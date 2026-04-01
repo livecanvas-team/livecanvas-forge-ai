@@ -1,0 +1,656 @@
+.lcfa-admin {
+    --color1: #26c6da;
+    --color2: #e83e8c;
+    --color-green: #64ff05;
+    --color-yellow: #ffcc00;
+    --color-accents: rgb(63, 67, 86);
+    --color-interface-bg: #212337;
+    --color-interface-bg-dark: #191a29;
+    --color-grey: rgb(102, 102, 102);
+    --color-lightgrey: rgb(180, 183, 182);
+    --color-grey-2: #a9abcb;
+    --color-prop-icons: #80829f;
+    --lcfa-border: rgba(169, 171, 203, 0.18);
+    --lcfa-border-strong: rgba(169, 171, 203, 0.32);
+    --lcfa-surface: linear-gradient(180deg, rgba(33, 35, 55, 0.98), rgba(25, 26, 41, 0.98));
+    --lcfa-surface-soft: rgba(33, 35, 55, 0.78);
+    --lcfa-surface-muted: rgba(25, 26, 41, 0.92);
+    --lcfa-text: #f6f7ff;
+    --lcfa-text-muted: #a9abcb;
+    --lcfa-shadow: 0 22px 50px rgba(8, 9, 16, 0.42);
+    --lcfa-shadow-soft: 0 14px 30px rgba(8, 9, 16, 0.22);
+    position: relative;
+    padding-bottom: 24px;
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin::before {
+    content: "";
+    position: fixed;
+    inset: 32px 0 0 160px;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at top right, rgba(232, 62, 140, 0.18), transparent 28%),
+        radial-gradient(circle at top left, rgba(38, 198, 218, 0.12), transparent 24%),
+        linear-gradient(180deg, #111320 0%, #17192a 55%, #111320 100%);
+    z-index: -1;
+}
+
+.lcfa-admin h1,
+.lcfa-admin h2,
+.lcfa-admin h3,
+.lcfa-admin p,
+.lcfa-admin label,
+.lcfa-admin li,
+.lcfa-admin span,
+.lcfa-admin strong,
+.lcfa-admin small {
+    color: inherit;
+}
+
+.lcfa-admin .lcfa-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
+    gap: 20px;
+    align-items: stretch;
+    margin: 20px 0 18px;
+    padding: 26px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 24px;
+    background:
+        radial-gradient(circle at top right, rgba(232, 62, 140, 0.22), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(38, 198, 218, 0.18), transparent 28%),
+        linear-gradient(145deg, rgba(33, 35, 55, 0.98), rgba(25, 26, 41, 0.98));
+    box-shadow: var(--lcfa-shadow);
+    overflow: hidden;
+}
+
+.lcfa-admin .lcfa-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    width: fit-content;
+    padding: 8px 12px;
+    border: 1px solid rgba(232, 62, 140, 0.24);
+    border-radius: 999px;
+    background: rgba(232, 62, 140, 0.08);
+    color: #ffd1e8;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-hero h1 {
+    margin: 16px 0 12px;
+    color: var(--lcfa-text);
+    font-size: 34px;
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+}
+
+.lcfa-admin .lcfa-lead {
+    max-width: 60rem;
+    margin: 0;
+    color: var(--lcfa-text-muted);
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+.lcfa-admin .lcfa-hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.lcfa-admin .lcfa-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--lcfa-border);
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-badge strong {
+    color: #d8dbef;
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-badge span {
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-hero-stack {
+    display: grid;
+    gap: 14px;
+    align-content: center;
+}
+
+.lcfa-admin .lcfa-brand-pill {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 68px;
+    padding: 14px 16px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 18px;
+    background: rgba(12, 13, 22, 0.38);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-brand-pill span {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.lcfa-admin .lcfa-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.lcfa-admin .lcfa-logo-livecanvas {
+    width: 160px;
+    max-width: 100%;
+    height: auto;
+}
+
+.lcfa-admin .lcfa-brand-pill .lcfa-logo-livecanvas {
+    width: 118px;
+}
+
+.lcfa-admin .lcfa-brand-tile .lcfa-logo-livecanvas {
+    width: 124px;
+}
+
+.lcfa-admin .lcfa-logo-windpress {
+    width: 32px;
+    height: 32px;
+    filter: brightness(0) invert(1);
+}
+
+.lcfa-admin .lcfa-logo-bootstrap {
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #8f5bff, #6f42c1);
+    color: #fff;
+    box-shadow: 0 12px 24px rgba(111, 66, 193, 0.32);
+}
+
+.lcfa-admin .lcfa-logo-bootstrap svg {
+    width: 100%;
+    height: 100%;
+}
+
+.lcfa-admin .lcfa-fallback-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--lcfa-text);
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 22px;
+    align-items: start;
+}
+
+.lcfa-admin .lcfa-main,
+.lcfa-admin .lcfa-sidebar {
+    display: grid;
+    gap: 22px;
+}
+
+.lcfa-admin .lcfa-card {
+    position: relative;
+    padding: 22px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 24px;
+    background: var(--lcfa-surface);
+    box-shadow: var(--lcfa-shadow-soft);
+    overflow: hidden;
+}
+
+.lcfa-admin .lcfa-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%);
+    pointer-events: none;
+}
+
+.lcfa-admin .lcfa-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.lcfa-admin .lcfa-card-head h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+}
+
+.lcfa-admin .lcfa-card-head p {
+    margin: 0;
+    color: var(--lcfa-text-muted);
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: inherit;
+}
+
+.lcfa-admin .lcfa-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.lcfa-admin .lcfa-card-head > .lcfa-icon {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    padding: 10px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(38, 198, 218, 0.18), rgba(232, 62, 140, 0.16));
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0 22px;
+}
+
+.lcfa-admin .lcfa-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--lcfa-border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 13px;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.lcfa-admin .lcfa-step:hover {
+    transform: translateY(-1px);
+    border-color: rgba(232, 62, 140, 0.38);
+    background: rgba(232, 62, 140, 0.08);
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-step.is-current {
+    border-color: rgba(232, 62, 140, 0.52);
+    background: linear-gradient(180deg, rgba(232, 62, 140, 0.22), rgba(232, 62, 140, 0.1));
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-step.is-done {
+    border-color: rgba(38, 198, 218, 0.32);
+}
+
+.lcfa-admin .lcfa-step-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.lcfa-admin .lcfa-form {
+    display: grid;
+    gap: 16px;
+}
+
+.lcfa-admin .lcfa-form label {
+    display: grid;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-form label > span {
+    font-weight: 700;
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin .lcfa-form input[type="text"],
+.lcfa-admin .lcfa-form select,
+.lcfa-admin .lcfa-form textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 14px;
+    background: rgba(12, 13, 22, 0.52);
+    color: var(--lcfa-text);
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-form input[type="text"]:focus,
+.lcfa-admin .lcfa-form select:focus,
+.lcfa-admin .lcfa-form textarea:focus {
+    border-color: rgba(232, 62, 140, 0.52);
+    box-shadow: 0 0 0 1px rgba(232, 62, 140, 0.28);
+    outline: none;
+}
+
+.lcfa-admin .lcfa-form select option {
+    color: #111;
+}
+
+.lcfa-admin .button.button-primary {
+    min-height: 46px;
+    padding: 0 18px;
+    border: 1px solid rgba(232, 62, 140, 0.38);
+    border-radius: 14px;
+    background: linear-gradient(90deg, #cf2f79 0%, #e83e8c 56%, #ff5cab 100%);
+    color: #fff;
+    text-shadow: none;
+    box-shadow: 0 14px 30px rgba(232, 62, 140, 0.22);
+}
+
+.lcfa-admin .button.button-primary:hover,
+.lcfa-admin .button.button-primary:focus {
+    border-color: rgba(232, 62, 140, 0.6);
+    background: linear-gradient(90deg, #c02b70 0%, #de3986 56%, #f056a2 100%);
+    color: #fff;
+}
+
+.lcfa-admin .notice {
+    margin: 0 0 18px;
+    border-radius: 16px;
+    border-color: var(--lcfa-border-strong);
+    background: rgba(33, 35, 55, 0.94);
+    color: var(--lcfa-text);
+    box-shadow: var(--lcfa-shadow-soft);
+}
+
+.lcfa-admin .notice p {
+    color: inherit;
+}
+
+.lcfa-admin .notice.notice-success {
+    border-left: 4px solid var(--color1);
+}
+
+.lcfa-admin .notice.notice-error {
+    border-left: 4px solid var(--color2);
+}
+
+.lcfa-admin .notice.notice-warning {
+    border-left: 4px solid var(--color-yellow);
+}
+
+.lcfa-admin .notice a {
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-status-list,
+.lcfa-admin .lcfa-facts,
+.lcfa-admin .lcfa-bullets {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lcfa-admin .lcfa-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(169, 171, 203, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.lcfa-admin .lcfa-status-label {
+    color: #dfe2f7;
+    font-weight: 600;
+}
+
+.lcfa-admin .lcfa-status-row strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+}
+
+.lcfa-admin .lcfa-status-row .ok {
+    color: var(--color1);
+}
+
+.lcfa-admin .lcfa-status-row .ko {
+    color: #ff738d;
+}
+
+.lcfa-admin .lcfa-choice-grid,
+.lcfa-admin .lcfa-radio-group {
+    display: grid;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-choice-card,
+.lcfa-admin .lcfa-radio {
+    position: relative;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 16px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+    transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.lcfa-admin .lcfa-choice-card:hover,
+.lcfa-admin .lcfa-radio:hover {
+    transform: translateY(-1px);
+    border-color: rgba(232, 62, 140, 0.3);
+    background: rgba(232, 62, 140, 0.08);
+}
+
+.lcfa-admin .lcfa-choice-card:has(input:checked),
+.lcfa-admin .lcfa-radio:has(input:checked) {
+    border-color: rgba(232, 62, 140, 0.48);
+    background:
+        linear-gradient(180deg, rgba(232, 62, 140, 0.16), rgba(232, 62, 140, 0.08)),
+        rgba(255, 255, 255, 0.04);
+    box-shadow: inset 0 0 0 1px rgba(232, 62, 140, 0.12);
+}
+
+.lcfa-admin .lcfa-choice-card input,
+.lcfa-admin .lcfa-radio input {
+    margin-top: 3px;
+}
+
+.lcfa-admin .lcfa-choice-copy {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+}
+
+.lcfa-admin .lcfa-choice-copy strong {
+    font-size: 15px;
+}
+
+.lcfa-admin .lcfa-choice-copy span,
+.lcfa-admin .lcfa-choice-copy small {
+    color: var(--lcfa-text-muted);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-choice-media {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 40px;
+    margin-bottom: 6px;
+}
+
+.lcfa-admin .lcfa-radio-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-top: -2px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(38, 198, 218, 0.16), rgba(232, 62, 140, 0.12));
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-radio-copy {
+    line-height: 1.45;
+    font-weight: 600;
+}
+
+.lcfa-admin .lcfa-guide {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--lcfa-border);
+}
+
+.lcfa-admin .lcfa-guide h3 {
+    margin: 0 0 10px;
+    color: var(--lcfa-text);
+    font-size: 16px;
+}
+
+.lcfa-admin .lcfa-guide p {
+    margin: 0 0 12px;
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-brand-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.lcfa-admin .lcfa-brand-tile {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+    min-height: 150px;
+    padding: 16px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-brand-tile.is-active {
+    border-color: rgba(38, 198, 218, 0.26);
+    box-shadow: inset 0 0 0 1px rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-brand-logo {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+}
+
+.lcfa-admin .lcfa-brand-tile strong {
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-brand-tile span {
+    color: var(--lcfa-text-muted);
+    line-height: 1.45;
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-facts li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(169, 171, 203, 0.1);
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-facts li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.lcfa-admin .lcfa-facts strong {
+    color: #dfe2f7;
+}
+
+.lcfa-admin .lcfa-facts span {
+    color: var(--lcfa-text-muted);
+    text-align: right;
+}
+
+.lcfa-admin .lcfa-bullets li {
+    position: relative;
+    padding-left: 18px;
+    color: var(--lcfa-text-muted);
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-bullets li::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--color1), var(--color2));
+}
+
+@media (max-width: 1100px) {
+    .lcfa-admin .lcfa-grid,
+    .lcfa-admin .lcfa-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-brand-grid {
+        grid-template-columns: 1fr;
+    }
+}
