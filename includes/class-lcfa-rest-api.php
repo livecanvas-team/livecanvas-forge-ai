@@ -6,15 +6,19 @@ final class LCFA_Rest_Api {
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
     private LCFA_WindPress_Bridge $windpress_bridge;
+    private LCFA_Theme_Files_Bridge $theme_files_bridge;
+    private LCFA_Local_MCP_Bridge $local_mcp_bridge;
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
-        $this->environment      = $environment;
-        $this->inventory        = $inventory;
-        $this->windpress_bridge = $windpress_bridge;
-        $this->context_builder  = $context_builder;
-        $this->command_deck     = $command_deck;
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
+        $this->environment        = $environment;
+        $this->inventory          = $inventory;
+        $this->windpress_bridge   = $windpress_bridge;
+        $this->theme_files_bridge = $theme_files_bridge;
+        $this->local_mcp_bridge   = $local_mcp_bridge;
+        $this->context_builder    = $context_builder;
+        $this->command_deck       = $command_deck;
     }
 
     public function hooks(): void {
@@ -64,6 +68,56 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_read'],
         ]);
 
+        register_rest_route('lcfa/v1', '/theme/roots', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_roots'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/files', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_files'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/templates', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_templates'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/templates/(?P<type>[a-zA-Z0-9_-]+)', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_templates_by_type'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/file', [
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_theme_file'],
+                'permission_callback' => [$this, 'can_read'],
+            ],
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'save_theme_file'],
+                'permission_callback' => [$this, 'can_write'],
+            ],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/template', [
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_theme_template_file'],
+                'permission_callback' => [$this, 'can_read'],
+            ],
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'save_theme_template_file'],
+                'permission_callback' => [$this, 'can_write'],
+            ],
+        ]);
+
         register_rest_route('lcfa/v1', '/history', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_history'],
@@ -85,6 +139,12 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/mcp/status', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_mcp_status'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/local-status', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_mcp_local_status'],
             'permission_callback' => [$this, 'can_read'],
         ]);
 
@@ -146,6 +206,12 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/windpress/cache', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'save_windpress_cache'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/windpress/build-local', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'build_windpress_cache_locally'],
             'permission_callback' => [$this, 'can_write'],
         ]);
 
@@ -225,6 +291,110 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function get_theme_roots(): WP_REST_Response {
+        try {
+            $roots = $this->theme_files_bridge->get_theme_roots();
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'roots' => $roots,
+        ]);
+    }
+
+    public function get_theme_files(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $files = $this->theme_files_bridge->list_files([
+                'root_scope' => sanitize_key((string) ($request->get_param('root_scope') ?: 'active')),
+                'directory'  => sanitize_text_field((string) ($request->get_param('directory') ?: '')),
+                'extensions' => $request->get_param('extension') ?: [],
+                'limit'      => absint($request->get_param('limit') ?: 250),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'files' => $files,
+        ]);
+    }
+
+    public function get_theme_templates(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $templates = $this->theme_files_bridge->list_templates([
+                'root_scope' => sanitize_key((string) ($request->get_param('root_scope') ?: 'active')),
+                'limit'      => absint($request->get_param('limit') ?: 250),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'templates' => $templates,
+        ]);
+    }
+
+    public function get_theme_templates_by_type(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $templates = $this->theme_files_bridge->list_templates_by_extension(
+                sanitize_key((string) $request->get_param('type')),
+                [
+                    'root_scope' => sanitize_key((string) ($request->get_param('root_scope') ?: 'active')),
+                    'limit'      => absint($request->get_param('limit') ?: 250),
+                ]
+            );
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'templates' => $templates,
+        ]);
+    }
+
+    public function get_theme_file(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $file = $this->theme_files_bridge->read_file([
+                'root_scope' => sanitize_key((string) ($request->get_param('root_scope') ?: 'active')),
+                'path'       => sanitize_text_field((string) ($request->get_param('path') ?: '')),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'file' => $file,
+        ]);
+    }
+
+    public function get_theme_template_file(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $file = $this->theme_files_bridge->read_template_file([
+                'root_scope' => sanitize_key((string) ($request->get_param('root_scope') ?: 'active')),
+                'path'       => sanitize_text_field((string) ($request->get_param('path') ?: '')),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'file' => $file,
+        ]);
+    }
+
     public function get_history(): WP_REST_Response {
         return new WP_REST_Response([
             'history' => LCFA_Settings::get_history(),
@@ -240,6 +410,12 @@ final class LCFA_Rest_Api {
     public function get_mcp_status(): WP_REST_Response {
         return new WP_REST_Response([
             'mcp' => $this->context_builder->get_mcp_status(),
+        ]);
+    }
+
+    public function get_mcp_local_status(): WP_REST_Response {
+        return new WP_REST_Response([
+            'local_mcp' => $this->local_mcp_bridge->get_status(),
         ]);
     }
 
@@ -355,6 +531,38 @@ final class LCFA_Rest_Api {
         ], !empty($result['ok']) ? 200 : 400);
     }
 
+    public function build_windpress_cache_locally(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        $provider_ids = $payload['provider_ids'] ?? [];
+
+        if (is_string($provider_ids)) {
+            $provider_ids = array_values(array_filter(array_map('sanitize_key', preg_split('/[\s,]+/', $provider_ids) ?: [])));
+        } elseif (is_array($provider_ids)) {
+            $provider_ids = array_values(array_filter(array_map(static function ($item): string {
+                return sanitize_key((string) $item);
+            }, $provider_ids)));
+        } else {
+            $provider_ids = [];
+        }
+
+        $result = $this->local_mcp_bridge->build_windpress_cache([
+            'provider_ids' => $provider_ids,
+            'kind'         => sanitize_key((string) ($payload['kind'] ?? 'full')),
+            'store'        => !array_key_exists('store', $payload) || rest_sanitize_boolean($payload['store']),
+            'source_map'   => rest_sanitize_boolean($payload['source_map'] ?? false),
+            'max_batches'  => absint($payload['max_batches'] ?? 0),
+        ]);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
     public function flush_windpress_cache(): WP_REST_Response {
         $result = $this->windpress_bridge->flush_runtime_cache();
 
@@ -371,6 +579,56 @@ final class LCFA_Rest_Api {
         return new WP_REST_Response([
             'result' => $result,
         ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function save_theme_file(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        try {
+            $result = $this->theme_files_bridge->write_file([
+                'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
+                'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
+                'content'            => wp_unslash((string) ($payload['content'] ?? '')),
+                'dry_run'            => !empty($payload['dry_run']),
+                'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ]);
+    }
+
+    public function save_theme_template_file(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        try {
+            $result = $this->theme_files_bridge->write_template_file([
+                'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
+                'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
+                'content'            => wp_unslash((string) ($payload['content'] ?? '')),
+                'dry_run'            => !empty($payload['dry_run']),
+                'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ]);
     }
 
     public function can_read(?WP_REST_Request $request = null): bool {

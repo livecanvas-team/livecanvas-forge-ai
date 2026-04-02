@@ -7,6 +7,9 @@ const DEFAULTS = {
   wpRoot: '',
   host: '127.0.0.1',
   port: 7681,
+  tool: '',
+  toolArgs: {},
+  output: 'json',
   verbose: false
 }
 
@@ -20,6 +23,9 @@ function loadConfig(argv = []) {
     wpRoot: process.env.LCFA_WP_ROOT || DEFAULTS.wpRoot,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
     port: parsePort(process.env.LCFA_MCP_PORT || DEFAULTS.port),
+    tool: process.env.LCFA_TOOL || DEFAULTS.tool,
+    toolArgs: parseToolArguments(process.env.LCFA_TOOL_ARGS || ''),
+    output: process.env.LCFA_OUTPUT || DEFAULTS.output,
     verbose: process.env.LCFA_VERBOSE === '1'
   }
 
@@ -63,6 +69,15 @@ function loadConfig(argv = []) {
       case 'port':
         config.port = parsePort(value)
         break
+      case 'tool':
+        config.tool = value || config.tool
+        break
+      case 'tool-args':
+        config.toolArgs = parseToolArguments(value)
+        break
+      case 'output':
+        config.output = value || config.output
+        break
       case 'verbose':
         config.verbose = true
         break
@@ -75,6 +90,10 @@ function loadConfig(argv = []) {
 
   if (!['stdio', 'bridge'].includes(config.transport)) {
     throw new Error(`Unsupported transport "${config.transport}". Use stdio or bridge.`)
+  }
+
+  if (!['json', 'pretty'].includes(config.output)) {
+    throw new Error(`Unsupported output "${config.output}". Use json or pretty.`)
   }
 
   if (!config.restBase) {
@@ -112,6 +131,23 @@ function parsePort(value) {
   }
 
   return port
+}
+
+function parseToolArguments(value) {
+  if (!value) {
+    return {}
+  }
+
+  if (typeof value === 'object') {
+    return value
+  }
+
+  try {
+    const parsed = JSON.parse(String(value))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch (error) {
+    throw new Error('Invalid --tool-args payload. Pass a valid JSON object.')
+  }
 }
 
 module.exports = {

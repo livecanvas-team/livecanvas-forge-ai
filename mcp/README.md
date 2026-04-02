@@ -6,6 +6,7 @@ Local MCP package for `LiveCanvas Forge AI`.
 
 - `stdio`: MCP server for agent clients such as Codex, Claude Code, OpenCode, or Cursor.
 - `bridge`: local HTTP/WebSocket bridge on the configured host and port.
+- `--tool`: one-shot CLI mode for local orchestration from WordPress or shell scripts.
 
 ## Minimal usage
 
@@ -23,6 +24,18 @@ LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
 LCFA_MCP_TOKEN="your-token" \
 LCFA_WP_ROOT="/absolute/path/to/wordpress" \
 node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=bridge --host=127.0.0.1 --port=7681
+```
+
+## One-shot tool mode
+
+```bash
+LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
+LCFA_MCP_TOKEN="your-token" \
+LCFA_WP_ROOT="/absolute/path/to/wordpress" \
+node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js \
+  --tool=build_windpress_cache \
+  --tool-args='{"provider_ids":["wordpress-theme-json"],"store":false}' \
+  --output=json
 ```
 
 HTTP routes:

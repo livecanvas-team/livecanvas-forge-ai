@@ -20,6 +20,8 @@ require_once LCFA_DIR . 'includes/class-lcfa-environment.php';
 require_once LCFA_DIR . 'includes/class-lcfa-installer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require_once LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
+require_once LCFA_DIR . 'includes/class-lcfa-theme-files-bridge.php';
+require_once LCFA_DIR . 'includes/class-lcfa-local-mcp-bridge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-context-builder.php';
 require_once LCFA_DIR . 'includes/class-lcfa-command-deck.php';
 require_once LCFA_DIR . 'includes/class-lcfa-rest-api.php';

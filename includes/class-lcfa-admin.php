@@ -6,13 +6,15 @@ final class LCFA_Admin {
     private LCFA_Environment $environment;
     private LCFA_Installer $installer;
     private LCFA_Inventory $inventory;
+    private LCFA_Theme_Files_Bridge $theme_files_bridge;
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer, LCFA_Inventory $inventory, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
+    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer, LCFA_Inventory $inventory, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
         $this->environment  = $environment;
         $this->installer    = $installer;
         $this->inventory    = $inventory;
+        $this->theme_files_bridge = $theme_files_bridge;
         $this->context_builder = $context_builder;
         $this->command_deck = $command_deck;
     }
@@ -26,6 +28,8 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_connections', [$this, 'handle_connections_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
         add_action('admin_post_lcfa_command', [$this, 'handle_command_post']);
+        add_action('lc_editor_header', [$this, 'render_editor_bridge_styles']);
+        add_action('lc_editor_before_body_closing', [$this, 'render_editor_bridge']);
     }
 
     public function register_menus(): void {
@@ -87,6 +91,102 @@ final class LCFA_Admin {
 
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup'));
         exit;
+    }
+
+    public function render_editor_bridge_styles(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        echo '<style id="lcfa-editor-bridge-styles">';
+        echo '.lcfa-editor-shell{position:fixed;right:20px;bottom:20px;z-index:999999;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}';
+        echo '.lcfa-editor-launcher{display:inline-flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid rgba(53,208,242,.28);border-radius:999px;background:rgba(15,18,32,.94);box-shadow:0 20px 60px rgba(0,0,0,.45);color:#f5f7ff;cursor:pointer;backdrop-filter:blur(16px);font-size:13px;font-weight:700;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}';
+        echo '.lcfa-editor-launcher:hover{transform:translateY(-1px);border-color:rgba(53,208,242,.44)}';
+        echo '.lcfa-editor-launcher .lcfa-icon{width:16px;height:16px;color:#35d0f2}';
+        echo '.lcfa-editor-drawer{position:absolute;right:0;bottom:0;width:360px;max-width:min(360px,calc(100vw - 32px));padding:18px;border-radius:22px;background:linear-gradient(180deg,rgba(17,22,38,.96),rgba(13,16,29,.96));border:1px solid rgba(53,208,242,.2);box-shadow:0 24px 80px rgba(0,0,0,.52);backdrop-filter:blur(18px);color:#f5f7ff;opacity:0;transform:translateY(10px) scale(.98);pointer-events:none;transition:opacity .22s ease,transform .22s ease}';
+        echo '.lcfa-editor-shell.is-open .lcfa-editor-drawer{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}';
+        echo '.lcfa-editor-shell.is-open .lcfa-editor-launcher{opacity:0;pointer-events:none;transform:translateY(6px)}';
+        echo '.lcfa-editor-bridge__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}';
+        echo '.lcfa-editor-bridge__eyebrow{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#35d0f2;font-weight:700;margin-bottom:6px}';
+        echo '.lcfa-editor-bridge__title{font-size:17px;line-height:1.35;font-weight:700;margin:0;color:#fff}';
+        echo '.lcfa-editor-bridge__close{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#ff62bf;cursor:pointer}';
+        echo '.lcfa-editor-bridge__close:hover{background:rgba(238,30,149,.16)}';
+        echo '.lcfa-editor-bridge__stack{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}';
+        echo '.lcfa-editor-bridge__pill{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:rgba(53,208,242,.08);border:1px solid rgba(53,208,242,.2);color:#35d0f2}';
+        echo '.lcfa-editor-bridge__pill.is-secondary{background:rgba(238,30,149,.1);border-color:rgba(238,30,149,.26);color:#ff62bf}';
+        echo '.lcfa-editor-bridge__section{padding:12px 0;border-top:1px solid rgba(255,255,255,.07)}';
+        echo '.lcfa-editor-bridge__section:first-of-type{border-top:none;padding-top:0}';
+        echo '.lcfa-editor-bridge__label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(245,247,255,.54);font-weight:700;margin-bottom:6px}';
+        echo '.lcfa-editor-bridge__meta{font-size:13px;line-height:1.6;color:rgba(245,247,255,.78)}';
+        echo '.lcfa-editor-bridge__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}';
+        echo '.lcfa-editor-bridge__button{display:flex;align-items:center;gap:8px;min-height:42px;padding:10px 12px;border-radius:14px;text-decoration:none;font-size:12px;font-weight:700;border:1px solid transparent;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}';
+        echo '.lcfa-editor-bridge__button:hover{transform:translateY(-1px)}';
+        echo '.lcfa-editor-bridge__button .lcfa-icon{width:14px;height:14px}';
+        echo '.lcfa-editor-bridge__button.is-primary{background:#35d0f2;color:#0b1020}';
+        echo '.lcfa-editor-bridge__button.is-primary .lcfa-icon{color:#0b1020}';
+        echo '.lcfa-editor-bridge__button.is-secondary{background:rgba(238,30,149,.12);border-color:rgba(238,30,149,.22);color:#ff62bf}';
+        echo '.lcfa-editor-bridge__button.is-neutral{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08);color:#f5f7ff}';
+        echo '.lcfa-editor-bridge__button.is-neutral .lcfa-icon{color:#35d0f2}';
+        echo '.lcfa-editor-bridge__hint{font-size:12px;line-height:1.6;color:rgba(245,247,255,.62)}';
+        echo '@media (max-width:782px){.lcfa-editor-shell{right:12px;left:12px;bottom:12px}.lcfa-editor-launcher{width:100%;justify-content:center}.lcfa-editor-drawer{width:auto;left:0}.lcfa-editor-bridge__actions{grid-template-columns:1fr}}';
+        echo '</style>';
+    }
+
+    public function render_editor_bridge(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        global $post;
+
+        if (!$post instanceof WP_Post) {
+            return;
+        }
+
+        $snapshot = $this->environment->get_snapshot();
+        $context = $this->get_command_context_for_post($post);
+        $actions = $this->get_editor_bridge_actions($post, $context);
+
+        echo '<div class="lcfa-editor-shell" data-lcfa-editor-shell>';
+        echo '<button type="button" class="lcfa-editor-launcher" data-lcfa-editor-open>';
+        echo $this->get_icon_svg('stars');
+        echo '<span>' . esc_html__('Open Forge AI', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<aside class="lcfa-editor-drawer" aria-hidden="true">';
+        echo '<div class="lcfa-editor-bridge__head">';
+        echo '<div>';
+        echo '<span class="lcfa-editor-bridge__eyebrow">' . esc_html__('Forge AI bridge', 'livecanvas-forge-ai') . '</span>';
+        echo '<p class="lcfa-editor-bridge__title">' . esc_html(get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai')) . '</p>';
+        echo '</div>';
+        echo '<button type="button" class="lcfa-editor-bridge__close" data-lcfa-editor-close aria-label="' . esc_attr__('Close Forge AI panel', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('x-circle') . '</button>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__stack">';
+        echo '<span class="lcfa-editor-bridge__pill">' . esc_html(strtoupper((string) ($snapshot['detected_framework'] ?: 'unknown'))) . '</span>';
+        echo '<span class="lcfa-editor-bridge__pill">' . esc_html(strtoupper((string) ($snapshot['site_mode'] ?: 'local'))) . '</span>';
+        echo '<span class="lcfa-editor-bridge__pill' . (!empty($snapshot['windpress_active']) ? '' : ' is-secondary') . '">' . esc_html(!empty($snapshot['windpress_active']) ? __('WindPress active', 'livecanvas-forge-ai') : __('WindPress inactive', 'livecanvas-forge-ai')) . '</span>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__section">';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Current target', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__meta">' . esc_html($this->get_editor_target_summary($post, $context)) . '</div>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__section">';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Quick actions', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__actions">';
+        foreach ($actions as $action) {
+            echo '<a class="lcfa-editor-bridge__button is-' . esc_attr($action['tone']) . '" href="' . esc_url($action['url']) . '" target="_blank" rel="noreferrer noopener">';
+            echo $this->get_icon_svg($action['icon']);
+            echo '<span>' . esc_html($action['label']) . '</span>';
+            echo '</a>';
+        }
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__section">';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Workflow note', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__hint">' . esc_html__('Use the current target action for content changes. Use WindPress audit when you are working on Picowind styles, cache, or theme.json.', 'livecanvas-forge-ai') . '</div>';
+        echo '</div>';
+        echo '</aside>';
+        echo '</div>';
+        echo '<script id="lcfa-editor-bridge-script">(function(){var shell=document.querySelector("[data-lcfa-editor-shell]");if(!shell||shell.dataset.bound==="1"){return;}shell.dataset.bound="1";var drawer=shell.querySelector(".lcfa-editor-drawer");var openBtn=shell.querySelector("[data-lcfa-editor-open]");var closeBtn=shell.querySelector("[data-lcfa-editor-close]");var setOpen=function(next){shell.classList.toggle("is-open",next);if(drawer){drawer.setAttribute("aria-hidden",next?"false":"true");}};if(openBtn){openBtn.addEventListener("click",function(){setOpen(true);});}if(closeBtn){closeBtn.addEventListener("click",function(){setOpen(false);});}document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});document.addEventListener("click",function(event){if(!shell.classList.contains("is-open")){return;}if(shell.contains(event.target)){return;}setOpen(false);});})();</script>';
     }
 
     public function handle_setup_post(): void {
@@ -524,6 +624,7 @@ final class LCFA_Admin {
         $guides           = $this->get_tool_guides($settings['site_mode'] ?: $snapshot['site_mode']);
         $guide            = $guides[$preferred_client] ?? $guides['other'];
         $mcp_status       = $this->context_builder->get_mcp_status();
+        $local_bridge     = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
         $mcp_bootstrap    = $this->context_builder->get_bootstrap_payload();
         $command_example  = wp_json_encode([
             'action'  => 'site_audit',
@@ -601,8 +702,9 @@ final class LCFA_Admin {
         echo '<li>' . esc_html(sprintf(__('REST base: %s', 'livecanvas-forge-ai'), rest_url('lcfa/v1/'))) . '</li>';
         echo '<li>' . esc_html(sprintf(__('MCP endpoint: %s', 'livecanvas-forge-ai'), $mcp_status['endpoint'])) . '</li>';
         echo '<li>' . esc_html__('Context endpoints: /context, /theme-context, /page-html, /acf-fields, /library/blocks.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('Execution endpoints: /command/actions, /command, /mcp/status, /mcp/bootstrap.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('WindPress endpoints: /windpress/status, /windpress/providers, /windpress/providers/scan, /windpress/volume, /windpress/volume/handlers, /windpress/volume/reset, /windpress/theme-json, /windpress/cache. MCP bridge also exposes /windpress/providers/scan/full and /windpress/build for local compilation.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Execution endpoints: /command/actions, /command, /mcp/status, /mcp/local-status, /mcp/bootstrap.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('WindPress endpoints: /windpress/status, /windpress/providers, /windpress/providers/scan, /windpress/volume, /windpress/volume/handlers, /windpress/volume/reset, /windpress/theme-json, /windpress/cache, /windpress/build-local. MCP bridge also exposes /windpress/providers/scan/full and /windpress/build for local compilation.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Theme endpoints: /theme/roots, /theme/files, /theme/templates, /theme/templates/{type}, /theme/file, /theme/template.', 'livecanvas-forge-ai') . '</li>';
         echo '<li>' . esc_html__('Filesystem tools: get_theme_roots, list_theme_files, list_theme_templates, list_twig_templates, list_latte_templates, list_php_templates, read_theme_file, read_template_file, write_theme_file, write_template_file.', 'livecanvas-forge-ai') . '</li>';
         echo '<li>' . esc_html__('Recommended auth for remote use: a dedicated WordPress user plus Application Password.', 'livecanvas-forge-ai') . '</li>';
         echo '<li>' . esc_html__('Installer note: the framework installer consumes the package URLs stored on this page.', 'livecanvas-forge-ai') . '</li>';
@@ -640,8 +742,16 @@ final class LCFA_Admin {
         echo '<ul class="lcfa-bullets">';
         echo '<li>' . esc_html(sprintf(__('Enabled: %s', 'livecanvas-forge-ai'), $mcp_status['enabled'] ? __('yes', 'livecanvas-forge-ai') : __('no', 'livecanvas-forge-ai'))) . '</li>';
         echo '<li>' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $mcp_status['filesystem_mode'])) . '</li>';
+        echo '<li>' . esc_html(sprintf(__('Local MCP bridge: %s', 'livecanvas-forge-ai'), !empty($local_bridge['available']) ? __('ready', 'livecanvas-forge-ai') : __('not available', 'livecanvas-forge-ai'))) . '</li>';
+        echo '<li>' . esc_html(sprintf(__('Local WindPress build: %s', 'livecanvas-forge-ai'), !empty($local_bridge['build_available']) ? __('ready', 'livecanvas-forge-ai') : __('not available', 'livecanvas-forge-ai'))) . '</li>';
+        if (!empty($local_bridge['node_version'])) {
+            echo '<li>' . esc_html(sprintf(__('Node version: %s', 'livecanvas-forge-ai'), $local_bridge['node_version'])) . '</li>';
+        }
         echo '<li>' . esc_html(sprintf(__('Token: %s', 'livecanvas-forge-ai'), $connections['mcp_token'])) . '</li>';
         echo '</ul>';
+        if (!empty($local_bridge['message'])) {
+            echo '<p>' . esc_html($local_bridge['message']) . '</p>';
+        }
         echo '</div>';
         echo '</section>';
 
@@ -657,6 +767,25 @@ final class LCFA_Admin {
         $actions        = $this->command_deck->get_actions();
         $command_result = LCFA_Settings::consume_command_result();
         $history        = LCFA_Settings::get_history();
+        $theme_context  = $this->context_builder->get_theme_context();
+        $windpress      = is_array($theme_context['windpress'] ?? null) ? $theme_context['windpress'] : [];
+        $mcp_status     = $this->context_builder->get_mcp_status();
+        $local_bridge   = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
+        $command_form   = $this->get_command_form_context($actions);
+        $theme_roots    = null;
+        $theme_templates = null;
+
+        try {
+            $theme_roots = $this->theme_files_bridge->get_theme_roots();
+            $theme_templates = $this->theme_files_bridge->list_templates([
+                'root_scope' => 'active',
+                'limit'      => 8,
+            ]);
+        } catch (Throwable $throwable) {
+            $theme_roots = [
+                'error' => $throwable->getMessage(),
+            ];
+        }
 
         echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
@@ -665,8 +794,25 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
-        echo '<div><h2>' . esc_html__('Run command', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('This MVP executor supports preview and apply for pages, header/footer partials, and dynamic templates.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Run command', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Execute LiveCanvas targets and WindPress maintenance operations from the same backend console.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
+
+        if (!empty($command_form['context_label'])) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Current editor context', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html($command_form['context_label']) . '</p>';
+            echo '</div>';
+        }
+
+        if (!empty($local_bridge)) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Local build runtime', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html(!empty($local_bridge['build_available']) ? __('Local Node + MCP execution is available. You can run build_windpress_cache directly from this tab.', 'livecanvas-forge-ai') : ($local_bridge['message'] ?? __('Local MCP execution is not available.', 'livecanvas-forge-ai'))) . '</p>';
+            if (!empty($local_bridge['node_version'])) {
+                echo '<p><code>' . esc_html(sprintf(__('Node %s', 'livecanvas-forge-ai'), $local_bridge['node_version'])) . '</code></p>';
+            }
+            echo '</div>';
+        }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
         wp_nonce_field('lcfa_command');
@@ -675,26 +821,47 @@ final class LCFA_Admin {
         echo '<label><span>' . esc_html__('Action', 'livecanvas-forge-ai') . '</span>';
         echo '<select name="action">';
         foreach ($actions as $action_key => $action_data) {
-            echo '<option value="' . esc_attr($action_key) . '">' . esc_html($action_data['label']) . '</option>';
+            echo '<option value="' . esc_attr($action_key) . '"' . selected($command_form['action'], $action_key, false) . '>' . esc_html($action_data['label']) . '</option>';
         }
         echo '</select></label>';
 
-        echo '<label><span>' . esc_html__('Target ID', 'livecanvas-forge-ai') . '</span><input type="text" name="target_id" value="" placeholder="' . esc_attr__('Required for update actions.', 'livecanvas-forge-ai') . '"></label>';
-        echo '<label><span>' . esc_html__('Variant', 'livecanvas-forge-ai') . '</span><input type="text" name="variant" value="1" placeholder="1"></label>';
-        echo '<label><span>' . esc_html__('Title', 'livecanvas-forge-ai') . '</span><input type="text" name="title" value="" placeholder="' . esc_attr__('Used for create actions.', 'livecanvas-forge-ai') . '"></label>';
-        echo '<label><span>' . esc_html__('Slug', 'livecanvas-forge-ai') . '</span><input type="text" name="slug" value="" placeholder="optional-slug"></label>';
+        echo '<label><span>' . esc_html__('Target ID', 'livecanvas-forge-ai') . '</span><input type="text" name="target_id" value="' . esc_attr($command_form['target_id']) . '" placeholder="' . esc_attr__('Required for update actions.', 'livecanvas-forge-ai') . '"></label>';
+        echo '<label><span>' . esc_html__('Variant', 'livecanvas-forge-ai') . '</span><input type="text" name="variant" value="' . esc_attr($command_form['variant']) . '" placeholder="1"></label>';
+        echo '<label><span>' . esc_html__('Title', 'livecanvas-forge-ai') . '</span><input type="text" name="title" value="' . esc_attr($command_form['title']) . '" placeholder="' . esc_attr__('Used for create actions.', 'livecanvas-forge-ai') . '"></label>';
+        echo '<label><span>' . esc_html__('Slug', 'livecanvas-forge-ai') . '</span><input type="text" name="slug" value="' . esc_attr($command_form['slug']) . '" placeholder="optional-slug"></label>';
+        echo '<label><span>' . esc_html__('WindPress provider ID', 'livecanvas-forge-ai') . '</span><input type="text" name="provider_id" value="' . esc_attr($command_form['provider_id']) . '" placeholder="wordpress-theme-json, livecanvas-content"></label>';
+        echo '<label><span>' . esc_html__('WindPress relative path', 'livecanvas-forge-ai') . '</span><input type="text" name="relative_path" value="' . esc_attr($command_form['relative_path']) . '" placeholder="main.css"></label>';
+        echo '<label><span>' . esc_html__('Theme root scope', 'livecanvas-forge-ai') . '</span>';
+        echo '<select name="root_scope">';
+        echo '<option value="stylesheet"' . selected($command_form['root_scope'], 'stylesheet', false) . '>' . esc_html__('Stylesheet theme', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="template"' . selected($command_form['root_scope'], 'template', false) . '>' . esc_html__('Template theme', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="active"' . selected($command_form['root_scope'], 'active', false) . '>' . esc_html__('Active roots', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="all"' . selected($command_form['root_scope'], 'all', false) . '>' . esc_html__('All roots', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></label>';
+        echo '<label><span>' . esc_html__('Theme file path', 'livecanvas-forge-ai') . '</span><input type="text" name="file_path" value="' . esc_attr($command_form['file_path']) . '" placeholder="views/single.twig"></label>';
         echo '<label><span>' . esc_html__('Post status', 'livecanvas-forge-ai') . '</span>';
         echo '<select name="status">';
-        echo '<option value="draft">' . esc_html__('Draft', 'livecanvas-forge-ai') . '</option>';
-        echo '<option value="publish">' . esc_html__('Publish', 'livecanvas-forge-ai') . '</option>';
-        echo '<option value="private">' . esc_html__('Private', 'livecanvas-forge-ai') . '</option>';
-        echo '<option value="pending">' . esc_html__('Pending', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="draft"' . selected($command_form['status'], 'draft', false) . '>' . esc_html__('Draft', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="publish"' . selected($command_form['status'], 'publish', false) . '>' . esc_html__('Publish', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="private"' . selected($command_form['status'], 'private', false) . '>' . esc_html__('Private', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="pending"' . selected($command_form['status'], 'pending', false) . '>' . esc_html__('Pending', 'livecanvas-forge-ai') . '</option>';
         echo '</select></label>';
-        echo '<label><span>' . esc_html__('HTML / template content', 'livecanvas-forge-ai') . '</span><textarea name="content" rows="16" placeholder="' . esc_attr__('<section>...</section>', 'livecanvas-forge-ai') . '"></textarea></label>';
-        echo '<label class="lcfa-checkbox"><input type="checkbox" name="dry_run" value="1" checked> ' . esc_html__('Run as preview only', 'livecanvas-forge-ai') . '</label>';
+        echo '<label><span>' . esc_html__('HTML / template / CSS / theme.json content', 'livecanvas-forge-ai') . '</span><textarea name="content" rows="16" placeholder="' . esc_attr__('<section>...</section>', 'livecanvas-forge-ai') . '">' . esc_textarea($command_form['content']) . '</textarea></label>';
+        echo '<label class="lcfa-checkbox"><input type="checkbox" name="dry_run" value="1"' . checked($command_form['dry_run'], true, false) . '> ' . esc_html__('Run as preview only', 'livecanvas-forge-ai') . '</label>';
 
         echo '<button class="button button-primary">' . esc_html__('Run command', 'livecanvas-forge-ai') . '</button>';
         echo '</form>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Action guide', 'livecanvas-forge-ai') . '</h3>';
+        echo '<ul class="lcfa-bullets">';
+        foreach ($actions as $action_key => $action_data) {
+            echo '<li><strong>' . esc_html($action_data['label']) . '</strong>: ' . esc_html($action_data['description']) . ' ';
+            echo '<code>' . esc_html($action_key) . '</code></li>';
+        }
+        echo '<li>' . esc_html__('For build_windpress_cache, the provider field accepts one provider ID or a comma-separated list.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ul>';
+        echo '</div>';
         echo '</section>';
 
         echo '<section class="lcfa-card">';
@@ -703,6 +870,22 @@ final class LCFA_Admin {
         echo '<div><h2>' . esc_html__('Inventory', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('LiveCanvas-aware targets currently discoverable by the companion.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
         $this->render_inventory_panel($inventory);
+        echo '</section>';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('wind');
+        echo '<div><h2>' . esc_html__('WindPress runtime', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Provider scans, local cache builds, and cache maintenance for Picowind and Tailwind workflows.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        $this->render_windpress_panel($windpress, $local_bridge);
+        echo '</section>';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('file-earmark');
+        echo '<div><h2>' . esc_html__('Theme files', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Fallback templates and theme files available to the companion inside the active theme roots.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        $this->render_theme_files_panel($theme_roots, $theme_templates);
         echo '</section>';
 
         echo '</div>';
@@ -1092,6 +1275,9 @@ final class LCFA_Admin {
         if (!empty($result['target_id'])) {
             echo '<span class="lcfa-chip">' . esc_html(sprintf(__('ID: %d', 'livecanvas-forge-ai'), (int) $result['target_id'])) . '</span>';
         }
+        if (!empty($result['target_title'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Label: %s', 'livecanvas-forge-ai'), $result['target_title'])) . '</span>';
+        }
         echo '</div>';
 
         if (!empty($result['message']) && $result['message'] !== ($result['summary'] ?? '')) {
@@ -1102,6 +1288,13 @@ final class LCFA_Admin {
             echo '<div class="lcfa-guide">';
             echo '<h3>' . esc_html__('Audit inventory', 'livecanvas-forge-ai') . '</h3>';
             $this->render_inventory_panel($result['inventory']);
+            echo '</div>';
+        }
+
+        if (!empty($result['data']) && is_array($result['data'])) {
+            echo '<div class="lcfa-result-panel">';
+            echo '<h3>' . esc_html__('Structured payload', 'livecanvas-forge-ai') . '</h3>';
+            echo '<div class="lcfa-code-block"><pre><code>' . esc_html(wp_json_encode($result['data'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) . '</code></pre></div>';
             echo '</div>';
         }
 
@@ -1168,7 +1361,7 @@ final class LCFA_Admin {
         echo '<div class="lcfa-inventory-groups">';
         foreach ($groups as $key => $label) {
             $items = isset($inventory[$key]) && is_array($inventory[$key]) ? $inventory[$key] : [];
-            $this->render_inventory_group($label, $items);
+            $this->render_inventory_group($key, $label, $items);
         }
         echo '</div>';
 
@@ -1202,7 +1395,195 @@ final class LCFA_Admin {
         echo '</div>';
     }
 
-    private function render_inventory_group(string $label, array $items): void {
+    private function render_theme_files_panel(?array $roots, ?array $templates): void {
+        if (!empty($roots['error'])) {
+            echo '<p class="lcfa-empty">' . esc_html((string) $roots['error']) . '</p>';
+            return;
+        }
+
+        if (!is_array($roots) || empty($roots['roots'])) {
+            echo '<p class="lcfa-empty">' . esc_html__('Theme roots are not available for this site.', 'livecanvas-forge-ai') . '</p>';
+            return;
+        }
+
+        echo '<div class="lcfa-chip-row">';
+        foreach ((array) $roots['roots'] as $root) {
+            if (!is_array($root)) {
+                continue;
+            }
+
+            echo '<span class="lcfa-chip">';
+            echo esc_html(sprintf('%1$s: %2$s', strtoupper((string) ($root['key'] ?? 'theme')), (string) ($root['label'] ?? '')));
+            echo '</span>';
+        }
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Writable fallback layer', 'livecanvas-forge-ai') . '</h3>';
+        echo '<p>' . esc_html__('Use these files when LiveCanvas dynamic tags or shortcodes are not enough and the companion needs a real Twig, Latte, PHP, CSS, or JS fallback.', 'livecanvas-forge-ai') . '</p>';
+        echo '</div>';
+
+        $items = is_array($templates['files'] ?? null) ? $templates['files'] : [];
+        if (!$items) {
+            echo '<p class="lcfa-empty">' . esc_html__('No template files were detected in the common theme template directories.', 'livecanvas-forge-ai') . '</p>';
+            return;
+        }
+
+        echo '<ul class="lcfa-target-list">';
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $forge_url = $this->get_command_url([
+                'suggest_action' => 'write_theme_template',
+                'file_path'      => (string) ($item['relative_path'] ?? ''),
+                'root_scope'     => (string) ($item['root'] ?? 'active'),
+            ]);
+
+            echo '<li class="lcfa-target-item">';
+            echo '<div class="lcfa-target-copy">';
+            echo '<strong>' . esc_html((string) ($item['relative_path'] ?? '')) . '</strong>';
+            echo '<span>' . esc_html(sprintf('%1$s · %2$s', (string) ($item['theme'] ?? ''), (string) ($item['kind'] ?? 'template'))) . '</span>';
+            echo '</div>';
+            echo '<div class="lcfa-target-actions">';
+            echo '<a class="button button-small button-primary" href="' . esc_url($forge_url) . '">' . esc_html__('Forge', 'livecanvas-forge-ai') . '</a>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    private function render_windpress_panel(array $windpress, array $local_bridge): void {
+        $providers       = is_array($windpress['providers'] ?? null) ? $windpress['providers'] : [];
+        $handlers        = is_array($windpress['volume_handlers'] ?? null) ? $windpress['volume_handlers'] : [];
+        $css_cache       = is_array($windpress['cache']['css'] ?? null) ? $windpress['cache']['css'] : [];
+        $theme_json_cache= is_array($windpress['cache']['theme_json'] ?? null) ? $windpress['cache']['theme_json'] : [];
+        $default_ids     = $this->get_default_windpress_provider_ids($providers);
+        $reset_entries   = ['main.css', 'tailwind.config.js', 'wizard.css', 'wizard.js'];
+
+        if (empty($windpress['available'])) {
+            echo '<p class="lcfa-empty">' . esc_html__('WindPress is not active on this site. This panel becomes operational when Picowind + WindPress are running.', 'livecanvas-forge-ai') . '</p>';
+
+            if (!empty($local_bridge['message'])) {
+                echo '<div class="lcfa-guide">';
+                echo '<h3>' . esc_html__('Local bridge status', 'livecanvas-forge-ai') . '</h3>';
+                echo '<p>' . esc_html((string) $local_bridge['message']) . '</p>';
+                echo '</div>';
+            }
+
+            return;
+        }
+
+        echo '<div class="lcfa-summary-grid">';
+        $this->render_summary_tile(__('Providers', 'livecanvas-forge-ai'), (string) count($providers));
+        $this->render_summary_tile(__('Handlers', 'livecanvas-forge-ai'), (string) count($handlers));
+        $this->render_summary_tile(__('CSS cache', 'livecanvas-forge-ai'), $this->format_file_size_label((int) ($css_cache['bytes'] ?? 0)));
+        $this->render_summary_tile(__('theme.json', 'livecanvas-forge-ai'), $this->format_file_size_label((int) ($theme_json_cache['bytes'] ?? 0)));
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Quick actions', 'livecanvas-forge-ai') . '</h3>';
+        echo '<div class="lcfa-cta-row">';
+        echo '<a class="button button-primary" href="' . esc_url($this->get_command_url(['suggest_action' => 'windpress_audit'])) . '">' . esc_html__('Run audit', 'livecanvas-forge-ai') . '</a>';
+
+        if (!empty($local_bridge['build_available'])) {
+            echo '<a class="button" href="' . esc_url($this->get_command_url([
+                'suggest_action' => 'build_windpress_cache',
+                'provider_id'    => $default_ids,
+            ])) . '">' . esc_html__('Build local cache', 'livecanvas-forge-ai') . '</a>';
+        }
+
+        echo '<a class="button" href="' . esc_url($this->get_command_url(['suggest_action' => 'windpress_flush_cache'])) . '">' . esc_html__('Flush cache', 'livecanvas-forge-ai') . '</a>';
+        echo '</div>';
+
+        echo '<div class="lcfa-chip-row">';
+        echo '<span class="lcfa-chip' . (!empty($windpress['active']) ? ' is-positive' : '') . '">' . esc_html(!empty($windpress['active']) ? __('Active', 'livecanvas-forge-ai') : __('Inactive', 'livecanvas-forge-ai')) . '</span>';
+        if (!empty($windpress['tailwind_version'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Tailwind v%d', 'livecanvas-forge-ai'), (int) $windpress['tailwind_version'])) . '</span>';
+        }
+        if (!empty($windpress['performance_mode'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), (string) $windpress['performance_mode'])) . '</span>';
+        }
+        if (!empty($local_bridge['node_version'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Node: %s', 'livecanvas-forge-ai'), (string) $local_bridge['node_version'])) . '</span>';
+        }
+        echo '</div>';
+        echo '</div>';
+
+        if (!empty($local_bridge['message'])) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Local build runtime', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html((string) $local_bridge['message']) . '</p>';
+            echo '</div>';
+        }
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Providers', 'livecanvas-forge-ai') . '</h3>';
+        if (!$providers) {
+            echo '<p class="lcfa-empty">' . esc_html__('No WindPress providers were returned by the runtime.', 'livecanvas-forge-ai') . '</p>';
+        } else {
+            echo '<ul class="lcfa-target-list">';
+            foreach ($providers as $provider) {
+                if (!is_array($provider)) {
+                    continue;
+                }
+
+                $provider_id = (string) ($provider['id'] ?? '');
+                $meta = array_filter([
+                    (string) ($provider['type'] ?? ''),
+                    !empty($provider['enabled']) ? __('enabled', 'livecanvas-forge-ai') : __('disabled', 'livecanvas-forge-ai'),
+                    array_key_exists('installed', $provider) && $provider['installed'] !== null
+                        ? (!empty($provider['installed']) ? __('installed', 'livecanvas-forge-ai') : __('missing', 'livecanvas-forge-ai'))
+                        : '',
+                ]);
+
+                echo '<li class="lcfa-target-item">';
+                echo '<div class="lcfa-target-copy">';
+                echo '<strong>' . esc_html((string) ($provider['name'] ?? $provider_id)) . '</strong>';
+                echo '<span>' . esc_html(implode(' · ', $meta)) . '</span>';
+                echo '</div>';
+                echo '<div class="lcfa-target-actions">';
+                echo '<a class="button button-small" href="' . esc_url($this->get_command_url([
+                    'suggest_action' => 'windpress_scan_provider',
+                    'provider_id'    => $provider_id,
+                ])) . '">' . esc_html__('Scan', 'livecanvas-forge-ai') . '</a>';
+
+                if (!empty($local_bridge['build_available'])) {
+                    echo '<a class="button button-small button-primary" href="' . esc_url($this->get_command_url([
+                        'suggest_action' => 'build_windpress_cache',
+                        'provider_id'    => $provider_id,
+                    ])) . '">' . esc_html__('Build', 'livecanvas-forge-ai') . '</a>';
+                }
+                echo '</div>';
+                echo '</li>';
+            }
+            echo '</ul>';
+        }
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Internal entries', 'livecanvas-forge-ai') . '</h3>';
+        echo '<ul class="lcfa-target-list">';
+        foreach ($reset_entries as $entry) {
+            echo '<li class="lcfa-target-item">';
+            echo '<div class="lcfa-target-copy">';
+            echo '<strong>' . esc_html($entry) . '</strong>';
+            echo '<span>' . esc_html__('Reset one internal WindPress cache entry.', 'livecanvas-forge-ai') . '</span>';
+            echo '</div>';
+            echo '<div class="lcfa-target-actions">';
+            echo '<a class="button button-small" href="' . esc_url($this->get_command_url([
+                'suggest_action' => 'windpress_reset_entry',
+                'relative_path'  => $entry,
+            ])) . '">' . esc_html__('Reset', 'livecanvas-forge-ai') . '</a>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+        echo '</div>';
+    }
+
+    private function render_inventory_group(string $group_key, string $label, array $items): void {
         echo '<div class="lcfa-inventory-group">';
         echo '<h3>' . esc_html($label) . '</h3>';
 
@@ -1232,6 +1613,10 @@ final class LCFA_Admin {
             echo '<span>' . esc_html(implode(' · ', array_filter($meta_parts))) . '</span>';
             echo '</div>';
             echo '<div class="lcfa-target-actions">';
+            $forge_url = $this->get_inventory_item_command_url($group_key, $item);
+            if ($forge_url) {
+                echo '<a class="button button-small button-primary" href="' . esc_url($forge_url) . '">' . esc_html__('Forge', 'livecanvas-forge-ai') . '</a>';
+            }
             if (!empty($item['edit_url'])) {
                 echo '<a class="button button-small" href="' . esc_url($item['edit_url']) . '">' . esc_html__('Edit', 'livecanvas-forge-ai') . '</a>';
             }
@@ -1247,6 +1632,13 @@ final class LCFA_Admin {
             echo '<p class="lcfa-empty">' . esc_html(sprintf(__('Showing %1$d of %2$d entries.', 'livecanvas-forge-ai'), count($visible_items), count($items))) . '</p>';
         }
 
+        echo '</div>';
+    }
+
+    private function render_summary_tile(string $label, string $value): void {
+        echo '<div class="lcfa-summary-tile">';
+        echo '<span>' . esc_html($label) . '</span>';
+        echo '<strong>' . esc_html($value) . '</strong>';
         echo '</div>';
     }
 
@@ -1379,6 +1771,365 @@ final class LCFA_Admin {
             default:
                 return '<span class="lcfa-fallback-logo">AI</span>';
         }
+    }
+
+    private function get_command_form_context(array $actions): array {
+        $defaults = [
+            'action'        => 'site_audit',
+            'target_id'     => '',
+            'variant'       => '1',
+            'title'         => '',
+            'slug'          => '',
+            'provider_id'   => '',
+            'relative_path' => '',
+            'root_scope'    => 'stylesheet',
+            'file_path'     => '',
+            'status'        => 'draft',
+            'content'       => '',
+            'dry_run'       => true,
+            'context_label' => '',
+        ];
+
+        $requested_action = sanitize_key($_GET['suggest_action'] ?? '');
+        if ($requested_action !== '' && isset($actions[$requested_action])) {
+            $defaults['action'] = $requested_action;
+        }
+
+        $defaults['target_id']     = absint($_GET['target_id'] ?? 0) ?: '';
+        $defaults['variant']       = sanitize_text_field($_GET['variant'] ?? '1');
+        $defaults['provider_id']   = sanitize_key($_GET['provider_id'] ?? '');
+        $defaults['relative_path'] = sanitize_text_field($_GET['relative_path'] ?? '');
+        $defaults['root_scope']    = sanitize_key($_GET['root_scope'] ?? 'stylesheet');
+        $defaults['file_path']     = sanitize_text_field($_GET['file_path'] ?? '');
+
+        $post_id = absint($_GET['post_id'] ?? 0);
+        if ($post_id) {
+            $post = get_post($post_id);
+
+            if ($post instanceof WP_Post) {
+                $context = $this->get_command_context_for_post($post);
+                if (!empty($context['action']) && isset($actions[$context['action']])) {
+                    $defaults['action'] = $context['action'];
+                }
+                if (!empty($context['target_id'])) {
+                    $defaults['target_id'] = (string) $context['target_id'];
+                }
+                if (!empty($context['variant'])) {
+                    $defaults['variant'] = (string) $context['variant'];
+                }
+
+                $defaults['context_label'] = sprintf(
+                    __('Imported from LiveCanvas editor: %1$s (#%2$d, %3$s). Suggested action: %4$s.', 'livecanvas-forge-ai'),
+                    get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai'),
+                    (int) $post->ID,
+                    $post->post_type,
+                    $this->get_action_label($defaults['action'])
+                );
+            }
+        }
+
+        return $this->hydrate_command_form_context($defaults);
+    }
+
+    private function hydrate_command_form_context(array $context): array {
+        $action = (string) ($context['action'] ?? '');
+        $target = [
+            'post'    => null,
+            'content' => '',
+        ];
+
+        switch ($action) {
+            case 'update_page':
+                if (!empty($context['target_id'])) {
+                    $target = $this->inventory->get_target_content('page', (int) $context['target_id']);
+                }
+                break;
+
+            case 'update_dynamic_template':
+                if (!empty($context['target_id'])) {
+                    $target = $this->inventory->get_target_content('dynamic_template', (int) $context['target_id']);
+                }
+                break;
+
+            case 'update_header':
+                $target = $this->inventory->get_target_content('header', 0, (string) ($context['variant'] ?? '1'));
+                break;
+
+            case 'update_footer':
+                $target = $this->inventory->get_target_content('footer', 0, (string) ($context['variant'] ?? '1'));
+                break;
+
+            case 'write_theme_template':
+                if (!empty($context['file_path'])) {
+                    try {
+                        $target = $this->theme_files_bridge->read_template_file([
+                            'root_scope' => (string) ($context['root_scope'] ?? 'active'),
+                            'path'       => (string) $context['file_path'],
+                        ]);
+                    } catch (Throwable $throwable) {
+                        $target = [
+                            'content' => '',
+                        ];
+                    }
+                }
+                break;
+
+            case 'write_theme_file':
+                if (!empty($context['file_path'])) {
+                    try {
+                        $target = $this->theme_files_bridge->read_file([
+                            'root_scope' => (string) ($context['root_scope'] ?? 'active'),
+                            'path'       => (string) $context['file_path'],
+                        ]);
+                    } catch (Throwable $throwable) {
+                        $target = [
+                            'content' => '',
+                        ];
+                    }
+                }
+                break;
+        }
+
+        if (!empty($target['post']) && is_array($target['post'])) {
+            if ($context['title'] === '') {
+                $context['title'] = (string) ($target['post']['title'] ?? '');
+            }
+            if ($context['slug'] === '') {
+                $context['slug'] = (string) ($target['post']['slug'] ?? '');
+            }
+            if ($context['status'] === 'draft' && !empty($target['post']['status'])) {
+                $context['status'] = (string) $target['post']['status'];
+            }
+            if ($context['content'] === '') {
+                $context['content'] = (string) ($target['content'] ?? '');
+            }
+            if ($context['target_id'] === '' && !empty($target['post']['id'])) {
+                $context['target_id'] = (string) (int) $target['post']['id'];
+            }
+        }
+
+        if ($context['content'] === '' && !empty($target['content']) && is_string($target['content'])) {
+            $context['content'] = $target['content'];
+        }
+
+        return $context;
+    }
+
+    private function get_command_context_for_post(WP_Post $post): array {
+        $context = [
+            'action'    => '',
+            'target_id' => (int) $post->ID,
+            'variant'   => '1',
+        ];
+
+        if ($post->post_type === 'lc_dynamic_template') {
+            $context['action'] = 'update_dynamic_template';
+            return $context;
+        }
+
+        if ($post->post_type === 'lc_partial') {
+            $header_variant = (string) get_post_meta($post->ID, 'is_header', true);
+            $footer_variant = (string) get_post_meta($post->ID, 'is_footer', true);
+
+            if ($header_variant !== '') {
+                $context['action']  = 'update_header';
+                $context['variant'] = $header_variant ?: '1';
+                return $context;
+            }
+
+            if ($footer_variant !== '') {
+                $context['action']  = 'update_footer';
+                $context['variant'] = $footer_variant ?: '1';
+                return $context;
+            }
+
+            return $context;
+        }
+
+        if (get_post_meta($post->ID, '_lc_livecanvas_enabled', true) === '1' || $post->post_type === 'page') {
+            $context['action'] = 'update_page';
+        }
+
+        return $context;
+    }
+
+    private function get_editor_bridge_actions(WP_Post $post, array $context): array {
+        $actions = [];
+        $current_action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
+        $mcp_status = $this->context_builder->get_mcp_status();
+        $local_bridge = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
+
+        $actions[] = [
+            'label' => __('Current target', 'livecanvas-forge-ai'),
+            'icon'  => 'command',
+            'tone'  => 'primary',
+            'url'   => $this->get_command_url([
+                'post_id'        => $post->ID,
+                'suggest_action' => $current_action,
+                'target_id'      => (int) ($context['target_id'] ?? 0),
+                'variant'        => (string) ($context['variant'] ?? '1'),
+            ]),
+        ];
+
+        $actions[] = [
+            'label' => __('Site audit', 'livecanvas-forge-ai'),
+            'icon'  => 'activity',
+            'tone'  => 'neutral',
+            'url'   => $this->get_command_url([
+                'suggest_action' => 'site_audit',
+            ]),
+        ];
+
+        if ($this->inventory->resolve_partial_post_id('is_header', '1')) {
+            $actions[] = [
+                'label' => __('Header partial', 'livecanvas-forge-ai'),
+                'icon'  => 'layers',
+                'tone'  => 'neutral',
+                'url'   => $this->get_command_url([
+                    'suggest_action' => 'update_header',
+                    'variant'        => '1',
+                ]),
+            ];
+        }
+
+        if ($this->inventory->resolve_partial_post_id('is_footer', '1')) {
+            $actions[] = [
+                'label' => __('Footer partial', 'livecanvas-forge-ai'),
+                'icon'  => 'layers',
+                'tone'  => 'neutral',
+                'url'   => $this->get_command_url([
+                    'suggest_action' => 'update_footer',
+                    'variant'        => '1',
+                ]),
+            ];
+        }
+
+        $actions[] = [
+            'label' => __('WindPress audit', 'livecanvas-forge-ai'),
+            'icon'  => 'wind',
+            'tone'  => 'secondary',
+            'url'   => $this->get_command_url([
+                'suggest_action' => 'windpress_audit',
+            ]),
+        ];
+
+        if (!empty($local_bridge['build_available'])) {
+            $actions[] = [
+                'label' => __('Build Tailwind', 'livecanvas-forge-ai'),
+                'icon'  => 'rocket',
+                'tone'  => 'secondary',
+                'url'   => $this->get_command_url([
+                    'suggest_action' => 'build_windpress_cache',
+                ]),
+            ];
+        }
+
+        $actions[] = [
+            'label' => __('Connections', 'livecanvas-forge-ai'),
+            'icon'  => 'plug',
+            'tone'  => 'secondary',
+            'url'   => $this->get_dashboard_url([
+                'tab' => 'connections',
+            ]),
+        ];
+
+        return array_slice($actions, 0, 7);
+    }
+
+    private function get_default_windpress_provider_ids(array $providers): string {
+        $selected = [];
+
+        foreach ($providers as $provider) {
+            if (!is_array($provider) || empty($provider['id'])) {
+                continue;
+            }
+
+            if (!empty($provider['enabled']) && (!array_key_exists('installed', $provider) || !empty($provider['installed']))) {
+                $selected[] = (string) $provider['id'];
+            }
+        }
+
+        if (!$selected && !empty($providers[0]['id'])) {
+            $selected[] = (string) $providers[0]['id'];
+        }
+
+        return implode(',', array_values(array_unique($selected)));
+    }
+
+    private function format_file_size_label(int $bytes): string {
+        return $bytes > 0 ? size_format($bytes) : __('0 B', 'livecanvas-forge-ai');
+    }
+
+    private function get_editor_target_summary(WP_Post $post, array $context): string {
+        $action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
+        $variant = !empty($context['variant']) ? (string) $context['variant'] : '1';
+        $label = $this->get_action_label($action);
+
+        if ($action === 'update_header' || $action === 'update_footer') {
+            return sprintf(
+                __('Post #%1$d · %2$s · %3$s · variant %4$s', 'livecanvas-forge-ai'),
+                (int) $post->ID,
+                $post->post_type,
+                $label,
+                $variant
+            );
+        }
+
+        return sprintf(
+            __('Post #%1$d · %2$s · %3$s', 'livecanvas-forge-ai'),
+            (int) $post->ID,
+            $post->post_type,
+            $label
+        );
+    }
+
+    private function get_action_label(string $action): string {
+        $actions = $this->command_deck->get_actions();
+
+        return isset($actions[$action]['label']) ? (string) $actions[$action]['label'] : $action;
+    }
+
+    private function get_inventory_item_command_url(string $group_key, array $item): string {
+        $post = !empty($item['id']) ? get_post((int) $item['id']) : null;
+
+        if (!$post instanceof WP_Post) {
+            return '';
+        }
+
+        $context = $this->get_command_context_for_post($post);
+
+        if ($group_key === 'header_partials') {
+            $context['action'] = 'update_header';
+        } elseif ($group_key === 'footer_partials') {
+            $context['action'] = 'update_footer';
+        } elseif ($group_key === 'dynamic_templates') {
+            $context['action'] = 'update_dynamic_template';
+        } elseif ($group_key === 'livecanvas_pages') {
+            $context['action'] = 'update_page';
+        }
+
+        if (empty($context['action'])) {
+            return '';
+        }
+
+        return $this->get_command_url([
+            'post_id'        => $post->ID,
+            'suggest_action' => $context['action'] ?? '',
+            'target_id'      => $context['target_id'] ?? 0,
+            'variant'        => $context['variant'] ?? '',
+        ]);
+    }
+
+    private function get_command_url(array $args = []): string {
+        return $this->get_dashboard_url(array_merge([
+            'tab' => 'command',
+        ], $args));
+    }
+
+    private function get_dashboard_url(array $args = []): string {
+        return add_query_arg(array_merge([
+            'page' => 'lcfa-dashboard',
+        ], $args), admin_url('admin.php'));
     }
 
     private function get_plugin_asset_url(string $slug, string $relative_path): string {

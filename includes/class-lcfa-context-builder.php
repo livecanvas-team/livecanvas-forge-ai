@@ -6,11 +6,13 @@ final class LCFA_Context_Builder {
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
     private ?LCFA_WindPress_Bridge $windpress_bridge;
+    private ?LCFA_Local_MCP_Bridge $local_mcp_bridge;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, ?LCFA_WindPress_Bridge $windpress_bridge = null) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, ?LCFA_WindPress_Bridge $windpress_bridge = null, ?LCFA_Local_MCP_Bridge $local_mcp_bridge = null) {
         $this->environment      = $environment;
         $this->inventory        = $inventory;
         $this->windpress_bridge = $windpress_bridge;
+        $this->local_mcp_bridge = $local_mcp_bridge;
     }
 
     public function build_context(array $args = []): array {
@@ -166,6 +168,14 @@ final class LCFA_Context_Builder {
     public function get_mcp_status(): array {
         $connections = LCFA_Settings::get_connections();
         $snapshot    = $this->environment->get_snapshot();
+        $local_bridge_status = $this->local_mcp_bridge
+            ? $this->local_mcp_bridge->get_status()
+            : [
+                'available'       => false,
+                'build_available' => false,
+                'local_site'      => false,
+                'message'         => __('Local MCP bridge is not configured.', 'livecanvas-forge-ai'),
+            ];
 
         return [
             'enabled'          => (bool) $connections['mcp_enabled'],
@@ -177,14 +187,15 @@ final class LCFA_Context_Builder {
             'preferred_client' => $connections['preferred_client'],
             'server_command'   => $connections['mcp_server_command'],
             'filesystem_mode'  => $snapshot['site_mode'] === 'local' ? 'local-theme-access' : 'remote-rest-primary',
+            'local_bridge'     => $local_bridge_status,
             'capabilities'     => [
                 'rest_context'      => true,
                 'rest_commands'     => true,
-                'filesystem_bridge' => $snapshot['site_mode'] === 'local',
-                'theme_files'       => $snapshot['site_mode'] === 'local',
+                'filesystem_bridge' => !empty($local_bridge_status['available']),
+                'theme_files'       => !empty($local_bridge_status['available']),
                 'tailwind_compile'  => $snapshot['windpress_active'],
                 'windpress_bridge'  => $snapshot['windpress_active'],
-                'windpress_local_compile' => $snapshot['windpress_active'] && $snapshot['site_mode'] === 'local',
+                'windpress_local_compile' => !empty($local_bridge_status['build_available']),
                 'latte_templates'   => $this->has_latte_templates(),
             ],
         ];
