@@ -110,9 +110,20 @@ final class LCFA_Installer {
     private function install_framework_package(string $framework) {
         $urls = apply_filters('lcfa_framework_package_urls', []);
         $url  = '';
+        $connections = LCFA_Settings::get_connections();
 
         if (is_array($urls) && isset($urls[$framework])) {
             $url = (string) $urls[$framework];
+        }
+
+        if ($url === '') {
+            if ($framework === 'picowind') {
+                $url = (string) $connections['picowind_package_url'];
+            }
+
+            if ($framework === 'picostrap') {
+                $url = (string) $connections['picostrap_package_url'];
+            }
         }
 
         if ($url === '') {

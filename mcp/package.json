@@ -1,0 +1,13 @@
+{
+  "name": "@livecanvas/forge-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP bridge for LiveCanvas Forge AI",
+  "bin": {
+    "livecanvas-forge-mcp": "bin/livecanvas-forge-mcp.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "UNLICENSED"
+}

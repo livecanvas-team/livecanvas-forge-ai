@@ -18,6 +18,11 @@ define('LCFA_URL', plugin_dir_url(__FILE__));
 require_once LCFA_DIR . 'includes/class-lcfa-settings.php';
 require_once LCFA_DIR . 'includes/class-lcfa-environment.php';
 require_once LCFA_DIR . 'includes/class-lcfa-installer.php';
+require_once LCFA_DIR . 'includes/class-lcfa-inventory.php';
+require_once LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
+require_once LCFA_DIR . 'includes/class-lcfa-context-builder.php';
+require_once LCFA_DIR . 'includes/class-lcfa-command-deck.php';
+require_once LCFA_DIR . 'includes/class-lcfa-rest-api.php';
 require_once LCFA_DIR . 'includes/class-lcfa-admin.php';
 require_once LCFA_DIR . 'includes/class-lcfa-plugin.php';
 

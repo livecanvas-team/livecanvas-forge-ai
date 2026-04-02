@@ -5,10 +5,16 @@ defined('ABSPATH') || exit;
 final class LCFA_Admin {
     private LCFA_Environment $environment;
     private LCFA_Installer $installer;
+    private LCFA_Inventory $inventory;
+    private LCFA_Context_Builder $context_builder;
+    private LCFA_Command_Deck $command_deck;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer) {
-        $this->environment = $environment;
-        $this->installer   = $installer;
+    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer, LCFA_Inventory $inventory, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
+        $this->environment  = $environment;
+        $this->installer    = $installer;
+        $this->inventory    = $inventory;
+        $this->context_builder = $context_builder;
+        $this->command_deck = $command_deck;
     }
 
     public function hooks(): void {
@@ -16,30 +22,24 @@ final class LCFA_Admin {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_init', [$this, 'maybe_redirect_after_activation']);
         add_action('admin_post_lcfa_setup', [$this, 'handle_setup_post']);
+        add_action('admin_post_lcfa_reset_setup', [$this, 'handle_reset_setup_post']);
+        add_action('admin_post_lcfa_connections', [$this, 'handle_connections_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
+        add_action('admin_post_lcfa_command', [$this, 'handle_command_post']);
     }
 
     public function register_menus(): void {
         $parent_slug = $this->environment->get_livecanvas_menu_slug();
-        $capability  = 'manage_options';
+        $admin_capability = 'manage_options';
 
         if ($parent_slug) {
             add_submenu_page(
                 $parent_slug,
                 __('Forge AI', 'livecanvas-forge-ai'),
                 __('Forge AI', 'livecanvas-forge-ai'),
-                $capability,
+                $admin_capability,
                 'lcfa-dashboard',
                 [$this, 'render_dashboard_page']
-            );
-
-            add_submenu_page(
-                $parent_slug,
-                __('Forge Setup', 'livecanvas-forge-ai'),
-                __('Forge Setup', 'livecanvas-forge-ai'),
-                $capability,
-                'lcfa-setup',
-                [$this, 'render_setup_page']
             );
 
             return;
@@ -48,21 +48,13 @@ final class LCFA_Admin {
         add_menu_page(
             __('LiveCanvas Forge AI', 'livecanvas-forge-ai'),
             __('Forge AI', 'livecanvas-forge-ai'),
-            $capability,
+            $admin_capability,
             'lcfa-dashboard',
             [$this, 'render_dashboard_page'],
             'dashicons-superhero-alt',
             59
         );
 
-        add_submenu_page(
-            'lcfa-dashboard',
-            __('Forge Setup', 'livecanvas-forge-ai'),
-            __('Forge Setup', 'livecanvas-forge-ai'),
-            $capability,
-            'lcfa-setup',
-            [$this, 'render_setup_page']
-        );
     }
 
     public function enqueue_assets(string $hook_suffix): void {
@@ -93,7 +85,7 @@ final class LCFA_Admin {
             return;
         }
 
-        wp_safe_redirect(admin_url('admin.php?page=lcfa-setup'));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup'));
         exit;
     }
 
@@ -184,6 +176,9 @@ final class LCFA_Admin {
                     'ai_tool'             => $ai_tool,
                     'last_completed_step' => max(4, (int) $settings['last_completed_step']),
                 ]);
+                LCFA_Settings::update_connections(array_merge(LCFA_Settings::get_connections(), [
+                    'preferred_client' => $ai_tool,
+                ]));
 
                 LCFA_Settings::set_notice(__('AI client saved.', 'livecanvas-forge-ai'));
                 $this->redirect_to_step(5);
@@ -215,12 +210,52 @@ final class LCFA_Admin {
                 ]);
 
                 LCFA_Settings::set_notice(__('Forge Setup is complete. You can now move into the operational dashboard.', 'livecanvas-forge-ai'));
-                wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard'));
+                wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
                 exit;
 
             default:
                 $this->redirect_to_step(1);
         }
+    }
+
+    public function handle_connections_post(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_connections');
+
+        LCFA_Settings::update_connections($_POST);
+
+        if (!empty($_POST['rotate_mcp_token'])) {
+            LCFA_Settings::rotate_mcp_token();
+        }
+
+        $preferred_client = sanitize_key($_POST['preferred_client'] ?? '');
+        if (in_array($preferred_client, ['codex', 'opencode', 'claude-code', 'cursor', 'other'], true)) {
+            LCFA_Settings::patch([
+                'ai_tool' => $preferred_client,
+            ]);
+        }
+
+        LCFA_Settings::set_notice(!empty($_POST['rotate_mcp_token']) ? __('Connection settings saved and MCP token rotated.', 'livecanvas-forge-ai') : __('Connection settings saved.', 'livecanvas-forge-ai'));
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+        exit;
+    }
+
+    public function handle_reset_setup_post(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_reset_setup');
+
+        LCFA_Settings::update(LCFA_Settings::defaults());
+        LCFA_Settings::set_notice(__('Forge Setup has been reset. Connections, history, and Genesis brief were preserved.', 'livecanvas-forge-ai'), 'success');
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=1'));
+        exit;
     }
 
     public function handle_project_brief_post(): void {
@@ -233,38 +268,165 @@ final class LCFA_Admin {
         LCFA_Settings::update_project_brief($_POST);
         LCFA_Settings::set_notice(__('Genesis brief updated.', 'livecanvas-forge-ai'));
 
-        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard'));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
+        exit;
+    }
+
+    public function handle_command_post(): void {
+        if (!current_user_can('edit_pages')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_command');
+
+        $result = $this->command_deck->execute($_POST);
+        LCFA_Settings::set_command_result($result);
+
+        if (!empty($result['ok'])) {
+            $notice = $result['mode'] === 'preview'
+                ? __('Command preview prepared.', 'livecanvas-forge-ai')
+                : ($result['message'] ?: __('Command applied.', 'livecanvas-forge-ai'));
+
+            LCFA_Settings::set_notice($notice, 'success');
+        } else {
+            LCFA_Settings::set_notice($result['message'] ?: __('The command failed.', 'livecanvas-forge-ai'), 'error');
+        }
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=command'));
         exit;
     }
 
     public function render_setup_page(): void {
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=' . max(1, absint($_GET['step'] ?? 1))));
+        exit;
+    }
+
+    public function render_dashboard_page(): void {
         if (!current_user_can('manage_options')) {
             return;
         }
 
         $settings = LCFA_Settings::get();
         $snapshot = $this->environment->get_snapshot();
-        $step     = max(1, absint($_GET['step'] ?? 1));
+        $brief    = LCFA_Settings::get_project_brief();
+        $summary  = $this->inventory->get_summary();
+        $notice   = LCFA_Settings::consume_notice();
+        $tab      = sanitize_key($_GET['tab'] ?? ($settings['completed'] ? 'genesis' : 'setup'));
 
-        if ($step > 1 && !$snapshot['livecanvas_active']) {
-            $step = 1;
+        if (!in_array($tab, ['setup', 'genesis', 'connections', 'command'], true)) {
+            $tab = $settings['completed'] ? 'genesis' : 'setup';
         }
 
-        $notice = LCFA_Settings::consume_notice();
+        $hero = [
+            'setup' => [
+                'title'    => __('Forge Setup', 'livecanvas-forge-ai'),
+                'subtitle' => __('Run the onboarding wizard, confirm the framework, and prepare the plugin for local or remote AI-assisted development.', 'livecanvas-forge-ai'),
+            ],
+            'genesis' => [
+                'title'    => __('Genesis Brief', 'livecanvas-forge-ai'),
+                'subtitle' => __('Define the brand, site scope, and build mode so the AI starts with a persistent project brief instead of isolated prompts.', 'livecanvas-forge-ai'),
+            ],
+            'connections' => [
+                'title'    => __('Connections', 'livecanvas-forge-ai'),
+                'subtitle' => __('Configure the transport contract, remote credentials, package URLs, and preferred AI client from a single control surface.', 'livecanvas-forge-ai'),
+            ],
+            'command' => [
+                'title'    => __('Command Deck', 'livecanvas-forge-ai'),
+                'subtitle' => __('Preview or apply concrete LiveCanvas operations from inside WordPress using the same contract exposed by the REST API.', 'livecanvas-forge-ai'),
+            ],
+        ];
 
         echo '<div class="wrap lcfa-admin">';
         $this->render_page_header(
-            __('Forge Setup', 'livecanvas-forge-ai'),
-            __('Prepare the stack, confirm your frontend framework, and choose how your AI clients will connect to LiveCanvas.', 'livecanvas-forge-ai'),
+            $hero[$tab]['title'],
+            $hero[$tab]['subtitle'],
             $snapshot,
             $settings
         );
 
         $this->render_notice($notice);
-        $this->render_step_nav($step, $settings, $snapshot);
+        $this->render_internal_tabs($tab, $settings);
+
+        if (!$settings['completed'] && $tab !== 'setup') {
+            echo '<div class="notice notice-warning"><p>';
+            echo esc_html__('Forge Setup is not complete yet. Finish the setup flow before using the operational dashboard.', 'livecanvas-forge-ai');
+            echo ' <a href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=setup')) . '">' . esc_html__('Open Forge Setup', 'livecanvas-forge-ai') . '</a>';
+            echo '</p></div>';
+        }
+
+        switch ($tab) {
+            case 'setup':
+                $this->render_setup_tab($settings, $snapshot);
+                break;
+
+            case 'connections':
+                $this->render_connections_tab($settings, $snapshot);
+                break;
+
+            case 'command':
+                $this->render_command_tab($settings, $snapshot);
+                break;
+
+            case 'genesis':
+            default:
+                $this->render_genesis_tab($settings, $snapshot, $brief, $summary);
+                break;
+        }
+
+        echo '</div>';
+    }
+
+    public function render_connections_page(): void {
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+        exit;
+    }
+
+    public function render_command_page(): void {
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=command'));
+        exit;
+    }
+
+    private function render_internal_tabs(string $current_tab, array $settings): void {
+        $tabs = [
+            'setup' => ['label' => __('Setup', 'livecanvas-forge-ai'), 'icon' => 'shield-check'],
+            'genesis' => ['label' => __('Genesis', 'livecanvas-forge-ai'), 'icon' => 'stars'],
+            'connections' => ['label' => __('Connections', 'livecanvas-forge-ai'), 'icon' => 'plug'],
+            'command' => ['label' => __('Command Deck', 'livecanvas-forge-ai'), 'icon' => 'command'],
+        ];
+
+        echo '<div class="lcfa-tabbar">';
+        echo '<nav class="lcfa-tabs">';
+        foreach ($tabs as $tab => $data) {
+            $classes = 'lcfa-tab' . ($tab === $current_tab ? ' is-current' : '');
+            $url     = admin_url('admin.php?page=lcfa-dashboard&tab=' . $tab);
+            echo '<a class="' . esc_attr($classes) . '" href="' . esc_url($url) . '">';
+            echo '<span class="lcfa-step-icon-wrap">' . $this->get_icon_svg($data['icon']) . '</span>';
+            echo '<span>' . esc_html($data['label']) . '</span>';
+            echo '</a>';
+        }
+        echo '</nav>';
+
+        if ((int) $settings['last_completed_step'] > 0 || !empty($settings['completed'])) {
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            wp_nonce_field('lcfa_reset_setup');
+            echo '<input type="hidden" name="action" value="lcfa_reset_setup">';
+            echo '<button class="button" type="submit">' . esc_html__('Restart Forge Setup', 'livecanvas-forge-ai') . '</button>';
+            echo '</form>';
+        }
+
+        echo '</div>';
+    }
+
+    private function render_setup_tab(array $settings, array $snapshot): void {
+        $step = max(1, absint($_GET['step'] ?? 1));
+
+        if ($step > 1 && !$snapshot['livecanvas_active']) {
+            $step = 1;
+        }
 
         echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
+        $this->render_step_nav($step, $settings, $snapshot);
 
         switch ($step) {
             case 1:
@@ -283,6 +445,7 @@ final class LCFA_Admin {
                 $this->render_permissions_step($settings);
                 break;
             case 6:
+            default:
                 $this->render_finish_step($settings, $snapshot);
                 break;
         }
@@ -292,36 +455,9 @@ final class LCFA_Admin {
         $this->render_snapshot_card($snapshot, $settings);
         echo '</aside>';
         echo '</div>';
-        echo '</div>';
     }
 
-    public function render_dashboard_page(): void {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
-
-        $settings = LCFA_Settings::get();
-        $snapshot = $this->environment->get_snapshot();
-        $brief    = LCFA_Settings::get_project_brief();
-        $notice   = LCFA_Settings::consume_notice();
-
-        echo '<div class="wrap lcfa-admin">';
-        $this->render_page_header(
-            __('Forge AI Dashboard', 'livecanvas-forge-ai'),
-            __('Capture the project brief now, then wire the future Command Deck into LiveCanvas with preview, diff, and rollback as the default workflow.', 'livecanvas-forge-ai'),
-            $snapshot,
-            $settings
-        );
-
-        $this->render_notice($notice);
-
-        if (!$settings['completed']) {
-            echo '<div class="notice notice-warning"><p>';
-            echo esc_html__('Forge Setup is not complete yet. Finish the setup flow before using the operational dashboard.', 'livecanvas-forge-ai');
-            echo ' <a href="' . esc_url(admin_url('admin.php?page=lcfa-setup')) . '">' . esc_html__('Open Forge Setup', 'livecanvas-forge-ai') . '</a>';
-            echo '</p></div>';
-        }
-
+    private function render_genesis_tab(array $settings, array $snapshot, array $brief, array $summary): void {
         echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
 
@@ -362,13 +498,16 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
-        echo '<div><h2>' . esc_html__('Command Deck', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('The persistent operational chat will land here in the next milestone.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Operations overview', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Once the brief is stored, use Connections and Command Deck from the same screen to execute the build progressively.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
-        echo '<p>' . esc_html__('This panel will consume the Genesis brief, the confirmed stack, and the selected permission profile to create or refine pages, headers, footers, dynamic templates, and safe fallbacks with preview first.', 'livecanvas-forge-ai') . '</p>';
+        echo '<div class="lcfa-cta-row">';
+        echo '<a class="button button-primary" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=command')) . '">' . esc_html__('Open Command Deck', 'livecanvas-forge-ai') . '</a>';
+        echo '<a class="button" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=connections')) . '">' . esc_html__('Open Connections', 'livecanvas-forge-ai') . '</a>';
+        echo '</div>';
         echo '<ul class="lcfa-bullets">';
-        echo '<li>' . esc_html__('Targets planned: pages, headers, footers, partials, dynamic templates, PHP fallback templates.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('Execution model: plan, preview, diff, apply, rollback.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('Client integrations planned: Codex, OpenCode, Claude Code, Cursor, MCP, and REST.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html(sprintf(__('Inventory ready: %1$d pages, %2$d headers, %3$d footers, %4$d dynamic templates.', 'livecanvas-forge-ai'), $summary['pages'], $summary['headers'], $summary['footers'], $summary['dynamic_templates'])) . '</li>';
+        echo '<li>' . esc_html__('Execution model: preview first, diff when content changes, apply only when requested.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Use this brief as the persistent input for generating structure, copy, sections, and dynamic templates.', 'livecanvas-forge-ai') . '</li>';
         echo '</ul>';
         echo '</section>';
 
@@ -377,6 +516,200 @@ final class LCFA_Admin {
         $this->render_snapshot_card($snapshot, $settings);
         echo '</aside>';
         echo '</div>';
+    }
+
+    private function render_connections_tab(array $settings, array $snapshot): void {
+        $connections      = LCFA_Settings::get_connections();
+        $preferred_client = $connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex');
+        $guides           = $this->get_tool_guides($settings['site_mode'] ?: $snapshot['site_mode']);
+        $guide            = $guides[$preferred_client] ?? $guides['other'];
+        $mcp_status       = $this->context_builder->get_mcp_status();
+        $mcp_bootstrap    = $this->context_builder->get_bootstrap_payload();
+        $command_example  = wp_json_encode([
+            'action'  => 'site_audit',
+            'dry_run' => true,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $preferred_bootstrap = $mcp_bootstrap['clients'][$preferred_client] ?? $mcp_bootstrap['clients']['codex'];
+        $common_environment = [
+            'LCFA_SITE_URL=' . $mcp_bootstrap['common']['site_url'],
+            'LCFA_REST_BASE=' . $mcp_bootstrap['common']['rest_base'],
+            'LCFA_MCP_ENDPOINT=' . $mcp_bootstrap['common']['mcp_endpoint'],
+            'LCFA_MCP_TOKEN=' . $mcp_bootstrap['common']['mcp_token'],
+            'LCFA_FRAMEWORK=' . $mcp_bootstrap['common']['framework'],
+            'LCFA_THEME=' . $mcp_bootstrap['common']['theme'],
+        ];
+
+        if (($mcp_bootstrap['common']['filesystem_mode'] ?? '') === 'local-theme-access' && !empty($mcp_bootstrap['common']['wp_root'])) {
+            $common_environment[] = 'LCFA_WP_ROOT=' . $mcp_bootstrap['common']['wp_root'];
+        }
+
+        $common_bootstrap = implode("\n", $common_environment);
+
+        echo '<div class="lcfa-grid">';
+        echo '<div class="lcfa-main">';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('plug');
+        echo '<div><h2>' . esc_html__('Connection profile', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this page to feed the installer and define how your preferred client should talk to the companion.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
+        wp_nonce_field('lcfa_connections');
+        echo '<input type="hidden" name="action" value="lcfa_connections">';
+
+        echo '<label><span>' . esc_html__('Preferred transport', 'livecanvas-forge-ai') . '</span>';
+        echo '<select name="transport">';
+        echo '<option value="rest"' . selected($connections['transport'], 'rest', false) . '>' . esc_html__('REST first', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="mcp"' . selected($connections['transport'], 'mcp', false) . '>' . esc_html__('MCP first', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="hybrid"' . selected($connections['transport'], 'hybrid', false) . '>' . esc_html__('Hybrid', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></label>';
+
+        echo '<label><span>' . esc_html__('Preferred AI client', 'livecanvas-forge-ai') . '</span>';
+        echo '<select name="preferred_client">';
+        echo '<option value="codex"' . selected($preferred_client, 'codex', false) . '>' . esc_html__('Codex', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="opencode"' . selected($preferred_client, 'opencode', false) . '>' . esc_html__('OpenCode', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="claude-code"' . selected($preferred_client, 'claude-code', false) . '>' . esc_html__('Claude Code', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="cursor"' . selected($preferred_client, 'cursor', false) . '>' . esc_html__('Cursor', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="other"' . selected($preferred_client, 'other', false) . '>' . esc_html__('Other', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></label>';
+
+        echo '<label><span>' . esc_html__('Picowind package URL', 'livecanvas-forge-ai') . '</span><input type="text" name="picowind_package_url" value="' . esc_attr($connections['picowind_package_url']) . '" placeholder="https://...zip"></label>';
+        echo '<label><span>' . esc_html__('Picostrap package URL', 'livecanvas-forge-ai') . '</span><input type="text" name="picostrap_package_url" value="' . esc_attr($connections['picostrap_package_url']) . '" placeholder="https://...zip"></label>';
+        echo '<label><span>' . esc_html__('Local bridge URL', 'livecanvas-forge-ai') . '</span><input type="text" name="local_bridge_url" value="' . esc_attr($connections['local_bridge_url']) . '"></label>';
+        echo '<label class="lcfa-checkbox"><input type="checkbox" name="mcp_enabled" value="1"' . checked((bool) $connections['mcp_enabled'], true, false) . '> ' . esc_html__('Enable the built-in MCP bridge profile for local tooling.', 'livecanvas-forge-ai') . '</label>';
+        echo '<label><span>' . esc_html__('MCP host', 'livecanvas-forge-ai') . '</span><input type="text" name="mcp_host" value="' . esc_attr($connections['mcp_host']) . '" placeholder="127.0.0.1"></label>';
+        echo '<label><span>' . esc_html__('MCP port', 'livecanvas-forge-ai') . '</span><input type="text" name="mcp_port" value="' . esc_attr($connections['mcp_port']) . '" placeholder="7681"></label>';
+        echo '<label><span>' . esc_html__('Remote site URL', 'livecanvas-forge-ai') . '</span><input type="text" name="remote_site_url" value="' . esc_attr($connections['remote_site_url']) . '" placeholder="https://example.com"></label>';
+        echo '<label><span>' . esc_html__('Remote username', 'livecanvas-forge-ai') . '</span><input type="text" name="remote_username" value="' . esc_attr($connections['remote_username']) . '"></label>';
+        echo '<label><span>' . esc_html__('Remote application password', 'livecanvas-forge-ai') . '</span><input type="password" name="remote_application_password" value="" placeholder="' . esc_attr($connections['remote_application_password'] !== '' ? __('Stored. Leave blank to keep current value.', 'livecanvas-forge-ai') : __('xxxx xxxx xxxx xxxx xxxx xxxx', 'livecanvas-forge-ai')) . '"></label>';
+        echo '<label><span>' . esc_html__('MCP server command', 'livecanvas-forge-ai') . '</span><textarea name="mcp_server_command" rows="4" placeholder="npx @livecanvas/forge-mcp">' . esc_textarea($connections['mcp_server_command']) . '</textarea></label>';
+
+        echo '<div class="lcfa-cta-row">';
+        echo '<button class="button button-primary">' . esc_html__('Save connection settings', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button" type="submit" name="rotate_mcp_token" value="1">' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</button>';
+        echo '</div>';
+        echo '</form>';
+        echo '</section>';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('command');
+        echo '<div><h2>' . esc_html__('MCP bootstrap', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('This is the plugin-side contract that your own MCP server can consume immediately.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<ul class="lcfa-bullets">';
+        echo '<li>' . esc_html(sprintf(__('REST base: %s', 'livecanvas-forge-ai'), rest_url('lcfa/v1/'))) . '</li>';
+        echo '<li>' . esc_html(sprintf(__('MCP endpoint: %s', 'livecanvas-forge-ai'), $mcp_status['endpoint'])) . '</li>';
+        echo '<li>' . esc_html__('Context endpoints: /context, /theme-context, /page-html, /acf-fields, /library/blocks.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Execution endpoints: /command/actions, /command, /mcp/status, /mcp/bootstrap.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('WindPress endpoints: /windpress/status, /windpress/providers, /windpress/providers/scan, /windpress/volume, /windpress/volume/handlers, /windpress/volume/reset, /windpress/theme-json, /windpress/cache. MCP bridge also exposes /windpress/providers/scan/full and /windpress/build for local compilation.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Filesystem tools: get_theme_roots, list_theme_files, list_theme_templates, list_twig_templates, list_latte_templates, list_php_templates, read_theme_file, read_template_file, write_theme_file, write_template_file.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Recommended auth for remote use: a dedicated WordPress user plus Application Password.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Installer note: the framework installer consumes the package URLs stored on this page.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ul>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Common environment', 'livecanvas-forge-ai') . '</h3>';
+        echo '<div class="lcfa-code-block"><pre><code>' . esc_html($common_bootstrap) . '</code></pre></div>';
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Preferred client bootstrap', 'livecanvas-forge-ai') . '</h3>';
+        echo '<div class="lcfa-code-block"><pre><code>' . esc_html($preferred_bootstrap['command'] . "\n\n" . implode("\n", $preferred_bootstrap['env'])) . '</code></pre></div>';
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Example command request', 'livecanvas-forge-ai') . '</h3>';
+        echo '<div class="lcfa-code-block"><pre><code>' . esc_html("POST " . rest_url('lcfa/v1/command') . "\nContent-Type: application/json\n\n" . $command_example) . '</code></pre></div>';
+        echo '</div>';
+        echo '</section>';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('stars');
+        echo '<div><h2>' . esc_html__('Preferred client guide', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('A concrete starting point for the client currently selected in the setup or on this page.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<p>' . esc_html($guide['summary']) . '</p>';
+        echo '<ul class="lcfa-bullets">';
+        foreach ($guide['steps'] as $line) {
+            echo '<li>' . esc_html($line) . '</li>';
+        }
+        echo '</ul>';
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('MCP status', 'livecanvas-forge-ai') . '</h3>';
+        echo '<ul class="lcfa-bullets">';
+        echo '<li>' . esc_html(sprintf(__('Enabled: %s', 'livecanvas-forge-ai'), $mcp_status['enabled'] ? __('yes', 'livecanvas-forge-ai') : __('no', 'livecanvas-forge-ai'))) . '</li>';
+        echo '<li>' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $mcp_status['filesystem_mode'])) . '</li>';
+        echo '<li>' . esc_html(sprintf(__('Token: %s', 'livecanvas-forge-ai'), $connections['mcp_token'])) . '</li>';
+        echo '</ul>';
+        echo '</div>';
+        echo '</section>';
+
+        echo '</div>';
+        echo '<aside class="lcfa-sidebar">';
+        $this->render_snapshot_card($snapshot, $settings);
+        echo '</aside>';
+        echo '</div>';
+    }
+
+    private function render_command_tab(array $settings, array $snapshot): void {
+        $inventory      = $this->inventory->get_inventory();
+        $actions        = $this->command_deck->get_actions();
+        $command_result = LCFA_Settings::consume_command_result();
+        $history        = LCFA_Settings::get_history();
+
+        echo '<div class="lcfa-grid">';
+        echo '<div class="lcfa-main">';
+        $this->render_command_result($command_result);
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('command');
+        echo '<div><h2>' . esc_html__('Run command', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('This MVP executor supports preview and apply for pages, header/footer partials, and dynamic templates.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
+        wp_nonce_field('lcfa_command');
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+
+        echo '<label><span>' . esc_html__('Action', 'livecanvas-forge-ai') . '</span>';
+        echo '<select name="action">';
+        foreach ($actions as $action_key => $action_data) {
+            echo '<option value="' . esc_attr($action_key) . '">' . esc_html($action_data['label']) . '</option>';
+        }
+        echo '</select></label>';
+
+        echo '<label><span>' . esc_html__('Target ID', 'livecanvas-forge-ai') . '</span><input type="text" name="target_id" value="" placeholder="' . esc_attr__('Required for update actions.', 'livecanvas-forge-ai') . '"></label>';
+        echo '<label><span>' . esc_html__('Variant', 'livecanvas-forge-ai') . '</span><input type="text" name="variant" value="1" placeholder="1"></label>';
+        echo '<label><span>' . esc_html__('Title', 'livecanvas-forge-ai') . '</span><input type="text" name="title" value="" placeholder="' . esc_attr__('Used for create actions.', 'livecanvas-forge-ai') . '"></label>';
+        echo '<label><span>' . esc_html__('Slug', 'livecanvas-forge-ai') . '</span><input type="text" name="slug" value="" placeholder="optional-slug"></label>';
+        echo '<label><span>' . esc_html__('Post status', 'livecanvas-forge-ai') . '</span>';
+        echo '<select name="status">';
+        echo '<option value="draft">' . esc_html__('Draft', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="publish">' . esc_html__('Publish', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="private">' . esc_html__('Private', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="pending">' . esc_html__('Pending', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></label>';
+        echo '<label><span>' . esc_html__('HTML / template content', 'livecanvas-forge-ai') . '</span><textarea name="content" rows="16" placeholder="' . esc_attr__('<section>...</section>', 'livecanvas-forge-ai') . '"></textarea></label>';
+        echo '<label class="lcfa-checkbox"><input type="checkbox" name="dry_run" value="1" checked> ' . esc_html__('Run as preview only', 'livecanvas-forge-ai') . '</label>';
+
+        echo '<button class="button button-primary">' . esc_html__('Run command', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+        echo '</section>';
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('layers');
+        echo '<div><h2>' . esc_html__('Inventory', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('LiveCanvas-aware targets currently discoverable by the companion.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        $this->render_inventory_panel($inventory);
+        echo '</section>';
+
+        echo '</div>';
+        echo '<aside class="lcfa-sidebar">';
+        $this->render_snapshot_card($snapshot, $settings);
+        $this->render_history_panel($history);
+        echo '</aside>';
         echo '</div>';
     }
 
@@ -596,7 +929,7 @@ final class LCFA_Admin {
                 continue;
             }
 
-            echo '<a class="' . esc_attr(implode(' ', $classes)) . '" href="' . esc_url(admin_url('admin.php?page=lcfa-setup&step=' . $step)) . '">' . $content . '</a>';
+            echo '<a class="' . esc_attr(implode(' ', $classes)) . '" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=' . $step)) . '">' . $content . '</a>';
         }
 
         echo '</nav>';
@@ -612,32 +945,32 @@ final class LCFA_Admin {
         echo '<div class="lcfa-brand-grid">';
         $this->render_brand_tile(
             __('LiveCanvas', 'livecanvas-forge-ai'),
-            $this->get_partner_logo('livecanvas'),
+            $this->get_partner_logo('livecanvas-micro'),
             $snapshot['livecanvas_active'] ? __('Active', 'livecanvas-forge-ai') : __('Missing or inactive', 'livecanvas-forge-ai'),
-            $snapshot['livecanvas_active']
+            $snapshot['livecanvas_active'] ? 'active' : 'other'
         );
         $this->render_brand_tile(
             $snapshot['detected_framework'] === 'picowind' ? __('Picowind', 'livecanvas-forge-ai') : __('Bootstrap', 'livecanvas-forge-ai'),
             $snapshot['detected_framework'] === 'picowind' ? $this->get_icon_svg('wind') : $this->get_partner_logo('bootstrap'),
             $snapshot['framework_slug'] ?: __('No editor config detected', 'livecanvas-forge-ai'),
-            $snapshot['detected_framework'] !== 'unknown'
+            'other'
         );
         $this->render_brand_tile(
             __('WindPress', 'livecanvas-forge-ai'),
             $this->get_partner_logo('windpress'),
             $snapshot['windpress_active'] ? __('Active', 'livecanvas-forge-ai') : ($snapshot['windpress_installed'] ? __('Installed', 'livecanvas-forge-ai') : __('Not installed', 'livecanvas-forge-ai')),
-            $snapshot['windpress_installed']
+            $snapshot['windpress_active'] ? 'active' : 'other'
         );
         echo '</div>';
 
         echo '<ul class="lcfa-facts">';
-        $this->render_fact_row(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_name']);
-        $this->render_fact_row(__('Detected framework', 'livecanvas-forge-ai'), $snapshot['detected_framework']);
-        $this->render_fact_row(__('Editor config', 'livecanvas-forge-ai'), $snapshot['framework_slug'] ?: 'n/a');
-        $this->render_fact_row(__('Site profile', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode']);
-        $this->render_fact_row(__('Tangible', 'livecanvas-forge-ai'), $snapshot['tangible_available'] ? __('Available', 'livecanvas-forge-ai') : __('Unavailable', 'livecanvas-forge-ai'));
-        $this->render_fact_row(__('WooCommerce', 'livecanvas-forge-ai'), $snapshot['woocommerce_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'));
-        $this->render_fact_row(__('ACF', 'livecanvas-forge-ai'), $snapshot['acf_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'));
+        $this->render_fact_row(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_name'], 'active');
+        $this->render_fact_row(__('Detected framework', 'livecanvas-forge-ai'), $snapshot['detected_framework'], $snapshot['detected_framework'] !== 'unknown' ? 'active' : 'other');
+        $this->render_fact_row(__('Editor config', 'livecanvas-forge-ai'), $snapshot['framework_slug'] ?: 'n/a', $snapshot['framework_slug'] ? 'active' : 'other');
+        $this->render_fact_row(__('Site profile', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode'], !empty($settings['site_mode']) ? 'active' : 'other');
+        $this->render_fact_row(__('Tangible', 'livecanvas-forge-ai'), $snapshot['tangible_available'] ? __('Available', 'livecanvas-forge-ai') : __('Unavailable', 'livecanvas-forge-ai'), $snapshot['tangible_available'] ? 'active' : 'other');
+        $this->render_fact_row(__('WooCommerce', 'livecanvas-forge-ai'), $snapshot['woocommerce_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'), $snapshot['woocommerce_active'] ? 'active' : 'other');
+        $this->render_fact_row(__('ACF', 'livecanvas-forge-ai'), $snapshot['acf_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'), $snapshot['acf_active'] ? 'active' : 'other');
         echo '</ul>';
         echo '</section>';
     }
@@ -686,40 +1019,280 @@ final class LCFA_Admin {
         echo '<section class="lcfa-hero">';
         echo '<div class="lcfa-hero-copy">';
         echo '<div class="lcfa-kicker">';
-        echo $this->get_icon_svg('moon-stars');
         echo '<span>' . esc_html__('LiveCanvas Forge AI', 'livecanvas-forge-ai') . '</span>';
         echo '</div>';
         echo '<h1>' . esc_html($title) . '</h1>';
         echo '<p class="lcfa-lead">' . esc_html($subtitle) . '</p>';
         echo '<div class="lcfa-hero-badges">';
-        $this->render_badge(__('Framework', 'livecanvas-forge-ai'), $settings['framework'] ?: $snapshot['detected_framework']);
-        $this->render_badge(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_stylesheet']);
-        $this->render_badge(__('Site mode', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode']);
-        echo '</div>';
+        if (!empty($settings['framework'])) {
+            $this->render_badge(__('Framework', 'livecanvas-forge-ai'), $settings['framework'], 'active');
+        }
+        $this->render_badge(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_stylesheet'], 'active');
+        if (!empty($settings['site_mode'])) {
+            $this->render_badge(__('Site mode', 'livecanvas-forge-ai'), $settings['site_mode'], 'active');
+        }
         echo '</div>';
 
-        echo '<div class="lcfa-hero-stack">';
-        echo '<div class="lcfa-brand-pill">' . $this->get_partner_logo('livecanvas') . '<span>' . esc_html__('LiveCanvas', 'livecanvas-forge-ai') . '</span></div>';
-        echo '<div class="lcfa-brand-pill">' . $this->get_partner_logo('bootstrap') . '<span>' . esc_html__('Bootstrap', 'livecanvas-forge-ai') . '</span></div>';
-        echo '<div class="lcfa-brand-pill">' . $this->get_partner_logo('windpress') . '<span>' . esc_html__('WindPress', 'livecanvas-forge-ai') . '</span></div>';
+        echo '<div class="lcfa-mini-partners">';
+        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('livecanvas-micro') . '<span>' . esc_html__('LiveCanvas', 'livecanvas-forge-ai') . '</span></span>';
+        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('bootstrap') . '<span>' . esc_html__('Bootstrap', 'livecanvas-forge-ai') . '</span></span>';
+        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('windpress') . '<span>' . esc_html__('WindPress', 'livecanvas-forge-ai') . '</span></span>';
+        echo '</div>';
         echo '</div>';
         echo '</section>';
     }
 
-    private function render_brand_tile(string $title, string $logo_markup, string $caption, bool $is_active): void {
-        echo '<div class="lcfa-brand-tile' . ($is_active ? ' is-active' : '') . '">';
+    private function render_brand_tile(string $title, string $logo_markup, string $caption, string $tone = 'other'): void {
+        $tone_class = in_array($tone, ['active', 'other'], true) ? $tone : 'other';
+
+        echo '<div class="lcfa-brand-tile is-' . esc_attr($tone_class) . '">';
         echo '<div class="lcfa-brand-logo">' . $logo_markup . '</div>';
         echo '<strong>' . esc_html($title) . '</strong>';
-        echo '<span>' . esc_html($caption) . '</span>';
+        echo '<span class="lcfa-brand-caption">' . esc_html($caption) . '</span>';
         echo '</div>';
     }
 
-    private function render_fact_row(string $label, string $value): void {
-        echo '<li><strong>' . esc_html($label) . ':</strong> <span>' . esc_html($value) . '</span></li>';
+    private function render_fact_row(string $label, string $value, string $tone = 'other'): void {
+        $tone_class = in_array($tone, ['active', 'other'], true) ? $tone : 'other';
+
+        echo '<li><strong>' . esc_html($label) . ':</strong> <span class="lcfa-fact-value is-' . esc_attr($tone_class) . '">' . esc_html($value) . '</span></li>';
     }
 
-    private function render_badge(string $label, string $value): void {
-        echo '<span class="lcfa-badge"><strong>' . esc_html($label) . '</strong><span>' . esc_html($value) . '</span></span>';
+    private function render_badge(string $label, string $value, string $tone = 'other'): void {
+        $tone_class = in_array($tone, ['active', 'other'], true) ? $tone : 'other';
+
+        echo '<span class="lcfa-badge is-' . esc_attr($tone_class) . '"><strong>' . esc_html($label) . '</strong><span>' . esc_html($value) . '</span></span>';
+    }
+
+    private function render_command_result(?array $result): void {
+        if (!$result) {
+            return;
+        }
+
+        $is_success = !empty($result['ok']);
+        $status_icon = $is_success ? 'check-circle' : 'x-circle';
+        $status_label = $is_success ? __('Command result', 'livecanvas-forge-ai') : __('Command error', 'livecanvas-forge-ai');
+
+        echo '<section class="lcfa-card lcfa-command-result' . ($is_success ? ' is-success' : ' is-error') . '">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg($status_icon);
+        echo '<div><h2>' . esc_html($status_label) . '</h2><p>' . esc_html($result['summary'] ?: $result['message']) . '</p></div>';
+        echo '</div>';
+
+        echo '<div class="lcfa-result-meta">';
+        if (!empty($result['action'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Action: %s', 'livecanvas-forge-ai'), $result['action'])) . '</span>';
+        }
+        if (!empty($result['mode'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), $result['mode'])) . '</span>';
+        }
+        if (!empty($result['target_type'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Target: %s', 'livecanvas-forge-ai'), $result['target_type'])) . '</span>';
+        }
+        if (!empty($result['target_id'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('ID: %d', 'livecanvas-forge-ai'), (int) $result['target_id'])) . '</span>';
+        }
+        echo '</div>';
+
+        if (!empty($result['message']) && $result['message'] !== ($result['summary'] ?? '')) {
+            echo '<p class="lcfa-result-message">' . esc_html($result['message']) . '</p>';
+        }
+
+        if (!empty($result['inventory']) && is_array($result['inventory'])) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Audit inventory', 'livecanvas-forge-ai') . '</h3>';
+            $this->render_inventory_panel($result['inventory']);
+            echo '</div>';
+        }
+
+        if (!empty($result['diff_html']) || $result['existing_html'] !== '' || $result['proposed_html'] !== '') {
+            echo '<div class="lcfa-result-grid">';
+
+            if (!empty($result['diff_html'])) {
+                echo '<div class="lcfa-result-panel lcfa-diff-panel">';
+                echo '<h3>' . esc_html__('Diff preview', 'livecanvas-forge-ai') . '</h3>';
+                echo '<div class="lcfa-diff">' . $result['diff_html'] . '</div>';
+                echo '</div>';
+            }
+
+            if ($result['existing_html'] !== '') {
+                echo '<div class="lcfa-result-panel">';
+                echo '<h3>' . esc_html__('Current content', 'livecanvas-forge-ai') . '</h3>';
+                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($result['existing_html']) . '</code></pre></div>';
+                echo '</div>';
+            }
+
+            if ($result['proposed_html'] !== '') {
+                echo '<div class="lcfa-result-panel">';
+                echo '<h3>' . esc_html__('Proposed content', 'livecanvas-forge-ai') . '</h3>';
+                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($result['proposed_html']) . '</code></pre></div>';
+                echo '</div>';
+            }
+
+            echo '</div>';
+        }
+
+        echo '</section>';
+    }
+
+    private function render_inventory_panel(array $inventory): void {
+        $summary = $inventory['summary'] ?? [];
+        $summary_items = [
+            'pages'             => __('Pages', 'livecanvas-forge-ai'),
+            'headers'           => __('Headers', 'livecanvas-forge-ai'),
+            'footers'           => __('Footers', 'livecanvas-forge-ai'),
+            'dynamic_templates' => __('Dynamic templates', 'livecanvas-forge-ai'),
+            'blocks'            => __('Blocks', 'livecanvas-forge-ai'),
+            'sections'          => __('Sections', 'livecanvas-forge-ai'),
+        ];
+
+        echo '<div class="lcfa-summary-grid">';
+        foreach ($summary_items as $key => $label) {
+            echo '<div class="lcfa-summary-tile">';
+            echo '<span>' . esc_html($label) . '</span>';
+            echo '<strong>' . esc_html((string) ($summary[$key] ?? 0)) . '</strong>';
+            echo '</div>';
+        }
+        echo '</div>';
+
+        $groups = [
+            'livecanvas_pages'  => __('LiveCanvas pages', 'livecanvas-forge-ai'),
+            'header_partials'   => __('Header partials', 'livecanvas-forge-ai'),
+            'footer_partials'   => __('Footer partials', 'livecanvas-forge-ai'),
+            'other_partials'    => __('Other partials', 'livecanvas-forge-ai'),
+            'dynamic_templates' => __('Dynamic templates', 'livecanvas-forge-ai'),
+            'blocks'            => __('Blocks', 'livecanvas-forge-ai'),
+            'sections'          => __('Sections', 'livecanvas-forge-ai'),
+        ];
+
+        echo '<div class="lcfa-inventory-groups">';
+        foreach ($groups as $key => $label) {
+            $items = isset($inventory[$key]) && is_array($inventory[$key]) ? $inventory[$key] : [];
+            $this->render_inventory_group($label, $items);
+        }
+        echo '</div>';
+
+        $custom_post_types = isset($inventory['custom_post_types']) && is_array($inventory['custom_post_types']) ? $inventory['custom_post_types'] : [];
+
+        echo '<div class="lcfa-guide">';
+        echo '<h3>' . esc_html__('Custom post types', 'livecanvas-forge-ai') . '</h3>';
+        if (!$custom_post_types) {
+            echo '<p class="lcfa-empty">' . esc_html__('No custom post types detected beyond WordPress core and LiveCanvas internals.', 'livecanvas-forge-ai') . '</p>';
+        } else {
+            echo '<div class="lcfa-chip-row">';
+            foreach ($custom_post_types as $post_type) {
+                $label = $post_type['label'] ?: $post_type['name'];
+                $flags = [];
+                if (!empty($post_type['has_archive'])) {
+                    $flags[] = __('archive', 'livecanvas-forge-ai');
+                }
+                if (!empty($post_type['show_in_rest'])) {
+                    $flags[] = __('rest', 'livecanvas-forge-ai');
+                }
+
+                echo '<span class="lcfa-chip">';
+                echo esc_html($label . ' (' . $post_type['name'] . ')');
+                if ($flags) {
+                    echo ' · ' . esc_html(implode(', ', $flags));
+                }
+                echo '</span>';
+            }
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+
+    private function render_inventory_group(string $label, array $items): void {
+        echo '<div class="lcfa-inventory-group">';
+        echo '<h3>' . esc_html($label) . '</h3>';
+
+        if (!$items) {
+            echo '<p class="lcfa-empty">' . esc_html__('Nothing detected yet for this target type.', 'livecanvas-forge-ai') . '</p>';
+            echo '</div>';
+
+            return;
+        }
+
+        $visible_items = array_slice($items, 0, 12);
+
+        echo '<ul class="lcfa-target-list">';
+        foreach ($visible_items as $item) {
+            $meta_parts = [
+                '#' . (int) $item['id'],
+                $item['status'],
+            ];
+
+            if (!empty($item['slug'])) {
+                $meta_parts[] = $item['slug'];
+            }
+
+            echo '<li class="lcfa-target-item">';
+            echo '<div class="lcfa-target-copy">';
+            echo '<strong>' . esc_html($item['title']) . '</strong>';
+            echo '<span>' . esc_html(implode(' · ', array_filter($meta_parts))) . '</span>';
+            echo '</div>';
+            echo '<div class="lcfa-target-actions">';
+            if (!empty($item['edit_url'])) {
+                echo '<a class="button button-small" href="' . esc_url($item['edit_url']) . '">' . esc_html__('Edit', 'livecanvas-forge-ai') . '</a>';
+            }
+            if (!empty($item['view_url'])) {
+                echo '<a class="button button-small" href="' . esc_url($item['view_url']) . '" target="_blank" rel="noreferrer noopener">' . esc_html__('View', 'livecanvas-forge-ai') . '</a>';
+            }
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+
+        if (count($items) > count($visible_items)) {
+            echo '<p class="lcfa-empty">' . esc_html(sprintf(__('Showing %1$d of %2$d entries.', 'livecanvas-forge-ai'), count($visible_items), count($items))) . '</p>';
+        }
+
+        echo '</div>';
+    }
+
+    private function render_history_panel(array $history): void {
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('activity');
+        echo '<div><h2>' . esc_html__('Recent runs', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('The last preview or apply operations executed through the companion.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        if (!$history) {
+            echo '<p class="lcfa-empty">' . esc_html__('No command history yet.', 'livecanvas-forge-ai') . '</p>';
+            echo '</section>';
+
+            return;
+        }
+
+        echo '<div class="lcfa-history-list">';
+        foreach (array_slice($history, 0, 10) as $entry) {
+            $time = !empty($entry['time'])
+                ? get_date_from_gmt($entry['time'], get_option('date_format') . ' ' . get_option('time_format'))
+                : '';
+
+            echo '<div class="lcfa-history-item">';
+            echo '<div class="lcfa-history-copy">';
+            echo '<strong>' . esc_html($entry['summary'] ?: ($entry['message'] ?? __('Unnamed operation', 'livecanvas-forge-ai'))) . '</strong>';
+            if ($time !== '') {
+                echo '<span>' . esc_html($time) . '</span>';
+            }
+            echo '</div>';
+            echo '<div class="lcfa-chip-row">';
+            if (!empty($entry['action'])) {
+                echo '<span class="lcfa-chip">' . esc_html($entry['action']) . '</span>';
+            }
+            if (!empty($entry['mode'])) {
+                echo '<span class="lcfa-chip">' . esc_html($entry['mode']) . '</span>';
+            }
+            echo '<span class="lcfa-chip' . (!empty($entry['ok']) ? ' is-positive' : ' is-negative') . '">' . esc_html(!empty($entry['ok']) ? __('OK', 'livecanvas-forge-ai') : __('Error', 'livecanvas-forge-ai')) . '</span>';
+            if (!empty($entry['target_id'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('#%d', 'livecanvas-forge-ai'), (int) $entry['target_id'])) . '</span>';
+            }
+            echo '</div>';
+            echo '</div>';
+        }
+        echo '</div>';
+        echo '</section>';
     }
 
     private function get_tool_guides(string $site_mode): array {
@@ -782,6 +1355,15 @@ final class LCFA_Admin {
 
                 return '<span class="lcfa-fallback-logo">LC</span>';
 
+            case 'livecanvas-micro':
+                $logo = $this->get_plugin_asset_url('livecanvas', 'images/lc-micrologo.svg');
+
+                if ($logo) {
+                    return '<img src="' . esc_url($logo) . '" alt="' . esc_attr__('LiveCanvas', 'livecanvas-forge-ai') . '" class="lcfa-logo lcfa-logo-livecanvas-micro">';
+                }
+
+                return '<span class="lcfa-fallback-logo lcfa-fallback-logo-micro">LC</span>';
+
             case 'windpress':
                 $logo = $this->get_plugin_asset_url('windpress', 'windpress.svg');
 
@@ -792,7 +1374,7 @@ final class LCFA_Admin {
                 return '<span class="lcfa-fallback-logo">WP</span>';
 
             case 'bootstrap':
-                return '<span class="lcfa-logo lcfa-logo-bootstrap"><svg viewBox="0 0 118 94" aria-hidden="true"><path fill="currentColor" d="M24.509 0h68.982C107.024 0 118 10.976 118 24.509v44.982C118 83.024 107.024 94 93.491 94H24.509C10.976 94 0 83.024 0 69.491V24.509C0 10.976 10.976 0 24.509 0Zm53.659 62.019c0 10.084-7.517 16.235-20.201 16.235H36.149V15.746H57.39c12.189 0 18.581 5.43 18.581 14.751 0 6.434-3.556 11.18-9.779 12.754v.253c8.483.887 11.976 6.139 11.976 18.515Zm-30.45-20.675h7.39c6.56 0 9.906-2.282 9.906-7.643 0-5.367-3.219-7.39-9.589-7.39h-7.707v15.033Zm0 9.716v17.541h8.356c6.876 0 10.222-2.409 10.222-8.166 0-5.811-3.346-9.375-10.285-9.375h-8.293Z"/></svg></span>';
+                return '<img src="' . esc_url('https://getbootstrap.com/docs/5.3/assets/brand/bootstrap-logo-shadow@2x.png') . '" alt="' . esc_attr__('Bootstrap', 'livecanvas-forge-ai') . '" class="lcfa-logo lcfa-logo-bootstrap-image">';
 
             default:
                 return '<span class="lcfa-fallback-logo">AI</span>';
@@ -842,7 +1424,7 @@ final class LCFA_Admin {
     }
 
     private function redirect_to_step(int $step): void {
-        wp_safe_redirect(admin_url('admin.php?page=lcfa-setup&step=' . $step));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=' . $step));
         exit;
     }
 }
