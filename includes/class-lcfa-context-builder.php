@@ -21,6 +21,11 @@ final class LCFA_Context_Builder {
         $theme      = wp_get_theme();
         $post_id    = absint($args['post_id'] ?? 0);
         $post_type  = sanitize_key($args['post_type'] ?? '');
+        $brief      = LCFA_Settings::get_project_brief();
+        $brief_hash = LCFA_Settings::get_project_brief_hash($brief);
+        $genesis_plan = LCFA_Settings::get_genesis_plan();
+        $genesis_progress = LCFA_Settings::get_genesis_progress();
+        $plan_stack = is_array($genesis_plan['stack'] ?? null) ? $genesis_plan['stack'] : [];
         $target     = null;
 
         if ($post_id > 0) {
@@ -60,7 +65,19 @@ final class LCFA_Context_Builder {
                 'latte_templates'       => $this->has_latte_templates(),
                 'template_directory_lc' => $this->get_theme_templates_directory(),
             ],
-            'brief'         => LCFA_Settings::get_project_brief(),
+            'brief'         => $brief,
+            'genesis'       => [
+                'brief_hash' => $brief_hash,
+                'available'  => !empty($genesis_plan),
+                'stale'      => !empty($genesis_plan) && (
+                    (string) ($genesis_plan['brief_hash'] ?? '') !== $brief_hash
+                    || (string) ($plan_stack['framework'] ?? '') !== (string) ($snapshot['detected_framework'] ?? '')
+                    || (string) ($plan_stack['theme'] ?? '') !== (string) ($snapshot['current_theme_stylesheet'] ?? '')
+                    || (string) ($plan_stack['site_mode'] ?? '') !== (string) ($snapshot['site_mode'] ?? '')
+                ),
+                'plan'       => $genesis_plan,
+                'progress'   => $genesis_progress,
+            ],
             'connections'   => LCFA_Settings::get_public_connections(),
             'mcp'           => $this->get_mcp_status(),
             'windpress'     => $this->get_windpress_context(),
@@ -91,6 +108,7 @@ final class LCFA_Context_Builder {
             'site'         => $context['site'],
             'stack'        => $context['stack'],
             'brief'        => $context['brief'],
+            'genesis'      => $context['genesis'],
             'mcp'          => $context['mcp'],
             'windpress'    => $context['windpress'],
             'output_rules' => $context['output_rules'],
@@ -324,6 +342,7 @@ final class LCFA_Context_Builder {
                 'inventory',
                 'context',
                 'theme_context',
+                'genesis_plan',
                 'page_html',
                 'acf_fields',
                 'blocks_library',
@@ -347,6 +366,7 @@ final class LCFA_Context_Builder {
             ],
             'write_tools' => [
                 'command',
+                'generate_genesis_plan',
                 'rotate_mcp_token',
                 'save_windpress_volume_entries',
                 'reset_windpress_volume_entry',

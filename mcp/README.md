@@ -62,7 +62,10 @@ HTTP routes:
 - `GET /theme/templates/php?root_scope=active`
 - `GET /theme/file?root_scope=stylesheet&path=views/header.twig`
 - `GET /theme/template?root_scope=stylesheet&path=views/header.twig`
+- `GET /theme/backups`
+- `GET /theme/backup?backup_id=2026-04-03/theme-name/file`
 - `GET /command/actions`
+- `POST /command/suggest`
 - `POST /command`
 - `POST /windpress/volume`
 - `POST /windpress/providers/scan`
@@ -74,12 +77,28 @@ HTTP routes:
 - `POST /windpress/cache/flush`
 - `POST /theme/file`
 - `POST /theme/template`
+- `POST /theme/backup/restore`
 
 WebSocket bridge messages accept:
 
 - `{ "action": "tools/list" }`
 - `{ "action": "tools/call", "name": "get_snapshot", "arguments": {} }`
 - `{ "tool": "run_lc_command", "arguments": { "action": "site_audit", "dry_run": true } }`
+
+Core companion tools:
+
+- `get_snapshot`
+- `get_inventory`
+- `get_context`
+- `get_theme_context`
+- `get_genesis_plan`
+- `generate_genesis_plan`
+- `get_page_html`
+- `get_acf_fields`
+- `list_lc_blocks`
+- `list_command_actions`
+- `suggest_lc_command`
+- `run_lc_command`
 
 Theme filesystem tools:
 
@@ -93,6 +112,9 @@ Theme filesystem tools:
 - `read_template_file`
 - `write_theme_file`
 - `write_template_file`
+- `list_theme_backups`
+- `read_theme_backup`
+- `restore_theme_backup`
 
 WindPress tools:
 

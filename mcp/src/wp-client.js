@@ -20,6 +20,14 @@ class WPClient {
     return this.request('GET', 'theme-context', { query: params })
   }
 
+  async getGenesisPlan() {
+    return this.request('GET', 'genesis/plan')
+  }
+
+  async generateGenesisPlan(payload = {}) {
+    return this.request('POST', 'genesis/plan/generate', { body: payload })
+  }
+
   async getPageHtml(postId) {
     return this.request('GET', 'page-html', {
       query: { post_id: postId }
@@ -40,8 +48,28 @@ class WPClient {
     return this.request('GET', 'history')
   }
 
+  async getThemeBackups(params = {}) {
+    return this.request('GET', 'theme/backups', { query: params })
+  }
+
+  async getThemeBackup(backupId) {
+    return this.request('GET', 'theme/backup', {
+      query: { backup_id: backupId }
+    })
+  }
+
+  async restoreThemeBackup(payload = {}) {
+    return this.request('POST', 'theme/backup/restore', {
+      body: payload
+    })
+  }
+
   async getCommandActions() {
     return this.request('GET', 'command/actions')
+  }
+
+  async suggestCommand(payload = {}) {
+    return this.request('POST', 'command/suggest', { body: payload })
   }
 
   async runCommand(payload) {

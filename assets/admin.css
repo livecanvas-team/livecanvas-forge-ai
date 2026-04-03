@@ -765,6 +765,53 @@
     line-height: 1;
 }
 
+.lcfa-admin .lcfa-summary-tile small {
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-genesis-page-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-genesis-page-card,
+.lcfa-admin .lcfa-genesis-task {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(12, 13, 22, 0.38);
+}
+
+.lcfa-admin .lcfa-genesis-page-card strong,
+.lcfa-admin .lcfa-genesis-task strong {
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-genesis-page-card code {
+    color: #35d0f2;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.lcfa-admin .lcfa-genesis-page-card p,
+.lcfa-admin .lcfa-genesis-task p {
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    line-height: 1.6;
+}
+
+.lcfa-admin .lcfa-genesis-task-list {
+    display: grid;
+    gap: 12px;
+}
+
 .lcfa-admin .lcfa-inventory-groups {
     display: grid;
     gap: 14px;
@@ -830,6 +877,112 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+.lcfa-admin .lcfa-thread-toolbar {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.lcfa-admin .lcfa-thread-switch {
+    display: inline-grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(232, 62, 140, 0.22);
+    background: rgba(232, 62, 140, 0.05);
+    color: inherit;
+    text-decoration: none;
+    min-width: 132px;
+}
+
+.lcfa-admin .lcfa-thread-switch:hover,
+.lcfa-admin .lcfa-thread-switch:focus {
+    border-color: rgba(232, 62, 140, 0.38);
+    background: rgba(232, 62, 140, 0.12);
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-thread-switch.is-current {
+    border-color: rgba(38, 198, 218, 0.42);
+    background: rgba(38, 198, 218, 0.1);
+}
+
+.lcfa-admin .lcfa-thread-switch strong {
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-thread-switch span {
+    color: var(--lcfa-text-muted);
+    font-size: 11px;
+}
+
+.lcfa-admin .lcfa-inline-thread-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+}
+
+.lcfa-admin .lcfa-inline-thread-form input[type="text"] {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 14px;
+    background: rgba(12, 13, 22, 0.52);
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin .lcfa-thread-log {
+    display: grid;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-thread-message {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(12, 13, 22, 0.42);
+}
+
+.lcfa-admin .lcfa-thread-message.is-user {
+    border-color: rgba(232, 62, 140, 0.22);
+    background: rgba(232, 62, 140, 0.06);
+}
+
+.lcfa-admin .lcfa-thread-message.is-assistant {
+    border-color: rgba(38, 198, 218, 0.22);
+    background: rgba(38, 198, 218, 0.06);
+}
+
+.lcfa-admin .lcfa-thread-message.is-system {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lcfa-admin .lcfa-thread-message__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-thread-message__head strong {
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-thread-message__head span {
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-thread-message__body pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: inherit;
+    font: inherit;
 }
 
 .lcfa-admin .button.button-small {
@@ -1088,13 +1241,18 @@
     }
 
     .lcfa-admin .lcfa-summary-grid,
-    .lcfa-admin .lcfa-brand-grid {
+    .lcfa-admin .lcfa-brand-grid,
+    .lcfa-admin .lcfa-genesis-page-grid {
         grid-template-columns: 1fr;
     }
 
     .lcfa-admin .lcfa-result-grid,
     .lcfa-admin .lcfa-target-item,
     .lcfa-admin .lcfa-history-item {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-inline-thread-form {
         grid-template-columns: 1fr;
     }
 

@@ -85,6 +85,11 @@ async function handleHttpRequest(request, response, client, tools, themeFiles, w
     return
   }
 
+  if (request.method === 'GET' && url.pathname === '/genesis/plan') {
+    sendJson(response, 200, await client.getGenesisPlan())
+    return
+  }
+
   if (request.method === 'GET' && url.pathname === '/page-html') {
     sendJson(response, 200, await client.getPageHtml(url.searchParams.get('post_id')))
     return
@@ -188,8 +193,36 @@ async function handleHttpRequest(request, response, client, tools, themeFiles, w
     return
   }
 
+  if (request.method === 'GET' && url.pathname === '/theme/backups') {
+    sendJson(response, 200, await themeFiles.listBackups({
+      path: url.searchParams.get('path') || '',
+      kind: url.searchParams.get('kind') || '',
+      limit: url.searchParams.get('limit')
+    }))
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/theme/backup') {
+    sendJson(response, 200, await themeFiles.readBackup({
+      backup_id: url.searchParams.get('backup_id') || url.searchParams.get('id') || ''
+    }))
+    return
+  }
+
   if (request.method === 'GET' && url.pathname === '/command/actions') {
     sendJson(response, 200, await client.getCommandActions())
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/command/suggest') {
+    const payload = await readJsonBody(request)
+    sendJson(response, 200, await client.suggestCommand(payload))
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/genesis/plan/generate') {
+    const payload = await readJsonBody(request)
+    sendJson(response, 200, await client.generateGenesisPlan(payload))
     return
   }
 
@@ -270,6 +303,12 @@ async function handleHttpRequest(request, response, client, tools, themeFiles, w
   if (request.method === 'POST' && url.pathname === '/theme/template') {
     const payload = await readJsonBody(request)
     sendJson(response, 200, await themeFiles.writeTemplateFile(payload))
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/theme/backup/restore') {
+    const payload = await readJsonBody(request)
+    sendJson(response, 200, await themeFiles.restoreBackup(payload))
     return
   }
 

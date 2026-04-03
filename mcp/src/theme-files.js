@@ -376,6 +376,128 @@ class ThemeFilesystem {
     })
   }
 
+  async listBackups(options = {}) {
+    const limit = normalizeLimit(options.limit)
+    const filterPath = sanitizeRelativePath(options.path || '', { allowEmpty: true })
+    const filterKind = String(options.kind || '').trim().toLowerCase()
+    const backupFiles = []
+    const descriptors = []
+
+    if (!fs.existsSync(this.backupsDirectory)) {
+      return {
+        ok: true,
+        backups_directory: this.backupsDirectory,
+        limit,
+        truncated: false,
+        backups: []
+      }
+    }
+
+    await collectBackupFiles(this.backupsDirectory, backupFiles)
+
+    for (const backupFile of backupFiles) {
+      const descriptor = await this.describeBackupFile(backupFile)
+
+      if (filterPath && descriptor.relative_path !== filterPath) {
+        continue
+      }
+
+      if (filterKind && descriptor.kind !== filterKind) {
+        continue
+      }
+
+      descriptors.push(descriptor)
+    }
+
+    descriptors.sort((left, right) => (right._timestamp || 0) - (left._timestamp || 0))
+    const truncated = descriptors.length > limit
+
+    return {
+      ok: true,
+      backups_directory: this.backupsDirectory,
+      limit,
+      truncated,
+      backups: descriptors.slice(0, limit).map((descriptor) => {
+        const nextDescriptor = { ...descriptor }
+        delete nextDescriptor._timestamp
+        return nextDescriptor
+      })
+    }
+  }
+
+  async readBackup(options = {}) {
+    const backupId = sanitizeRelativePath(options.backup_id || options.id)
+    const absolutePath = this.resolveBackupAbsolutePath(backupId)
+    const descriptor = await this.describeBackupFile(absolutePath)
+    const content = await fsp.readFile(absolutePath, 'utf8')
+
+    delete descriptor._timestamp
+
+    return {
+      ...descriptor,
+      content
+    }
+  }
+
+  async restoreBackup(options = {}) {
+    const backup = await this.readBackup(options)
+    const requestedRootScope = String(options.root_scope || '').trim()
+    const rootScope = ['stylesheet', 'template', 'active', 'all'].includes(requestedRootScope)
+      ? requestedRootScope
+      : (backup.root || 'stylesheet')
+    const relativePath = sanitizeRelativePath(options.path || backup.relative_path)
+    const dryRun = Boolean(options.dry_run)
+
+    if (!relativePath) {
+      throw new Error('Unable to infer the original theme file path from the selected backup.')
+    }
+
+    let currentFile = null
+
+    try {
+      currentFile = await this.readFile({
+        root_scope: rootScope === 'all' ? 'active' : rootScope,
+        path: relativePath
+      })
+    } catch (error) {
+      currentFile = null
+    }
+
+    const writeResult = await this.writeFile({
+      root_scope: rootScope,
+      path: relativePath,
+      content: backup.content || '',
+      dry_run: dryRun,
+      create_directories: options.create_directories !== false
+    })
+
+    return {
+      ...writeResult,
+      restored_from_backup: {
+        backup_id: backup.backup_id,
+        created_at: backup.created_at,
+        relative_path: backup.relative_path,
+        root: backup.root,
+        theme: backup.theme,
+        kind: backup.kind,
+        bytes: backup.bytes
+      },
+      current_file: currentFile
+        ? {
+            exists: true,
+            root: currentFile.root,
+            theme: currentFile.theme,
+            relative_path: currentFile.relative_path,
+            absolute_path: currentFile.absolute_path,
+            size: currentFile.size,
+            modified_at: currentFile.modified_at
+          }
+        : {
+            exists: false
+          }
+    }
+  }
+
   resolveReadableFile(rootScope, relativePath, roots) {
     for (const root of this.resolveTargets(rootScope, roots, { forWrite: false })) {
       const absolutePath = this.resolveAbsolutePath(root.path, relativePath)
@@ -487,8 +609,80 @@ class ThemeFilesystem {
 
     await fsp.mkdir(backupDirectory, { recursive: true })
     await fsp.writeFile(backupPath, content, 'utf8')
+    await fsp.writeFile(this.getBackupMetadataPath(backupPath), JSON.stringify({
+      root: root.key,
+      theme: root.label,
+      relative_path: relativePath,
+      kind: classifyFileKind(relativePath),
+      created_at: new Date().toISOString()
+    }, null, 2), 'utf8')
 
     return backupPath
+  }
+
+  getBackupMetadataPath(backupPath) {
+    return `${backupPath}.json`
+  }
+
+  async readBackupMetadata(backupPath) {
+    const metadataPath = this.getBackupMetadataPath(backupPath)
+
+    if (!fs.existsSync(metadataPath)) {
+      return {}
+    }
+
+    try {
+      const content = await fsp.readFile(metadataPath, 'utf8')
+      const parsed = JSON.parse(content)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      return {}
+    }
+  }
+
+  inferBackupRelativePath(backupPath) {
+    const filename = path.basename(backupPath)
+    const marker = filename.indexOf('__')
+
+    if (marker < 0) {
+      return ''
+    }
+
+    return filename.slice(marker + 2).replace(/__/g, '/')
+  }
+
+  resolveBackupAbsolutePath(backupId) {
+    const absolutePath = path.resolve(this.backupsDirectory, backupId)
+    assertInsideRoot(absolutePath, this.backupsDirectory)
+
+    if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile() || absolutePath.endsWith('.json')) {
+      throw new Error(`Backup file not found: ${backupId}`)
+    }
+
+    return absolutePath
+  }
+
+  async describeBackupFile(absolutePath) {
+    const metadata = await this.readBackupMetadata(absolutePath)
+    const stats = await fsp.stat(absolutePath)
+    const backupId = toPosix(path.relative(this.backupsDirectory, absolutePath))
+    const createdAt = typeof metadata.created_at === 'string' && metadata.created_at
+      ? metadata.created_at
+      : stats.mtime.toISOString()
+    const timestamp = Number.isNaN(Date.parse(createdAt)) ? stats.mtimeMs : Date.parse(createdAt)
+
+    return {
+      backup_id: backupId,
+      backup_path: absolutePath,
+      relative_path: metadata.relative_path || this.inferBackupRelativePath(absolutePath),
+      root: metadata.root || '',
+      theme: metadata.theme || backupId.split('/')[1] || '',
+      kind: metadata.kind || classifyFileKind(metadata.relative_path || this.inferBackupRelativePath(absolutePath) || '.txt'),
+      bytes: stats.size,
+      created_at: createdAt,
+      modified_at: stats.mtime.toISOString(),
+      _timestamp: timestamp
+    }
   }
 }
 
@@ -530,6 +724,29 @@ async function walkDirectory(directory, onFile, options) {
   }
 
   return true
+}
+
+async function collectBackupFiles(directory, files) {
+  const entries = await fsp.readdir(directory, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.name === '.' || entry.name === '..') {
+      continue
+    }
+
+    const absolutePath = path.join(directory, entry.name)
+
+    if (entry.isDirectory()) {
+      await collectBackupFiles(absolutePath, files)
+      continue
+    }
+
+    if (!entry.isFile() || absolutePath.endsWith('.json')) {
+      continue
+    }
+
+    files.push(absolutePath)
+  }
 }
 
 function findWordPressRoot(startPath) {

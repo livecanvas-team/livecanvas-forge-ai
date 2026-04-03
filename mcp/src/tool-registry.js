@@ -43,6 +43,33 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
       invoke: async (argumentsMap = {}) => client.getThemeContext(argumentsMap)
     },
     {
+      name: 'get_genesis_plan',
+      description: 'Read the stored Genesis build plan generated from the persistent project brief.',
+      inputSchema: {
+        type: 'object',
+        properties: {}
+      },
+      invoke: async () => client.getGenesisPlan()
+    },
+    {
+      name: 'generate_genesis_plan',
+      description: 'Generate and store a Genesis build plan from the current or provided brief.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          brief: { type: 'object' },
+          project_mode: { type: 'string' },
+          brand_name: { type: 'string' },
+          sector: { type: 'string' },
+          tone: { type: 'string' },
+          logo_status: { type: 'string' },
+          required_pages: { type: 'string' },
+          notes: { type: 'string' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.generateGenesisPlan(argumentsMap)
+    },
+    {
       name: 'get_page_html',
       description: 'Read the raw post_content HTML for a WordPress post or page.',
       inputSchema: {
@@ -84,6 +111,28 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
       invoke: async () => client.getCommandActions()
     },
     {
+      name: 'suggest_lc_command',
+      description: 'Analyze a natural-language request and return the safest suggested companion action payload.',
+      inputSchema: {
+        type: 'object',
+        required: ['user_prompt'],
+        properties: {
+          user_prompt: { type: 'string' },
+          execution_target: { type: 'string' },
+          target_id: { type: 'integer' },
+          variant: { type: 'string' },
+          provider_id: { type: 'string' },
+          relative_path: { type: 'string' },
+          root_scope: { type: 'string' },
+          file_path: { type: 'string' },
+          backup_id: { type: 'string' },
+          status: { type: 'string' },
+          context_post_id: { type: 'integer' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.suggestCommand(argumentsMap)
+    },
+    {
       name: 'run_lc_command',
       description: 'Execute a LiveCanvas Forge command through the plugin contract.',
       inputSchema: {
@@ -92,11 +141,17 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
         properties: {
           action: { type: 'string' },
           dry_run: { type: 'boolean' },
+          execution_target: { type: 'string' },
           target_id: { type: 'integer' },
           variant: { type: 'string' },
           title: { type: 'string' },
           slug: { type: 'string' },
           status: { type: 'string' },
+          provider_id: { type: 'string' },
+          relative_path: { type: 'string' },
+          root_scope: { type: 'string' },
+          file_path: { type: 'string' },
+          backup_id: { type: 'string' },
           content: { type: 'string' }
         }
       },
@@ -422,6 +477,47 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
         }
       },
       invoke: async (argumentsMap = {}) => themeFiles.writeTemplateFile(argumentsMap)
+    },
+    {
+      name: 'list_theme_backups',
+      description: 'List local theme and template backups captured by the fallback filesystem layer.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          kind: { type: 'string' },
+          limit: { type: 'integer' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => themeFiles.listBackups(argumentsMap)
+    },
+    {
+      name: 'read_theme_backup',
+      description: 'Read one local theme backup file and return its metadata plus contents.',
+      inputSchema: {
+        type: 'object',
+        required: ['backup_id'],
+        properties: {
+          backup_id: { type: 'string' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => themeFiles.readBackup(argumentsMap)
+    },
+    {
+      name: 'restore_theme_backup',
+      description: 'Restore a local theme backup back into the active theme roots with preview support.',
+      inputSchema: {
+        type: 'object',
+        required: ['backup_id'],
+        properties: {
+          backup_id: { type: 'string' },
+          root_scope: { type: 'string' },
+          path: { type: 'string' },
+          dry_run: { type: 'boolean' },
+          create_directories: { type: 'boolean' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => themeFiles.restoreBackup(argumentsMap)
     }
   ]
 

@@ -5,11 +5,17 @@ defined('ABSPATH') || exit;
 final class LCFA_Settings {
     public const OPTION_KEY = 'lcfa_settings';
     public const BRIEF_OPTION_KEY = 'lcfa_project_brief';
+    public const GENESIS_PLAN_OPTION_KEY = 'lcfa_genesis_plan';
+    public const GENESIS_PROGRESS_OPTION_KEY = 'lcfa_genesis_progress';
     public const CONNECTIONS_OPTION_KEY = 'lcfa_connections';
     public const HISTORY_OPTION_KEY = 'lcfa_command_history';
+    public const THREADS_OPTION_KEY = 'lcfa_command_threads';
     public const REDIRECT_OPTION_KEY = 'lcfa_do_activation_redirect';
+    private const DEFAULT_THREAD_ID = 'default';
     private const NOTICE_PREFIX = 'lcfa_notice_';
     private const COMMAND_RESULT_PREFIX = 'lcfa_command_result_';
+    private const COMMAND_SUGGESTION_PREFIX = 'lcfa_command_suggestion_';
+    private const CONNECTION_TEST_PREFIX = 'lcfa_connection_test_';
 
     public static function defaults(): array {
         return [
@@ -65,6 +71,12 @@ final class LCFA_Settings {
 
     public static function update_project_brief(array $brief): void {
         update_option(self::BRIEF_OPTION_KEY, self::get_sanitized_project_brief($brief));
+    }
+
+    public static function get_project_brief_hash(?array $brief = null): string {
+        $brief = is_array($brief) ? self::get_sanitized_project_brief($brief) : self::get_project_brief();
+
+        return md5((string) wp_json_encode($brief));
     }
 
     public static function get_sanitized_project_brief(array $brief): array {
@@ -188,6 +200,102 @@ final class LCFA_Settings {
         return wp_generate_password(32, false, false);
     }
 
+    public static function get_genesis_plan(): array {
+        $plan = get_option(self::GENESIS_PLAN_OPTION_KEY, []);
+
+        return is_array($plan) ? $plan : [];
+    }
+
+    public static function update_genesis_plan(array $plan): void {
+        update_option(self::GENESIS_PLAN_OPTION_KEY, $plan);
+    }
+
+    public static function clear_genesis_plan(): void {
+        delete_option(self::GENESIS_PLAN_OPTION_KEY);
+    }
+
+    public static function get_genesis_progress(): array {
+        $progress = get_option(self::GENESIS_PROGRESS_OPTION_KEY, []);
+
+        if (!is_array($progress)) {
+            $progress = [];
+        }
+
+        $progress = wp_parse_args($progress, [
+            'brief_hash' => self::get_project_brief_hash(),
+            'tasks'      => [],
+        ]);
+
+        if (!is_array($progress['tasks'])) {
+            $progress['tasks'] = [];
+        }
+
+        return [
+            'brief_hash' => sanitize_text_field((string) ($progress['brief_hash'] ?? self::get_project_brief_hash())),
+            'tasks'      => array_reduce(array_keys($progress['tasks']), static function (array $carry, string $task_id) use ($progress): array {
+                $normalized_id = sanitize_key($task_id);
+                $task          = is_array($progress['tasks'][$task_id] ?? null) ? $progress['tasks'][$task_id] : [];
+
+                if ($normalized_id === '') {
+                    return $carry;
+                }
+
+                $carry[$normalized_id] = [
+                    'status'       => in_array($task['status'] ?? '', ['pending', 'previewed', 'applied', 'failed'], true) ? (string) $task['status'] : 'pending',
+                    'updated_at'   => sanitize_text_field((string) ($task['updated_at'] ?? '')),
+                    'thread_id'    => self::normalize_thread_id((string) ($task['thread_id'] ?? 'default')),
+                    'action'       => sanitize_key((string) ($task['action'] ?? '')),
+                    'mode'         => sanitize_key((string) ($task['mode'] ?? '')),
+                    'ok'           => !empty($task['ok']),
+                    'message'      => sanitize_textarea_field((string) ($task['message'] ?? '')),
+                    'target_type'  => sanitize_key((string) ($task['target_type'] ?? '')),
+                    'target_id'    => absint($task['target_id'] ?? 0),
+                    'target_title' => sanitize_text_field((string) ($task['target_title'] ?? '')),
+                ];
+
+                return $carry;
+            }, []),
+        ];
+    }
+
+    public static function update_genesis_progress(array $progress): void {
+        update_option(self::GENESIS_PROGRESS_OPTION_KEY, [
+            'brief_hash' => sanitize_text_field((string) ($progress['brief_hash'] ?? self::get_project_brief_hash())),
+            'tasks'      => is_array($progress['tasks'] ?? null) ? $progress['tasks'] : [],
+        ]);
+    }
+
+    public static function clear_genesis_progress(): void {
+        delete_option(self::GENESIS_PROGRESS_OPTION_KEY);
+    }
+
+    public static function update_genesis_task_progress(string $task_id, array $state, ?string $brief_hash = null): array {
+        $normalized_task_id = sanitize_key($task_id);
+
+        if ($normalized_task_id === '') {
+            return self::get_genesis_progress();
+        }
+
+        $progress              = self::get_genesis_progress();
+        $progress['brief_hash'] = sanitize_text_field((string) ($brief_hash ?: self::get_project_brief_hash()));
+        $progress['tasks'][$normalized_task_id] = [
+            'status'       => in_array($state['status'] ?? '', ['pending', 'previewed', 'applied', 'failed'], true) ? (string) $state['status'] : 'pending',
+            'updated_at'   => sanitize_text_field((string) ($state['updated_at'] ?? current_time('mysql', true))),
+            'thread_id'    => self::normalize_thread_id((string) ($state['thread_id'] ?? 'default')),
+            'action'       => sanitize_key((string) ($state['action'] ?? '')),
+            'mode'         => sanitize_key((string) ($state['mode'] ?? '')),
+            'ok'           => !empty($state['ok']),
+            'message'      => sanitize_textarea_field((string) ($state['message'] ?? '')),
+            'target_type'  => sanitize_key((string) ($state['target_type'] ?? '')),
+            'target_id'    => absint($state['target_id'] ?? 0),
+            'target_title' => sanitize_text_field((string) ($state['target_title'] ?? '')),
+        ];
+
+        self::update_genesis_progress($progress);
+
+        return self::get_genesis_progress();
+    }
+
     public static function get_history(): array {
         $history = get_option(self::HISTORY_OPTION_KEY, []);
 
@@ -202,12 +310,165 @@ final class LCFA_Settings {
         update_option(self::HISTORY_OPTION_KEY, $history);
     }
 
+    public static function get_threads(): array {
+        $threads = get_option(self::THREADS_OPTION_KEY, []);
+
+        if (!is_array($threads)) {
+            $threads = [];
+        }
+
+        $normalized = [];
+
+        foreach ($threads as $thread_id => $thread) {
+            if (!is_array($thread)) {
+                continue;
+            }
+
+            $normalized_id = self::normalize_thread_id((string) $thread_id);
+            $normalized[$normalized_id] = self::normalize_thread($thread, $normalized_id);
+        }
+
+        if (!isset($normalized[self::DEFAULT_THREAD_ID])) {
+            $normalized[self::DEFAULT_THREAD_ID] = self::default_thread();
+        }
+
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($normalized));
+
+        return self::sort_threads_by_updated_at((array) get_option(self::THREADS_OPTION_KEY, $normalized));
+    }
+
+    public static function get_thread_summaries(): array {
+        $summaries = [];
+
+        foreach (self::get_threads() as $thread) {
+            $messages = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
+            $last_message = $messages ? $messages[0] : null;
+
+            $summaries[] = [
+                'id'            => (string) ($thread['id'] ?? ''),
+                'title'         => (string) ($thread['title'] ?? ''),
+                'created_at'    => (string) ($thread['created_at'] ?? ''),
+                'updated_at'    => (string) ($thread['updated_at'] ?? ''),
+                'message_count' => count($messages),
+                'last_role'     => is_array($last_message) ? (string) ($last_message['role'] ?? '') : '',
+                'last_preview'  => is_array($last_message) ? wp_trim_words((string) ($last_message['content'] ?? ''), 14, '...') : '',
+            ];
+        }
+
+        return $summaries;
+    }
+
+    public static function get_thread(string $thread_id = ''): array {
+        $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        $threads       = self::get_threads();
+
+        if (!isset($threads[$normalized_id])) {
+            return $threads[self::DEFAULT_THREAD_ID] ?? self::default_thread();
+        }
+
+        return $threads[$normalized_id];
+    }
+
+    public static function create_thread(string $title = ''): array {
+        $threads    = self::get_threads();
+        $timestamp  = current_time('mysql', true);
+        $thread_id  = 'thread-' . strtolower(wp_generate_password(8, false, false));
+        $thread     = [
+            'id'         => $thread_id,
+            'title'      => $title !== '' ? sanitize_text_field($title) : __('New command thread', 'livecanvas-forge-ai'),
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+            'messages'   => [
+                [
+                    'id'      => 'system-' . strtolower(wp_generate_password(6, false, false)),
+                    'role'    => 'system',
+                    'label'   => __('Thread created', 'livecanvas-forge-ai'),
+                    'time'    => $timestamp,
+                    'content' => __('This thread stores request context, execution notes, and results for the current Command Deck workflow.', 'livecanvas-forge-ai'),
+                    'meta'    => [],
+                ],
+            ],
+        ];
+
+        $threads[$thread_id] = $thread;
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread($thread_id);
+    }
+
+    public static function append_thread_message(string $thread_id, array $message): array {
+        $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        $threads       = self::get_threads();
+        $thread        = $threads[$normalized_id] ?? self::default_thread();
+        $messages      = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
+        $timestamp     = current_time('mysql', true);
+        $meta          = is_array($message['meta'] ?? null) ? $message['meta'] : [];
+
+        $messages[] = [
+            'id'      => sanitize_key((string) ($message['id'] ?? ('msg-' . strtolower(wp_generate_password(10, false, false))))),
+            'role'    => in_array($message['role'] ?? '', ['user', 'assistant', 'system'], true) ? (string) $message['role'] : 'assistant',
+            'label'   => sanitize_text_field((string) ($message['label'] ?? '')),
+            'time'    => sanitize_text_field((string) ($message['time'] ?? $timestamp)),
+            'content' => sanitize_textarea_field((string) ($message['content'] ?? '')),
+            'meta'    => self::sanitize_thread_meta($meta),
+        ];
+
+        $messages = array_slice($messages, -80);
+
+        $thread['messages']   = $messages;
+        $thread['updated_at'] = $timestamp;
+        $thread['title']      = sanitize_text_field((string) ($thread['title'] ?? __('Command thread', 'livecanvas-forge-ai')));
+        $thread['created_at'] = sanitize_text_field((string) ($thread['created_at'] ?? $timestamp));
+        $thread['id']         = $normalized_id;
+
+        $threads[$normalized_id] = $thread;
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread($normalized_id);
+    }
+
+    public static function normalize_thread_id(string $thread_id): string {
+        $normalized = sanitize_key($thread_id);
+
+        return $normalized !== '' ? $normalized : self::DEFAULT_THREAD_ID;
+    }
+
     public static function set_command_result(array $result): void {
         set_transient(self::COMMAND_RESULT_PREFIX . get_current_user_id(), $result, 5 * MINUTE_IN_SECONDS);
     }
 
     public static function consume_command_result(): ?array {
         $key    = self::COMMAND_RESULT_PREFIX . get_current_user_id();
+        $result = get_transient($key);
+
+        if ($result) {
+            delete_transient($key);
+        }
+
+        return is_array($result) ? $result : null;
+    }
+
+    public static function set_command_suggestion(array $suggestion): void {
+        set_transient(self::COMMAND_SUGGESTION_PREFIX . get_current_user_id(), $suggestion, 10 * MINUTE_IN_SECONDS);
+    }
+
+    public static function consume_command_suggestion(): ?array {
+        $key        = self::COMMAND_SUGGESTION_PREFIX . get_current_user_id();
+        $suggestion = get_transient($key);
+
+        if ($suggestion) {
+            delete_transient($key);
+        }
+
+        return is_array($suggestion) ? $suggestion : null;
+    }
+
+    public static function set_connection_test_result(array $result): void {
+        set_transient(self::CONNECTION_TEST_PREFIX . get_current_user_id(), $result, 10 * MINUTE_IN_SECONDS);
+    }
+
+    public static function consume_connection_test_result(): ?array {
+        $key    = self::CONNECTION_TEST_PREFIX . get_current_user_id();
         $result = get_transient($key);
 
         if ($result) {
@@ -237,5 +498,93 @@ final class LCFA_Settings {
         }
 
         return is_array($notice) ? $notice : null;
+    }
+
+    private static function default_thread(): array {
+        return [
+            'id'         => self::DEFAULT_THREAD_ID,
+            'title'      => __('Main thread', 'livecanvas-forge-ai'),
+            'created_at' => current_time('mysql', true),
+            'updated_at' => current_time('mysql', true),
+            'messages'   => [],
+        ];
+    }
+
+    private static function normalize_thread(array $thread, string $thread_id): array {
+        $messages = [];
+
+        foreach ((array) ($thread['messages'] ?? []) as $message) {
+            if (!is_array($message)) {
+                continue;
+            }
+
+            $messages[] = [
+                'id'      => sanitize_key((string) ($message['id'] ?? ('msg-' . strtolower(wp_generate_password(10, false, false))))),
+                'role'    => in_array($message['role'] ?? '', ['user', 'assistant', 'system'], true) ? (string) $message['role'] : 'assistant',
+                'label'   => sanitize_text_field((string) ($message['label'] ?? '')),
+                'time'    => sanitize_text_field((string) ($message['time'] ?? current_time('mysql', true))),
+                'content' => sanitize_textarea_field((string) ($message['content'] ?? '')),
+                'meta'    => self::sanitize_thread_meta((array) ($message['meta'] ?? [])),
+            ];
+        }
+
+        return [
+            'id'         => $thread_id,
+            'title'      => sanitize_text_field((string) ($thread['title'] ?? __('Command thread', 'livecanvas-forge-ai'))),
+            'created_at' => sanitize_text_field((string) ($thread['created_at'] ?? current_time('mysql', true))),
+            'updated_at' => sanitize_text_field((string) ($thread['updated_at'] ?? current_time('mysql', true))),
+            'messages'   => array_slice($messages, -80),
+        ];
+    }
+
+    private static function sanitize_thread_meta(array $meta): array {
+        $sanitized = [];
+
+        foreach ($meta as $key => $value) {
+            $normalized_key = sanitize_key((string) $key);
+
+            if ($normalized_key === '') {
+                continue;
+            }
+
+            if (is_bool($value) || is_numeric($value)) {
+                $sanitized[$normalized_key] = $value;
+                continue;
+            }
+
+            if (is_array($value)) {
+                $sanitized[$normalized_key] = array_map(static function ($item) {
+                    if (is_bool($item) || is_numeric($item)) {
+                        return $item;
+                    }
+
+                    return sanitize_text_field((string) $item);
+                }, $value);
+                continue;
+            }
+
+            $sanitized[$normalized_key] = sanitize_text_field((string) $value);
+        }
+
+        return $sanitized;
+    }
+
+    private static function sort_threads_by_updated_at(array $threads): array {
+        uasort($threads, static function (array $left, array $right): int {
+            return strtotime((string) ($right['updated_at'] ?? '')) <=> strtotime((string) ($left['updated_at'] ?? ''));
+        });
+
+        return $threads;
+    }
+
+    private static function trim_threads(array $threads): array {
+        $threads = self::sort_threads_by_updated_at($threads);
+        $default = $threads[self::DEFAULT_THREAD_ID] ?? self::default_thread();
+        unset($threads[self::DEFAULT_THREAD_ID]);
+
+        $threads = array_slice($threads, 0, 11, true);
+        $threads[self::DEFAULT_THREAD_ID] = $default;
+
+        return self::sort_threads_by_updated_at($threads);
     }
 }

@@ -10,8 +10,10 @@ final class LCFA_Rest_Api {
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
+    private LCFA_Prompt_Suggester $prompt_suggester;
+    private LCFA_Genesis_Planner $genesis_planner;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
@@ -19,6 +21,8 @@ final class LCFA_Rest_Api {
         $this->local_mcp_bridge   = $local_mcp_bridge;
         $this->context_builder    = $context_builder;
         $this->command_deck       = $command_deck;
+        $this->prompt_suggester   = $prompt_suggester;
+        $this->genesis_planner    = $genesis_planner;
     }
 
     public function hooks(): void {
@@ -48,6 +52,18 @@ final class LCFA_Rest_Api {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_theme_context'],
             'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/genesis/plan', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_genesis_plan'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/genesis/plan/generate', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'generate_genesis_plan'],
+            'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/page-html', [
@@ -118,6 +134,24 @@ final class LCFA_Rest_Api {
             ],
         ]);
 
+        register_rest_route('lcfa/v1', '/theme/backups', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_backups'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/backup', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_backup'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme/backup/restore', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'restore_theme_backup'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
         register_rest_route('lcfa/v1', '/history', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_history'],
@@ -128,6 +162,12 @@ final class LCFA_Rest_Api {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_actions'],
             'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/command/suggest', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'suggest_command'],
+            'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/command', [
@@ -251,6 +291,56 @@ final class LCFA_Rest_Api {
     public function get_theme_context(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response([
             'theme_context' => $this->context_builder->get_theme_context($request->get_params()),
+        ]);
+    }
+
+    public function get_genesis_plan(): WP_REST_Response {
+        $brief_hash = LCFA_Settings::get_project_brief_hash();
+        $plan       = LCFA_Settings::get_genesis_plan();
+        $progress   = LCFA_Settings::get_genesis_progress();
+        $snapshot   = $this->environment->get_snapshot();
+        $plan_stack = is_array($plan['stack'] ?? null) ? $plan['stack'] : [];
+        $stale      = !empty($plan) && (
+            (string) ($plan['brief_hash'] ?? '') !== $brief_hash
+            || (string) ($plan_stack['framework'] ?? '') !== (string) ($snapshot['detected_framework'] ?? '')
+            || (string) ($plan_stack['theme'] ?? '') !== (string) ($snapshot['current_theme_stylesheet'] ?? '')
+            || (string) ($plan_stack['site_mode'] ?? '') !== (string) ($snapshot['site_mode'] ?? '')
+        );
+
+        return new WP_REST_Response([
+            'brief_hash' => $brief_hash,
+            'available'  => !empty($plan),
+            'stale'      => $stale,
+            'plan'       => $plan,
+            'progress'   => $progress,
+        ]);
+    }
+
+    public function generate_genesis_plan(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $brief = [];
+        if (isset($payload['brief']) && is_array($payload['brief'])) {
+            $brief = $payload['brief'];
+        } elseif (array_intersect(array_keys($payload), ['project_mode', 'brand_name', 'sector', 'tone', 'logo_status', 'required_pages', 'notes'])) {
+            $brief = $payload;
+        }
+
+        $plan = $this->genesis_planner->generate($brief ?: null);
+        LCFA_Settings::update_genesis_plan($plan);
+        LCFA_Settings::clear_genesis_progress();
+
+        return new WP_REST_Response([
+            'plan' => $plan,
+            'progress' => LCFA_Settings::get_genesis_progress(),
         ]);
     }
 
@@ -395,6 +485,40 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function get_theme_backups(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $backups = $this->theme_files_bridge->list_backups([
+                'path'  => sanitize_text_field((string) ($request->get_param('path') ?: '')),
+                'kind'  => sanitize_key((string) ($request->get_param('kind') ?: '')),
+                'limit' => absint($request->get_param('limit') ?: 20),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'backups' => $backups,
+        ]);
+    }
+
+    public function get_theme_backup(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $backup = $this->theme_files_bridge->read_backup([
+                'backup_id' => sanitize_text_field((string) ($request->get_param('backup_id') ?: $request->get_param('id') ?: '')),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'backup' => $backup,
+        ]);
+    }
+
     public function get_history(): WP_REST_Response {
         return new WP_REST_Response([
             'history' => LCFA_Settings::get_history(),
@@ -405,6 +529,25 @@ final class LCFA_Rest_Api {
         return new WP_REST_Response([
             'actions' => $this->command_deck->get_actions(),
         ]);
+    }
+
+    public function suggest_command(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $suggestion = $this->prompt_suggester->suggest($payload);
+        $status     = !empty($suggestion['ok']) ? 200 : 400;
+
+        return new WP_REST_Response([
+            'suggestion' => $suggestion,
+        ], $status);
     }
 
     public function get_mcp_status(): WP_REST_Response {
@@ -617,6 +760,31 @@ final class LCFA_Rest_Api {
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'content'            => wp_unslash((string) ($payload['content'] ?? '')),
+                'dry_run'            => !empty($payload['dry_run']),
+                'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
+            ]);
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'error' => $throwable->getMessage(),
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ]);
+    }
+
+    public function restore_theme_backup(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        try {
+            $result = $this->theme_files_bridge->restore_backup([
+                'backup_id'          => sanitize_text_field((string) ($payload['backup_id'] ?? $payload['id'] ?? '')),
+                'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? '')),
+                'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'dry_run'            => !empty($payload['dry_run']),
                 'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
             ]);

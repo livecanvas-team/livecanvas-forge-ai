@@ -286,6 +286,129 @@ final class LCFA_Theme_Files_Bridge {
         ]));
     }
 
+    public function list_backups(array $options = []): array {
+        $limit              = $this->normalize_limit($options['limit'] ?? 20);
+        $filter_path        = $this->sanitize_relative_path((string) ($options['path'] ?? ''), true);
+        $filter_kind        = sanitize_key((string) ($options['kind'] ?? ''));
+        $backups_directory  = $this->get_backups_directory();
+        $backup_files       = [];
+        $descriptors        = [];
+
+        if (!is_dir($backups_directory)) {
+            return [
+                'ok'                => true,
+                'backups_directory' => $backups_directory,
+                'limit'             => $limit,
+                'truncated'         => false,
+                'backups'           => [],
+            ];
+        }
+
+        $this->collect_backup_files($backups_directory, $backup_files);
+
+        foreach ($backup_files as $backup_file) {
+            $descriptor = $this->describe_backup_file($backup_file, $backups_directory);
+
+            if ($filter_path !== '' && (string) ($descriptor['relative_path'] ?? '') !== $filter_path) {
+                continue;
+            }
+
+            if ($filter_kind !== '' && (string) ($descriptor['kind'] ?? '') !== $filter_kind) {
+                continue;
+            }
+
+            $descriptors[] = $descriptor;
+        }
+
+        usort($descriptors, static function (array $left, array $right): int {
+            return ((int) ($right['_timestamp'] ?? 0)) <=> ((int) ($left['_timestamp'] ?? 0));
+        });
+
+        $truncated = count($descriptors) > $limit;
+        $descriptors = array_slice($descriptors, 0, $limit);
+
+        foreach ($descriptors as &$descriptor) {
+            unset($descriptor['_timestamp']);
+        }
+        unset($descriptor);
+
+        return [
+            'ok'                => true,
+            'backups_directory' => $backups_directory,
+            'limit'             => $limit,
+            'truncated'         => $truncated,
+            'backups'           => $descriptors,
+        ];
+    }
+
+    public function read_backup(array $options = []): array {
+        $backup_id     = $this->sanitize_relative_path((string) ($options['backup_id'] ?? $options['id'] ?? ''));
+        $absolute_path = $this->resolve_backup_absolute_path($backup_id);
+        $descriptor    = $this->describe_backup_file($absolute_path, $this->get_backups_directory());
+        $content       = (string) file_get_contents($absolute_path);
+
+        unset($descriptor['_timestamp']);
+        $descriptor['content'] = $content;
+
+        return $descriptor;
+    }
+
+    public function restore_backup(array $options = []): array {
+        $backup       = $this->read_backup($options);
+        $requested_root = sanitize_key((string) ($options['root_scope'] ?? ''));
+        $root_scope   = in_array($requested_root, ['stylesheet', 'template', 'active', 'all'], true)
+            ? $requested_root
+            : (string) ($backup['root'] ?? 'stylesheet');
+        $relative_path = $this->sanitize_relative_path((string) ($options['path'] ?? ($backup['relative_path'] ?? '')));
+        $dry_run       = !empty($options['dry_run']);
+
+        if ($relative_path === '') {
+            throw new RuntimeException(__('Unable to infer the original theme file path from the selected backup.', 'livecanvas-forge-ai'));
+        }
+
+        $current_file = null;
+
+        try {
+            $current_file = $this->read_file([
+                'root_scope' => $root_scope === 'all' ? 'active' : $root_scope,
+                'path'       => $relative_path,
+            ]);
+        } catch (Throwable $throwable) {
+            $current_file = null;
+        }
+
+        $write_result = $this->write_file([
+            'root_scope'         => $root_scope,
+            'path'               => $relative_path,
+            'content'            => (string) ($backup['content'] ?? ''),
+            'dry_run'            => $dry_run,
+            'create_directories' => !array_key_exists('create_directories', $options) || !empty($options['create_directories']),
+        ]);
+
+        $write_result['restored_from_backup'] = [
+            'backup_id'     => (string) ($backup['backup_id'] ?? ''),
+            'created_at'    => (string) ($backup['created_at'] ?? ''),
+            'relative_path' => (string) ($backup['relative_path'] ?? ''),
+            'root'          => (string) ($backup['root'] ?? ''),
+            'theme'         => (string) ($backup['theme'] ?? ''),
+            'kind'          => (string) ($backup['kind'] ?? ''),
+            'bytes'         => (int) ($backup['bytes'] ?? 0),
+        ];
+        $write_result['current_file'] = $current_file ? [
+            'exists'         => true,
+            'root'           => (string) ($current_file['root'] ?? ''),
+            'theme'          => (string) ($current_file['theme'] ?? ''),
+            'relative_path'  => (string) ($current_file['relative_path'] ?? ''),
+            'absolute_path'  => (string) ($current_file['absolute_path'] ?? ''),
+            'size'           => (int) ($current_file['size'] ?? 0),
+            'modified_at'    => (string) ($current_file['modified_at'] ?? ''),
+        ] : [
+            'exists' => false,
+        ];
+
+        return $write_result;
+    }
+
     private function resolve_readable_file(string $root_scope, string $relative_path, array $roots): array {
         foreach ($this->resolve_targets($root_scope, $roots, false) as $root) {
             $absolute_path = $this->resolve_absolute_path($root['path'], $relative_path);
@@ -397,8 +520,128 @@ final class LCFA_Theme_Files_Bridge {
 
         wp_mkdir_p($backup_directory);
         file_put_contents($backup_path, $content);
+        file_put_contents($this->get_backup_metadata_path($backup_path), wp_json_encode([
+            'root'          => (string) ($root['key'] ?? ''),
+            'theme'         => (string) ($root['label'] ?? ''),
+            'relative_path' => $relative_path,
+            'kind'          => $this->classify_file_kind($relative_path),
+            'created_at'    => gmdate('c'),
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         return wp_normalize_path($backup_path);
+    }
+
+    private function collect_backup_files(string $directory, array &$files): void {
+        $entries = @scandir($directory);
+
+        if (!is_array($entries)) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $absolute_path = wp_normalize_path($directory . '/' . $entry);
+
+            if (is_dir($absolute_path)) {
+                $this->collect_backup_files($absolute_path, $files);
+                continue;
+            }
+
+            if (!is_file($absolute_path) || str_ends_with($absolute_path, '.json')) {
+                continue;
+            }
+
+            $files[] = $absolute_path;
+        }
+    }
+
+    private function describe_backup_file(string $absolute_path, string $backups_directory): array {
+        $normalized_backups_directory = wp_normalize_path($backups_directory);
+        $normalized_path              = wp_normalize_path($absolute_path);
+        $metadata                     = $this->read_backup_metadata($absolute_path);
+        $backup_id                    = ltrim(str_replace($normalized_backups_directory, '', $normalized_path), '/');
+        $relative_path                = (string) ($metadata['relative_path'] ?? '');
+
+        if ($relative_path === '') {
+            $relative_path = $this->infer_backup_relative_path($normalized_path);
+        }
+
+        $theme = (string) ($metadata['theme'] ?? '');
+        if ($theme === '') {
+            $segments = explode('/', $backup_id);
+            $theme    = isset($segments[1]) ? (string) $segments[1] : '';
+        }
+
+        $created_at = (string) ($metadata['created_at'] ?? '');
+        $timestamp  = filemtime($normalized_path) ?: time();
+
+        if ($created_at === '') {
+            $created_at = gmdate('c', $timestamp);
+        } else {
+            $parsed_timestamp = strtotime($created_at);
+            if ($parsed_timestamp !== false) {
+                $timestamp = $parsed_timestamp;
+            }
+        }
+
+        return [
+            'backup_id'      => $backup_id,
+            'backup_path'    => $normalized_path,
+            'relative_path'  => $relative_path,
+            'root'           => (string) ($metadata['root'] ?? ''),
+            'theme'          => $theme,
+            'kind'           => (string) ($metadata['kind'] ?? ($relative_path !== '' ? $this->classify_file_kind($relative_path) : 'text')),
+            'bytes'          => filesize($normalized_path) ?: 0,
+            'created_at'     => $created_at,
+            'modified_at'    => gmdate('c', filemtime($normalized_path) ?: $timestamp),
+            '_timestamp'     => $timestamp,
+        ];
+    }
+
+    private function resolve_backup_absolute_path(string $backup_id): string {
+        $backups_directory = $this->get_backups_directory();
+        $absolute_path     = wp_normalize_path($backups_directory . '/' . ltrim($backup_id, '/'));
+
+        $this->assert_inside_root($absolute_path, $backups_directory);
+
+        if (!is_file($absolute_path) || str_ends_with($absolute_path, '.json')) {
+            throw new RuntimeException(sprintf(__('Backup file not found: %s', 'livecanvas-forge-ai'), $backup_id));
+        }
+
+        return $absolute_path;
+    }
+
+    private function get_backup_metadata_path(string $backup_path): string {
+        return wp_normalize_path($backup_path . '.json');
+    }
+
+    private function read_backup_metadata(string $backup_path): array {
+        $metadata_path = $this->get_backup_metadata_path($backup_path);
+
+        if (!is_file($metadata_path)) {
+            return [];
+        }
+
+        $content = (string) file_get_contents($metadata_path);
+        $decoded = json_decode($content, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function infer_backup_relative_path(string $backup_path): string {
+        $filename = basename($backup_path);
+        $marker   = strpos($filename, '__');
+
+        if ($marker === false) {
+            return '';
+        }
+
+        $encoded = substr($filename, $marker + 2);
+
+        return str_replace('__', '/', $encoded);
     }
 
     private function walk_directory(string $directory, string $root_path, callable $on_file): bool {

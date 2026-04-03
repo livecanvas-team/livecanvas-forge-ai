@@ -8,13 +8,15 @@ final class LCFA_Command_Deck {
     private LCFA_WindPress_Bridge $windpress_bridge;
     private LCFA_Theme_Files_Bridge $theme_files_bridge;
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
+    private LCFA_Remote_Client $remote_client;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Remote_Client $remote_client) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
         $this->theme_files_bridge = $theme_files_bridge;
         $this->local_mcp_bridge   = $local_mcp_bridge;
+        $this->remote_client      = $remote_client;
     }
 
     public function get_actions(): array {
@@ -79,6 +81,10 @@ final class LCFA_Command_Deck {
                 'label'       => __('Inspect theme files', 'livecanvas-forge-ai'),
                 'description' => __('Returns active theme roots plus a first template inventory sample.', 'livecanvas-forge-ai'),
             ],
+            'theme_backups_audit' => [
+                'label'       => __('Inspect theme backups', 'livecanvas-forge-ai'),
+                'description' => __('Returns the most recent theme and template backups captured by the fallback layer.', 'livecanvas-forge-ai'),
+            ],
             'write_theme_template' => [
                 'label'       => __('Write theme template', 'livecanvas-forge-ai'),
                 'description' => __('Writes a Twig, Latte, PHP, or HTML template file inside the active theme.', 'livecanvas-forge-ai'),
@@ -86,6 +92,10 @@ final class LCFA_Command_Deck {
             'write_theme_file' => [
                 'label'       => __('Write theme file', 'livecanvas-forge-ai'),
                 'description' => __('Writes a generic allowed file such as CSS, JS, JSON, or PHP inside the active theme.', 'livecanvas-forge-ai'),
+            ],
+            'restore_theme_backup' => [
+                'label'       => __('Restore theme backup', 'livecanvas-forge-ai'),
+                'description' => __('Restores a previously captured theme or template backup back into the active theme roots.', 'livecanvas-forge-ai'),
             ],
         ];
     }
@@ -98,10 +108,13 @@ final class LCFA_Command_Deck {
         $status    = sanitize_key($payload['status'] ?? 'draft');
         $target_id = absint($payload['target_id'] ?? 0);
         $variant   = sanitize_text_field($payload['variant'] ?? '1');
-        $provider_id = sanitize_key($payload['provider_id'] ?? '');
+        $provider_id = sanitize_text_field($payload['provider_id'] ?? '');
         $relative_path = sanitize_text_field($payload['relative_path'] ?? '');
         $file_path = sanitize_text_field($payload['file_path'] ?? '');
+        $backup_id = sanitize_text_field($payload['backup_id'] ?? '');
         $root_scope = sanitize_key($payload['root_scope'] ?? 'stylesheet');
+        $execution_target = sanitize_key($payload['execution_target'] ?? 'local');
+        $genesis_task_id = sanitize_key((string) ($payload['genesis_task_id'] ?? ''));
         $content   = wp_unslash((string) ($payload['content'] ?? ''));
 
         if (!isset($this->get_actions()[$action])) {
@@ -118,6 +131,22 @@ final class LCFA_Command_Deck {
 
         if (!in_array($root_scope, ['stylesheet', 'template', 'active', 'all'], true)) {
             $root_scope = 'stylesheet';
+        }
+
+        if (!in_array($execution_target, ['local', 'remote'], true)) {
+            $execution_target = 'local';
+        }
+
+        $policy = $this->evaluate_policy($action, $dry_run);
+
+        if (empty($policy['ok'])) {
+            return $this->error_result((string) ($policy['message'] ?? __('This action is blocked by the current policy profile.', 'livecanvas-forge-ai')));
+        }
+
+        $dry_run = !empty($policy['force_preview']) ? true : $dry_run;
+
+        if ($execution_target === 'remote') {
+            return $this->execute_remote($payload, $dry_run, $policy);
         }
 
         $result = [
@@ -331,6 +360,8 @@ final class LCFA_Command_Deck {
                 break;
 
             case 'windpress_scan_provider':
+                $provider_id = sanitize_key($provider_id);
+
                 if ($provider_id === '') {
                     return $this->error_result(__('A WindPress provider ID is required.', 'livecanvas-forge-ai'));
                 }
@@ -531,6 +562,25 @@ final class LCFA_Command_Deck {
                 ];
                 break;
 
+            case 'theme_backups_audit':
+                try {
+                    $backups = $this->theme_files_bridge->list_backups([
+                        'limit' => 12,
+                    ]);
+                } catch (Throwable $throwable) {
+                    return $this->error_result($throwable->getMessage());
+                }
+
+                $result['target_type'] = 'theme_backups';
+                $result['summary']     = __('Inspect recent theme and template backups.', 'livecanvas-forge-ai');
+                $result['message']     = __('Theme backup audit prepared.', 'livecanvas-forge-ai');
+                $result['data']        = [
+                    'backups_directory' => (string) ($backups['backups_directory'] ?? ''),
+                    'backup_count'      => is_array($backups['backups'] ?? null) ? count($backups['backups']) : 0,
+                    'backups'           => $backups['backups'] ?? [],
+                ];
+                break;
+
             case 'write_theme_template':
             case 'write_theme_file':
                 if ($file_path === '') {
@@ -593,7 +643,103 @@ final class LCFA_Command_Deck {
                     : __('Theme file written.', 'livecanvas-forge-ai');
                 $result['data'] = $write_result;
                 break;
+
+            case 'restore_theme_backup':
+                if ($backup_id === '') {
+                    return $this->error_result(__('A backup ID is required.', 'livecanvas-forge-ai'));
+                }
+
+                try {
+                    $backup = $this->theme_files_bridge->read_backup([
+                        'backup_id' => $backup_id,
+                    ]);
+                } catch (Throwable $throwable) {
+                    return $this->error_result($throwable->getMessage());
+                }
+
+                $effective_path = $file_path !== '' ? $file_path : (string) ($backup['relative_path'] ?? '');
+                $effective_root_scope = $root_scope !== ''
+                    ? $root_scope
+                    : (string) ($backup['root'] ?? 'stylesheet');
+
+                if ($effective_path === '') {
+                    return $this->error_result(__('The selected backup does not contain a valid target path.', 'livecanvas-forge-ai'));
+                }
+
+                $existing = [
+                    'content' => '',
+                ];
+
+                try {
+                    $existing = $this->theme_files_bridge->read_file([
+                        'root_scope' => $effective_root_scope === 'all' ? 'active' : $effective_root_scope,
+                        'path'       => $effective_path,
+                    ]);
+                } catch (Throwable $throwable) {
+                    $existing = [
+                        'content' => '',
+                    ];
+                }
+
+                $backup_content = (string) ($backup['content'] ?? '');
+
+                $result['target_type']   = 'theme_backup_restore';
+                $result['target_title']  = $effective_path;
+                $result['existing_html'] = (string) ($existing['content'] ?? '');
+                $result['proposed_html'] = $backup_content;
+                $result['diff_html']     = $this->build_diff($result['existing_html'], $backup_content);
+                $result['summary']       = sprintf(__('Restore backup for "%s".', 'livecanvas-forge-ai'), $effective_path);
+
+                if ($dry_run) {
+                    $result['message'] = __('Theme backup restore preview prepared.', 'livecanvas-forge-ai');
+                    $result['data'] = [
+                        'backup_id'     => (string) ($backup['backup_id'] ?? ''),
+                        'relative_path' => $effective_path,
+                        'root_scope'    => $effective_root_scope,
+                        'backup'        => [
+                            'created_at' => (string) ($backup['created_at'] ?? ''),
+                            'theme'      => (string) ($backup['theme'] ?? ''),
+                            'root'       => (string) ($backup['root'] ?? ''),
+                            'kind'       => (string) ($backup['kind'] ?? ''),
+                            'bytes'      => (int) ($backup['bytes'] ?? 0),
+                        ],
+                    ];
+                    break;
+                }
+
+                try {
+                    $restore_result = $this->theme_files_bridge->restore_backup([
+                        'backup_id'  => $backup_id,
+                        'root_scope' => $effective_root_scope,
+                        'path'       => $effective_path,
+                    ]);
+                } catch (Throwable $throwable) {
+                    return $this->error_result($throwable->getMessage());
+                }
+
+                $result['message'] = __('Theme backup restored.', 'livecanvas-forge-ai');
+                $result['data']    = $restore_result;
+                break;
         }
+
+        if (!empty($policy['notice'])) {
+            $result['message'] = trim((string) $policy['notice'] . ' ' . (string) ($result['message'] ?? ''));
+        }
+
+        if (!is_array($result['data'])) {
+            $result['data'] = [];
+        }
+
+        if ($genesis_task_id !== '') {
+            $result['data']['genesis_task_id'] = $genesis_task_id;
+        }
+
+        $result['data']['policy'] = [
+            'profile'             => $policy['profile'],
+            'allow_file_fallback' => $policy['allow_file_fallback'],
+            'force_preview'       => !empty($policy['force_preview']),
+            'notice'              => (string) ($policy['notice'] ?? ''),
+        ];
 
         LCFA_Settings::append_history([
             'time'         => current_time('mysql', true),
@@ -605,6 +751,67 @@ final class LCFA_Command_Deck {
             'target_type'  => $result['target_type'],
             'target_id'    => $result['target_id'],
             'target_title' => $result['target_title'],
+            'execution_target' => 'local',
+        ]);
+
+        return $result;
+    }
+
+    private function execute_remote(array $payload, bool $dry_run, array $policy): array {
+        $status = $this->remote_client->get_status();
+
+        if (empty($status['available'])) {
+            return $this->error_result((string) ($status['message'] ?? __('The remote companion is not reachable.', 'livecanvas-forge-ai')));
+        }
+
+        $payload['dry_run'] = $dry_run;
+        $payload['execution_target'] = 'remote';
+        $payload['provider_id'] = sanitize_text_field($payload['provider_id'] ?? '');
+
+        $response = $this->remote_client->run_command($payload);
+
+        if (is_wp_error($response)) {
+            return $this->error_result($response->get_error_message());
+        }
+
+        $result = is_array($response['result'] ?? null) ? $response['result'] : [];
+
+        if (!$result) {
+            return $this->error_result(__('The remote companion returned an empty command payload.', 'livecanvas-forge-ai'));
+        }
+
+        if (!empty($policy['notice'])) {
+            $result['message'] = trim((string) $policy['notice'] . ' ' . (string) ($result['message'] ?? ''));
+        }
+
+        if (!is_array($result['data'] ?? null)) {
+            $result['data'] = [];
+        }
+
+        $result['data']['policy'] = [
+            'profile'             => $policy['profile'],
+            'allow_file_fallback' => $policy['allow_file_fallback'],
+            'force_preview'       => !empty($policy['force_preview']),
+            'notice'              => (string) ($policy['notice'] ?? ''),
+        ];
+        $result['data']['execution_target'] = 'remote';
+        $result['data']['remote'] = [
+            'endpoint'  => (string) ($status['endpoint'] ?? ''),
+            'theme'     => (string) ($status['snapshot']['theme'] ?? ''),
+            'framework' => (string) ($status['snapshot']['framework'] ?? ''),
+        ];
+
+        LCFA_Settings::append_history([
+            'time'             => current_time('mysql', true),
+            'action'           => (string) ($result['action'] ?? ''),
+            'mode'             => (string) ($result['mode'] ?? ($dry_run ? 'preview' : 'apply')),
+            'ok'               => !empty($result['ok']),
+            'message'          => (string) ($result['message'] ?? ''),
+            'summary'          => (string) ($result['summary'] ?? ''),
+            'target_type'      => (string) ($result['target_type'] ?? ''),
+            'target_id'        => (int) ($result['target_id'] ?? 0),
+            'target_title'     => (string) ($result['target_title'] ?? ''),
+            'execution_target' => 'remote',
         ]);
 
         return $result;
@@ -620,8 +827,10 @@ final class LCFA_Command_Deck {
             'build_windpress_cache',
             'windpress_flush_cache',
             'theme_files_audit',
+            'theme_backups_audit',
             'write_theme_template',
             'write_theme_file',
+            'restore_theme_backup',
         ], true);
     }
 
@@ -657,5 +866,100 @@ final class LCFA_Command_Deck {
             'inventory'     => null,
             'data'          => null,
         ];
+    }
+
+    private function evaluate_policy(string $action, bool $dry_run): array {
+        $settings = LCFA_Settings::get();
+        $profile  = in_array($settings['permission_profile'] ?? '', ['read_only', 'draft_preview', 'confirmed_apply', 'advanced_templates'], true)
+            ? (string) $settings['permission_profile']
+            : 'draft_preview';
+        $allow_file_fallback = !empty($settings['allow_file_fallback']);
+        $is_read_action      = $this->is_read_action($action);
+        $is_advanced_action  = $this->is_advanced_action($action);
+        $is_file_action      = $this->is_file_fallback_action($action);
+
+        if ($profile === 'read_only' && !$is_read_action) {
+            return [
+                'ok'                  => false,
+                'profile'             => $profile,
+                'allow_file_fallback' => $allow_file_fallback,
+                'force_preview'       => false,
+                'notice'              => '',
+                'message'             => __('The current permission profile is read_only, so write-intent actions are blocked.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!$allow_file_fallback && $is_file_action && !$dry_run) {
+            return [
+                'ok'                  => true,
+                'profile'             => $profile,
+                'allow_file_fallback' => false,
+                'force_preview'       => true,
+                'notice'              => __('File fallback apply was downgraded to preview because theme/PHP fallback is disabled in policy.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ($profile === 'draft_preview' && !$is_read_action && !$dry_run) {
+            return [
+                'ok'                  => true,
+                'profile'             => $profile,
+                'allow_file_fallback' => $allow_file_fallback,
+                'force_preview'       => true,
+                'notice'              => __('Apply was downgraded to preview because the active policy only allows drafts and previews.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ($profile === 'confirmed_apply' && $is_advanced_action && !$dry_run) {
+            return [
+                'ok'                  => true,
+                'profile'             => $profile,
+                'allow_file_fallback' => $allow_file_fallback,
+                'force_preview'       => true,
+                'notice'              => __('Advanced template, WindPress, or partial writes were downgraded to preview because the active policy requires the advanced_templates profile for apply.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'ok'                  => true,
+            'profile'             => $profile,
+            'allow_file_fallback' => $allow_file_fallback,
+            'force_preview'       => false,
+            'notice'              => '',
+        ];
+    }
+
+    private function is_read_action(string $action): bool {
+        return in_array($action, [
+            'site_audit',
+            'windpress_audit',
+            'windpress_scan_provider',
+            'theme_files_audit',
+            'theme_backups_audit',
+        ], true);
+    }
+
+    private function is_advanced_action(string $action): bool {
+        return in_array($action, [
+            'update_header',
+            'update_footer',
+            'create_dynamic_template',
+            'update_dynamic_template',
+            'windpress_reset_entry',
+            'windpress_store_theme_json',
+            'windpress_store_cache_css',
+            'build_windpress_cache',
+            'windpress_flush_cache',
+            'write_theme_template',
+            'write_theme_file',
+            'restore_theme_backup',
+        ], true);
+    }
+
+    private function is_file_fallback_action(string $action): bool {
+        return in_array($action, [
+            'write_theme_template',
+            'write_theme_file',
+            'restore_theme_backup',
+        ], true);
     }
 }
