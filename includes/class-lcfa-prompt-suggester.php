@@ -64,6 +64,8 @@ final class LCFA_Prompt_Suggester {
             $score += 2;
         }
 
+        $prioritize_page_intent = $this->should_prioritize_page_intent($prompt, $suggested['target_id']);
+
         if ($this->contains_any($prompt, ['restore', 'rollback', 'revert']) && $this->contains_any($prompt, ['backup', 'previous version'])) {
             $suggested['action'] = 'restore_theme_backup';
             $reasons[] = __('The request asks for a restore or rollback from backup.', 'livecanvas-forge-ai');
@@ -78,14 +80,6 @@ final class LCFA_Prompt_Suggester {
             $suggested['variant'] = $suggested['variant'] !== '' ? $suggested['variant'] : '1';
             $reasons[] = __('Detected an explicit footer intent.', 'livecanvas-forge-ai');
             $score += 3;
-        } elseif ($this->contains_any($prompt, ['windpress', 'tailwind', 'theme.json', 'utility classes', 'daisyui'])) {
-            $windpress_action = $this->detect_windpress_action($prompt);
-
-            if ($windpress_action !== '') {
-                $suggested['action'] = $windpress_action;
-                $reasons[] = __('Detected a Tailwind/WindPress runtime request.', 'livecanvas-forge-ai');
-                $score += 3;
-            }
         } elseif ($suggested['file_path'] !== '') {
             $suggested['action'] = $this->is_template_path($suggested['file_path']) ? 'write_theme_template' : 'write_theme_file';
             $reasons[] = __('A concrete file path was detected, so the request maps to the fallback theme layer.', 'livecanvas-forge-ai');
@@ -94,10 +88,18 @@ final class LCFA_Prompt_Suggester {
             $suggested['action'] = $this->contains_any($prompt, ['create', 'new', 'generate']) ? 'create_dynamic_template' : 'update_dynamic_template';
             $reasons[] = __('Detected a dynamic template request.', 'livecanvas-forge-ai');
             $score += 2;
-        } elseif ($this->contains_any($prompt, ['landing page', 'homepage', 'home page', 'page'])) {
+        } elseif ($prioritize_page_intent) {
             $suggested['action'] = $this->detect_page_action($prompt, $suggested['target_id']);
             $reasons[] = __('Detected a page-oriented request.', 'livecanvas-forge-ai');
             $score += 2;
+        } elseif ($this->contains_any($prompt, ['windpress', 'tailwind', 'theme.json', 'utility classes', 'daisyui'])) {
+            $windpress_action = $this->detect_windpress_action($prompt);
+
+            if ($windpress_action !== '') {
+                $suggested['action'] = $windpress_action;
+                $reasons[] = __('Detected a Tailwind/WindPress runtime request.', 'livecanvas-forge-ai');
+                $score += 3;
+            }
         } elseif ($this->contains_any($prompt, ['audit', 'inspect', 'analyze', 'review', 'check'])) {
             $suggested['action'] = 'site_audit';
             $reasons[] = __('The request is phrased as an inspection rather than a write.', 'livecanvas-forge-ai');
@@ -136,7 +138,7 @@ final class LCFA_Prompt_Suggester {
             }
         }
 
-        if (in_array($suggested['action'], ['create_page', 'create_dynamic_template'], true) && $suggested['title'] === '') {
+        if (in_array($suggested['action'], ['page_upsert', 'create_page', 'create_dynamic_template'], true) && $suggested['title'] === '') {
             $detected_title = $this->extract_title($user_prompt, $suggested['action']);
 
             if ($detected_title !== '') {
@@ -169,15 +171,41 @@ final class LCFA_Prompt_Suggester {
     }
 
     private function detect_page_action(string $prompt, int $target_id): string {
-        if ($this->contains_any($prompt, ['create', 'new', 'generate', 'build from scratch'])) {
-            return 'create_page';
+        return 'page_upsert';
+    }
+
+    private function should_prioritize_page_intent(string $prompt, int $target_id): bool {
+        $mentions_page = $this->contains_any($prompt, ['landing page', 'homepage', 'home page', 'page', 'pagina']);
+        $mentions_page_write = $this->contains_any($prompt, ['create', 'new', 'generate', 'build', 'make', 'update', 'edit', 'modify', 'rewrite', 'refresh', 'crea', 'genera', 'aggiorna', 'modifica', 'riscrivi']);
+        $explicit_windpress_runtime = $this->contains_any($prompt, [
+            'build tailwind cache',
+            'compile tailwind',
+            'rebuild tailwind',
+            'generate css',
+            'theme.json',
+            'flush cache',
+            'clear cache',
+            'purge cache',
+            'scan provider',
+            'provider audit',
+            'cache css',
+            'compiled css',
+            'reset main.css',
+            'reset tailwind.config.js',
+            'reset wizard.css',
+            'reset wizard.js',
+            'reset entry',
+        ]);
+
+        if ($explicit_windpress_runtime) {
+            return false;
         }
 
-        if ($target_id > 0 || $this->contains_any($prompt, ['update', 'edit', 'modify', 'rewrite', 'refresh'])) {
-            return 'update_page';
+        if ($mentions_page && $mentions_page_write) {
+            return true;
         }
 
-        return 'create_page';
+        return $target_id > 0 && $mentions_page_write;
     }
 
     private function detect_windpress_action(string $prompt): string {
@@ -237,7 +265,7 @@ final class LCFA_Prompt_Suggester {
             return sanitize_text_field((string) $matches[1]);
         }
 
-        if ($action === 'create_page') {
+        if (in_array($action, ['page_upsert', 'create_page'], true)) {
             if ($this->contains_any(strtolower($prompt), ['homepage', 'home page'])) {
                 return __('Home', 'livecanvas-forge-ai');
             }

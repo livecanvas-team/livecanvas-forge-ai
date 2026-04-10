@@ -25,6 +25,10 @@ final class LCFA_Command_Deck {
                 'label'       => __('Run site audit', 'livecanvas-forge-ai'),
                 'description' => __('Returns the current stack summary and LiveCanvas inventory without writing.', 'livecanvas-forge-ai'),
             ],
+            'page_upsert' => [
+                'label'       => __('Create or update page', 'livecanvas-forge-ai'),
+                'description' => __('Creates a page when no target exists, or updates the existing LiveCanvas page and always returns final URLs.', 'livecanvas-forge-ai'),
+            ],
             'create_page' => [
                 'label'       => __('Create LiveCanvas page', 'livecanvas-forge-ai'),
                 'description' => __('Creates a page in draft or publish state and enables LiveCanvas on it.', 'livecanvas-forge-ai'),
@@ -106,7 +110,7 @@ final class LCFA_Command_Deck {
         $title     = sanitize_text_field($payload['title'] ?? '');
         $slug      = sanitize_title($payload['slug'] ?? '');
         $status    = sanitize_key($payload['status'] ?? 'draft');
-        $target_id = absint($payload['target_id'] ?? 0);
+        $target_id = absint($payload['target_id'] ?? $payload['post_id'] ?? 0);
         $variant   = sanitize_text_field($payload['variant'] ?? '1');
         $provider_id = sanitize_text_field($payload['provider_id'] ?? '');
         $relative_path = sanitize_text_field($payload['relative_path'] ?? '');
@@ -153,16 +157,20 @@ final class LCFA_Command_Deck {
             'ok'            => true,
             'action'        => $action,
             'mode'          => $dry_run ? 'preview' : 'apply',
+            'execution_target' => 'local',
             'message'       => '',
             'summary'       => '',
             'target_type'   => '',
             'target_id'     => 0,
             'target_title'  => '',
+            'frontend_url'  => '',
+            'edit_url'      => '',
             'diff_html'     => '',
             'existing_html' => '',
             'proposed_html' => $content,
             'inventory'     => null,
-            'data'          => null,
+            'warnings'      => [],
+            'data'          => [],
         ];
 
         switch ($action) {
@@ -180,67 +188,87 @@ final class LCFA_Command_Deck {
                 $result['inventory']   = $inventory;
                 break;
 
+            case 'page_upsert':
             case 'create_page':
-                if ($title === '') {
-                    return $this->error_result(__('A page title is required.', 'livecanvas-forge-ai'));
-                }
+            case 'update_page':
+                $existing   = ['post' => null, 'content' => ''];
+                $is_update  = false;
+                $page_title = $title;
+                $page_slug  = $slug;
+                $page_target_id = $action === 'create_page' ? 0 : $target_id;
 
-                $result['target_type'] = 'page';
-                $result['target_title'] = $title;
-                $result['summary'] = sprintf(__('Create LiveCanvas page "%s".', 'livecanvas-forge-ai'), $title);
-                $result['diff_html'] = $this->build_diff('', $content);
+                if ($page_target_id > 0) {
+                    $existing = $this->inventory->get_target_content('page', $page_target_id);
 
-                if (!$dry_run) {
-                    $post_id = wp_insert_post([
-                        'post_type'    => 'page',
-                        'post_title'   => $title,
-                        'post_name'    => $slug !== '' ? $slug : '',
-                        'post_status'  => $status,
-                        'post_content' => $content,
-                    ], true);
-
-                    if (is_wp_error($post_id)) {
-                        return $this->error_result($post_id->get_error_message());
+                    if ($action === 'update_page' && !$existing['post']) {
+                        return $this->error_result(__('The requested page target was not found.', 'livecanvas-forge-ai'));
                     }
 
-                    update_post_meta($post_id, '_lc_livecanvas_enabled', '1');
-
-                    $result['target_id'] = (int) $post_id;
-                    $result['message']   = __('LiveCanvas page created.', 'livecanvas-forge-ai');
-                }
-                break;
-
-            case 'update_page':
-                if (!$target_id) {
+                    $is_update = !empty($existing['post']);
+                } elseif ($action === 'update_page') {
                     return $this->error_result(__('A target page ID is required.', 'livecanvas-forge-ai'));
                 }
 
-                $existing = $this->inventory->get_target_content('page', $target_id);
+                if (!$is_update && $page_title === '') {
+                    return $this->error_result(__('A page title is required.', 'livecanvas-forge-ai'));
+                }
 
-                if (!$existing['post']) {
-                    return $this->error_result(__('The requested page target was not found.', 'livecanvas-forge-ai'));
+                if ($is_update) {
+                    $page_title = $page_title !== '' ? $page_title : (string) ($existing['post']['title'] ?? '');
+                    $page_slug  = $page_slug !== '' ? $page_slug : (string) ($existing['post']['slug'] ?? '');
                 }
 
                 $result['target_type']   = 'page';
-                $result['target_id']     = $target_id;
-                $result['target_title']  = $existing['post']['title'];
+                $result['target_id']     = $page_target_id;
+                $result['target_title']  = $page_title;
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
-                $result['summary']       = sprintf(__('Update page #%d.', 'livecanvas-forge-ai'), $target_id);
+                $result['summary']       = $is_update
+                    ? sprintf(__('Update page #%d.', 'livecanvas-forge-ai'), $page_target_id)
+                    : sprintf(__('Create LiveCanvas page "%s".', 'livecanvas-forge-ai'), $page_title);
+
+                if ($is_update) {
+                    $result['frontend_url'] = (string) ($existing['post']['view_url'] ?? '');
+                    $result['edit_url']     = (string) ($existing['post']['edit_url'] ?? '');
+                }
 
                 if (!$dry_run) {
-                    $updated = wp_update_post([
-                        'ID'           => $target_id,
-                        'post_content' => $content,
-                    ], true);
+                    $page_id = $is_update
+                        ? wp_update_post([
+                            'ID'           => $page_target_id,
+                            'post_title'   => $page_title,
+                            'post_name'    => $page_slug !== '' ? $page_slug : '',
+                            'post_status'  => $status,
+                            'post_content' => $content,
+                        ], true)
+                        : wp_insert_post([
+                            'post_type'    => 'page',
+                            'post_title'   => $page_title,
+                            'post_name'    => $page_slug !== '' ? $page_slug : '',
+                            'post_status'  => $status,
+                            'post_content' => $content,
+                        ], true);
 
-                    if (is_wp_error($updated)) {
-                        return $this->error_result($updated->get_error_message());
+                    if (is_wp_error($page_id)) {
+                        return $this->error_result($page_id->get_error_message());
                     }
 
-                    update_post_meta($target_id, '_lc_livecanvas_enabled', '1');
+                    $page_id = (int) $page_id;
+                    update_post_meta($page_id, '_lc_livecanvas_enabled', '1');
+                    $this->hydrate_target_urls($result, 'page', $page_id);
 
-                    $result['message'] = __('Page updated.', 'livecanvas-forge-ai');
+                    $result['message'] = $is_update
+                        ? __('Page updated.', 'livecanvas-forge-ai')
+                        : __('LiveCanvas page created.', 'livecanvas-forge-ai');
+                    break;
+                }
+
+                if (!$is_update) {
+                    $preview_slug = $page_slug !== '' ? $page_slug : sanitize_title($page_title);
+
+                    if ($preview_slug !== '') {
+                        $result['frontend_url'] = trailingslashit(home_url($preview_slug));
+                    }
                 }
                 break;
 
@@ -726,14 +754,17 @@ final class LCFA_Command_Deck {
             $result['message'] = trim((string) $policy['notice'] . ' ' . (string) ($result['message'] ?? ''));
         }
 
-        if (!is_array($result['data'])) {
-            $result['data'] = [];
-        }
-
         if ($genesis_task_id !== '') {
             $result['data']['genesis_task_id'] = $genesis_task_id;
         }
 
+        $result['data']['execution_target'] = $result['execution_target'];
+        if ($result['frontend_url'] !== '') {
+            $result['data']['frontend_url'] = $result['frontend_url'];
+        }
+        if ($result['edit_url'] !== '') {
+            $result['data']['edit_url'] = $result['edit_url'];
+        }
         $result['data']['policy'] = [
             'profile'             => $policy['profile'],
             'allow_file_fallback' => $policy['allow_file_fallback'],
@@ -788,6 +819,16 @@ final class LCFA_Command_Deck {
             $result['data'] = [];
         }
 
+        $result['execution_target'] = 'remote';
+        if (!isset($result['frontend_url']) || !is_string($result['frontend_url'])) {
+            $result['frontend_url'] = '';
+        }
+        if (!isset($result['edit_url']) || !is_string($result['edit_url'])) {
+            $result['edit_url'] = '';
+        }
+        if (!is_array($result['warnings'] ?? null)) {
+            $result['warnings'] = [];
+        }
         $result['data']['policy'] = [
             'profile'             => $policy['profile'],
             'allow_file_fallback' => $policy['allow_file_fallback'],
@@ -795,6 +836,12 @@ final class LCFA_Command_Deck {
             'notice'              => (string) ($policy['notice'] ?? ''),
         ];
         $result['data']['execution_target'] = 'remote';
+        if ($result['frontend_url'] !== '') {
+            $result['data']['frontend_url'] = $result['frontend_url'];
+        }
+        if ($result['edit_url'] !== '') {
+            $result['data']['edit_url'] = $result['edit_url'];
+        }
         $result['data']['remote'] = [
             'endpoint'  => (string) ($status['endpoint'] ?? ''),
             'theme'     => (string) ($status['snapshot']['theme'] ?? ''),
@@ -855,17 +902,36 @@ final class LCFA_Command_Deck {
             'ok'            => false,
             'action'        => '',
             'mode'          => 'preview',
+            'execution_target' => 'local',
             'message'       => $message,
             'summary'       => '',
             'target_type'   => '',
             'target_id'     => 0,
             'target_title'  => '',
+            'frontend_url'  => '',
+            'edit_url'      => '',
             'diff_html'     => '',
             'existing_html' => '',
             'proposed_html' => '',
             'inventory'     => null,
-            'data'          => null,
+            'warnings'      => [],
+            'data'          => [],
         ];
+    }
+
+    public function evaluate_action_policy_for_rest(string $action, bool $dry_run): array {
+        return $this->evaluate_policy($action, $dry_run);
+    }
+
+    private function hydrate_target_urls(array &$result, string $target_type, int $target_id): void {
+        $result['target_type'] = $target_type;
+        $result['target_id']   = $target_id;
+
+        if ($target_type === 'page' || $target_type === 'dynamic_template' || $target_type === 'partial' || $target_type === 'header' || $target_type === 'footer') {
+            $result['target_title'] = html_entity_decode(get_the_title($target_id) ?: __('Untitled', 'livecanvas-forge-ai'));
+            $result['frontend_url'] = (string) get_permalink($target_id);
+            $result['edit_url']     = (string) get_edit_post_link($target_id, 'raw');
+        }
     }
 
     private function evaluate_policy(string $action, bool $dry_run): array {

@@ -1089,8 +1089,6 @@ final class LCFA_Admin {
         $connection_test  = LCFA_Settings::consume_connection_test_result();
         $remote_status    = $this->remote_client->get_status();
         $preferred_client = $connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex');
-        $guides           = $this->get_tool_guides($settings['site_mode'] ?: $snapshot['site_mode']);
-        $guide            = $guides[$preferred_client] ?? $guides['other'];
         $mcp_status       = $this->context_builder->get_mcp_status();
         $local_bridge     = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
         $mcp_bootstrap    = $this->context_builder->get_bootstrap_payload();
@@ -1173,6 +1171,8 @@ final class LCFA_Admin {
         echo '</div>';
         echo '</section>';
 
+        $this->render_agent_connection_guide($mcp_bootstrap, $settings, $snapshot, $preferred_client, $mcp_status);
+
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
@@ -1228,40 +1228,236 @@ final class LCFA_Admin {
         echo '</div>';
         echo '</section>';
 
-        echo '<section class="lcfa-card">';
-        echo '<div class="lcfa-card-head">';
-        echo $this->get_icon_svg('stars');
-        echo '<div><h2>' . esc_html__('Preferred client guide', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('A concrete starting point for the client currently selected in the setup or on this page.', 'livecanvas-forge-ai') . '</p></div>';
-        echo '</div>';
-        echo '<p>' . esc_html($guide['summary']) . '</p>';
-        echo '<ul class="lcfa-bullets">';
-        foreach ($guide['steps'] as $line) {
-            echo '<li>' . esc_html($line) . '</li>';
-        }
-        echo '</ul>';
-        echo '<div class="lcfa-guide">';
-        echo '<h3>' . esc_html__('MCP status', 'livecanvas-forge-ai') . '</h3>';
-        echo '<ul class="lcfa-bullets">';
-        echo '<li>' . esc_html(sprintf(__('Enabled: %s', 'livecanvas-forge-ai'), $mcp_status['enabled'] ? __('yes', 'livecanvas-forge-ai') : __('no', 'livecanvas-forge-ai'))) . '</li>';
-        echo '<li>' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $mcp_status['filesystem_mode'])) . '</li>';
-        echo '<li>' . esc_html(sprintf(__('Local MCP bridge: %s', 'livecanvas-forge-ai'), !empty($local_bridge['available']) ? __('ready', 'livecanvas-forge-ai') : __('not available', 'livecanvas-forge-ai'))) . '</li>';
-        echo '<li>' . esc_html(sprintf(__('Local WindPress build: %s', 'livecanvas-forge-ai'), !empty($local_bridge['build_available']) ? __('ready', 'livecanvas-forge-ai') : __('not available', 'livecanvas-forge-ai'))) . '</li>';
-        if (!empty($local_bridge['node_version'])) {
-            echo '<li>' . esc_html(sprintf(__('Node version: %s', 'livecanvas-forge-ai'), $local_bridge['node_version'])) . '</li>';
-        }
-        echo '<li>' . esc_html(sprintf(__('Token: %s', 'livecanvas-forge-ai'), $connections['mcp_token'])) . '</li>';
-        echo '</ul>';
-        if (!empty($local_bridge['message'])) {
-            echo '<p>' . esc_html($local_bridge['message']) . '</p>';
-        }
-        echo '</div>';
-        echo '</section>';
-
         echo '</div>';
         echo '<aside class="lcfa-sidebar">';
         $this->render_snapshot_card($snapshot, $settings);
         echo '</aside>';
         echo '</div>';
+    }
+
+    private function render_agent_connection_guide(array $mcp_bootstrap, array $settings, array $snapshot, string $preferred_client, array $mcp_status): void {
+        $guides        = $this->get_agent_connection_guides($mcp_bootstrap, $settings, $snapshot);
+        $selected_key  = $preferred_client === 'other'
+            ? 'generic'
+            : (isset($guides[$preferred_client]) ? $preferred_client : 'codex');
+        $local_bridge  = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
+        $site_mode     = (string) ($settings['site_mode'] ?: ($snapshot['site_mode'] ?? 'local'));
+        $filesystem_mode = (string) ($mcp_status['filesystem_mode'] ?? '');
+
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('stars');
+        echo '<div><h2>' . esc_html__('Connect your coding agent', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('These quickstart guides are written in English on purpose. Pick your client, copy the server details, and attach the LiveCanvas Forge MCP bridge in a few minutes.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        echo '<div class="lcfa-chip-row">';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Site mode: %s', 'livecanvas-forge-ai'), $site_mode)) . '</span>';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $filesystem_mode ?: 'n/a')) . '</span>';
+        echo '<span class="lcfa-chip' . (!empty($local_bridge['available']) ? ' is-positive' : '') . '">' . esc_html(!empty($local_bridge['available']) ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai')) . '</span>';
+        echo '</div>';
+
+        echo '<div class="lcfa-guide">';
+        echo '<p>' . esc_html__('Use the MCP token for your coding agent. WordPress Application Passwords are only needed when one WordPress site connects to another WordPress site through the remote companion.', 'livecanvas-forge-ai') . '</p>';
+        echo '</div>';
+
+        echo '<div class="lcfa-agent-guide">';
+        foreach ($guides as $key => $guide) {
+            $input_id = 'lcfa-agent-tab-' . sanitize_key($key);
+            echo '<input class="lcfa-agent-guide__input" type="radio" name="lcfa_agent_tab" id="' . esc_attr($input_id) . '"' . checked($selected_key, $key, false) . '>';
+        }
+
+        echo '<div class="lcfa-agent-guide__tabs" role="tablist" aria-label="' . esc_attr__('Coding agent quickstart tabs', 'livecanvas-forge-ai') . '">';
+        foreach ($guides as $key => $guide) {
+            $input_id = 'lcfa-agent-tab-' . sanitize_key($key);
+            echo '<label class="lcfa-agent-guide__tab" for="' . esc_attr($input_id) . '" role="tab">' . esc_html($guide['label']) . '</label>';
+        }
+        echo '</div>';
+
+        echo '<div class="lcfa-agent-guide__panels">';
+        foreach ($guides as $key => $guide) {
+            echo '<section class="lcfa-agent-guide__panel lcfa-agent-guide__panel--' . esc_attr(sanitize_html_class($key)) . '">';
+            echo '<p class="lcfa-agent-guide__intro">' . esc_html($guide['intro']) . '</p>';
+            echo '<div class="lcfa-agent-guide__panel-grid">';
+
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html__('Step-by-step', 'livecanvas-forge-ai') . '</h3>';
+            echo '<ol class="lcfa-agent-guide__steps">';
+            foreach ($guide['steps'] as $step) {
+                echo '<li>' . esc_html($step) . '</li>';
+            }
+            echo '</ol>';
+            if (!empty($guide['note'])) {
+                echo '<p class="lcfa-agent-guide__note">' . esc_html($guide['note']) . '</p>';
+            }
+            echo '</div>';
+
+            if (!empty($guide['shortcut_title']) && !empty($guide['shortcut'])) {
+                echo '<div class="lcfa-agent-guide__window">';
+                echo '<h3>' . esc_html($guide['shortcut_title']) . '</h3>';
+                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['shortcut']) . '</code></pre></div>';
+                echo '</div>';
+            }
+
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
+            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['command']) . '</code></pre></div>';
+            echo '</div>';
+
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
+            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['environment']) . '</code></pre></div>';
+            echo '</div>';
+
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html__('Quick terminal test', 'livecanvas-forge-ai') . '</h3>';
+            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['test_command']) . '</code></pre></div>';
+            echo '</div>';
+
+            echo '</div>';
+            echo '</section>';
+        }
+        echo '</div>';
+        echo '</div>';
+        echo '</section>';
+    }
+
+    private function get_agent_connection_guides(array $mcp_bootstrap, array $settings, array $snapshot): array {
+        $clients = is_array($mcp_bootstrap['clients'] ?? null) ? $mcp_bootstrap['clients'] : [];
+        $common  = is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [];
+        $is_local_filesystem = (string) ($common['filesystem_mode'] ?? '') === 'local-theme-access';
+        $wp_root_note = $is_local_filesystem
+            ? __('This site is detected as local, so keep LCFA_WP_ROOT in the environment if you want local file access and local build tools.', 'livecanvas-forge-ai')
+            : __('This site is currently handled as remote. In most cases you can leave LCFA_WP_ROOT out of the client environment.', 'livecanvas-forge-ai');
+
+        $codex = is_array($clients['codex'] ?? null) ? $clients['codex'] : ['command' => '', 'env' => []];
+        $cursor = is_array($clients['cursor'] ?? null) ? $clients['cursor'] : $codex;
+        $claude = is_array($clients['claude-code'] ?? null) ? $clients['claude-code'] : $codex;
+        $opencode = is_array($clients['opencode'] ?? null) ? $clients['opencode'] : $codex;
+
+        return [
+            'codex' => [
+                'label'          => __('Codex', 'livecanvas-forge-ai'),
+                'intro'          => __('Use this if Codex is your main coding agent. The easiest path is to register the MCP server once, then let Codex call the plugin tools from the current workspace.', 'livecanvas-forge-ai'),
+                'steps'          => [
+                    __('Open a terminal in the same workspace as your WordPress project.', 'livecanvas-forge-ai'),
+                    __('Run the Codex shortcut below, or add a new stdio MCP server manually.', 'livecanvas-forge-ai'),
+                    __('Keep the server name as livecanvas-forge so it is easy to recognize later.', 'livecanvas-forge-ai'),
+                    __('Restart Codex if needed, then call get_snapshot as your first tool check.', 'livecanvas-forge-ai'),
+                ],
+                'note'           => $wp_root_note,
+                'shortcut_title' => __('Codex shortcut', 'livecanvas-forge-ai'),
+                'shortcut'       => $this->build_codex_register_command($codex),
+                'command'        => (string) ($codex['command'] ?? ''),
+                'environment'    => $this->build_environment_block((array) ($codex['env'] ?? [])),
+                'test_command'   => $this->build_manual_mcp_test_command((array) ($codex['env'] ?? [])),
+            ],
+            'cursor' => [
+                'label'        => __('Cursor', 'livecanvas-forge-ai'),
+                'intro'        => __('Use this if you want Cursor to discover the Forge tools through MCP. Add one local stdio MCP server and keep the command and environment exactly as shown.', 'livecanvas-forge-ai'),
+                'steps'        => [
+                    __('Open the MCP server settings in Cursor.', 'livecanvas-forge-ai'),
+                    __('Create a new local or stdio MCP server named livecanvas-forge.', 'livecanvas-forge-ai'),
+                    __('Paste the server command and environment variables from this tab.', 'livecanvas-forge-ai'),
+                    __('Save the server, reconnect it, and ask for get_snapshot to confirm that the bridge is live.', 'livecanvas-forge-ai'),
+                ],
+                'note'         => $wp_root_note,
+                'command'      => (string) ($cursor['command'] ?? ''),
+                'environment'  => $this->build_environment_block((array) ($cursor['env'] ?? [])),
+                'test_command' => $this->build_manual_mcp_test_command((array) ($cursor['env'] ?? [])),
+            ],
+            'claude-code' => [
+                'label'        => __('Claude Code', 'livecanvas-forge-ai'),
+                'intro'        => __('Use this if Claude Code is your main agent. The bridge still runs in stdio mode: the only difference is the client where you register it.', 'livecanvas-forge-ai'),
+                'steps'        => [
+                    __('Open the MCP settings in Claude Code.', 'livecanvas-forge-ai'),
+                    __('Add a new stdio MCP server called livecanvas-forge.', 'livecanvas-forge-ai'),
+                    __('Use the command and environment shown below without changing the token or the REST base.', 'livecanvas-forge-ai'),
+                    __('Reconnect the server and run get_snapshot before asking Claude Code to write anything.', 'livecanvas-forge-ai'),
+                ],
+                'note'         => $wp_root_note,
+                'command'      => (string) ($claude['command'] ?? ''),
+                'environment'  => $this->build_environment_block((array) ($claude['env'] ?? [])),
+                'test_command' => $this->build_manual_mcp_test_command((array) ($claude['env'] ?? [])),
+            ],
+            'opencode' => [
+                'label'        => __('OpenCode', 'livecanvas-forge-ai'),
+                'intro'        => __('Use this if OpenCode is your main terminal agent. You only need one local MCP entry that points to the Forge bridge.', 'livecanvas-forge-ai'),
+                'steps'        => [
+                    __('Open the MCP server configuration in OpenCode.', 'livecanvas-forge-ai'),
+                    __('Add a new local MCP server named livecanvas-forge.', 'livecanvas-forge-ai'),
+                    __('Paste the command and environment variables from this tab.', 'livecanvas-forge-ai'),
+                    __('Reconnect the server and run get_snapshot to make sure the WordPress companion is reachable.', 'livecanvas-forge-ai'),
+                ],
+                'note'         => $wp_root_note,
+                'command'      => (string) ($opencode['command'] ?? ''),
+                'environment'  => $this->build_environment_block((array) ($opencode['env'] ?? [])),
+                'test_command' => $this->build_manual_mcp_test_command((array) ($opencode['env'] ?? [])),
+            ],
+            'generic' => [
+                'label'        => __('Generic MCP client', 'livecanvas-forge-ai'),
+                'intro'        => __('Use this if your coding agent is MCP-compatible but not listed here. The same MCP bridge still works: you only need a stdio server entry and the variables shown below.', 'livecanvas-forge-ai'),
+                'steps'        => [
+                    __('Open the MCP server settings in your client.', 'livecanvas-forge-ai'),
+                    __('Create a new stdio server named livecanvas-forge.', 'livecanvas-forge-ai'),
+                    __('Paste the command and environment variables shown in this tab.', 'livecanvas-forge-ai'),
+                    __('Reconnect the client and test with get_snapshot before running write commands.', 'livecanvas-forge-ai'),
+                ],
+                'note'         => $wp_root_note,
+                'command'      => (string) ($codex['command'] ?? ''),
+                'environment'  => $this->build_environment_block((array) ($codex['env'] ?? [])),
+                'test_command' => $this->build_manual_mcp_test_command((array) ($codex['env'] ?? [])),
+            ],
+        ];
+    }
+
+    private function build_environment_block(array $environment): string {
+        if (!$environment) {
+            return __('No environment variables were generated for this client.', 'livecanvas-forge-ai');
+        }
+
+        return implode("\n", array_map(static function ($entry): string {
+            return (string) $entry;
+        }, $environment));
+    }
+
+    private function build_codex_register_command(array $client): string {
+        $lines = [
+            'codex mcp add livecanvas-forge \\',
+        ];
+
+        foreach ((array) ($client['env'] ?? []) as $entry) {
+            $lines[] = '  --env ' . (string) $entry . ' \\';
+        }
+
+        $lines[] = '  -- ' . (string) ($client['command'] ?? '');
+
+        return implode("\n", $lines);
+    }
+
+    private function build_manual_mcp_test_command(array $environment): string {
+        $lines = [];
+
+        foreach ($environment as $entry) {
+            $parts = explode('=', (string) $entry, 2);
+            $key   = $parts[0] ?? '';
+            $value = $parts[1] ?? '';
+
+            if ($key === '') {
+                continue;
+            }
+
+            $lines[] = $key . '=' . $this->quote_shell_value($value) . ' \\';
+        }
+
+        $lines[] = 'node ' . $this->quote_shell_value(LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js') . ' \\';
+        $lines[] = '  --tool get_snapshot \\';
+        $lines[] = '  --output pretty';
+
+        return implode("\n", $lines);
+    }
+
+    private function quote_shell_value(string $value): string {
+        return "'" . str_replace("'", "'\"'\"'", $value) . "'";
     }
 
     private function render_command_tab(array $settings, array $snapshot): void {
@@ -2786,6 +2982,7 @@ final class LCFA_Admin {
         ];
 
         switch ($action) {
+            case 'page_upsert':
             case 'update_page':
                 if (!empty($context['target_id'])) {
                     $target = $this->inventory->get_target_content('page', (int) $context['target_id']);
@@ -2983,7 +3180,7 @@ final class LCFA_Admin {
         }
 
         if (get_post_meta($post->ID, '_lc_livecanvas_enabled', true) === '1' || $post->post_type === 'page') {
-            $context['action'] = 'update_page';
+            $context['action'] = 'page_upsert';
         }
 
         return $context;
@@ -3141,7 +3338,7 @@ final class LCFA_Admin {
         } elseif ($group_key === 'dynamic_templates') {
             $context['action'] = 'update_dynamic_template';
         } elseif ($group_key === 'livecanvas_pages') {
-            $context['action'] = 'update_page';
+            $context['action'] = 'page_upsert';
         }
 
         if (empty($context['action'])) {

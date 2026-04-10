@@ -676,6 +676,125 @@
     color: var(--lcfa-text-muted);
 }
 
+.lcfa-admin .lcfa-agent-guide {
+    display: grid;
+    gap: 18px;
+    margin-top: 20px;
+}
+
+.lcfa-admin .lcfa-agent-guide__input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lcfa-admin .lcfa-agent-guide__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.lcfa-admin .lcfa-agent-guide__tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 46px;
+    padding: 0 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(232, 62, 140, 0.2);
+    background: rgba(232, 62, 140, 0.06);
+    color: var(--lcfa-text);
+    cursor: pointer;
+    font-weight: 700;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.lcfa-admin .lcfa-agent-guide__tab:hover {
+    transform: translateY(-1px);
+    border-color: rgba(232, 62, 140, 0.34);
+    background: rgba(232, 62, 140, 0.1);
+}
+
+.lcfa-admin .lcfa-agent-guide__panels {
+    position: relative;
+}
+
+.lcfa-admin .lcfa-agent-guide__panel {
+    display: none;
+    gap: 18px;
+    padding: 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+        rgba(12, 13, 22, 0.42);
+}
+
+.lcfa-admin .lcfa-agent-guide__intro {
+    margin: 0;
+    color: var(--lcfa-text-muted);
+    line-height: 1.6;
+}
+
+.lcfa-admin .lcfa-agent-guide__panel-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.lcfa-admin .lcfa-agent-guide__window {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.lcfa-admin .lcfa-agent-guide__window h3 {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-agent-guide__steps {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding-left: 18px;
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-agent-guide__steps li {
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-agent-guide__note {
+    margin: 0;
+    color: #dfe2f7;
+    line-height: 1.55;
+}
+
+#lcfa-agent-tab-codex:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-codex"],
+#lcfa-agent-tab-cursor:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-cursor"],
+#lcfa-agent-tab-claude-code:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-claude-code"],
+#lcfa-agent-tab-opencode:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-opencode"],
+#lcfa-agent-tab-generic:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-generic"] {
+    border-color: rgba(38, 198, 218, 0.48);
+    background:
+        linear-gradient(180deg, rgba(38, 198, 218, 0.18), rgba(38, 198, 218, 0.08)),
+        rgba(255, 255, 255, 0.04);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(38, 198, 218, 0.12);
+}
+
+#lcfa-agent-tab-codex:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--codex,
+#lcfa-agent-tab-cursor:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--cursor,
+#lcfa-agent-tab-claude-code:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--claude-code,
+#lcfa-agent-tab-opencode:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--opencode,
+#lcfa-agent-tab-generic:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--generic {
+    display: grid;
+}
+
 .lcfa-admin .lcfa-checkbox {
     display: flex;
     align-items: center;
@@ -1242,7 +1361,8 @@
 
     .lcfa-admin .lcfa-summary-grid,
     .lcfa-admin .lcfa-brand-grid,
-    .lcfa-admin .lcfa-genesis-page-grid {
+    .lcfa-admin .lcfa-genesis-page-grid,
+    .lcfa-admin .lcfa-agent-guide__panel-grid {
         grid-template-columns: 1fr;
     }
 

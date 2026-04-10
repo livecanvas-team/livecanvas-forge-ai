@@ -730,12 +730,23 @@ final class LCFA_Rest_Api {
             $payload = $request->get_params();
         }
 
+        $policy = $this->command_deck->evaluate_action_policy_for_rest('write_theme_file', !empty($payload['dry_run']));
+
+        if (empty($policy['ok'])) {
+            return new WP_REST_Response([
+                'error'  => (string) ($policy['message'] ?? __('This action is blocked by the current policy profile.', 'livecanvas-forge-ai')),
+                'policy' => $this->format_policy_result($policy),
+            ], 403);
+        }
+
+        $effective_dry_run = !empty($policy['force_preview']) ? true : !empty($payload['dry_run']);
+
         try {
             $result = $this->theme_files_bridge->write_file([
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'content'            => wp_unslash((string) ($payload['content'] ?? '')),
-                'dry_run'            => !empty($payload['dry_run']),
+                'dry_run'            => $effective_dry_run,
                 'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
             ]);
         } catch (Throwable $throwable) {
@@ -743,6 +754,8 @@ final class LCFA_Rest_Api {
                 'error' => $throwable->getMessage(),
             ], 400);
         }
+
+        $result['policy'] = $this->format_policy_result($policy);
 
         return new WP_REST_Response([
             'result' => $result,
@@ -755,12 +768,23 @@ final class LCFA_Rest_Api {
             $payload = $request->get_params();
         }
 
+        $policy = $this->command_deck->evaluate_action_policy_for_rest('write_theme_template', !empty($payload['dry_run']));
+
+        if (empty($policy['ok'])) {
+            return new WP_REST_Response([
+                'error'  => (string) ($policy['message'] ?? __('This action is blocked by the current policy profile.', 'livecanvas-forge-ai')),
+                'policy' => $this->format_policy_result($policy),
+            ], 403);
+        }
+
+        $effective_dry_run = !empty($policy['force_preview']) ? true : !empty($payload['dry_run']);
+
         try {
             $result = $this->theme_files_bridge->write_template_file([
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'content'            => wp_unslash((string) ($payload['content'] ?? '')),
-                'dry_run'            => !empty($payload['dry_run']),
+                'dry_run'            => $effective_dry_run,
                 'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
             ]);
         } catch (Throwable $throwable) {
@@ -768,6 +792,8 @@ final class LCFA_Rest_Api {
                 'error' => $throwable->getMessage(),
             ], 400);
         }
+
+        $result['policy'] = $this->format_policy_result($policy);
 
         return new WP_REST_Response([
             'result' => $result,
@@ -837,5 +863,14 @@ final class LCFA_Rest_Api {
         $connections = LCFA_Settings::get_connections();
 
         return $connections['mcp_token'] !== '' && hash_equals($connections['mcp_token'], $token);
+    }
+
+    private function format_policy_result(array $policy): array {
+        return [
+            'profile'             => (string) ($policy['profile'] ?? ''),
+            'allow_file_fallback' => !empty($policy['allow_file_fallback']),
+            'force_preview'       => !empty($policy['force_preview']),
+            'notice'              => (string) ($policy['notice'] ?? ''),
+        ];
     }
 }
