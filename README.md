@@ -1,66 +1,159 @@
 # LiveCanvas Forge AI
 
-`LiveCanvas Forge AI` is a WordPress companion plugin for [LiveCanvas](https://livecanvas.com/).
+`LiveCanvas Forge AI` is a companion plugin for [LiveCanvas](https://livecanvas.com/) built for AI-assisted web development.
 
-It adds:
+The goal is not to replace LiveCanvas.
 
-- a guided onboarding wizard for LiveCanvas projects
-- a persistent `Genesis` brief and build plan
-- a `Command Deck` for preview/apply operations on LiveCanvas targets
-- a REST contract for local and remote automation
-- a local MCP package for Codex, OpenCode, Claude Code, Cursor, and similar clients
-- optional theme-file and WindPress/Tailwind bridges for advanced workflows
+The goal is to let a coding agent handle the heavy structural work of building a site, while LiveCanvas remains the visual and code-level fine-tuning layer.
 
-This plugin is designed to work with:
+In practical terms, this means:
+
+- a coding agent can inspect the WordPress + LiveCanvas stack
+- create or update LiveCanvas pages
+- work on headers, footers, partials, templates, and site-wide structure
+- help prepare a design system
+- operate on both local and remote WordPress sites
+- return real URLs and concrete results that can then be refined in LiveCanvas
+
+## Product Vision
+
+This plugin is designed for a specific workflow:
+
+1. you work in LiveCanvas, Picostrap, or Picowind
+2. you connect a coding agent such as Codex, Cursor, Claude Code, or OpenCode
+3. the agent performs high-leverage tasks such as setup, audits, page creation, shell scaffolding, and design-system work
+4. you open the result in LiveCanvas and fine-tune the output
+
+This makes the plugin a bridge between:
+
+- the AI coding-agent world
+- the LiveCanvas editing world
+- the WordPress runtime
+
+## What It Supports
+
+The plugin is built to work with:
 
 - `LiveCanvas`
-- `Picostrap` / Bootstrap
-- `Picowind` / Tailwind
-- `WindPress` for Tailwind runtime and cache management
+- `Picostrap`
+- `Picowind`
+- `WindPress`
 
-## Status
+Current design-system direction:
 
-Current status: `alpha`.
+- `Picostrap` uses `PicoSass` and the Bootstrap variable/compiler flow
+- `Picowind` uses `WindPress` and `DaisyUI` as the theme/runtime layer
+- custom themes will eventually use a plugin-managed fallback design-system layer
 
-The WordPress companion, setup flow, Genesis planning, Command Deck, REST API, local MCP package, remote Application Password support, theme fallback layer, and WindPress bridge are implemented.
+## What Exists Today
 
-## What The Plugin Does
+The current plugin includes:
 
-Inside WordPress, the plugin gives you a single control surface with four tabs:
+- a setup wizard
+- stack detection for LiveCanvas, framework, and site mode
+- a `Genesis` brief and planning flow
+- a `Connections` screen for local, remote, and coding-agent bootstrap
+- a `Command Deck` for preview/apply actions
+- a REST API under `/wp-json/lcfa/v1/`
+- a local MCP package in [`mcp/`](./mcp/)
+- a remote companion flow using WordPress Application Passwords
+- a theme-files bridge
+- a WindPress bridge
 
-- `Setup`: onboarding wizard and stack detection
-- `Genesis`: project brief and build plan
-- `Connections`: local, remote, and MCP bootstrap configuration
-- `Command Deck`: preview/apply operations on pages, partials, dynamic templates, theme files, and WindPress actions
+Recent foundation work also introduced:
 
-Outside WordPress, the plugin exposes a companion contract that AI agents can use through:
+- a normalized `page_upsert` action for create/update page flows
+- final `frontend_url` and `edit_url` in page results
+- safer policy enforcement on direct theme-file write routes
+- better prompt routing so page creation requests are not incorrectly diverted into WindPress runtime actions
 
-- WordPress REST routes under `/wp-json/lcfa/v1/`
-- a local MCP package included in [`mcp/`](mcp/)
+## Current Status
 
-## Requirements
+Status: `alpha`
 
-- WordPress with administrator access
-- `LiveCanvas` installed and active
-- one of:
-  - `Picostrap`
-  - `Picowind`
-- `Node.js` if you want to use the local MCP runtime
-- `WindPress` if you want Tailwind cache scans, cache writes, or local Tailwind build orchestration
+The plugin is already useful for experimentation and structured development workflows, but it is still evolving toward a more deterministic and plug-and-play product.
+
+The current direction is:
+
+- make agent connection simpler
+- expose clearer foundation operations
+- keep local and remote behavior as symmetrical as possible
+- make LiveCanvas page generation and global site scaffolding reliable first
+
+## Core Idea
+
+The plugin should be thought of as an execution engine.
+
+The coding agent does the planning and prompting.
+
+The plugin does the actual work inside WordPress.
+
+That means the architecture is:
+
+```text
+Coding Agent -> MCP bridge or REST contract -> LiveCanvas Forge AI -> WordPress / LiveCanvas / WindPress
+```
+
+## Main Areas In The Plugin
+
+### Setup
+
+The setup flow profiles the project:
+
+- preflight
+- framework choice
+- site mode
+- preferred client
+- operational policy
+
+### Genesis
+
+The Genesis flow stores a project brief and generates a structured plan for the site.
+
+This is the planning layer for larger site builds.
+
+### Connections
+
+The Connections page is where the plugin explains how to attach a coding agent.
+
+It now includes built-in, English quickstart guides for:
+
+- `Codex`
+- `Cursor`
+- `Claude Code`
+- `OpenCode`
+- `Generic MCP client`
+
+Each guide is shown in a dedicated tab and includes:
+
+- step-by-step instructions
+- the MCP server command
+- the environment variables
+- a terminal smoke test
+- a Codex registration shortcut when relevant
+
+### Command Deck
+
+The Command Deck is the operational console for preview/apply actions.
+
+This is where the plugin currently executes work such as:
+
+- site audits
+- page creation and update
+- header and footer updates
+- dynamic-template operations
+- WindPress runtime actions
+- theme-file fallback operations
 
 ## Installation
 
-### 1. Install The Plugin
-
-Install `LiveCanvas Forge AI` into:
+Install the plugin into:
 
 ```text
 wp-content/plugins/livecanvas-forge-ai
 ```
 
-Then activate it from the WordPress Plugins screen.
-
-### 2. Open Forge AI
+Then activate it from WordPress admin.
 
 After activation, open:
 
@@ -68,383 +161,241 @@ After activation, open:
 WordPress Admin > Forge AI
 ```
 
-If LiveCanvas is available, Forge AI will also appear under the LiveCanvas admin area.
+If LiveCanvas is active, Forge AI also appears inside the LiveCanvas admin area.
 
-### 3. Run Forge Setup
+## Recommended First Run
 
-The setup wizard validates the stack in this order:
+1. activate the plugin
+2. open `Forge AI`
+3. complete the setup wizard
+4. open `Connections`
+5. run the connection checks
+6. use the built-in coding-agent guide for your preferred client
+7. verify the bridge with `get_snapshot`
+8. move to `Command Deck` and start with a preview-first flow
 
-1. `Preflight`
-   - checks that LiveCanvas is installed and active
-2. `Framework`
-   - confirms whether the project should use `Picostrap` or `Picowind`
-3. `Site`
-   - chooses `local`, `remote`, or hybrid workflow intent
-4. `Client`
-   - selects the preferred AI client
-5. `Policy`
-   - defines read/write behavior and file fallback rules
-6. `Finish`
-   - closes the wizard and unlocks the operational tabs
+## How Agent Connection Works
 
-## First-Time Configuration
+There are two different connection models in this project.
 
-After the wizard, configure the project in this order.
+This distinction matters.
 
-### A. Genesis
+### 1. Coding Agent -> Plugin
 
-Open the `Genesis` tab and fill in:
+This is the most important one for Codex, Cursor, Claude Code, OpenCode, and similar tools.
 
-- project mode
-- brand name
-- sector
-- tone of voice
-- logo status
-- required pages
-- additional notes
+The coding agent connects to the plugin by using:
 
-Then:
+- the plugin REST base
+- the MCP token generated by the plugin
+- optionally the WordPress root path when local filesystem access is needed
 
-1. click `Save Genesis Brief`
-2. click `Generate Build Plan`
+The plugin ships with a Node MCP bridge that turns the WordPress companion into an MCP server for coding agents.
 
-Forge AI will generate:
+See:
 
-- planned pages
-- suggested execution order
-- advisory tasks
-- quick links into `Command Deck`
+- [`mcp/README.md`](./mcp/README.md)
+- [`mcp/bin/livecanvas-forge-mcp.js`](./mcp/bin/livecanvas-forge-mcp.js)
 
-### B. Connections
+### 2. Plugin -> Remote Plugin
 
-Open the `Connections` tab and review:
+This is a different flow.
 
-- transport mode
-- preferred client
-- local bridge URL
-- MCP host/port/token
-- remote site URL and credentials
-- framework package URLs if you want guided installer support
+It is used when one WordPress companion wants to orchestrate another WordPress site remotely.
 
-Then click:
+This remote flow uses:
 
-```text
-Run connection checks
-```
+- remote site URL
+- remote WordPress username
+- remote Application Password
 
-This validates:
+This is not the same thing as the MCP-token flow used by coding agents.
 
-- local REST bridge
-- local MCP runtime
-- remote companion connection
+## Local Connection Guide
 
-### C. Command Deck
+Local mode means:
 
-Use the `Command Deck` tab for operational work.
+- the WordPress site runs on your machine
+- the coding agent runs on your machine
+- the MCP bridge can optionally use the local WordPress root for filesystem-aware operations
 
-Typical workflow:
+Typical local requirements:
 
-1. choose a task from `Genesis` or open `Command Deck` directly
-2. review the suggested action
-3. run a preview first
-4. inspect diff and structured payload
-5. apply only when the result is correct
-
-The plugin stores:
-
-- command history
-- persistent threads
-- Genesis task progress
-- theme/template backups for restore operations
-
-## How Local AI Integration Works
-
-The AI client does not talk directly to LiveCanvas.
-
-It talks to:
-
-1. the local MCP package, or
-2. the companion REST API
-
-The companion then executes WordPress-safe operations.
-
-### Flow
-
-```text
-AI Client -> MCP or REST -> LiveCanvas Forge AI -> WordPress / LiveCanvas / WindPress
-```
-
-### Local Requirements
-
-For local Codex/OpenCode usage, all of the following must be true:
-
-- the site is detected as `local`
-- the local WordPress URL responds correctly
-- `/wp-json/lcfa/v1/mcp/status` is reachable
+- LiveCanvas is active
+- the site REST API is reachable
 - Node.js is available
-- the MCP script is present
+- the plugin MCP bridge is present
+- the MCP token is available
 
-If local REST loopback fails, the MCP runtime will not be available end-to-end.
+Typical local variables:
 
-## Codex Quick Start
-
-Use the values shown in:
-
-```text
-Forge AI > Connections > MCP bootstrap
+```bash
+LCFA_REST_BASE="http://your-local-site.test/wp-json/lcfa/v1/"
+LCFA_MCP_TOKEN="your-generated-token"
+LCFA_WP_ROOT="/absolute/path/to/wordpress"
 ```
 
-Typical command:
+Typical local MCP server command:
 
 ```bash
 node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio
 ```
 
-Typical environment:
+The easiest path is:
+
+1. open `Connections`
+2. choose your coding agent tab
+3. copy the generated command and environment
+4. register the MCP server in your coding client
+5. run `get_snapshot` as the first smoke test
+
+## Remote Connection Guide
+
+Remote mode means:
+
+- the WordPress site is hosted elsewhere
+- the coding agent still talks to the plugin through its REST contract
+- local filesystem access is usually not available
+
+Typical remote variables:
 
 ```bash
-LCFA_SITE_URL="http://your-local-site.test/"
-LCFA_REST_BASE="http://your-local-site.test/wp-json/lcfa/v1/"
-LCFA_MCP_ENDPOINT="ws://127.0.0.1:7681"
-LCFA_MCP_TOKEN="your-generated-token"
-LCFA_WP_ROOT="/absolute/path/to/wordpress"
+LCFA_REST_BASE="https://example.com/wp-json/lcfa/v1/"
+LCFA_MCP_TOKEN="remote-site-token"
 ```
 
-Use the exact values generated by the plugin for the current site.
+In most remote scenarios, `LCFA_WP_ROOT` is not required.
 
-## OpenCode Quick Start
+Remote usage currently has two valid patterns:
 
-Typical command:
+### Pattern A: Agent directly targets the remote site
 
-```bash
-node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --agent=opencode
-```
+This is the cleaner agent workflow.
 
-Typical environment:
+The agent talks directly to the remote plugin companion with:
 
-```bash
-LCFA_REST_BASE="http://your-local-site.test/wp-json/lcfa/v1/"
-LCFA_MCP_TOKEN="your-generated-token"
-LCFA_WP_ROOT="/absolute/path/to/wordpress"
-```
+- remote REST base
+- remote MCP token
 
-## Claude Code And Cursor
+### Pattern B: Local WordPress companion controls a remote WordPress companion
 
-Forge AI also prepares bootstrap values for:
+This uses:
 
-- `Claude Code`
-- `Cursor`
+- remote site URL
+- remote WordPress username
+- remote Application Password
 
-The generated values are shown in the `Connections` tab.
+This is configured inside the local plugin `Connections` screen.
 
-## Remote Site Setup
+## What The Coding-Agent Guides In The Plugin Now Cover
 
-Remote mode requires the same companion plugin to be installed on the remote WordPress site.
+The `Connections` page now includes an onboarding section specifically for coding agents.
 
-### Remote Requirements
+That section explains, in English:
 
-- `LiveCanvas Forge AI` installed on the remote site
-- LiveCanvas installed and active on the remote site
-- a dedicated WordPress user on the remote site
-- an `Application Password` for that user
+- what command to use
+- what environment variables to set
+- how to test the bridge manually from terminal
+- how to register the MCP server in a client such as Codex
 
-### Remote Configuration
+The intent is to make the coding-agent connection more plug-and-play and less transport-heavy.
 
-In `Connections`, fill in:
+## Current Foundation Direction
 
-- `Remote site URL`
-- `Remote username`
-- `Remote application password`
+The product is moving away from ambiguous prompt guessing and toward deterministic foundation operations.
 
-Then run connection checks again.
-
-When the remote companion is reachable, you can use:
-
-```text
-Command Deck > Execution target = Remote site
-```
-
-## Command Deck Actions
-
-Current supported actions include:
+The target contract includes actions such as:
 
 - `site_audit`
-- `create_page`
-- `update_page`
-- `update_header`
-- `update_footer`
-- `create_dynamic_template`
-- `update_dynamic_template`
-- `windpress_audit`
-- `windpress_scan_provider`
-- `windpress_reset_entry`
-- `windpress_store_theme_json`
-- `windpress_store_cache_css`
-- `build_windpress_cache`
-- `windpress_flush_cache`
-- `theme_files_audit`
-- `theme_backups_audit`
-- `write_theme_template`
-- `write_theme_file`
-- `restore_theme_backup`
+- `site_prepare`
+- `design_system_apply`
+- `global_shell_apply`
+- `page_upsert`
+- `site_foundation_run`
 
-## Genesis Task Progress
+The first foundation slice already started with:
 
-Each Genesis task can be in one of these states:
+- stronger safety rules
+- better page create/update behavior
+- final URLs in page responses
 
-- `Pending`
-- `Previewed`
-- `Applied`
-- `Needs attention`
+## Design-System Direction
 
-The status changes automatically when a Command Deck run is linked to a Genesis task.
+The design-system work is intentionally theme-aware.
 
-## WindPress And Tailwind
+Planned execution model:
 
-If the site uses `Picowind`, Forge AI can work with `WindPress`.
+- `Picostrap` -> translate intent into `PicoSass` variables -> compile Bootstrap bundle
+- `Picowind` -> translate intent into `WindPress` and `DaisyUI` runtime changes
+- custom themes -> fallback plugin-owned canonical design-system layer
 
-Supported operations include:
+This matters because the plugin is not supposed to dump generic CSS into the project when a native theme/compiler/runtime already exists.
 
-- provider audit
-- provider scan
-- volume reset
-- cache flush
-- theme.json cache write
-- CSS cache write
-- local Tailwind build orchestration
+## What The Project Is Becoming
 
-Local Tailwind build requires:
+This is not just a generic AI plugin for WordPress.
 
-- local site mode
-- Node.js available to PHP
-- REST loopback working
-- `WindPress` active
+It is becoming a site-foundation engine for LiveCanvas-powered development.
 
-## Theme File Fallback Layer
+The long-term workflow is:
 
-When LiveCanvas dynamic markup is not enough, the companion can work on theme files.
+1. connect the coding agent in minutes
+2. audit the site
+3. apply foundation work
+4. generate or update real pages and templates
+5. open the result in LiveCanvas
+6. fine-tune visually and structurally
 
-Supported file types include:
+## Roadmap
 
-- Twig
-- Latte
-- PHP
-- HTML
-- CSS
-- JS
-- JSON
+### Phase 1: Foundation Contract
 
-Every overwrite goes through:
+- harden safety and policy behavior
+- finish normalized page creation/update flows
+- keep local and remote page execution behavior aligned
+- simplify coding-agent connection UX
 
-- preview
-- diff
-- optional apply
-- backup capture
-- restore support
+### Phase 2: Design-System Execution
 
-## REST Contract
+- implement `design_system_apply`
+- integrate `Picostrap` through `PicoSass`
+- integrate `Picowind` through `WindPress` and `DaisyUI`
+- expose preview/apply behavior for design changes
 
-Main routes live under:
+### Phase 3: Global Shell
 
-```text
-/wp-json/lcfa/v1/
-```
+- implement `global_shell_apply`
+- make header/footer creation and update first-class
+- improve partial inventory and variant handling
 
-Examples:
+### Phase 4: Site Foundation Run
 
-- `/snapshot`
-- `/inventory`
-- `/context`
-- `/theme-context`
-- `/genesis/plan`
-- `/command/actions`
-- `/command/suggest`
-- `/command`
+- implement `site_foundation_run`
+- orchestrate site audit, design system, shell, and starter pages
+- make first-install workflows deterministic
 
-## MCP Package
+### Phase 5: Dynamic Templates And Data-Aware Builds
 
-The bundled MCP package lives in:
+- real LiveCanvas dynamic-template assignment
+- WooCommerce single/archive support
+- custom post type support
+- ACF-aware template generation
 
-- [mcp/README.md](mcp/README.md)
+### Phase 6: Deeper LiveCanvas Editing Loop
 
-It supports:
+- tighter editor-side chat workflows
+- more contextual editing inside LiveCanvas
+- better collaboration between generated output and human fine-tuning
 
-- `stdio` mode
-- `bridge` mode
-- one-shot `--tool` mode
+## Repository Notes
 
-## Recommended Human Test
+- WordPress companion plugin entrypoint: [`livecanvas-forge-ai.php`](./livecanvas-forge-ai.php)
+- MCP package: [`mcp/`](./mcp/)
+- foundation design spec: [`docs/superpowers/specs/2026-04-10-livecanvas-foundation-orchestrator-design.md`](./docs/superpowers/specs/2026-04-10-livecanvas-foundation-orchestrator-design.md)
+- current phase-1 implementation plan: [`docs/superpowers/plans/2026-04-10-foundation-contract-phase-1.md`](./docs/superpowers/plans/2026-04-10-foundation-contract-phase-1.md)
 
-Before testing with Codex or OpenCode, validate the plugin from WordPress first.
+## Short Summary
 
-1. complete `Setup`
-2. save a `Genesis Brief`
-3. generate a `Genesis Build Plan`
-4. open the first task in `Command Deck`
-5. run a preview
-6. verify the task becomes `Previewed`
-7. apply a safe task such as `create_page`
-8. verify the task becomes `Applied`
-9. run `Connections > Run connection checks`
-10. only after that, connect Codex or OpenCode
+`LiveCanvas Forge AI` is a companion layer that lets coding agents do serious WordPress and LiveCanvas work, while keeping LiveCanvas as the place where final refinement happens.
 
-This separates:
-
-- plugin UX issues
-- WordPress connectivity issues
-- MCP/runtime issues
-- client integration issues
-
-## Troubleshooting
-
-### Local REST bridge fails
-
-Check:
-
-- the local site URL is correct
-- the local web server is running
-- `/wp-json/lcfa/v1/mcp/status` is reachable
-
-### Local MCP runtime fails
-
-Check:
-
-- Node.js is installed
-- the MCP script exists
-- WordPress REST loopback works
-- the site is detected as `local`
-
-### Remote connection fails
-
-Check:
-
-- the plugin is installed on the remote site
-- the remote URL is correct
-- the username is correct
-- the Application Password is valid
-- the remote user has enough permissions
-
-### WindPress local build is unavailable
-
-Check:
-
-- `WindPress` is active
-- the site is local
-- Node.js is available
-- REST loopback works
-
-## Repository Structure
-
-```text
-livecanvas-forge-ai/
-├── assets/
-├── includes/
-├── mcp/
-└── livecanvas-forge-ai.php
-```
-
-## Notes
-
-- UI copy is intentionally English.
-- This plugin does not replace LiveCanvas. It orchestrates LiveCanvas-compatible operations.
-- For production use, treat this project as an advanced companion layer, not as a fully finalized commercial release yet.
+That is the product.
