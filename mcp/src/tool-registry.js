@@ -282,7 +282,10 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
             anyOf: [
               { type: 'string' },
               { type: 'object' },
-              { type: 'array' }
+              {
+                type: 'array',
+                items: {}
+              }
             ]
           }
         }

@@ -13,13 +13,23 @@ final class LCFA_Connection_Tester {
         $this->remote_client     = $remote_client;
     }
 
-    public function run_checks(): array {
+    public function run_checks(array $options = []): array {
         $connections = LCFA_Settings::get_connections();
-        $checks = [
-            'local_rest' => $this->test_local_rest($connections),
-            'local_mcp'  => $this->test_local_mcp(),
-            'remote_rest'=> $this->test_remote_rest($connections),
-        ];
+        $mode = sanitize_key((string) ($options['mode'] ?? 'all'));
+        $checks = [];
+
+        if ($mode === 'remote') {
+            $checks['remote_rest'] = $this->test_remote_rest($connections);
+        } elseif ($mode === 'local') {
+            $checks['local_rest'] = $this->test_local_rest($connections);
+            $checks['local_mcp']  = $this->test_local_mcp();
+        } else {
+            $checks = [
+                'local_rest' => $this->test_local_rest($connections),
+                'local_mcp'  => $this->test_local_mcp(),
+                'remote_rest'=> $this->test_remote_rest($connections),
+            ];
+        }
 
         $blocking_failures = array_filter($checks, static function (array $check): bool {
             return empty($check['ok']) && empty($check['skipped']);
@@ -73,12 +83,25 @@ final class LCFA_Connection_Tester {
 
     private function test_local_mcp(): array {
         $status = $this->local_mcp_bridge->get_status();
+        $skipped = false;
+        $message = (string) ($status['message'] ?? '');
+
+        if (empty($status['local_site'])) {
+            $skipped = true;
+        } elseif (empty($status['script_exists'])) {
+            $skipped = false;
+        } elseif (empty($status['node_available'])) {
+            $skipped = true;
+            $message = __('Node.js is not available to the current PHP process. External coding agents can still connect through the local REST bridge.', 'livecanvas-forge-ai');
+        } elseif (empty($status['rest_reachable'])) {
+            $skipped = true;
+        }
 
         return [
             'label'   => __('Local MCP runtime', 'livecanvas-forge-ai'),
             'ok'      => !empty($status['available']),
-            'skipped' => false,
-            'message' => (string) ($status['message'] ?? ''),
+            'skipped' => $skipped,
+            'message' => $message,
             'details' => [
                 'node_available' => !empty($status['node_available']),
                 'node_version'   => (string) ($status['node_version'] ?? ''),

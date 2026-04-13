@@ -194,6 +194,12 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_read'],
         ]);
 
+        register_rest_route('lcfa/v1', '/mcp/workspace-root', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'sync_mcp_workspace_root'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
         register_rest_route('lcfa/v1', '/mcp/token', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'rotate_mcp_token'],
@@ -568,6 +574,58 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function sync_mcp_workspace_root(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $workspace_root = sanitize_text_field((string) ($payload['workspace_root'] ?? ''));
+        $snapshot = $this->environment->get_snapshot();
+
+        if (($snapshot['site_mode'] ?? '') !== 'local') {
+            return new WP_REST_Response([
+                'result' => [
+                    'ok'             => false,
+                    'updated'        => false,
+                    'workspace_root' => '',
+                    'message'        => __('Workspace sync is only available when this site is configured as local.', 'livecanvas-forge-ai'),
+                ],
+            ], 200);
+        }
+
+        if ($workspace_root === '' || $this->is_runtime_workspace_root($workspace_root) || !$this->looks_like_absolute_path($workspace_root)) {
+            return new WP_REST_Response([
+                'result' => [
+                    'ok'             => false,
+                    'updated'        => false,
+                    'workspace_root' => '',
+                    'message'        => __('The incoming workspace root is not a usable host path.', 'livecanvas-forge-ai'),
+                ],
+            ], 200);
+        }
+
+        $connections = LCFA_Settings::get_connections();
+        $connections['workspace_root'] = $workspace_root;
+        $connections['connection_mode'] = 'local';
+        LCFA_Settings::update_connections($connections);
+
+        return new WP_REST_Response([
+            'result' => [
+                'ok'             => true,
+                'updated'        => true,
+                'workspace_root' => $workspace_root,
+                'source'         => sanitize_key((string) ($payload['source'] ?? '')),
+                'agent'          => sanitize_key((string) ($payload['agent'] ?? '')),
+            ],
+        ]);
+    }
+
     public function run_command(WP_REST_Request $request): WP_REST_Response {
         $payload = $request->get_json_params();
 
@@ -863,6 +921,29 @@ final class LCFA_Rest_Api {
         $connections = LCFA_Settings::get_connections();
 
         return $connections['mcp_token'] !== '' && hash_equals($connections['mcp_token'], $token);
+    }
+
+    private function looks_like_absolute_path(string $path): bool {
+        if ($path === '') {
+            return false;
+        }
+
+        return (bool) preg_match('#^(?:/|[A-Za-z]:[\\\\/])#', $path);
+    }
+
+    private function is_runtime_workspace_root(string $path): bool {
+        $path = wp_normalize_path(untrailingslashit($path));
+
+        return in_array($path, [
+            '/wordpress',
+            '/app',
+            '/app/public',
+            '/var/www',
+            '/var/www/html',
+            '/srv/www',
+            '/srv/www/html',
+            '/usr/share/nginx/html',
+        ], true);
     }
 
     private function format_policy_result(array $policy): array {

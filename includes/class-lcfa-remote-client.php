@@ -52,6 +52,8 @@ final class LCFA_Remote_Client {
             ],
             'mcp'        => [
                 'enabled'         => !empty($mcp['enabled']),
+                'rest_base'       => (string) ($mcp['rest_base'] ?? $this->build_rest_base($site_url)),
+                'token'           => (string) ($mcp['token'] ?? ''),
                 'filesystem_mode' => (string) ($mcp['filesystem_mode'] ?? ''),
             ],
         ];

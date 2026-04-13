@@ -114,7 +114,17 @@ This is the planning layer for larger site builds.
 
 ### Connections
 
-The Connections page is where the plugin explains how to attach a coding agent.
+The Connections page is now wizard-first.
+
+It is the shortest path between the plugin and a coding agent.
+
+The page is organized around:
+
+- `Connect your coding agent`
+- a local or remote connection wizard
+- generated client bundles
+- smoke-test verification
+- advanced settings only when needed
 
 It now includes built-in, English quickstart guides for:
 
@@ -131,6 +141,13 @@ Each guide is shown in a dedicated tab and includes:
 - the environment variables
 - a terminal smoke test
 - a Codex registration shortcut when relevant
+
+The wizard also supports:
+
+- local workspace writes for supported client artifacts
+- downloadable bundles for remote setups
+- a `workspace_root` override for environments where WordPress runtime paths and host machine paths differ
+- a ready or needs-attention state after verification
 
 ### Command Deck
 
@@ -169,10 +186,12 @@ If LiveCanvas is active, Forge AI also appears inside the LiveCanvas admin area.
 2. open `Forge AI`
 3. complete the setup wizard
 4. open `Connections`
-5. run the connection checks
-6. use the built-in coding-agent guide for your preferred client
-7. verify the bridge with `get_snapshot`
-8. move to `Command Deck` and start with a preview-first flow
+5. choose your coding agent
+6. choose `local` or `remote`
+7. save the wizard selection
+8. install the local config or download the generated bundle
+9. run the smoke test with `get_snapshot`
+10. move to `Command Deck` and start with a preview-first flow
 
 ## How Agent Connection Works
 

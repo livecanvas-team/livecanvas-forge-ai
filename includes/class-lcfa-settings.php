@@ -135,6 +135,13 @@ final class LCFA_Settings {
             'remote_application_password' => '',
             'mcp_server_command'          => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
             'preferred_client'            => '',
+            'workspace_root'              => '',
+            'connection_status'           => '',
+            'connection_mode'             => '',
+            'connection_last_verified_at' => '',
+            'connection_last_error'       => '',
+            'connection_last_bundle_hash' => '',
+            'connection_current_step'     => '',
         ];
     }
 
@@ -175,6 +182,13 @@ final class LCFA_Settings {
             'remote_application_password' => $password,
             'mcp_server_command'          => sanitize_textarea_field($connections['mcp_server_command'] ?? ''),
             'preferred_client'            => sanitize_key($connections['preferred_client'] ?? ''),
+            'workspace_root'              => sanitize_text_field($connections['workspace_root'] ?? ''),
+            'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
+            'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
+            'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
+            'connection_last_error'       => sanitize_text_field($connections['connection_last_error'] ?? ''),
+            'connection_last_bundle_hash' => sanitize_text_field($connections['connection_last_bundle_hash'] ?? ''),
+            'connection_current_step'     => in_array($connections['connection_current_step'] ?? '', ['', 'choose_client', 'choose_mode', 'confirm_details', 'generate_bundle', 'smoke_test', 'ready'], true) ? $connections['connection_current_step'] : '',
         ];
     }
 

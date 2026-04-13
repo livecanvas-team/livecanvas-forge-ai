@@ -13,6 +13,8 @@ final class LCFA_Plugin {
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
     private LCFA_Connection_Tester $connection_tester;
     private LCFA_Remote_Client $remote_client;
+    private LCFA_Connection_Bundle_Builder $connection_bundle_builder;
+    private LCFA_Connection_Onboarding $connection_onboarding;
     private LCFA_Prompt_Suggester $prompt_suggester;
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
@@ -49,11 +51,13 @@ final class LCFA_Plugin {
         $this->local_mcp_bridge = new LCFA_Local_MCP_Bridge($this->environment);
         $this->remote_client = new LCFA_Remote_Client();
         $this->connection_tester = new LCFA_Connection_Tester($this->environment, $this->local_mcp_bridge, $this->remote_client);
+        $this->connection_bundle_builder = new LCFA_Connection_Bundle_Builder();
+        $this->connection_onboarding = new LCFA_Connection_Onboarding($this->connection_bundle_builder);
         $this->prompt_suggester = new LCFA_Prompt_Suggester($this->environment, $this->inventory);
         $this->context_builder = new LCFA_Context_Builder($this->environment, $this->inventory, $this->windpress_bridge, $this->local_mcp_bridge);
         $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client);
         $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
-        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
+        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
 
         add_action('plugins_loaded', [$this, 'boot']);
     }

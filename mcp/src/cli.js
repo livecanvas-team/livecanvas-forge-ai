@@ -5,6 +5,7 @@ const { WindPressCompiler } = require('./windpress-compiler')
 const { createToolRegistry } = require('./tool-registry')
 const { runStdioServer } = require('./mcp-stdio-server')
 const { startBridgeServer } = require('./bridge-server')
+const { syncWorkspaceRoot } = require('./workspace-root-sync')
 
 async function runCli(argv = []) {
   const config = loadConfig(argv)
@@ -14,15 +15,18 @@ async function runCli(argv = []) {
   const tools = createToolRegistry(client, themeFiles, windpressCompiler)
 
   if (config.tool) {
+    await syncWorkspaceRoot({ client, config })
     await runToolMode({ config, tools })
     return
   }
 
   if (config.transport === 'bridge') {
+    await syncWorkspaceRoot({ client, config })
     await startBridgeServer({ client, tools, themeFiles, windpressCompiler, config })
     return
   }
 
+  void syncWorkspaceRoot({ client, config })
   await runStdioServer({ client, tools, config })
 }
 

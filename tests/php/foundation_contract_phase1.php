@@ -119,6 +119,8 @@ $GLOBALS['lcfa_test_theme_root'] = LCFA_TEST_TMP . '/wp-content/themes';
 $GLOBALS['lcfa_test_stylesheet'] = 'picostrap-child';
 $GLOBALS['lcfa_test_template'] = 'picostrap-child';
 $GLOBALS['lcfa_test_uploads'] = LCFA_TEST_TMP . '/wp-content/uploads';
+$GLOBALS['lcfa_test_remote_get_map'] = [];
+$GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
 @mkdir($GLOBALS['lcfa_test_uploads'], 0777, true);
@@ -156,6 +158,10 @@ function wp_parse_args($args, $defaults = []): array {
     }
 
     return array_merge((array) $defaults, (array) $args);
+}
+
+function apply_filters(string $hook_name, $value) {
+    return $value;
 }
 
 function get_option(string $key, $default = false) {
@@ -239,6 +245,30 @@ function wp_parse_url(string $url, int $component = -1) {
     return parse_url($url, $component);
 }
 
+function wp_remote_get(string $url, array $args = []) {
+    if (isset($GLOBALS['lcfa_test_remote_get_map'][$url])) {
+        return $GLOBALS['lcfa_test_remote_get_map'][$url];
+    }
+
+    return new WP_Error('http_missing', 'No fake HTTP response registered for ' . $url);
+}
+
+function wp_remote_retrieve_response_code($response): int {
+    if ($response instanceof WP_Error) {
+        return 0;
+    }
+
+    return (int) ($response['response']['code'] ?? 0);
+}
+
+function wp_remote_retrieve_body($response): string {
+    if ($response instanceof WP_Error) {
+        return '';
+    }
+
+    return (string) ($response['body'] ?? '');
+}
+
 function get_plugins(): array {
     return [
         'livecanvas/livecanvas.php' => ['TextDomain' => 'livecanvas'],
@@ -278,7 +308,15 @@ function get_the_title(int $post_id): string {
 }
 
 function get_edit_post_link(int $post_id, string $context = 'display'): string {
+    if (!empty($GLOBALS['lcfa_test_force_empty_edit_link'])) {
+        return '';
+    }
+
     return 'https://example.test/wp-admin/post.php?post=' . $post_id . '&action=edit';
+}
+
+function admin_url(string $path = ''): string {
+    return 'https://example.test/wp-admin/' . ltrim($path, '/');
 }
 
 function get_permalink(int $post_id): string {
@@ -462,6 +500,7 @@ require LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
 require LCFA_DIR . 'includes/class-lcfa-theme-files-bridge.php';
 require LCFA_DIR . 'includes/class-lcfa-local-mcp-bridge.php';
+require LCFA_DIR . 'includes/class-lcfa-connection-tester.php';
 require LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require LCFA_DIR . 'includes/class-lcfa-context-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-prompt-suggester.php';
@@ -518,6 +557,77 @@ $updated_page_result = $command_deck->execute([
 
 lcfa_assert_true($updated_page_result['ok'] === true, 'page_upsert should update an existing page when post_id is provided');
 lcfa_assert_same(100, $updated_page_result['target_id'], 'page_upsert update should keep the same post id');
+
+$GLOBALS['lcfa_test_force_empty_edit_link'] = true;
+$fallback_edit_result = $command_deck->execute([
+    'action'  => 'page_upsert',
+    'title'   => 'Fallback Edit URL',
+    'slug'    => 'fallback-edit-url',
+    'status'  => 'draft',
+    'content' => '<main>Fallback Edit URL</main>',
+]);
+$GLOBALS['lcfa_test_force_empty_edit_link'] = false;
+
+lcfa_assert_true($fallback_edit_result['ok'] === true, 'page_upsert should still succeed when get_edit_post_link returns empty');
+lcfa_assert_same('https://example.test/wp-admin/post.php?post=101&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
+
+LCFA_Settings::update_connections(array_merge(LCFA_Settings::connection_defaults(), [
+    'local_bridge_url' => 'https://example.test/wp-json/lcfa/v1/',
+    'mcp_token'        => 'test-token',
+]));
+
+$GLOBALS['lcfa_test_remote_get_map']['https://example.test/wp-json/lcfa/v1/mcp/status'] = [
+    'response' => ['code' => 200],
+    'body'     => wp_json_encode([
+        'mcp' => [
+            'enabled'           => true,
+            'filesystem_mode'   => 'local-theme-access',
+            'preferred_client'  => 'opencode',
+        ],
+    ], JSON_UNESCAPED_SLASHES),
+];
+
+$connection_tester = new LCFA_Connection_Tester($environment, $local_mcp_bridge, $remote_client);
+$local_mcp_reflection = new ReflectionObject($local_mcp_bridge);
+$status_cache_property = $local_mcp_reflection->getProperty('status_cache');
+
+$status_cache_property->setValue($local_mcp_bridge, [
+    'available'        => false,
+    'build_available'  => false,
+    'local_site'       => true,
+    'windpress_active' => true,
+    'node_available'   => false,
+    'node_version'     => '',
+    'rest_reachable'   => true,
+    'script_exists'    => true,
+    'message'          => 'Node.js is not available to the current PHP process.',
+]);
+
+$local_checks = $connection_tester->run_checks([
+    'mode' => 'local',
+]);
+
+lcfa_assert_true($local_checks['ok'] === true, 'missing Node.js in the PHP process should not block local coding-agent connections when the REST bridge is healthy');
+lcfa_assert_true(!empty($local_checks['checks']['local_mcp']['skipped']), 'local_mcp should be downgraded to a non-blocking warning when only the PHP-side Node runtime is missing');
+
+$status_cache_property->setValue($local_mcp_bridge, [
+    'available'        => false,
+    'build_available'  => false,
+    'local_site'       => true,
+    'windpress_active' => true,
+    'node_available'   => true,
+    'node_version'     => 'v22.0.0',
+    'rest_reachable'   => true,
+    'script_exists'    => false,
+    'message'          => 'The local MCP CLI entrypoint was not found inside the plugin.',
+]);
+
+$missing_script_checks = $connection_tester->run_checks([
+    'mode' => 'local',
+]);
+
+lcfa_assert_true($missing_script_checks['ok'] === false, 'missing MCP CLI entrypoint should remain a blocking issue');
+lcfa_assert_true(empty($missing_script_checks['checks']['local_mcp']['skipped']), 'missing MCP CLI entrypoint should not be downgraded to skipped');
 lcfa_assert_same('https://example.test/landing-page-1-updated/', $updated_page_result['frontend_url'] ?? '', 'page_upsert update should refresh frontend_url after slug changes');
 lcfa_assert_same('<main>Updated Hero</main>', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert update should persist new content');
 

@@ -930,8 +930,18 @@ final class LCFA_Command_Deck {
         if ($target_type === 'page' || $target_type === 'dynamic_template' || $target_type === 'partial' || $target_type === 'header' || $target_type === 'footer') {
             $result['target_title'] = html_entity_decode(get_the_title($target_id) ?: __('Untitled', 'livecanvas-forge-ai'));
             $result['frontend_url'] = (string) get_permalink($target_id);
-            $result['edit_url']     = (string) get_edit_post_link($target_id, 'raw');
+            $result['edit_url']     = $this->resolve_edit_post_url($target_id);
         }
+    }
+
+    private function resolve_edit_post_url(int $post_id): string {
+        $edit_url = (string) get_edit_post_link($post_id, 'raw');
+
+        if ($edit_url !== '') {
+            return $edit_url;
+        }
+
+        return (string) admin_url(sprintf('post.php?post=%d&action=edit', $post_id));
     }
 
     private function evaluate_policy(string $action, bool $dry_run): array {

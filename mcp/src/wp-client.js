@@ -84,6 +84,10 @@ class WPClient {
     return this.request('GET', 'mcp/bootstrap')
   }
 
+  async syncWorkspaceRoot(payload = {}) {
+    return this.request('POST', 'mcp/workspace-root', { body: payload })
+  }
+
   async getWindPressStatus() {
     return this.request('GET', 'windpress/status')
   }
