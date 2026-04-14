@@ -38,6 +38,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-wizard-presenter.php';
+require_once LCFA_DIR . 'includes/class-lcfa-admin-hero-presenter.php';
 require_once LCFA_DIR . 'includes/class-lcfa-workspace-access.php';
 require_once LCFA_DIR . 'includes/class-lcfa-prompt-suggester.php';
 require_once LCFA_DIR . 'includes/class-lcfa-context-builder.php';

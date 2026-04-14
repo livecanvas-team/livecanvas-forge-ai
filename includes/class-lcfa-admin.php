@@ -12,6 +12,7 @@ final class LCFA_Admin {
     private LCFA_Context_Builder $context_builder;
     private LCFA_Connection_Onboarding $connection_onboarding;
     private LCFA_Connection_Wizard_Presenter $connection_wizard_presenter;
+    private LCFA_Admin_Hero_Presenter $admin_hero_presenter;
     private LCFA_Command_Deck $command_deck;
     private LCFA_Prompt_Suggester $prompt_suggester;
     private LCFA_Genesis_Planner $genesis_planner;
@@ -26,6 +27,7 @@ final class LCFA_Admin {
         $this->context_builder = $context_builder;
         $this->connection_onboarding = $connection_onboarding;
         $this->connection_wizard_presenter = new LCFA_Connection_Wizard_Presenter();
+        $this->admin_hero_presenter = new LCFA_Admin_Hero_Presenter();
         $this->command_deck = $command_deck;
         $this->prompt_suggester = $prompt_suggester;
         $this->genesis_planner = $genesis_planner;
@@ -889,15 +891,8 @@ final class LCFA_Admin {
             $tab = $this->get_default_dashboard_tab($settings);
         }
 
-        $hero = $this->get_dashboard_hero_content($tab);
-
         echo '<div class="wrap lcfa-admin">';
-        $this->render_page_header(
-            $hero['title'],
-            $hero['subtitle'],
-            $snapshot,
-            $settings
-        );
+        $this->render_page_header($tab, $snapshot, $settings);
 
         $this->render_notice($notice);
         $this->render_internal_tabs($tab, $settings);
@@ -984,7 +979,6 @@ final class LCFA_Admin {
             $step = 1;
         }
 
-        echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
         $this->render_step_nav($step, $settings, $snapshot);
 
@@ -1011,10 +1005,6 @@ final class LCFA_Admin {
         }
 
         echo '</div>';
-        echo '<aside class="lcfa-sidebar">';
-        $this->render_snapshot_card($snapshot, $settings);
-        echo '</aside>';
-        echo '</div>';
     }
 
     private function render_genesis_tab(array $settings, array $snapshot, array $brief, array $summary, array $plan, array $progress, string $brief_hash): void {
@@ -1032,7 +1022,6 @@ final class LCFA_Admin {
         );
         $next_task       = !$plan_stale ? $this->get_next_genesis_task($plan_tasks, $progress_tasks) : null;
 
-        echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
 
         echo '<section class="lcfa-card">';
@@ -1135,10 +1124,6 @@ final class LCFA_Admin {
         echo '</ul>';
         echo '</section>';
 
-        echo '</div>';
-        echo '<aside class="lcfa-sidebar">';
-        $this->render_snapshot_card($snapshot, $settings);
-        echo '</aside>';
         echo '</div>';
     }
 
@@ -1354,7 +1339,6 @@ final class LCFA_Admin {
 
         $common_bootstrap = implode("\n", $common_environment);
 
-        echo '<div class="lcfa-grid">';
         echo '<div class="lcfa-main">';
 
         $this->render_connection_test_result($connection_test);
@@ -1369,10 +1353,6 @@ final class LCFA_Admin {
         $this->render_remote_companion_card($remote_status);
         $this->render_advanced_connection_settings($connections, $preferred_client, $mcp_status, $preferred_bootstrap, $common_bootstrap, $command_example, (string) ($bundle['workspace_root'] ?? ''));
 
-        echo '</div>';
-        echo '<aside class="lcfa-sidebar">';
-        $this->render_snapshot_card($snapshot, $settings);
-        echo '</aside>';
         echo '</div>';
     }
 
@@ -2369,7 +2349,6 @@ final class LCFA_Admin {
 
         echo '</div>';
         echo '<aside class="lcfa-sidebar">';
-        $this->render_snapshot_card($snapshot, $settings);
         $this->render_history_panel($history);
         echo '</aside>';
         echo '</div>';
@@ -2677,31 +2656,84 @@ final class LCFA_Admin {
         echo '<div class="' . esc_attr($class) . '"><p>' . esc_html($notice['message']) . '</p></div>';
     }
 
-    private function render_page_header(string $title, string $subtitle, array $snapshot, array $settings): void {
+    private function render_page_header(string $tab, array $snapshot, array $settings): void {
+        $hero = $this->admin_hero_presenter->build($tab, $snapshot, $settings);
+
         echo '<section class="lcfa-hero">';
+        echo '<div class="lcfa-hero-main">';
         echo '<div class="lcfa-hero-copy">';
         echo '<div class="lcfa-kicker">';
         echo '<span>' . esc_html__('LiveCanvas Forge AI', 'livecanvas-forge-ai') . '</span>';
         echo '</div>';
-        echo '<h1>' . esc_html($title) . '</h1>';
-        echo '<p class="lcfa-lead">' . esc_html($subtitle) . '</p>';
-        echo '<div class="lcfa-hero-badges">';
-        if (!empty($settings['framework'])) {
-            $this->render_badge(__('Framework', 'livecanvas-forge-ai'), $settings['framework'], 'active');
-        }
-        $this->render_badge(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_stylesheet'], 'active');
-        if (!empty($settings['site_mode'])) {
-            $this->render_badge(__('Site mode', 'livecanvas-forge-ai'), $settings['site_mode'], 'active');
-        }
+        echo '<h1>' . esc_html((string) ($hero['title'] ?? '')) . '</h1>';
+        echo '<p class="lcfa-lead">' . esc_html((string) ($hero['subtitle'] ?? '')) . '</p>';
         echo '</div>';
+        echo '<div class="lcfa-hero-meta">';
+        echo '<div class="lcfa-hero-stack">';
+        foreach ((array) ($hero['marks'] ?? []) as $mark) {
+            if (!is_array($mark)) {
+                continue;
+            }
 
-        echo '<div class="lcfa-mini-partners">';
-        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('livecanvas-micro') . '<span>' . esc_html__('LiveCanvas', 'livecanvas-forge-ai') . '</span></span>';
-        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('bootstrap') . '<span>' . esc_html__('Bootstrap', 'livecanvas-forge-ai') . '</span></span>';
-        echo '<span class="lcfa-mini-partner">' . $this->get_partner_logo('windpress') . '<span>' . esc_html__('WindPress', 'livecanvas-forge-ai') . '</span></span>';
+            $this->render_admin_hero_mark($mark);
+        }
         echo '</div>';
+        echo '<div class="lcfa-hero-chips">';
+        foreach ((array) ($hero['chips'] ?? []) as $chip) {
+            if (!is_array($chip)) {
+                continue;
+            }
+
+            $this->render_admin_hero_chip($chip);
+        }
+        echo '</div>';
+        echo '<details class="lcfa-hero-details-panel">';
+        echo '<summary class="lcfa-hero-details-toggle">' . esc_html__('Details', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-hero-details">';
+        foreach ((array) ($hero['details'] ?? []) as $detail) {
+            if (!is_array($detail)) {
+                continue;
+            }
+
+            echo '<div class="lcfa-hero-detail">';
+            echo '<span class="lcfa-hero-detail-label">' . esc_html((string) ($detail['label'] ?? '')) . '</span>';
+            echo '<strong class="lcfa-hero-detail-value">' . esc_html((string) ($detail['value'] ?? '')) . '</strong>';
+            echo '</div>';
+        }
+        echo '</div>';
+        echo '</details>';
         echo '</div>';
         echo '</section>';
+    }
+
+    private function render_admin_hero_mark(array $mark): void {
+        $asset = (string) ($mark['asset'] ?? '');
+        $label = (string) ($mark['label'] ?? '');
+        $active = !empty($mark['active']);
+        $type = (string) ($mark['type'] ?? 'partner');
+        $media = $type === 'icon'
+            ? $this->get_icon_svg($asset ?: 'stars')
+            : $this->get_partner_logo($asset ?: 'livecanvas-micro');
+
+        echo '<span class="lcfa-hero-mark' . ($active ? ' is-active' : '') . '">';
+        echo '<span class="lcfa-hero-mark-media">' . $media . '</span>';
+        echo '<span class="lcfa-hero-mark-label">' . esc_html($label) . '</span>';
+        echo '</span>';
+    }
+
+    private function render_admin_hero_chip(array $chip): void {
+        $tone = in_array((string) ($chip['tone'] ?? 'other'), ['active', 'other'], true) ? (string) $chip['tone'] : 'other';
+        $label = (string) ($chip['label'] ?? '');
+        $value = (string) ($chip['value'] ?? '');
+        $client = (string) ($chip['client'] ?? '');
+
+        echo '<span class="lcfa-hero-chip is-' . esc_attr($tone) . '">';
+        if ($client !== '') {
+            echo '<span class="lcfa-hero-chip-media">' . $this->get_agent_icon_markup($client, $this->get_client_fallback_icon($client), 'lcfa-agent-icon lcfa-agent-icon--sm') . '</span>';
+        }
+        echo '<strong>' . esc_html($label) . '</strong>';
+        echo '<span>' . esc_html($value) . '</span>';
+        echo '</span>';
     }
 
     private function render_brand_tile(string $title, string $logo_markup, string $caption, string $tone = 'other'): void {

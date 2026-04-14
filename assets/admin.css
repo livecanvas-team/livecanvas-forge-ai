@@ -51,7 +51,7 @@
 .lcfa-admin .lcfa-hero {
     display: block;
     margin: 18px 0 16px;
-    padding: 20px 22px;
+    padding: 18px 20px;
     border: 1px solid var(--lcfa-border);
     border-radius: 24px;
     background:
@@ -60,6 +60,13 @@
         linear-gradient(145deg, rgba(33, 35, 55, 0.98), rgba(25, 26, 41, 0.98));
     box-shadow: var(--lcfa-shadow);
     overflow: hidden;
+}
+
+.lcfa-admin .lcfa-hero-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
+    gap: 20px;
+    align-items: start;
 }
 
 .lcfa-admin .lcfa-kicker {
@@ -78,7 +85,7 @@
 }
 
 .lcfa-admin .lcfa-hero h1 {
-    margin: 14px 0 10px;
+    margin: 12px 0 8px;
     color: var(--lcfa-text);
     font-size: 28px;
     line-height: 1.04;
@@ -86,18 +93,154 @@
 }
 
 .lcfa-admin .lcfa-lead {
-    max-width: 60rem;
+    max-width: 42rem;
     margin: 0;
     color: var(--lcfa-text-muted);
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.55;
 }
 
-.lcfa-admin .lcfa-hero-badges {
+.lcfa-admin .lcfa-hero-meta {
+    display: grid;
+    gap: 12px;
+    justify-items: end;
+}
+
+.lcfa-admin .lcfa-hero-stack {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 16px;
+    justify-content: flex-end;
+}
+
+.lcfa-admin .lcfa-hero-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 7px 11px;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-hero-mark.is-active {
+    border-color: rgba(38, 198, 218, 0.24);
+    background: rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-hero-mark-media {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lcfa-admin .lcfa-hero-mark-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-hero-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.lcfa-admin .lcfa-hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--lcfa-border);
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-hero-chip strong {
+    color: #d8dbef;
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-hero-chip span {
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-hero-chip.is-active {
+    border-color: rgba(38, 198, 218, 0.26);
+    background: rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-hero-chip.is-active span {
+    color: var(--color1);
+}
+
+.lcfa-admin .lcfa-hero-chip.is-other {
+    border-color: rgba(232, 62, 140, 0.24);
+    background: rgba(232, 62, 140, 0.08);
+}
+
+.lcfa-admin .lcfa-hero-chip.is-other span {
+    color: var(--color2);
+}
+
+.lcfa-admin .lcfa-hero-details-panel {
+    width: 100%;
+    border: 1px solid var(--lcfa-border);
+    border-radius: 18px;
+    background: rgba(17, 19, 32, 0.32);
+}
+
+.lcfa-admin .lcfa-hero-details-toggle {
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-hero-details-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.lcfa-admin .lcfa-hero-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 0 14px 14px;
+}
+
+.lcfa-admin .lcfa-hero-detail {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-hero-detail-label {
+    color: var(--lcfa-text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.lcfa-admin .lcfa-hero-detail-value {
+    color: var(--lcfa-text);
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-hero-chip-media {
+    display: inline-flex;
+    align-items: center;
 }
 
 .lcfa-admin .lcfa-badge {
@@ -136,24 +279,6 @@
 
 .lcfa-admin .lcfa-badge.is-other span {
     color: var(--color2);
-}
-
-.lcfa-admin .lcfa-mini-partners {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 14px;
-    margin-top: 16px;
-}
-
-.lcfa-admin .lcfa-mini-partner {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--lcfa-text-muted);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
 }
 
 .lcfa-admin .lcfa-logo {
@@ -1131,6 +1256,11 @@
     height: 22px;
 }
 
+.lcfa-admin .lcfa-agent-icon--sm {
+    width: 16px;
+    height: 16px;
+}
+
 .lcfa-admin .lcfa-chip--agent {
     display: inline-flex;
     align-items: center;
@@ -1689,8 +1819,16 @@
 
 @media (max-width: 1100px) {
     .lcfa-admin .lcfa-grid,
-    .lcfa-admin .lcfa-hero {
+    .lcfa-admin .lcfa-hero-main,
+    .lcfa-admin .lcfa-hero-details {
         grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-hero-meta,
+    .lcfa-admin .lcfa-hero-stack,
+    .lcfa-admin .lcfa-hero-chips {
+        justify-items: start;
+        justify-content: flex-start;
     }
 
     .lcfa-admin .lcfa-tabbar {

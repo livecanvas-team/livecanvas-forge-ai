@@ -91,6 +91,7 @@ function lcfa_assert_false(bool $condition, string $message): void {
 require LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
 require LCFA_DIR . 'includes/class-lcfa-connection-wizard-presenter.php';
+require LCFA_DIR . 'includes/class-lcfa-admin-hero-presenter.php';
 require LCFA_DIR . 'includes/class-lcfa-workspace-access.php';
 require LCFA_DIR . 'includes/class-lcfa-admin.php';
 
