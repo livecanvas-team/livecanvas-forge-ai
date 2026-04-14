@@ -12,6 +12,7 @@ final class LCFA_Rest_Api {
     private LCFA_Command_Deck $command_deck;
     private LCFA_Prompt_Suggester $prompt_suggester;
     private LCFA_Genesis_Planner $genesis_planner;
+    private LCFA_Picostrap_Compile_Service $picostrap_compile_service;
 
     public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner) {
         $this->environment        = $environment;
@@ -23,6 +24,7 @@ final class LCFA_Rest_Api {
         $this->command_deck       = $command_deck;
         $this->prompt_suggester   = $prompt_suggester;
         $this->genesis_planner    = $genesis_planner;
+        $this->picostrap_compile_service = new LCFA_Picostrap_Compile_Service($environment);
     }
 
     public function hooks(): void {
@@ -204,6 +206,24 @@ final class LCFA_Rest_Api {
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'rotate_mcp_token'],
             'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/picostrap/compile-manifest', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_picostrap_compile_manifest'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/picostrap/compile-source', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_picostrap_compile_source'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/picostrap/bundle', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'store_picostrap_bundle'],
+            'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/windpress/status', [
@@ -655,6 +675,68 @@ final class LCFA_Rest_Api {
                 'endpoint' => LCFA_Settings::get_mcp_endpoint(),
             ],
         ]);
+    }
+
+    public function get_picostrap_compile_manifest(): WP_REST_Response {
+        try {
+            $result = $this->picostrap_compile_service->get_manifest();
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'result' => [
+                    'ok' => false,
+                    'message' => $throwable->getMessage(),
+                ],
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], 200);
+    }
+
+    public function get_picostrap_compile_source(WP_REST_Request $request): WP_REST_Response {
+        try {
+            $result = $this->picostrap_compile_service->get_source((string) $request->get_param('import_path'));
+        } catch (Throwable $throwable) {
+            return new WP_REST_Response([
+                'result' => [
+                    'ok' => false,
+                    'message' => $throwable->getMessage(),
+                ],
+            ], 400);
+        }
+
+        $status = !empty($result['ok']) ? 200 : 404;
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], $status);
+    }
+
+    public function store_picostrap_bundle(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        $css = (string) ($payload['css'] ?? '');
+
+        if ($css === '') {
+            return new WP_REST_Response([
+                'result' => [
+                    'ok' => false,
+                    'message' => __('A compiled CSS payload is required.', 'livecanvas-forge-ai'),
+                ],
+            ], 400);
+        }
+
+        $result = $this->picostrap_compile_service->store_bundle($css);
+        $status = !empty($result['ok']) ? 200 : 400;
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], $status);
     }
 
     public function get_windpress_status(): WP_REST_Response {

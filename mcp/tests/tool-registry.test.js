@@ -25,6 +25,14 @@ function createNoopWindPressCompiler() {
   }
 }
 
+function createNoopPicostrapCompiler() {
+  return {
+    async buildBundle() {
+      return { ok: true }
+    }
+  }
+}
+
 function getArrayBranches(schema, matches = []) {
   if (!schema || typeof schema !== 'object') {
     return matches
@@ -50,7 +58,8 @@ async function run() {
   const registry = createToolRegistry(
     createNoopClient(),
     createNoopThemeFiles(),
-    createNoopWindPressCompiler()
+    createNoopWindPressCompiler(),
+    createNoopPicostrapCompiler()
   )
 
   const tools = registry.list()
@@ -65,6 +74,14 @@ async function run() {
   for (const branch of arrayBranches) {
     assert.ok(branch.items, 'every array schema branch in store_windpress_theme_json must declare items for MCP schema validation')
   }
+
+  const compilePicostrap = tools.find((tool) => tool.name === 'compile_picostrap_bundle')
+  assert.ok(compilePicostrap, 'compile_picostrap_bundle should be registered')
+
+  const runLcCommand = tools.find((tool) => tool.name === 'run_lc_command')
+  assert.ok(runLcCommand, 'run_lc_command should be registered')
+  assert.ok(runLcCommand.inputSchema.properties.auto_apply, 'run_lc_command should expose auto_apply in its schema')
+  assert.ok(runLcCommand.inputSchema.properties.prompt, 'run_lc_command should expose prompt in its schema')
 }
 
 run()

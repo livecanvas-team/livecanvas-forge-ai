@@ -76,6 +76,22 @@ class WPClient {
     return this.request('POST', 'command', { body: payload })
   }
 
+  async getPicostrapCompileManifest() {
+    return this.request('GET', 'picostrap/compile-manifest')
+  }
+
+  async getPicostrapCompileSource(importPath) {
+    return this.request('GET', 'picostrap/compile-source', {
+      query: { import_path: importPath }
+    })
+  }
+
+  async storePicostrapBundle(css) {
+    return this.request('POST', 'picostrap/bundle', {
+      body: { css }
+    })
+  }
+
   async getMcpStatus() {
     return this.request('GET', 'mcp/status')
   }

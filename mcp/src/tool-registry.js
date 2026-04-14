@@ -1,4 +1,4 @@
-function createToolRegistry(client, themeFiles, windpressCompiler) {
+function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null) {
   const tools = [
     {
       name: 'get_snapshot',
@@ -141,7 +141,9 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
         properties: {
           action: { type: 'string' },
           dry_run: { type: 'boolean' },
+          auto_apply: { type: 'boolean' },
           execution_target: { type: 'string' },
+          framework: { type: 'string' },
           target_id: { type: 'integer' },
           variant: { type: 'string' },
           title: { type: 'string' },
@@ -152,10 +154,33 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
           root_scope: { type: 'string' },
           file_path: { type: 'string' },
           backup_id: { type: 'string' },
-          content: { type: 'string' }
+          content: { type: 'string' },
+          prompt: { type: 'string' },
+          colors: { type: 'object' },
+          typography: { type: 'object' },
+          radius: { type: 'object' },
+          buttons: { type: 'object' }
         }
       },
-      invoke: async (argumentsMap = {}) => client.runCommand(argumentsMap)
+      invoke: async (argumentsMap = {}) => invokeRunLcCommand(argumentsMap, client, picostrapCompiler)
+    },
+    {
+      name: 'compile_picostrap_bundle',
+      description: 'Compile the active Picostrap Sass bundle through the bridge and store it back into WordPress.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          force: { type: 'boolean' },
+          label: { type: 'string' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => {
+        if (!picostrapCompiler) {
+          throw new Error('Picostrap compiler is not available in this MCP runtime.')
+        }
+
+        return picostrapCompiler.buildBundle(argumentsMap)
+      }
     },
     {
       name: 'get_mcp_status',
@@ -547,6 +572,103 @@ function createToolRegistry(client, themeFiles, windpressCompiler) {
       return tool.invoke(argumentsMap)
     }
   }
+}
+
+async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {
+  const response = await client.runCommand(argumentsMap)
+  const payload = unwrapResultEnvelope(response)
+
+  if (!shouldAutoCompilePicostrap(argumentsMap, payload) || !picostrapCompiler) {
+    return response
+  }
+
+  try {
+    const compileResult = await picostrapCompiler.buildBundle({
+      force: argumentsMap.force === true,
+      label: argumentsMap.label || 'design_system_compose_auto_apply'
+    })
+    const merged = mergeCommandAndCompileResults(payload, compileResult)
+    return wrapResultEnvelope(response, merged)
+  } catch (error) {
+    const merged = mergeCommandAndCompileResults(payload, {
+      ok: false,
+      build_strategy: 'bridge_dart_sass',
+      build_required: true,
+      build_executed: false,
+      warnings: [error instanceof Error ? error.message : String(error)]
+    })
+
+    merged.ok = false
+    merged.message = merged.message || 'Design system applied, but Picostrap bundle compilation failed.'
+    merged.summary = merged.summary || 'Picostrap design system applied, but the bundle was not compiled automatically.'
+
+    return wrapResultEnvelope(response, merged)
+  }
+}
+
+function shouldAutoCompilePicostrap(argumentsMap, payload) {
+  if (!payload || payload.ok === false || payload.target_stack !== 'picostrap') {
+    return false
+  }
+
+  if (argumentsMap.action === 'design_system_compose') {
+    return argumentsMap.auto_apply === true && payload.mode === 'apply'
+  }
+
+  if (argumentsMap.action === 'design_system_apply') {
+    return argumentsMap.dry_run !== true && payload.mode === 'apply'
+  }
+
+  return false
+}
+
+function mergeCommandAndCompileResults(commandPayload, compilePayload) {
+  const payload = commandPayload && typeof commandPayload === 'object' ? { ...commandPayload } : {}
+  const warnings = normalizeWarnings(payload.warnings).concat(normalizeWarnings(compilePayload.warnings))
+
+  return {
+    ...payload,
+    ok: Boolean(payload.ok !== false && compilePayload.ok !== false),
+    build_strategy: compilePayload.build_strategy || payload.build_strategy || '',
+    build_required: compilePayload.build_required !== undefined ? compilePayload.build_required : true,
+    build_executed: compilePayload.build_executed === true,
+    bundle_path: compilePayload.bundle_path || '',
+    bundle_url: compilePayload.bundle_url || '',
+    bundle_version: compilePayload.bundle_version || 0,
+    compiled_at: compilePayload.compiled_at || '',
+    warnings: uniqueStrings(warnings),
+    data: {
+      ...(payload.data || {}),
+      compile: compilePayload
+    }
+  }
+}
+
+function unwrapResultEnvelope(payload) {
+  if (payload && typeof payload === 'object' && payload.result && typeof payload.result === 'object') {
+    return payload.result
+  }
+
+  return payload
+}
+
+function wrapResultEnvelope(originalPayload, nextPayload) {
+  if (originalPayload && typeof originalPayload === 'object' && originalPayload.result && typeof originalPayload.result === 'object') {
+    return {
+      ...originalPayload,
+      result: nextPayload
+    }
+  }
+
+  return nextPayload
+}
+
+function normalizeWarnings(value) {
+  return Array.isArray(value) ? value.map((entry) => String(entry || '')).filter(Boolean) : []
+}
+
+function uniqueStrings(values) {
+  return Array.from(new Set(values))
 }
 
 module.exports = {

@@ -512,6 +512,9 @@ require LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-compose.php';
+require LCFA_DIR . 'includes/class-lcfa-picostrap-compile-manifest.php';
+require LCFA_DIR . 'includes/class-lcfa-picostrap-bundle-store.php';
+require LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
 require LCFA_DIR . 'includes/class-lcfa-command-deck.php';
 require LCFA_DIR . 'includes/class-lcfa-rest-api.php';
 
