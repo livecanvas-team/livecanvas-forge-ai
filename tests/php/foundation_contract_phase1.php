@@ -123,6 +123,8 @@ $GLOBALS['lcfa_test_remote_get_map'] = [];
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
+@mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates', 0777, true);
+@file_put_contents($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates/empty.php', '<?php // empty template');
 @mkdir($GLOBALS['lcfa_test_uploads'], 0777, true);
 
 function __(string $text, string $domain = ''): string {
@@ -555,6 +557,7 @@ lcfa_assert_same('page', $page_result['target_type'], 'page_upsert should target
 lcfa_assert_same(100, $page_result['target_id'], 'page_upsert should create the first fake post');
 lcfa_assert_same('https://example.test/landing-page-1/', $page_result['frontend_url'] ?? '', 'page_upsert should return frontend_url');
 lcfa_assert_contains('post.php?post=100&action=edit', $page_result['edit_url'] ?? '', 'page_upsert should return edit_url');
+lcfa_assert_same('page-templates/empty.php', $GLOBALS['lcfa_test_post_meta'][100]['_wp_page_template'] ?? '', 'page_upsert should assign the Empty Page template when it is available');
 
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
@@ -567,6 +570,7 @@ $updated_page_result = $command_deck->execute([
 
 lcfa_assert_true($updated_page_result['ok'] === true, 'page_upsert should update an existing page when post_id is provided');
 lcfa_assert_same(100, $updated_page_result['target_id'], 'page_upsert update should keep the same post id');
+lcfa_assert_same('page-templates/empty.php', $GLOBALS['lcfa_test_post_meta'][100]['_wp_page_template'] ?? '', 'page_upsert update should keep the Empty Page template assigned');
 
 $GLOBALS['lcfa_test_force_empty_edit_link'] = true;
 $fallback_edit_result = $command_deck->execute([
@@ -580,6 +584,29 @@ $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 lcfa_assert_true($fallback_edit_result['ok'] === true, 'page_upsert should still succeed when get_edit_post_link returns empty');
 lcfa_assert_same('https://example.test/wp-admin/post.php?post=101&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
+
+$previous_stylesheet = $GLOBALS['lcfa_test_stylesheet'];
+$previous_template = $GLOBALS['lcfa_test_template'];
+$GLOBALS['lcfa_test_stylesheet'] = 'picowind-child';
+$GLOBALS['lcfa_test_template'] = 'picowind';
+@mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind-child/page-templates', 0777, true);
+@mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind/page-templates', 0777, true);
+@file_put_contents($GLOBALS['lcfa_test_theme_root'] . '/picowind-child/page-templates/empty.php', '<?php // child empty template');
+@file_put_contents($GLOBALS['lcfa_test_theme_root'] . '/picowind/page-templates/empty.php', '<?php // parent empty template');
+
+$picowind_bootstrap_result = $command_deck->execute([
+    'action'  => 'page_upsert',
+    'title'   => 'Wrong Framework Pricing',
+    'slug'    => 'wrong-framework-pricing',
+    'status'  => 'draft',
+    'content' => '<main><div class="container"><div class="row"><div class="col-md-6"><a class="btn btn-primary">Buy</a></div></div></div></main>',
+]);
+
+$GLOBALS['lcfa_test_stylesheet'] = $previous_stylesheet;
+$GLOBALS['lcfa_test_template'] = $previous_template;
+
+lcfa_assert_true($picowind_bootstrap_result['ok'] === false, 'page_upsert should reject clearly Bootstrap-oriented markup when Picowind is active');
+lcfa_assert_contains('Picowind', $picowind_bootstrap_result['message'] ?? '', 'framework mismatch error should explain the active stack');
 
 LCFA_Settings::update_connections(array_merge(LCFA_Settings::connection_defaults(), [
     'local_bridge_url' => 'https://example.test/wp-json/lcfa/v1/',

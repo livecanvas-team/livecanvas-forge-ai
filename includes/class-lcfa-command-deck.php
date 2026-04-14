@@ -132,6 +132,7 @@ final class LCFA_Command_Deck {
     public function execute(array $payload): array {
         $action    = sanitize_key($payload['action'] ?? '');
         $dry_run   = !empty($payload['dry_run']);
+        $framework = $this->resolve_framework($payload);
         $title     = sanitize_text_field($payload['title'] ?? '');
         $slug      = sanitize_title($payload['slug'] ?? '');
         $status    = sanitize_key($payload['status'] ?? 'draft');
@@ -224,6 +225,12 @@ final class LCFA_Command_Deck {
             case 'page_upsert':
             case 'create_page':
             case 'update_page':
+                $framework_error = $this->validate_page_markup_for_framework($framework, $content);
+
+                if ($framework_error !== '') {
+                    return $this->error_result($framework_error);
+                }
+
                 $existing   = ['post' => null, 'content' => ''];
                 $is_update  = false;
                 $page_title = $title;
@@ -256,6 +263,7 @@ final class LCFA_Command_Deck {
                 $result['target_title']  = $page_title;
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
+                $result['data']['framework'] = $framework;
                 $result['summary']       = $is_update
                     ? sprintf(__('Update page #%d.', 'livecanvas-forge-ai'), $page_target_id)
                     : sprintf(__('Create LiveCanvas page "%s".', 'livecanvas-forge-ai'), $page_title);
@@ -288,6 +296,15 @@ final class LCFA_Command_Deck {
 
                     $page_id = (int) $page_id;
                     update_post_meta($page_id, '_lc_livecanvas_enabled', '1');
+                    $page_template = $this->resolve_livecanvas_page_template();
+
+                    if ($page_template !== '') {
+                        update_post_meta($page_id, '_wp_page_template', $page_template);
+                        $result['data']['page_template'] = $page_template;
+                    } else {
+                        $result['warnings'][] = __('Empty Page template was not found in the active theme roots.', 'livecanvas-forge-ai');
+                    }
+
                     $this->hydrate_target_urls($result, 'page', $page_id);
 
                     $result['message'] = $is_update
@@ -302,6 +319,11 @@ final class LCFA_Command_Deck {
                     if ($preview_slug !== '') {
                         $result['frontend_url'] = trailingslashit(home_url($preview_slug));
                     }
+                }
+
+                $page_template = $this->resolve_livecanvas_page_template();
+                if ($page_template !== '') {
+                    $result['data']['page_template'] = $page_template;
                 }
                 break;
 
@@ -967,6 +989,62 @@ final class LCFA_Command_Deck {
             $result['frontend_url'] = (string) get_permalink($target_id);
             $result['edit_url']     = $this->resolve_edit_post_url($target_id);
         }
+    }
+
+    private function resolve_framework(array $payload): string {
+        $explicit = sanitize_key((string) ($payload['framework'] ?? ''));
+
+        if (in_array($explicit, ['picostrap', 'picowind'], true)) {
+            return $explicit;
+        }
+
+        return $this->environment->detect_framework_family();
+    }
+
+    private function resolve_livecanvas_page_template(): string {
+        $candidates = [
+            trailingslashit(get_stylesheet_directory()) . 'page-templates/empty.php',
+            trailingslashit(get_template_directory()) . 'page-templates/empty.php',
+        ];
+
+        foreach ($candidates as $path) {
+            if (file_exists($path)) {
+                return 'page-templates/empty.php';
+            }
+        }
+
+        return '';
+    }
+
+    private function validate_page_markup_for_framework(string $framework, string $content): string {
+        if ($framework !== 'picowind' || trim($content) === '') {
+            return '';
+        }
+
+        $patterns = [
+            '/\brow\b/i',
+            '/\bcol-(?:sm|md|lg|xl|xxl)?-?\d+\b/i',
+            '/\bcontainer-fluid\b/i',
+            '/\bg-\d+\b/i',
+            '/\bd-flex\b/i',
+            '/\bjustify-content-[a-z-]+\b/i',
+            '/\balign-items-[a-z-]+\b/i',
+            '/\bbtn\b[^"]*\bbtn-[a-z0-9-]+\b/i',
+        ];
+
+        $matches = 0;
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                $matches++;
+            }
+        }
+
+        if ($matches < 2) {
+            return '';
+        }
+
+        return __('Picowind is active. Regenerate this page with Tailwind or DaisyUI-compatible markup instead of Bootstrap classes.', 'livecanvas-forge-ai');
     }
 
     private function resolve_edit_post_url(int $post_id): string {

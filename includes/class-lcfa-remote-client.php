@@ -3,6 +3,10 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Remote_Client {
+    private const STATUS_TTL = 30;
+
+    private ?array $status_cache = null;
+
     public function is_configured(): bool {
         $connections = LCFA_Settings::get_connections();
 
@@ -12,33 +16,51 @@ final class LCFA_Remote_Client {
     }
 
     public function get_status(): array {
+        if ($this->status_cache !== null) {
+            return $this->status_cache;
+        }
+
         $connections = LCFA_Settings::get_connections();
         $site_url    = $this->get_site_url($connections);
 
         if (!$this->is_configured()) {
-            return [
+            $this->status_cache = [
                 'configured' => false,
                 'available'  => false,
                 'endpoint'   => $site_url !== '' ? $this->build_rest_base($site_url) : '',
                 'message'    => __('Remote site URL, username, and Application Password are required before remote execution can start.', 'livecanvas-forge-ai'),
             ];
+
+            return $this->status_cache;
+        }
+
+        $cache_key = $this->get_status_cache_key($connections);
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            $this->status_cache = $cached;
+
+            return $this->status_cache;
         }
 
         $response = $this->request('GET', 'snapshot');
 
         if (is_wp_error($response)) {
-            return [
+            $this->status_cache = [
                 'configured' => true,
                 'available'  => false,
                 'endpoint'   => $this->build_rest_base($site_url),
                 'message'    => $response->get_error_message(),
             ];
+
+            set_transient($cache_key, $this->status_cache, self::STATUS_TTL);
+
+            return $this->status_cache;
         }
 
         $snapshot = is_array($response['snapshot'] ?? null) ? $response['snapshot'] : [];
         $mcp      = is_array($response['mcp'] ?? null) ? $response['mcp'] : [];
 
-        return [
+        $this->status_cache = [
             'configured' => true,
             'available'  => true,
             'endpoint'   => $this->build_rest_base($site_url),
@@ -57,6 +79,10 @@ final class LCFA_Remote_Client {
                 'filesystem_mode' => (string) ($mcp['filesystem_mode'] ?? ''),
             ],
         ];
+
+        set_transient($cache_key, $this->status_cache, self::STATUS_TTL);
+
+        return $this->status_cache;
     }
 
     public function get_actions() {
@@ -146,5 +172,14 @@ final class LCFA_Remote_Client {
             default:
                 return sprintf(__('Unexpected remote HTTP %d response.', 'livecanvas-forge-ai'), $status_code);
         }
+    }
+
+    private function get_status_cache_key(array $connections): string {
+        return 'lcfa_remote_status_' . md5(implode('|', [
+            trim((string) ($connections['remote_site_url'] ?? '')),
+            trim((string) ($connections['remote_username'] ?? '')),
+            trim((string) ($connections['remote_application_password'] ?? '')),
+            LCFA_VERSION,
+        ]));
     }
 }

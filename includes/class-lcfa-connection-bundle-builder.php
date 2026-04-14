@@ -13,18 +13,23 @@ final class LCFA_Connection_Bundle_Builder {
         $command_string = $this->join_shell_tokens($command);
         $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $workspace_root, $mode);
 
+        $shortcut = $this->build_client_shortcut($client, $command, $environment);
+
         return [
-            'client'            => $client,
-            'mode'              => $mode,
-            'server_name'       => 'livecanvas-forge',
-            'workspace_root'    => $workspace_root,
-            'command'           => $command,
-            'command_string'    => $command_string,
-            'environment'       => $environment,
-            'workspace_files'   => $this->build_workspace_files($client, $mode, $workspace_root, $command, $environment),
-            'download_files'    => $this->build_download_files($client, $command, $environment),
-            'smoke_test_command'=> $this->build_smoke_test_command($environment, $command),
-            'status'            => 'generated',
+            'client'              => $client,
+            'mode'                => $mode,
+            'server_name'         => 'livecanvas-forge',
+            'workspace_root'      => $workspace_root,
+            'command'             => $command,
+            'command_string'      => $command_string,
+            'copy_command_string' => $shortcut['command'] ?: $command_string,
+            'shortcut_title'      => $shortcut['title'],
+            'shortcut_command'    => $shortcut['command'],
+            'environment'         => $environment,
+            'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $command, $environment),
+            'download_files'      => $this->build_download_files($client, $command, $environment),
+            'smoke_test_command'  => $this->build_smoke_test_command($environment, $command),
+            'status'              => 'generated',
         ];
     }
 
@@ -402,10 +407,35 @@ final class LCFA_Connection_Bundle_Builder {
     }
 
     private function build_codex_script(array $command, array $environment): string {
+        return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_codex_register_command($command, $environment) . "\n";
+    }
+
+    private function build_claude_script(array $command, array $environment): string {
+        return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_claude_register_command($command, $environment) . "\n";
+    }
+
+    private function build_client_shortcut(string $client, array $command, array $environment): array {
+        switch ($client) {
+            case 'codex':
+                return [
+                    'title'   => __('Codex shortcut', 'livecanvas-forge-ai'),
+                    'command' => $this->build_codex_register_command($command, $environment),
+                ];
+            case 'claude-code':
+                return [
+                    'title'   => __('Claude Code shortcut', 'livecanvas-forge-ai'),
+                    'command' => $this->build_claude_register_command($command, $environment),
+                ];
+            default:
+                return [
+                    'title'   => '',
+                    'command' => '',
+                ];
+        }
+    }
+
+    private function build_codex_register_command(array $command, array $environment): string {
         $lines = [
-            '#!/usr/bin/env bash',
-            'set -euo pipefail',
-            '',
             'codex mcp add livecanvas-forge \\',
         ];
 
@@ -415,14 +445,11 @@ final class LCFA_Connection_Bundle_Builder {
 
         $lines[] = '  -- ' . $this->join_shell_tokens($command);
 
-        return implode("\n", $lines) . "\n";
+        return implode("\n", $lines);
     }
 
-    private function build_claude_script(array $command, array $environment): string {
+    private function build_claude_register_command(array $command, array $environment): string {
         $lines = [
-            '#!/usr/bin/env bash',
-            'set -euo pipefail',
-            '',
             'claude mcp add --transport stdio livecanvas-forge \\',
         ];
 
@@ -432,7 +459,7 @@ final class LCFA_Connection_Bundle_Builder {
 
         $lines[] = '  -- ' . $this->join_shell_tokens($command);
 
-        return implode("\n", $lines) . "\n";
+        return implode("\n", $lines);
     }
 
     private function build_generic_snippet(array $command, array $environment): string {

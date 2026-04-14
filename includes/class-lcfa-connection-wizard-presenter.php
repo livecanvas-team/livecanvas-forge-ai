@@ -53,28 +53,40 @@ final class LCFA_Connection_Wizard_Presenter {
     }
 
     private function build_banner(string $current_step, array $bundle, array $workspace_access): array {
+        $is_codex_local = $this->is_codex_local($bundle);
+
         if ($current_step === 'generate_bundle') {
             $local_writable = $this->can_write_workspace($bundle, $workspace_access);
             $is_opencode_local = $this->is_opencode_local($bundle);
 
             return [
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
-                'title'   => $local_writable
+                'title'   => $is_codex_local && !$local_writable
+                    ? __('Copy the Codex shortcut', 'livecanvas-forge-ai')
+                    : ($local_writable
                     ? __('Write the client config in this workspace', 'livecanvas-forge-ai')
-                    : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download the client bundle', 'livecanvas-forge-ai')),
-                'body'    => $local_writable
+                    : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download the client bundle', 'livecanvas-forge-ai'))),
+                'body'    => $is_codex_local && !$local_writable
+                    ? __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, then return here for verification.', 'livecanvas-forge-ai')
+                    : ($local_writable
                     ? __('Forge AI can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
-                    : __('This browser runtime cannot write to the selected host workspace directly. Download the bundle, open the project in your coding agent, then return here for the smoke test.', 'livecanvas-forge-ai'),
-                'next'    => __('After this step, come back here and run the smoke test.', 'livecanvas-forge-ai'),
+                    : __('This browser runtime cannot write to the selected host workspace directly. Download the bundle, open the project in your coding agent, then return here for the smoke test.', 'livecanvas-forge-ai')),
+                'next'    => $is_codex_local
+                    ? __('After running the Codex shortcut, verify with codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai')
+                    : __('After this step, come back here and run the smoke test.', 'livecanvas-forge-ai'),
             ];
         }
 
         if ($current_step === 'smoke_test') {
             return [
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
-                'title'   => __('Run the smoke test', 'livecanvas-forge-ai'),
-                'body'    => __('Use the generated bundle to verify that Forge AI can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
-                'next'    => __('A passing smoke test will move this connection to Ready.', 'livecanvas-forge-ai'),
+                'title'   => $is_codex_local ? __('Verify the Codex registration', 'livecanvas-forge-ai') : __('Run the smoke test', 'livecanvas-forge-ai'),
+                'body'    => $is_codex_local
+                    ? __('Run the Codex shortcut first. Once codex mcp list shows livecanvas-forge, use the smoke test to verify that Forge AI is reachable from Codex.', 'livecanvas-forge-ai')
+                    : __('Use the generated bundle to verify that Forge AI can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
+                'next'    => $is_codex_local
+                    ? __('A passing smoke test confirms that Codex can now call the livecanvas-forge tools.', 'livecanvas-forge-ai')
+                    : __('A passing smoke test will move this connection to Ready.', 'livecanvas-forge-ai'),
             ];
         }
 
@@ -135,31 +147,40 @@ final class LCFA_Connection_Wizard_Presenter {
             case 'generate_bundle':
                 $local_writable = $this->can_write_workspace($bundle, $workspace_access);
                 $is_opencode_local = $this->is_opencode_local($bundle);
+                $is_codex_local = $this->is_codex_local($bundle);
 
                 return [
                     'title'       => __('How do you want to continue?', 'livecanvas-forge-ai'),
-                    'description' => $is_opencode_local
+                    'description' => $is_codex_local
+                        ? __('Register the MCP server in Codex once, then come back here for verification.', 'livecanvas-forge-ai')
+                        : ($is_opencode_local
                         ? __('Download the OpenCode config, then switch to OpenCode once.', 'livecanvas-forge-ai')
-                        : __('Create the client configuration now, then move to verification.', 'livecanvas-forge-ai'),
+                        : __('Create the client configuration now, then move to verification.', 'livecanvas-forge-ai')),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
-                        'label'  => $local_writable
+                        'label'  => $is_codex_local && !$local_writable
+                            ? __('Copy Codex shortcut', 'livecanvas-forge-ai')
+                            : ($local_writable
                             ? __('Write config in workspace', 'livecanvas-forge-ai')
-                            : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download client bundle', 'livecanvas-forge-ai')),
-                        'action' => $local_writable ? 'install' : 'download',
+                            : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download client bundle', 'livecanvas-forge-ai'))),
+                        'action' => $is_codex_local && !$local_writable ? 'copy_command' : ($local_writable ? 'install' : 'download'),
                     ],
                     'secondary_ctas' => [
                         [
-                            'label'  => $local_writable ? __('Download client bundle', 'livecanvas-forge-ai') : __('Copy command', 'livecanvas-forge-ai'),
-                            'action' => $local_writable ? 'download' : 'copy_command',
+                            'label'  => $is_codex_local && !$local_writable
+                                ? __('Download Codex helper', 'livecanvas-forge-ai')
+                                : ($local_writable ? __('Download client bundle', 'livecanvas-forge-ai') : __('Copy command', 'livecanvas-forge-ai')),
+                            'action' => $is_codex_local && !$local_writable ? 'download' : ($local_writable ? 'download' : 'copy_command'),
                         ],
                     ],
                 ];
 
             case 'smoke_test':
                 return [
-                    'title'       => __('Ready to verify the connection?', 'livecanvas-forge-ai'),
-                    'description' => __('Run the smoke test after the client bundle is in place.', 'livecanvas-forge-ai'),
+                    'title'       => $this->is_codex_local($bundle) ? __('Ready to verify Codex?', 'livecanvas-forge-ai') : __('Ready to verify the connection?', 'livecanvas-forge-ai'),
+                    'description' => $this->is_codex_local($bundle)
+                        ? __('Run the smoke test after you have executed the Codex shortcut and Codex can see livecanvas-forge.', 'livecanvas-forge-ai')
+                        : __('Run the smoke test after the client bundle is in place.', 'livecanvas-forge-ai'),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
                         'label'  => __('Run smoke test', 'livecanvas-forge-ai'),
@@ -215,7 +236,7 @@ final class LCFA_Connection_Wizard_Presenter {
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
                 'title'   => __('Connection ready', 'livecanvas-forge-ai'),
                 'body'    => __('The smoke test has already passed. You can rerun checks or regenerate the bundle if something changes.', 'livecanvas-forge-ai'),
-                'next'    => __('Use Reconfigure only if you want to restart the wizard from the beginning.', 'livecanvas-forge-ai'),
+                'next'    => __('Use Change coding agent only when you want to restart the wizard from the first step and generate a new client bundle.', 'livecanvas-forge-ai'),
             ],
             'primary_cta' => [
                 'label'  => __('Run checks', 'livecanvas-forge-ai'),
@@ -227,7 +248,7 @@ final class LCFA_Connection_Wizard_Presenter {
                     'action' => 'download',
                 ],
                 [
-                    'label'  => __('Reconfigure', 'livecanvas-forge-ai'),
+                    'label'  => __('Change coding agent', 'livecanvas-forge-ai'),
                     'action' => 'reconfigure',
                 ],
             ],
@@ -274,7 +295,35 @@ final class LCFA_Connection_Wizard_Presenter {
     }
 
     private function build_visual_help(string $current_step, array $bundle): array {
-        if (!$this->is_opencode_local($bundle) || !in_array($current_step, ['generate_bundle', 'smoke_test'], true)) {
+        if (!in_array($current_step, ['generate_bundle', 'smoke_test'], true)) {
+            return [];
+        }
+
+        if ($this->is_codex_local($bundle)) {
+            return [
+                'title' => __('What to do in Codex', 'livecanvas-forge-ai'),
+                'client' => 'codex',
+                'items' => [
+                    [
+                        'title' => __('Copy and run the Codex shortcut', 'livecanvas-forge-ai'),
+                        'caption' => __('Execute the generated codex mcp add command once from this same project root.', 'livecanvas-forge-ai'),
+                        'tone' => 'project',
+                    ],
+                    [
+                        'title' => __('Check codex mcp list', 'livecanvas-forge-ai'),
+                        'caption' => __('Make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
+                        'tone' => 'mcp',
+                    ],
+                    [
+                        'title' => __('Open Codex and call get_snapshot', 'livecanvas-forge-ai'),
+                        'caption' => __('Once Codex sees the MCP server, return here and run the smoke test.', 'livecanvas-forge-ai'),
+                        'tone' => 'verify',
+                    ],
+                ],
+            ];
+        }
+
+        if (!$this->is_opencode_local($bundle)) {
             return [];
         }
 
@@ -303,6 +352,11 @@ final class LCFA_Connection_Wizard_Presenter {
 
     private function is_opencode_local(array $bundle): bool {
         return (string) ($bundle['client'] ?? '') === 'opencode'
+            && (string) ($bundle['mode'] ?? 'local') === 'local';
+    }
+
+    private function is_codex_local(array $bundle): bool {
+        return (string) ($bundle['client'] ?? '') === 'codex'
             && (string) ($bundle['mode'] ?? 'local') === 'local';
     }
 }

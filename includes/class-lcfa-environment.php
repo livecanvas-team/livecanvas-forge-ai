@@ -3,10 +3,21 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Environment {
+    private ?array $snapshot_cache = null;
+    private array $plugin_file_cache = [];
+    private ?array $plugins_cache = null;
+    private ?array $themes_cache = null;
+    private ?string $livecanvas_menu_slug_cache = null;
+    private array $theme_candidates_cache = [];
+
     public function get_snapshot(): array {
+        if ($this->snapshot_cache !== null) {
+            return $this->snapshot_cache;
+        }
+
         $current_theme = wp_get_theme();
 
-        return [
+        $this->snapshot_cache = [
             'livecanvas_installed'    => $this->is_plugin_installed('livecanvas'),
             'livecanvas_active'       => $this->is_livecanvas_active(),
             'livecanvas_plugin_file'  => $this->find_plugin_file_by_slug('livecanvas'),
@@ -25,6 +36,8 @@ final class LCFA_Environment {
             'picostrap_candidates'    => $this->find_theme_candidates('picostrap'),
             'picowind_candidates'     => $this->find_theme_candidates('picowind'),
         ];
+
+        return $this->snapshot_cache;
     }
 
     public function is_livecanvas_active(): bool {
@@ -48,22 +61,34 @@ final class LCFA_Environment {
     }
 
     public function find_plugin_file_by_slug(string $slug): ?string {
+        if (array_key_exists($slug, $this->plugin_file_cache)) {
+            return $this->plugin_file_cache[$slug];
+        }
+
         $this->load_plugin_api();
 
-        foreach (get_plugins() as $file => $data) {
+        foreach ($this->get_plugins_index() as $file => $data) {
             $directory = dirname($file);
             $filename  = basename($file, '.php');
             $textdomain = $data['TextDomain'] ?? '';
 
             if ($directory === $slug || $filename === $slug || $textdomain === $slug) {
+                $this->plugin_file_cache[$slug] = $file;
+
                 return $file;
             }
         }
+
+        $this->plugin_file_cache[$slug] = null;
 
         return null;
     }
 
     public function get_livecanvas_menu_slug(): ?string {
+        if ($this->livecanvas_menu_slug_cache !== null) {
+            return $this->livecanvas_menu_slug_cache;
+        }
+
         global $menu;
 
         if (!is_array($menu)) {
@@ -79,9 +104,13 @@ final class LCFA_Environment {
             $slug  = (string) $item[2];
 
             if ($label !== '' && (stripos($label, 'livecanvas') !== false || stripos($slug, 'livecanvas') !== false)) {
+                $this->livecanvas_menu_slug_cache = $slug;
+
                 return $slug;
             }
         }
+
+        $this->livecanvas_menu_slug_cache = '';
 
         return null;
     }
@@ -157,7 +186,11 @@ final class LCFA_Environment {
     }
 
     public function find_theme_candidates(string $family): array {
-        $themes     = wp_get_themes();
+        if (array_key_exists($family, $this->theme_candidates_cache)) {
+            return $this->theme_candidates_cache[$family];
+        }
+
+        $themes     = $this->get_themes_index();
         $candidates = [];
 
         foreach ($themes as $stylesheet => $theme) {
@@ -194,7 +227,9 @@ final class LCFA_Environment {
             return $left['is_child'] ? -1 : 1;
         });
 
-        return array_values($candidates);
+        $this->theme_candidates_cache[$family] = array_values($candidates);
+
+        return $this->theme_candidates_cache[$family];
     }
 
     public function get_preferred_theme_stylesheet(string $family): ?string {
@@ -213,5 +248,25 @@ final class LCFA_Environment {
         if (!function_exists('get_plugins') || !function_exists('is_plugin_active')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
+    }
+
+    private function get_plugins_index(): array {
+        if ($this->plugins_cache !== null) {
+            return $this->plugins_cache;
+        }
+
+        $this->plugins_cache = get_plugins();
+
+        return $this->plugins_cache;
+    }
+
+    private function get_themes_index(): array {
+        if ($this->themes_cache !== null) {
+            return $this->themes_cache;
+        }
+
+        $this->themes_cache = wp_get_themes();
+
+        return $this->themes_cache;
     }
 }

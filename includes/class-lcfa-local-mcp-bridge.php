@@ -3,6 +3,8 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Local_MCP_Bridge {
+    private const STATUS_TTL = 30;
+
     private LCFA_Environment $environment;
     private ?array $status_cache = null;
 
@@ -12,6 +14,13 @@ final class LCFA_Local_MCP_Bridge {
 
     public function get_status(): array {
         if ($this->status_cache !== null) {
+            return $this->status_cache;
+        }
+
+        $cached = get_transient($this->get_status_cache_key());
+        if (is_array($cached)) {
+            $this->status_cache = $cached;
+
             return $this->status_cache;
         }
 
@@ -53,6 +62,8 @@ final class LCFA_Local_MCP_Bridge {
             'rest_base'       => rest_url('lcfa/v1/'),
             'message'         => $message,
         ];
+
+        set_transient($this->get_status_cache_key(), $this->status_cache, self::STATUS_TTL);
 
         return $this->status_cache;
     }
@@ -117,6 +128,10 @@ final class LCFA_Local_MCP_Bridge {
 
     private function get_cli_script_path(): string {
         return LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js';
+    }
+
+    private function get_status_cache_key(): string {
+        return 'lcfa_local_mcp_status_' . md5(home_url('/') . '|' . LCFA_VERSION);
     }
 
     private function resolve_node_binary(): string {

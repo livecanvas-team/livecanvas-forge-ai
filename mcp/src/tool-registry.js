@@ -134,7 +134,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas Forge command through the plugin contract.',
+      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -575,17 +575,18 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
 }
 
 async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {
-  const response = await client.runCommand(argumentsMap)
+  const hydratedArguments = await hydrateFrameworkArgument(argumentsMap, client)
+  const response = await client.runCommand(hydratedArguments)
   const payload = unwrapResultEnvelope(response)
 
-  if (!shouldAutoCompilePicostrap(argumentsMap, payload) || !picostrapCompiler) {
+  if (!shouldAutoCompilePicostrap(hydratedArguments, payload) || !picostrapCompiler) {
     return response
   }
 
   try {
     const compileResult = await picostrapCompiler.buildBundle({
-      force: argumentsMap.force === true,
-      label: argumentsMap.label || 'design_system_compose_auto_apply'
+      force: hydratedArguments.force === true,
+      label: hydratedArguments.label || 'design_system_compose_auto_apply'
     })
     const merged = mergeCommandAndCompileResults(payload, compileResult)
     return wrapResultEnvelope(response, merged)
@@ -603,6 +604,37 @@ async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {
     merged.summary = merged.summary || 'Picostrap design system applied, but the bundle was not compiled automatically.'
 
     return wrapResultEnvelope(response, merged)
+  }
+}
+
+async function hydrateFrameworkArgument(argumentsMap, client) {
+  if (!argumentsMap || typeof argumentsMap !== 'object') {
+    return argumentsMap
+  }
+
+  if (argumentsMap.framework) {
+    return argumentsMap
+  }
+
+  try {
+    const snapshotResponse = await client.getSnapshot()
+    const snapshotPayload = snapshotResponse && typeof snapshotResponse === 'object' && snapshotResponse.snapshot && typeof snapshotResponse.snapshot === 'object'
+      ? snapshotResponse.snapshot
+      : snapshotResponse
+    const framework = snapshotPayload && typeof snapshotPayload === 'object'
+      ? String(snapshotPayload.detected_framework || '')
+      : ''
+
+    if (framework === '') {
+      return argumentsMap
+    }
+
+    return {
+      ...argumentsMap,
+      framework
+    }
+  } catch (error) {
+    return argumentsMap
   }
 }
 

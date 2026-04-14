@@ -7,6 +7,9 @@ final class LCFA_Context_Builder {
     private LCFA_Inventory $inventory;
     private ?LCFA_WindPress_Bridge $windpress_bridge;
     private ?LCFA_Local_MCP_Bridge $local_mcp_bridge;
+    private ?array $mcp_status_cache = null;
+    private ?array $bootstrap_payload_cache = null;
+    private ?array $windpress_context_cache = null;
 
     public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, ?LCFA_WindPress_Bridge $windpress_bridge = null, ?LCFA_Local_MCP_Bridge $local_mcp_bridge = null) {
         $this->environment      = $environment;
@@ -184,6 +187,10 @@ final class LCFA_Context_Builder {
     }
 
     public function get_mcp_status(): array {
+        if ($this->mcp_status_cache !== null) {
+            return $this->mcp_status_cache;
+        }
+
         $connections = LCFA_Settings::get_connections();
         $snapshot    = $this->environment->get_snapshot();
         $local_bridge_status = $this->local_mcp_bridge
@@ -195,7 +202,7 @@ final class LCFA_Context_Builder {
                 'message'         => __('Local MCP bridge is not configured.', 'livecanvas-forge-ai'),
             ];
 
-        return [
+        $this->mcp_status_cache = [
             'enabled'          => (bool) $connections['mcp_enabled'],
             'host'             => $connections['mcp_host'],
             'port'             => (int) $connections['mcp_port'],
@@ -217,9 +224,15 @@ final class LCFA_Context_Builder {
                 'latte_templates'   => $this->has_latte_templates(),
             ],
         ];
+
+        return $this->mcp_status_cache;
     }
 
     public function get_bootstrap_payload(): array {
+        if ($this->bootstrap_payload_cache !== null) {
+            return $this->bootstrap_payload_cache;
+        }
+
         $mcp_status  = $this->get_mcp_status();
         $snapshot    = $this->environment->get_snapshot();
         $connections = LCFA_Settings::get_connections();
@@ -242,7 +255,7 @@ final class LCFA_Context_Builder {
             ? ['LCFA_WP_ROOT=' . $common['wp_root']]
             : [];
 
-        return [
+        $this->bootstrap_payload_cache = [
             'common' => $common,
             'clients'=> [
                 'codex' => [
@@ -282,6 +295,8 @@ final class LCFA_Context_Builder {
                 ],
             ],
         ];
+
+        return $this->bootstrap_payload_cache;
     }
 
     private function get_post_context(int $post_id): ?array {
@@ -380,6 +395,10 @@ final class LCFA_Context_Builder {
     }
 
     private function get_windpress_context(): array {
+        if ($this->windpress_context_cache !== null) {
+            return $this->windpress_context_cache;
+        }
+
         if (!$this->windpress_bridge) {
             return [];
         }
@@ -387,10 +406,12 @@ final class LCFA_Context_Builder {
         $status = $this->windpress_bridge->get_status();
 
         if (empty($status['available'])) {
-            return $status;
+            $this->windpress_context_cache = $status;
+
+            return $this->windpress_context_cache;
         }
 
-        return [
+        $this->windpress_context_cache = [
             'installed'        => $status['installed'],
             'active'           => $status['active'],
             'available'        => $status['available'],
@@ -402,6 +423,8 @@ final class LCFA_Context_Builder {
             'providers'        => array_slice($status['providers'] ?? [], 0, 20),
             'volume_handlers'  => $status['volume_handlers'] ?? [],
         ];
+
+        return $this->windpress_context_cache;
     }
 
     private function get_acf_supported_post_types(): array {

@@ -193,6 +193,8 @@ $legacy_saved_bundle = $builder->build([
 
 lcfa_assert_same('/Users/commander/Studio/consultala', $legacy_saved_bundle['workspace_root'] ?? '', 'legacy saved runtime roots should be replaced with the derived local workspace root');
 lcfa_assert_same('/Users/commander/Studio/consultala', $legacy_saved_bundle['environment']['LCFA_WP_ROOT'] ?? '', 'legacy saved runtime roots should not leak into the generated environment');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), 'codex mcp add livecanvas-forge') !== false, 'codex bundles should expose the registration shortcut');
+lcfa_assert_same((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), (string) ($legacy_saved_bundle['copy_command_string'] ?? ''), 'codex bundles should prefer copying the Codex shortcut, not the raw MCP command');
 
 $runtime_only_script = <<<'PHP'
 <?php
@@ -355,9 +357,73 @@ $opencode_smoke = $presenter->build([
 lcfa_assert_same('Run smoke test', $opencode_smoke['active_panel']['primary_cta']['label'] ?? '', 'smoke test CTA should remain explicit');
 lcfa_assert_same('Return here and run the smoke test', $opencode_smoke['visual_help']['items'][2]['title'] ?? '', 'OpenCode smoke step should keep the return-to-WordPress cue');
 
+$codex_bundle_view = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'generate_bundle',
+    ],
+    'bundle' => [
+        'client'              => 'codex',
+        'mode'                => 'local',
+        'workspace_root'      => '/Users/commander/Studio/consultala',
+        'command_string'      => '\'node\' \'/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js\' \'--transport=stdio\'',
+        'copy_command_string' => "codex mcp add livecanvas-forge \\\n  --env LCFA_REST_BASE='http://localhost:8887/wp-json/lcfa/v1/' \\\n  --env LCFA_MCP_TOKEN='test-token' \\\n  --env LCFA_WP_ROOT='/Users/commander/Studio/consultala' \\\n  -- 'node' '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js' '--transport=stdio'",
+        'shortcut_title'      => 'Codex shortcut',
+        'shortcut_command'    => "codex mcp add livecanvas-forge \\\n  --env LCFA_REST_BASE='http://localhost:8887/wp-json/lcfa/v1/' \\\n  --env LCFA_MCP_TOKEN='test-token' \\\n  --env LCFA_WP_ROOT='/Users/commander/Studio/consultala' \\\n  -- 'node' '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js' '--transport=stdio'",
+        'workspace_files'     => [['path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
+        'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ],
+]);
+
+lcfa_assert_same('Copy Codex shortcut', $codex_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex local flow should elevate the registration shortcut to the primary action');
+lcfa_assert_same('Download Codex helper', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should still offer the helper script as a fallback');
+lcfa_assert_same('What to do in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific visual strip');
+
+$codex_smoke = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'smoke_test',
+    ],
+    'bundle' => [
+        'client'         => 'codex',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ],
+]);
+
+lcfa_assert_same('Ready to verify Codex?', $codex_smoke['active_panel']['title'] ?? '', 'Codex smoke-test step should explain that Codex registration must happen first');
+lcfa_assert_true(strpos((string) ($codex_smoke['active_panel']['description'] ?? ''), 'Codex shortcut') !== false, 'Codex smoke-test description should mention the shortcut explicitly');
+
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin_instance = $admin_reflection->newInstanceWithoutConstructor();
+$default_tab_method = new ReflectionMethod('LCFA_Admin', 'get_default_dashboard_tab');
+$post_setup_redirect_method = new ReflectionMethod('LCFA_Admin', 'get_post_setup_redirect_tab');
+$hero_content_method = new ReflectionMethod('LCFA_Admin', 'get_dashboard_hero_content');
+$reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconfigured_connections');
 $visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
+
+lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
+    'completed' => true,
+]), 'completed setup should default the dashboard to Connections');
+lcfa_assert_same('setup', $default_tab_method->invoke($admin_instance, [
+    'completed' => false,
+]), 'incomplete setup should still default the dashboard to Setup');
+lcfa_assert_same('connections', $post_setup_redirect_method->invoke($admin_instance), 'setup completion should redirect to Connections');
+
+$genesis_hero = $hero_content_method->invoke($admin_instance, 'genesis');
+lcfa_assert_same('Project Brief & Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should explain the real purpose of the tab');
+lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'after your coding agent connection is ready') !== false, 'genesis hero subtitle should position Genesis after Connections');
+
 ob_start();
 $visual_help_method->invoke($admin_instance, $opencode_fast_path);
 $visual_help_markup = (string) ob_get_clean();
@@ -399,5 +465,24 @@ $ready_view = $presenter->build([
 
 lcfa_assert_same('ready', $ready_view['mode'] ?? '', 'presenter should switch to ready mode after a passing smoke test');
 lcfa_assert_same('Run checks', $ready_view['ready_panel']['primary_cta']['label'] ?? '', 'ready state should expose Run checks as primary action');
+lcfa_assert_same('Change coding agent', $ready_view['ready_panel']['secondary_ctas'][1]['label'] ?? '', 'ready state should expose an explicit coding-agent reset action');
+
+$reconfigured_connections = $reconfigure_connections_method->invoke($admin_instance, [
+    'preferred_client'            => 'opencode',
+    'connection_mode'             => 'local',
+    'workspace_root'              => '/Users/commander/Studio/consultala',
+    'connection_status'           => 'ready',
+    'connection_last_verified_at' => '2026-04-13 21:00:00',
+    'connection_last_error'       => 'old error',
+    'connection_current_step'     => 'ready',
+]);
+
+lcfa_assert_same('', $reconfigured_connections['preferred_client'] ?? '', 'reconfiguring should clear the previously selected coding agent');
+lcfa_assert_same('local', $reconfigured_connections['connection_mode'] ?? '', 'reconfiguring should preserve the chosen mode');
+lcfa_assert_same('/Users/commander/Studio/consultala', $reconfigured_connections['workspace_root'] ?? '', 'reconfiguring should preserve the known workspace root');
+lcfa_assert_same('', $reconfigured_connections['connection_status'] ?? '', 'reconfiguring should clear the ready status');
+lcfa_assert_same('', $reconfigured_connections['connection_last_verified_at'] ?? '', 'reconfiguring should clear the verification timestamp');
+lcfa_assert_same('', $reconfigured_connections['connection_last_error'] ?? '', 'reconfiguring should clear the last error state');
+lcfa_assert_same('choose_client', $reconfigured_connections['connection_current_step'] ?? '', 'reconfiguring should reopen the wizard from choose_client');
 
 echo "PASS\n";

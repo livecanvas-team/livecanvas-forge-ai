@@ -33,6 +33,25 @@ function createNoopPicostrapCompiler() {
   }
 }
 
+function createFrameworkAwareClient(framework = 'picowind') {
+  const calls = []
+
+  return {
+    calls,
+    async getSnapshot() {
+      return {
+        snapshot: {
+          detected_framework: framework
+        }
+      }
+    },
+    async runCommand(argumentsMap = {}) {
+      calls.push(argumentsMap)
+      return { ok: true, result: { ok: true } }
+    }
+  }
+}
+
 function getArrayBranches(schema, matches = []) {
   if (!schema || typeof schema !== 'object') {
     return matches
@@ -82,6 +101,23 @@ async function run() {
   assert.ok(runLcCommand, 'run_lc_command should be registered')
   assert.ok(runLcCommand.inputSchema.properties.auto_apply, 'run_lc_command should expose auto_apply in its schema')
   assert.ok(runLcCommand.inputSchema.properties.prompt, 'run_lc_command should expose prompt in its schema')
+
+  const frameworkClient = createFrameworkAwareClient('picowind')
+  const frameworkRegistry = createToolRegistry(
+    frameworkClient,
+    createNoopThemeFiles(),
+    createNoopWindPressCompiler(),
+    createNoopPicostrapCompiler()
+  )
+
+  await frameworkRegistry.invoke('run_lc_command', {
+    action: 'page_upsert',
+    title: 'Pricing',
+    content: '<main></main>'
+  })
+
+  assert.equal(frameworkClient.calls.length, 1, 'run_lc_command should call the plugin once')
+  assert.equal(frameworkClient.calls[0].framework, 'picowind', 'run_lc_command should inject the active framework when it is missing from the payload')
 }
 
 run()
