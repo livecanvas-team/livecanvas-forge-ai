@@ -87,10 +87,73 @@ final class LCFA_Admin {
         }
 
         wp_enqueue_style(
+            'lcfa-prism',
+            LCFA_URL . 'assets/vendor/prism/prism-tomorrow.min.css',
+            [],
+            '1.29.0'
+        );
+
+        wp_enqueue_style(
             'lcfa-admin',
             LCFA_URL . 'assets/admin.css',
-            [],
+            ['lcfa-prism'],
             LCFA_VERSION
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-core',
+            LCFA_URL . 'assets/vendor/prism/prism-core.min.js',
+            [],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-markup',
+            LCFA_URL . 'assets/vendor/prism/prism-markup.min.js',
+            ['lcfa-prism-core'],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-clike',
+            LCFA_URL . 'assets/vendor/prism/prism-clike.min.js',
+            ['lcfa-prism-core'],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-javascript',
+            LCFA_URL . 'assets/vendor/prism/prism-javascript.min.js',
+            ['lcfa-prism-clike'],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-bash',
+            LCFA_URL . 'assets/vendor/prism/prism-bash.min.js',
+            ['lcfa-prism-core'],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-prism-json',
+            LCFA_URL . 'assets/vendor/prism/prism-json.min.js',
+            ['lcfa-prism-javascript'],
+            '1.29.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'lcfa-admin-script',
+            LCFA_URL . 'assets/admin.js',
+            ['lcfa-prism-markup', 'lcfa-prism-bash', 'lcfa-prism-json'],
+            LCFA_VERSION,
+            true
         );
     }
 
@@ -1602,8 +1665,7 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-cta-row lcfa-cta-row--stacked">';
         if (($primary_cta['action'] ?? '') === 'copy_command' && $copy_text !== '') {
-            $copied_label = esc_js(__('Copied', 'livecanvas-forge-ai'));
-            echo '<button class="button button-primary" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" onclick="if(navigator.clipboard){navigator.clipboard.writeText(this.getAttribute(\'data-lcfa-copy-text\'));this.textContent=\'' . $copied_label . '\';}">' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<button class="button button-primary" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</button>';
         } elseif ($show_workspace_install && ($primary_cta['action'] ?? '') === 'install') {
             echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
             wp_nonce_field('lcfa_install_client_bundle');
@@ -1646,8 +1708,7 @@ final class LCFA_Admin {
 
             if ($action === 'copy_command' && $copy_text !== '') {
                 $copy_label = $label ?: __('Copy command', 'livecanvas-forge-ai');
-                $copied_label = esc_js(__('Copied', 'livecanvas-forge-ai'));
-                echo '<button class="button" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" onclick="if(navigator.clipboard){navigator.clipboard.writeText(this.getAttribute(\'data-lcfa-copy-text\'));this.textContent=\'' . $copied_label . '\';}">' . esc_html($copy_label) . '</button>';
+                echo '<button class="button" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html($copy_label) . '</button>';
             }
         }
         echo '</div>';
@@ -1747,7 +1808,11 @@ final class LCFA_Admin {
         if (!empty($bundle['shortcut_command'])) {
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html((string) $bundle['shortcut_command']) . '</code></pre></div>';
+            $this->render_code_block((string) $bundle['shortcut_command'], [
+                'language'   => 'bash',
+                'label'      => __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
         }
 
@@ -1772,17 +1837,29 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html((string) ($bundle['command_string'] ?? '')) . '</code></pre></div>';
+        $this->render_code_block((string) ($bundle['command_string'] ?? ''), [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy command', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html($this->build_environment_block((array) ($bundle['environment'] ?? []))) . '</code></pre></div>';
+        $this->render_code_block($this->build_environment_block((array) ($bundle['environment'] ?? [])), [
+            'language'   => 'bash',
+            'label'      => __('Environment', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy env', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Smoke test', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html((string) ($bundle['smoke_test_command'] ?? '')) . '</code></pre></div>';
+        $this->render_code_block((string) ($bundle['smoke_test_command'] ?? ''), [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy smoke test', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '</div>';
@@ -1868,17 +1945,29 @@ final class LCFA_Admin {
         echo '<li>' . esc_html(sprintf(__('MCP endpoint: %s', 'livecanvas-forge-ai'), (string) ($mcp_status['endpoint'] ?? ''))) . '</li>';
         echo '<li>' . esc_html__('Execution endpoints: /command/actions, /command/suggest, /command, /mcp/status, /mcp/local-status, /mcp/bootstrap.', 'livecanvas-forge-ai') . '</li>';
         echo '</ul>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html($common_bootstrap) . '</code></pre></div>';
+        $this->render_code_block($common_bootstrap, [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy bootstrap', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Preferred client bootstrap', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html((string) ($preferred_bootstrap['command'] ?? '') . "\n\n" . implode("\n", (array) ($preferred_bootstrap['env'] ?? []))) . '</code></pre></div>';
+        $this->render_code_block((string) ($preferred_bootstrap['command'] ?? '') . "\n\n" . implode("\n", (array) ($preferred_bootstrap['env'] ?? [])), [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy client bootstrap', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Example command request', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html("POST " . rest_url('lcfa/v1/command') . "\nContent-Type: application/json\n\n" . $command_example) . '</code></pre></div>';
+        $this->render_code_block("POST " . rest_url('lcfa/v1/command') . "\nContent-Type: application/json\n\n" . $command_example, [
+            'language'   => 'bash',
+            'label'      => __('HTTP', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy request', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
 
         echo '</details>';
@@ -1948,23 +2037,39 @@ final class LCFA_Admin {
             if (!empty($guide['shortcut_title']) && !empty($guide['shortcut'])) {
                 echo '<div class="lcfa-agent-guide__window">';
                 echo '<h3>' . esc_html($guide['shortcut_title']) . '</h3>';
-                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['shortcut']) . '</code></pre></div>';
+                $this->render_code_block($guide['shortcut'], [
+                    'language'   => 'bash',
+                    'label'      => __('Shell', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
+                ]);
                 echo '</div>';
             }
 
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['command']) . '</code></pre></div>';
+            $this->render_code_block($guide['command'], [
+                'language'   => 'bash',
+                'label'      => __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy command', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
 
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['environment']) . '</code></pre></div>';
+            $this->render_code_block($guide['environment'], [
+                'language'   => 'bash',
+                'label'      => __('Environment', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy env', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
 
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html__('Quick terminal test', 'livecanvas-forge-ai') . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html($guide['test_command']) . '</code></pre></div>';
+            $this->render_code_block($guide['test_command'], [
+                'language'   => 'bash',
+                'label'      => __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy test command', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
 
             echo '</div>';
@@ -2958,7 +3063,11 @@ final class LCFA_Admin {
         if (!empty($result['data']) && is_array($result['data'])) {
             echo '<div class="lcfa-result-panel">';
             echo '<h3>' . esc_html__('Structured payload', 'livecanvas-forge-ai') . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html(wp_json_encode($result['data'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) . '</code></pre></div>';
+            $this->render_code_block(wp_json_encode($result['data'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
+                'language'   => 'json',
+                'label'      => __('JSON', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy payload', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
         }
 
@@ -2975,14 +3084,22 @@ final class LCFA_Admin {
             if ($result['existing_html'] !== '') {
                 echo '<div class="lcfa-result-panel">';
                 echo '<h3>' . esc_html__('Current content', 'livecanvas-forge-ai') . '</h3>';
-                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($result['existing_html']) . '</code></pre></div>';
+                $this->render_code_block($result['existing_html'], [
+                    'language'   => 'markup',
+                    'label'      => __('HTML', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy current HTML', 'livecanvas-forge-ai'),
+                ]);
                 echo '</div>';
             }
 
             if ($result['proposed_html'] !== '') {
                 echo '<div class="lcfa-result-panel">';
                 echo '<h3>' . esc_html__('Proposed content', 'livecanvas-forge-ai') . '</h3>';
-                echo '<div class="lcfa-code-block"><pre><code>' . esc_html($result['proposed_html']) . '</code></pre></div>';
+                $this->render_code_block($result['proposed_html'], [
+                    'language'   => 'markup',
+                    'label'      => __('HTML', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy proposed HTML', 'livecanvas-forge-ai'),
+                ]);
                 echo '</div>';
             }
 
@@ -3047,7 +3164,11 @@ final class LCFA_Admin {
         if ($payload) {
             echo '<div class="lcfa-result-panel">';
             echo '<h3>' . esc_html__('Suggested payload', 'livecanvas-forge-ai') . '</h3>';
-            echo '<div class="lcfa-code-block"><pre><code>' . esc_html(wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) . '</code></pre></div>';
+            $this->render_code_block(wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
+                'language'   => 'json',
+                'label'      => __('JSON', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy payload', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
         }
 
@@ -3113,9 +3234,47 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-result-panel">';
         echo '<h3>' . esc_html__('Structured payload', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-code-block"><pre><code>' . esc_html(wp_json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) . '</code></pre></div>';
+        $this->render_code_block(wp_json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
+            'language'   => 'json',
+            'label'      => __('JSON', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy payload', 'livecanvas-forge-ai'),
+        ]);
         echo '</div>';
         echo '</section>';
+    }
+
+    private function render_code_block(string $code, array $options = []): void {
+        $language = sanitize_html_class((string) ($options['language'] ?? 'bash'));
+        if ($language === '') {
+            $language = 'bash';
+        }
+
+        $label = (string) ($options['label'] ?? $this->get_code_block_label($language));
+        $copy_text = (string) ($options['copy_text'] ?? $code);
+        $copy_label = (string) ($options['copy_label'] ?? __('Copy', 'livecanvas-forge-ai'));
+        $copied_label = (string) ($options['copied_label'] ?? __('Copied', 'livecanvas-forge-ai'));
+
+        echo '<div class="lcfa-code-block" data-lcfa-code-language="' . esc_attr($language) . '">';
+        echo '<div class="lcfa-code-block__head">';
+        echo '<span class="lcfa-code-block__label">' . esc_html($label) . '</span>';
+        if ($copy_text !== '') {
+            echo '<button class="lcfa-code-block__copy" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr($copied_label) . '">' . esc_html($copy_label) . '</button>';
+        }
+        echo '</div>';
+        echo '<pre class="language-' . esc_attr($language) . '"><code class="language-' . esc_attr($language) . '">' . esc_html($code) . '</code></pre>';
+        echo '</div>';
+    }
+
+    private function get_code_block_label(string $language): string {
+        switch ($language) {
+            case 'json':
+                return __('JSON', 'livecanvas-forge-ai');
+            case 'markup':
+                return __('HTML', 'livecanvas-forge-ai');
+            case 'bash':
+            default:
+                return __('Shell', 'livecanvas-forge-ai');
+        }
     }
 
     private function render_inventory_panel(array $inventory): void {

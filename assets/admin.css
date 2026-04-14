@@ -1633,6 +1633,8 @@
 }
 
 .lcfa-admin .lcfa-code-block {
+    display: grid;
+    gap: 12px;
     padding: 14px;
     border-radius: 16px;
     border: 1px solid rgba(169, 171, 203, 0.12);
@@ -1640,7 +1642,56 @@
     overflow: auto;
 }
 
-.lcfa-admin .lcfa-code-block pre {
+.lcfa-admin .lcfa-code-block__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-code-block__label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--lcfa-text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-code-block__copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(169, 171, 203, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.lcfa-admin .lcfa-code-block__copy:hover {
+    border-color: rgba(38, 198, 218, 0.26);
+    background: rgba(38, 198, 218, 0.08);
+    transform: translateY(-1px);
+}
+
+.lcfa-admin .lcfa-code-block__copy:focus-visible {
+    outline: 2px solid rgba(38, 198, 218, 0.34);
+    outline-offset: 2px;
+}
+
+.lcfa-admin .lcfa-code-block pre,
+.lcfa-admin .lcfa-code-block pre[class*="language-"] {
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
@@ -1648,6 +1699,63 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
     line-height: 1.65;
+    background: transparent;
+}
+
+.lcfa-admin .lcfa-code-block code[class*="language-"] {
+    background: transparent;
+    font-family: inherit;
+    font-size: inherit;
+    text-shadow: none;
+}
+
+.lcfa-admin .lcfa-code-block .token.comment,
+.lcfa-admin .lcfa-code-block .token.prolog,
+.lcfa-admin .lcfa-code-block .token.doctype,
+.lcfa-admin .lcfa-code-block .token.cdata {
+    color: #8f97bf;
+}
+
+.lcfa-admin .lcfa-code-block .token.punctuation {
+    color: #d6daf5;
+}
+
+.lcfa-admin .lcfa-code-block .token.property,
+.lcfa-admin .lcfa-code-block .token.tag,
+.lcfa-admin .lcfa-code-block .token.boolean,
+.lcfa-admin .lcfa-code-block .token.number,
+.lcfa-admin .lcfa-code-block .token.constant,
+.lcfa-admin .lcfa-code-block .token.symbol,
+.lcfa-admin .lcfa-code-block .token.deleted {
+    color: #ff7ab8;
+}
+
+.lcfa-admin .lcfa-code-block .token.selector,
+.lcfa-admin .lcfa-code-block .token.attr-name,
+.lcfa-admin .lcfa-code-block .token.string,
+.lcfa-admin .lcfa-code-block .token.char,
+.lcfa-admin .lcfa-code-block .token.builtin,
+.lcfa-admin .lcfa-code-block .token.inserted {
+    color: #8cf7b6;
+}
+
+.lcfa-admin .lcfa-code-block .token.operator,
+.lcfa-admin .lcfa-code-block .token.entity,
+.lcfa-admin .lcfa-code-block .token.url,
+.lcfa-admin .lcfa-code-block .language-css .token.string,
+.lcfa-admin .lcfa-code-block .style .token.string {
+    color: #35d0f2;
+}
+
+.lcfa-admin .lcfa-code-block .token.atrule,
+.lcfa-admin .lcfa-code-block .token.attr-value,
+.lcfa-admin .lcfa-code-block .token.keyword {
+    color: #ffd166;
+}
+
+.lcfa-admin .lcfa-code-block .token.function,
+.lcfa-admin .lcfa-code-block .token.class-name {
+    color: #9d8cff;
 }
 
 .lcfa-admin .lcfa-brand-grid {
