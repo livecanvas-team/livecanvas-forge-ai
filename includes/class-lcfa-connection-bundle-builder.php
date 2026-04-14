@@ -436,14 +436,49 @@ final class LCFA_Connection_Bundle_Builder {
 
     private function build_codex_register_command(array $command, array $environment): string {
         $lines = [
-            'codex mcp add livecanvas-forge \\',
+            'LCFA_CODEX_BIN=""',
+            'if command -v codex >/dev/null 2>&1; then',
+            '  LCFA_CODEX_BIN="$(command -v codex)"',
+            'elif [ -x "/Applications/Codex.app/Contents/Resources/codex" ]; then',
+            '  LCFA_CODEX_BIN="/Applications/Codex.app/Contents/Resources/codex"',
+            'fi',
+            '',
+            'if [ -n "$LCFA_CODEX_BIN" ]; then',
+            '  "$LCFA_CODEX_BIN" mcp add livecanvas-forge \\',
         ];
 
         foreach ($environment as $key => $value) {
-            $lines[] = '  --env ' . $key . '=' . $this->quote_shell_value($value) . ' \\';
+            $lines[] = '    --env ' . $key . '=' . $this->quote_shell_value($value) . ' \\';
         }
 
-        $lines[] = '  -- ' . $this->join_shell_tokens($command);
+        $lines[] = '    -- ' . $this->join_shell_tokens($command);
+        $lines[] = 'else';
+        $lines[] = "  cat <<'EOF'";
+        $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';
+        $lines[] = 'Add this MCP server to ~/.codex/config.toml, then reopen Codex:';
+        $lines[] = '';
+        $lines[] = $this->build_codex_config_snippet($command, $environment);
+        $lines[] = 'EOF';
+        $lines[] = '  exit 1';
+        $lines[] = 'fi';
+
+        return implode("\n", $lines);
+    }
+
+    private function build_codex_config_snippet(array $command, array $environment): string {
+        $command_bin = $command[0] ?? 'node';
+        $args = array_slice($command, 1);
+        $lines = [
+            '[mcp_servers.livecanvas-forge]',
+            'command = ' . $this->quote_toml_string($command_bin),
+            'args = [' . implode(', ', array_map([$this, 'quote_toml_string'], $args)) . ']',
+            '',
+            '[mcp_servers.livecanvas-forge.env]',
+        ];
+
+        foreach ($environment as $key => $value) {
+            $lines[] = $key . ' = ' . $this->quote_toml_string($value);
+        }
 
         return implode("\n", $lines);
     }
@@ -511,5 +546,9 @@ final class LCFA_Connection_Bundle_Builder {
 
     private function quote_shell_value(string $value): string {
         return "'" . str_replace("'", "'\"'\"'", $value) . "'";
+    }
+
+    private function quote_toml_string(string $value): string {
+        return (string) wp_json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 }

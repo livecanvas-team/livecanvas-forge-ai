@@ -67,12 +67,12 @@ final class LCFA_Connection_Wizard_Presenter {
                     ? __('Write the client config in this workspace', 'livecanvas-forge-ai')
                     : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download the client bundle', 'livecanvas-forge-ai'))),
                 'body'    => $is_codex_local && !$local_writable
-                    ? __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, then return here for verification.', 'livecanvas-forge-ai')
+                    ? __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, and let it auto-detect the embedded Codex desktop CLI if codex is not in your PATH.', 'livecanvas-forge-ai')
                     : ($local_writable
                     ? __('Forge AI can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
                     : __('This browser runtime cannot write to the selected host workspace directly. Download the bundle, open the project in your coding agent, then return here for the smoke test.', 'livecanvas-forge-ai')),
                 'next'    => $is_codex_local
-                    ? __('After running the Codex shortcut, verify with codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai')
+                    ? __('After running the Codex shortcut, verify with codex mcp list or /Applications/Codex.app/Contents/Resources/codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai')
                     : __('After this step, come back here and run the smoke test.', 'livecanvas-forge-ai'),
             ];
         }
@@ -82,7 +82,7 @@ final class LCFA_Connection_Wizard_Presenter {
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
                 'title'   => $is_codex_local ? __('Verify the Codex registration', 'livecanvas-forge-ai') : __('Run the smoke test', 'livecanvas-forge-ai'),
                 'body'    => $is_codex_local
-                    ? __('Run the Codex shortcut first. Once codex mcp list shows livecanvas-forge, use the smoke test to verify that Forge AI is reachable from Codex.', 'livecanvas-forge-ai')
+                    ? __('Run the Codex shortcut first. Once codex mcp list, or the embedded Codex desktop CLI path, shows livecanvas-forge, use the smoke test to verify that Forge AI is reachable from Codex.', 'livecanvas-forge-ai')
                     : __('Use the generated bundle to verify that Forge AI can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
                 'next'    => $is_codex_local
                     ? __('A passing smoke test confirms that Codex can now call the livecanvas-forge tools.', 'livecanvas-forge-ai')
@@ -179,7 +179,7 @@ final class LCFA_Connection_Wizard_Presenter {
                 return [
                     'title'       => $this->is_codex_local($bundle) ? __('Ready to verify Codex?', 'livecanvas-forge-ai') : __('Ready to verify the connection?', 'livecanvas-forge-ai'),
                     'description' => $this->is_codex_local($bundle)
-                        ? __('Run the smoke test after you have executed the Codex shortcut and Codex can see livecanvas-forge.', 'livecanvas-forge-ai')
+                        ? __('Run the smoke test after you have executed the Codex shortcut and verified that Codex can see livecanvas-forge.', 'livecanvas-forge-ai')
                         : __('Run the smoke test after the client bundle is in place.', 'livecanvas-forge-ai'),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
@@ -306,12 +306,12 @@ final class LCFA_Connection_Wizard_Presenter {
                 'items' => [
                     [
                         'title' => __('Copy and run the Codex shortcut', 'livecanvas-forge-ai'),
-                        'caption' => __('Execute the generated codex mcp add command once from this same project root.', 'livecanvas-forge-ai'),
+                        'caption' => __('Execute the generated install command once from this same project root. It auto-detects the embedded Codex desktop CLI.', 'livecanvas-forge-ai'),
                         'tone' => 'project',
                     ],
                     [
                         'title' => __('Check codex mcp list', 'livecanvas-forge-ai'),
-                        'caption' => __('Make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
+                        'caption' => __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
                         'tone' => 'mcp',
                     ],
                     [

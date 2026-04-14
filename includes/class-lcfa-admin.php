@@ -1677,7 +1677,7 @@ final class LCFA_Admin {
             echo '<strong>' . esc_html__('Browser write disabled for this workspace', 'livecanvas-forge-ai') . '</strong>';
             echo '<p>' . esc_html($this->get_workspace_write_notice($workspace_write_state)) . '</p>';
             if ((string) ($bundle['client'] ?? '') === 'codex' && (string) ($bundle['mode'] ?? 'local') === 'local') {
-                echo '<p>' . esc_html__('Recommended Codex flow: copy the Codex shortcut, run it once in a terminal from this workspace, confirm with codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai') . '</p>';
+                echo '<p>' . esc_html__('Recommended Codex flow: copy the Codex shortcut, run it once in a terminal from this workspace, let it auto-detect the embedded Codex desktop CLI if codex is not in PATH, confirm with codex mcp list or /Applications/Codex.app/Contents/Resources/codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai') . '</p>';
             } else {
                 echo '<p>' . esc_html__('Recommended local flow: download the client bundle, open the project in your coding agent, let the local MCP bridge start once, then come back here and run the smoke test.', 'livecanvas-forge-ai') . '</p>';
             }
@@ -2014,9 +2014,9 @@ final class LCFA_Admin {
                 'intro'          => __('Use this if Codex is your main coding agent. The easiest path is to register the MCP server once, then let Codex call the plugin tools from the current workspace.', 'livecanvas-forge-ai'),
                 'steps'          => [
                     __('Open a terminal in the same workspace as your WordPress project.', 'livecanvas-forge-ai'),
-                    __('Run the Codex shortcut below, or add a new stdio MCP server manually.', 'livecanvas-forge-ai'),
+                    __('Run the Codex shortcut below. It auto-detects the embedded CLI in Codex.app, then falls back to a ~/.codex/config.toml snippet if needed.', 'livecanvas-forge-ai'),
                     __('Keep the server name as livecanvas-forge so it is easy to recognize later.', 'livecanvas-forge-ai'),
-                    __('Restart Codex if needed, then call get_snapshot as your first tool check.', 'livecanvas-forge-ai'),
+                    __('Restart Codex if needed, verify with codex mcp list or the embedded Codex CLI path, then call get_snapshot as your first tool check.', 'livecanvas-forge-ai'),
                 ],
                 'note'           => $wp_root_note,
                 'shortcut_title' => __('Codex shortcut', 'livecanvas-forge-ai'),
@@ -2104,15 +2104,63 @@ final class LCFA_Admin {
     }
 
     private function build_codex_register_command(array $client): string {
+        $command = trim((string) ($client['command'] ?? ''));
+        $environment = (array) ($client['env'] ?? []);
+
         $lines = [
-            'codex mcp add livecanvas-forge \\',
+            'LCFA_CODEX_BIN=""',
+            'if command -v codex >/dev/null 2>&1; then',
+            '  LCFA_CODEX_BIN="$(command -v codex)"',
+            'elif [ -x "/Applications/Codex.app/Contents/Resources/codex" ]; then',
+            '  LCFA_CODEX_BIN="/Applications/Codex.app/Contents/Resources/codex"',
+            'fi',
+            '',
+            'if [ -n "$LCFA_CODEX_BIN" ]; then',
+            '  "$LCFA_CODEX_BIN" mcp add livecanvas-forge \\',
+        ];
+
+        foreach ($environment as $entry) {
+            $lines[] = '    --env ' . (string) $entry . ' \\';
+        }
+
+        $lines[] = '    -- ' . $command;
+        $lines[] = 'else';
+        $lines[] = "  cat <<'EOF'";
+        $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';
+        $lines[] = 'Add this MCP server to ~/.codex/config.toml, then reopen Codex:';
+        $lines[] = '';
+        $lines[] = $this->build_codex_config_snippet($client);
+        $lines[] = 'EOF';
+        $lines[] = '  exit 1';
+        $lines[] = 'fi';
+
+        return implode("\n", $lines);
+    }
+
+    private function build_codex_config_snippet(array $client): string {
+        $command = trim((string) ($client['command'] ?? ''));
+        $command_tokens = preg_split('/\s+/', $command, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $command_bin = $command_tokens[0] ?? 'node';
+        $args = array_slice($command_tokens, 1);
+        $lines = [
+            '[mcp_servers.livecanvas-forge]',
+            'command = ' . $this->quote_toml_string($command_bin),
+            'args = [' . implode(', ', array_map([$this, 'quote_toml_string'], $args)) . ']',
+            '',
+            '[mcp_servers.livecanvas-forge.env]',
         ];
 
         foreach ((array) ($client['env'] ?? []) as $entry) {
-            $lines[] = '  --env ' . (string) $entry . ' \\';
-        }
+            $parts = explode('=', (string) $entry, 2);
+            $key = trim((string) ($parts[0] ?? ''));
+            $value = (string) ($parts[1] ?? '');
 
-        $lines[] = '  -- ' . (string) ($client['command'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+
+            $lines[] = $key . ' = ' . $this->quote_toml_string($value);
+        }
 
         return implode("\n", $lines);
     }
@@ -2141,6 +2189,10 @@ final class LCFA_Admin {
 
     private function quote_shell_value(string $value): string {
         return "'" . str_replace("'", "'\"'\"'", $value) . "'";
+    }
+
+    private function quote_toml_string(string $value): string {
+        return (string) wp_json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     private function render_command_tab(array $settings, array $snapshot): void {

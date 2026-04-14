@@ -193,8 +193,12 @@ $legacy_saved_bundle = $builder->build([
 
 lcfa_assert_same('/Users/commander/Studio/consultala', $legacy_saved_bundle['workspace_root'] ?? '', 'legacy saved runtime roots should be replaced with the derived local workspace root');
 lcfa_assert_same('/Users/commander/Studio/consultala', $legacy_saved_bundle['environment']['LCFA_WP_ROOT'] ?? '', 'legacy saved runtime roots should not leak into the generated environment');
-lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), 'codex mcp add livecanvas-forge') !== false, 'codex bundles should expose the registration shortcut');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), 'mcp add livecanvas-forge') !== false, 'codex bundles should expose the registration shortcut');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex shortcut should auto-detect the desktop app CLI when codex is not in PATH');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex shortcut should include a config.toml fallback snippet');
 lcfa_assert_same((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), (string) ($legacy_saved_bundle['copy_command_string'] ?? ''), 'codex bundles should prefer copying the Codex shortcut, not the raw MCP command');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex helper script should auto-detect the desktop app CLI');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex helper script should include a config.toml fallback snippet');
 
 $runtime_only_script = <<<'PHP'
 <?php
@@ -411,6 +415,7 @@ $post_setup_redirect_method = new ReflectionMethod('LCFA_Admin', 'get_post_setup
 $hero_content_method = new ReflectionMethod('LCFA_Admin', 'get_dashboard_hero_content');
 $reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconfigured_connections');
 $visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
+$admin_codex_command_method = new ReflectionMethod('LCFA_Admin', 'build_codex_register_command');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -423,6 +428,17 @@ lcfa_assert_same('connections', $post_setup_redirect_method->invoke($admin_insta
 $genesis_hero = $hero_content_method->invoke($admin_instance, 'genesis');
 lcfa_assert_same('Project Brief & Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should explain the real purpose of the tab');
 lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'after your coding agent connection is ready') !== false, 'genesis hero subtitle should position Genesis after Connections');
+
+$admin_codex_command = (string) $admin_codex_command_method->invoke($admin_instance, [
+    'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
+    'env'     => [
+        'LCFA_REST_BASE=http://localhost:8887/wp-json/lcfa/v1/',
+        'LCFA_MCP_TOKEN=test-token',
+        'LCFA_WP_ROOT=/Users/commander/Studio/consultala',
+    ],
+]);
+lcfa_assert_true(strpos($admin_codex_command, '/Applications/Codex.app/Contents/Resources/codex') !== false, 'admin Codex guide should mention the desktop app CLI path');
+lcfa_assert_true(strpos($admin_codex_command, '[mcp_servers.livecanvas-forge]') !== false, 'admin Codex guide should include the config.toml fallback snippet');
 
 ob_start();
 $visual_help_method->invoke($admin_instance, $opencode_fast_path);
