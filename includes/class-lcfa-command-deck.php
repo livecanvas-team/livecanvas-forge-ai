@@ -274,21 +274,14 @@ final class LCFA_Command_Deck {
                 }
 
                 if (!$dry_run) {
-                    $page_id = $is_update
-                        ? wp_update_post([
-                            'ID'           => $page_target_id,
-                            'post_title'   => $page_title,
-                            'post_name'    => $page_slug !== '' ? $page_slug : '',
-                            'post_status'  => $status,
-                            'post_content' => $content,
-                        ], true)
-                        : wp_insert_post([
-                            'post_type'    => 'page',
-                            'post_title'   => $page_title,
-                            'post_name'    => $page_slug !== '' ? $page_slug : '',
-                            'post_status'  => $status,
-                            'post_content' => $content,
-                        ], true);
+                    $page_id = $this->persist_page_content([
+                        'ID'           => $page_target_id,
+                        'post_type'    => 'page',
+                        'post_title'   => $page_title,
+                        'post_name'    => $page_slug !== '' ? $page_slug : '',
+                        'post_status'  => $status,
+                        'post_content' => $content,
+                    ], $is_update);
 
                     if (is_wp_error($page_id)) {
                         return $this->error_result($page_id->get_error_message());
@@ -1055,6 +1048,49 @@ final class LCFA_Command_Deck {
         }
 
         return (string) admin_url(sprintf('post.php?post=%d&action=edit', $post_id));
+    }
+
+    private function persist_page_content(array $postarr, bool $is_update) {
+        return $this->with_unfiltered_post_content(static function () use ($postarr, $is_update) {
+            if ($is_update) {
+                unset($postarr['post_type']);
+                return wp_update_post($postarr, true);
+            }
+
+            unset($postarr['ID']);
+            return wp_insert_post($postarr, true);
+        });
+    }
+
+    private function with_unfiltered_post_content(callable $operation) {
+        if (current_user_can('unfiltered_html') || !function_exists('remove_filter') || !function_exists('add_filter')) {
+            return $operation();
+        }
+
+        $removed_filters = [];
+
+        foreach ($this->get_content_sanitizer_filters() as $filter) {
+            [$hook, $callback, $priority, $accepted_args] = $filter;
+
+            if (remove_filter($hook, $callback, $priority)) {
+                $removed_filters[] = [$hook, $callback, $priority, $accepted_args];
+            }
+        }
+
+        try {
+            return $operation();
+        } finally {
+            foreach ($removed_filters as [$hook, $callback, $priority, $accepted_args]) {
+                add_filter($hook, $callback, $priority, $accepted_args);
+            }
+        }
+    }
+
+    private function get_content_sanitizer_filters(): array {
+        return [
+            ['content_save_pre', 'wp_filter_post_kses', 10, 1],
+            ['content_filtered_save_pre', 'wp_filter_post_kses', 10, 1],
+        ];
     }
 
     private function evaluate_policy(string $action, bool $dry_run): array {

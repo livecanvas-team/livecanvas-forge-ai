@@ -121,6 +121,7 @@ $GLOBALS['lcfa_test_template'] = 'picostrap-child';
 $GLOBALS['lcfa_test_uploads'] = LCFA_TEST_TMP . '/wp-content/uploads';
 $GLOBALS['lcfa_test_remote_get_map'] = [];
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
+$GLOBALS['lcfa_test_filters'] = [];
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates', 0777, true);
@@ -162,8 +163,93 @@ function wp_parse_args($args, $defaults = []): array {
     return array_merge((array) $defaults, (array) $args);
 }
 
+function lcfa_callback_id($callback): string {
+    if (is_string($callback)) {
+        return $callback;
+    }
+
+    if (is_array($callback)) {
+        $target = is_object($callback[0]) ? spl_object_hash($callback[0]) : (string) $callback[0];
+        return $target . '::' . (string) $callback[1];
+    }
+
+    if ($callback instanceof Closure) {
+        return spl_object_hash($callback);
+    }
+
+    return md5(serialize($callback));
+}
+
+function add_filter(string $hook_name, $callback, int $priority = 10, int $accepted_args = 1): bool {
+    $GLOBALS['lcfa_test_filters'][$hook_name][$priority][lcfa_callback_id($callback)] = [
+        'callback' => $callback,
+        'accepted_args' => $accepted_args,
+    ];
+
+    return true;
+}
+
+function remove_filter(string $hook_name, $callback, int $priority = 10): bool {
+    $id = lcfa_callback_id($callback);
+
+    if (!isset($GLOBALS['lcfa_test_filters'][$hook_name][$priority][$id])) {
+        return false;
+    }
+
+    unset($GLOBALS['lcfa_test_filters'][$hook_name][$priority][$id]);
+
+    if (empty($GLOBALS['lcfa_test_filters'][$hook_name][$priority])) {
+        unset($GLOBALS['lcfa_test_filters'][$hook_name][$priority]);
+    }
+
+    if (empty($GLOBALS['lcfa_test_filters'][$hook_name])) {
+        unset($GLOBALS['lcfa_test_filters'][$hook_name]);
+    }
+
+    return true;
+}
+
+function add_action(string $hook_name, $callback, int $priority = 10, int $accepted_args = 1): bool {
+    return add_filter($hook_name, $callback, $priority, $accepted_args);
+}
+
+function remove_action(string $hook_name, $callback, int $priority = 10): bool {
+    return remove_filter($hook_name, $callback, $priority);
+}
+
 function apply_filters(string $hook_name, $value) {
+    $args = func_get_args();
+
+    if (empty($GLOBALS['lcfa_test_filters'][$hook_name])) {
+        return $value;
+    }
+
+    ksort($GLOBALS['lcfa_test_filters'][$hook_name]);
+
+    foreach ($GLOBALS['lcfa_test_filters'][$hook_name] as $callbacks) {
+        foreach ($callbacks as $definition) {
+            $call_args = array_slice($args, 0, (int) $definition['accepted_args']);
+            $call_args[0] = $value;
+            $value = $definition['callback'](...$call_args);
+        }
+    }
+
     return $value;
+}
+
+function do_action(string $hook_name, ...$args): void {
+    if (empty($GLOBALS['lcfa_test_filters'][$hook_name])) {
+        return;
+    }
+
+    ksort($GLOBALS['lcfa_test_filters'][$hook_name]);
+
+    foreach ($GLOBALS['lcfa_test_filters'][$hook_name] as $callbacks) {
+        foreach ($callbacks as $definition) {
+            $call_args = array_slice($args, 0, (int) $definition['accepted_args']);
+            $definition['callback'](...$call_args);
+        }
+    }
 }
 
 function get_option(string $key, $default = false) {
@@ -199,6 +285,14 @@ function sanitize_text_field($value): string {
 
 function sanitize_textarea_field($value): string {
     return trim((string) $value);
+}
+
+function wp_filter_post_kses($value): string {
+    $value = (string) $value;
+    $value = preg_replace('#<script\b[^>]*>(.*?)</script>#is', '$1', $value) ?? $value;
+    $value = preg_replace('#<input\b[^>]*?/?>#is', '', $value) ?? $value;
+
+    return $value;
 }
 
 function sanitize_title($value): string {
@@ -384,6 +478,7 @@ final class WP_Query {
 function wp_insert_post(array $postarr, bool $wp_error = false) {
     $post_id = $GLOBALS['lcfa_test_next_post_id']++;
     $slug = $postarr['post_name'] !== '' ? $postarr['post_name'] : sanitize_title($postarr['post_title'] ?? 'untitled');
+    $content = apply_filters('content_save_pre', (string) ($postarr['post_content'] ?? ''));
 
     $post = new WP_Post([
         'ID'                => $post_id,
@@ -391,7 +486,7 @@ function wp_insert_post(array $postarr, bool $wp_error = false) {
         'post_status'       => (string) ($postarr['post_status'] ?? 'draft'),
         'post_title'        => (string) ($postarr['post_title'] ?? ''),
         'post_name'         => $slug,
-        'post_content'      => (string) ($postarr['post_content'] ?? ''),
+        'post_content'      => $content,
         'post_modified_gmt' => gmdate('Y-m-d H:i:s'),
     ]);
 
@@ -410,7 +505,9 @@ function wp_update_post(array $postarr, bool $wp_error = false) {
 
     foreach (['post_title', 'post_name', 'post_status', 'post_content'] as $field) {
         if (array_key_exists($field, $postarr)) {
-            $post->{$field} = (string) $postarr[$field];
+            $post->{$field} = $field === 'post_content'
+                ? apply_filters('content_save_pre', (string) $postarr[$field])
+                : (string) $postarr[$field];
         }
     }
 
@@ -427,6 +524,9 @@ function wp_text_diff(string $left, string $right, array $args = []): string {
 function wp_normalize_path(string $path): string {
     return str_replace('\\', '/', $path);
 }
+
+add_filter('content_save_pre', 'wp_filter_post_kses', 10, 1);
+add_filter('content_filtered_save_pre', 'wp_filter_post_kses', 10, 1);
 
 function trailingslashit(string $path): string {
     return rtrim($path, '/\\') . '/';
@@ -571,6 +671,18 @@ lcfa_assert_same('https://example.test/landing-page-1/', $page_result['frontend_
 lcfa_assert_contains('post.php?post=100&action=edit', $page_result['edit_url'] ?? '', 'page_upsert should return edit_url');
 lcfa_assert_same('page-templates/empty.php', $GLOBALS['lcfa_test_post_meta'][100]['_wp_page_template'] ?? '', 'page_upsert should assign the Empty Page template when it is available');
 
+$interactive_page_result = $command_deck->execute([
+    'action'  => 'page_upsert',
+    'title'   => 'Interactive Pricing',
+    'slug'    => 'interactive-pricing',
+    'status'  => 'draft',
+    'content' => '<main><label class="join"><input type="radio" name="billing" checked></label><script>(function(){console.log("pricing");})();</script></main>',
+]);
+
+lcfa_assert_true($interactive_page_result['ok'] === true, 'page_upsert should allow trusted interactive page markup');
+lcfa_assert_contains('<input type="radio"', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve form inputs instead of letting KSES strip them');
+lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve page-level scripts instead of saving raw JavaScript text');
+
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
     'post_id' => 100,
@@ -595,7 +707,7 @@ $fallback_edit_result = $command_deck->execute([
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 lcfa_assert_true($fallback_edit_result['ok'] === true, 'page_upsert should still succeed when get_edit_post_link returns empty');
-lcfa_assert_same('https://example.test/wp-admin/post.php?post=101&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
+lcfa_assert_same('https://example.test/wp-admin/post.php?post=102&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
 
 $previous_stylesheet = $GLOBALS['lcfa_test_stylesheet'];
 $previous_template = $GLOBALS['lcfa_test_template'];
