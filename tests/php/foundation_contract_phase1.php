@@ -544,6 +544,18 @@ $suggestion = $prompt_suggester->suggest([
 lcfa_assert_true(!empty($suggestion['ok']), 'prompt suggestion should succeed for page requests');
 lcfa_assert_same('page_upsert', $suggestion['suggested_payload']['action'] ?? '', 'page creation prompts should keep page_upsert even when Tailwind is mentioned');
 
+$context_reflection = new ReflectionClass($context_builder);
+$picowind_rules_method = $context_reflection->getMethod('get_output_rules');
+$picowind_rules = $picowind_rules_method->invoke($context_builder, 'picowind');
+
+lcfa_assert_true(($picowind_rules['html_only'] ?? null) === false, 'Picowind output rules should not force HTML-only output');
+lcfa_assert_true(($picowind_rules['allow_javascript'] ?? null) === true, 'Picowind output rules should allow JavaScript when needed');
+lcfa_assert_true(($picowind_rules['allow_page_level_inline_script'] ?? null) === true, 'Picowind output rules should allow small page-level scripts when needed');
+lcfa_assert_same('footer', $picowind_rules['page_level_script_placement'] ?? '', 'Picowind page-level scripts should be placed at the end of the page');
+lcfa_assert_true(($picowind_rules['prefer_daisyui_components'] ?? null) === true, 'Picowind output rules should prefer DaisyUI components first');
+lcfa_assert_true(($picowind_rules['allow_external_libraries'] ?? null) === true, 'Picowind output rules should allow external libraries when necessary');
+lcfa_assert_contains('JavaScript is allowed when it is necessary for the interaction', implode("\n", (array) ($picowind_rules['notes'] ?? [])), 'Picowind notes should explain that JavaScript is allowed when needed');
+
 $page_result = $command_deck->execute([
     'action'  => 'page_upsert',
     'title'   => 'Landing Page 1',

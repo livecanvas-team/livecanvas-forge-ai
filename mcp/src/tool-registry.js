@@ -32,7 +32,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'get_theme_context',
-      description: 'Read the stack, theme, output rules, and ACF-aware theme context.',
+      description: 'Read the stack, theme, output rules, and ACF-aware theme context. On Picowind sites, the policy is DaisyUI-first, Tailwind-compatible, and JavaScript is allowed when necessary.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -134,7 +134,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based.',
+      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction.',
       inputSchema: {
         type: 'object',
         required: ['action'],

@@ -101,6 +101,16 @@ async function run() {
   assert.ok(runLcCommand, 'run_lc_command should be registered')
   assert.ok(runLcCommand.inputSchema.properties.auto_apply, 'run_lc_command should expose auto_apply in its schema')
   assert.ok(runLcCommand.inputSchema.properties.prompt, 'run_lc_command should expose prompt in its schema')
+  assert.match(
+    runLcCommand.description,
+    /DaisyUI-first/i,
+    'run_lc_command should explain the DaisyUI-first Picowind policy'
+  )
+  assert.match(
+    runLcCommand.description,
+    /JavaScript is allowed when necessary/i,
+    'run_lc_command should explain that JavaScript is allowed when necessary on Picowind'
+  )
 
   const frameworkClient = createFrameworkAwareClient('picowind')
   const frameworkRegistry = createToolRegistry(

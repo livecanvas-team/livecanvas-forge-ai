@@ -312,13 +312,23 @@ final class LCFA_Context_Builder {
     private function get_output_rules(string $framework): array {
         if ($framework === 'picowind') {
             return [
-                'html_only'            => true,
-                'css_strategy'         => 'tailwind-utilities',
-                'inline_css'           => false,
-                'inline_js'            => false,
-                'prefer_template_type' => $this->has_latte_templates() ? 'latte' : 'html',
-                'notes'                => [
-                    __('Use Tailwind utility classes that are compatible with WinPress scanning.', 'livecanvas-forge-ai'),
+                'html_only'                      => false,
+                'css_strategy'                   => 'tailwind-utilities',
+                'inline_css'                     => false,
+                'inline_js'                      => true,
+                'allow_javascript'               => true,
+                'allow_page_level_inline_script' => true,
+                'page_level_script_placement'    => 'footer',
+                'prefer_daisyui_components'      => true,
+                'allow_external_libraries'       => true,
+                'external_library_policy'        => 'minimal-stable-needed-only',
+                'avoid_frameworks'               => ['bootstrap'],
+                'prefer_template_type'           => $this->has_latte_templates() ? 'latte' : 'html',
+                'notes'                          => [
+                    __('Use Tailwind utility classes that are compatible with WindPress scanning.', 'livecanvas-forge-ai'),
+                    __('Prefer DaisyUI components and native utility-first solutions before adding custom JavaScript.', 'livecanvas-forge-ai'),
+                    __('JavaScript is allowed when it is necessary for the interaction. Keep page-level scripts small, place them at the end of the page, and move reusable logic into theme files when it grows.', 'livecanvas-forge-ai'),
+                    __('External JavaScript libraries are allowed only when they solve a real need. Prefer stable, popular libraries and load them in a non-blocking way.', 'livecanvas-forge-ai'),
                     __('Prefer LiveCanvas HTML and Picowind-compatible templates before falling back to PHP.', 'livecanvas-forge-ai'),
                 ],
             ];
