@@ -20,6 +20,7 @@ final class LCFA_Plugin {
     private LCFA_Command_Deck $command_deck;
     private LCFA_Rest_Api $rest_api;
     private LCFA_Admin $admin;
+    private LCFA_Design_System_Preview $design_system_preview;
 
     public static function instance(): LCFA_Plugin {
         if (self::$instance === null) {
@@ -55,7 +56,26 @@ final class LCFA_Plugin {
         $this->connection_onboarding = new LCFA_Connection_Onboarding($this->connection_bundle_builder);
         $this->prompt_suggester = new LCFA_Prompt_Suggester($this->environment, $this->inventory);
         $this->context_builder = new LCFA_Context_Builder($this->environment, $this->inventory, $this->windpress_bridge, $this->local_mcp_bridge);
-        $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client);
+        $this->design_system_preview = new LCFA_Design_System_Preview();
+        $design_system_build_gateway = new LCFA_Design_System_Build_Gateway($this->local_mcp_bridge);
+        $picostrap_design_system = new LCFA_Design_System_Picostrap_Executor();
+        $picowind_design_system = new LCFA_Design_System_Picowind_Executor(
+            $this->windpress_bridge,
+            $this->theme_files_bridge,
+            $design_system_build_gateway
+        );
+        $design_system_apply = new LCFA_Design_System_Apply(
+            $this->environment,
+            $picostrap_design_system,
+            $picowind_design_system
+        );
+        $design_system_compose = new LCFA_Design_System_Compose(
+            $this->environment,
+            new LCFA_Design_System_Picostrap_Composer(),
+            $design_system_apply,
+            $this->design_system_preview
+        );
+        $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client, $design_system_apply, $design_system_compose);
         $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
         $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
 
@@ -63,6 +83,7 @@ final class LCFA_Plugin {
     }
 
     public function boot(): void {
+        $this->design_system_preview->hooks();
         $this->admin->hooks();
         $this->rest_api->hooks();
     }

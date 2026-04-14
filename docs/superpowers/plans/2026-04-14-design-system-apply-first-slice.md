@@ -113,6 +113,7 @@ function get_theme_root(string $stylesheet = ''): string {
     return LCFA_TEST_TMP . '/themes';
 }
 
+eval(<<<'PHP'
 namespace WindPress\WindPress\Core {
     final class Volume {
         public static array $entries = [];
@@ -136,8 +137,8 @@ namespace WindPress\WindPress\Core {
         public static function get_cache_url(string $file): string { return 'http://localhost:8887/wp-content/uploads/windpress/cache/' . $file; }
     }
 }
+PHP);
 
-namespace {
 function lcfa_assert_same($expected, $actual, string $message): void {
     if ($expected !== $actual) {
         fwrite(STDERR, $message . PHP_EOL . 'Expected: ' . var_export($expected, true) . PHP_EOL . 'Actual: ' . var_export($actual, true) . PHP_EOL);
@@ -153,9 +154,10 @@ function lcfa_assert_true(bool $condition, string $message): void {
 }
 ```
 
-- [ ] **Step 3: Add three red scenarios: Picostrap, Picowind, and command-deck exposure**
+- [ ] **Step 3: Add helper factories plus three red scenarios: Picostrap, Picowind, and command-deck exposure**
 
 ```php
+require LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require LCFA_DIR . 'includes/class-lcfa-settings.php';
 require LCFA_DIR . 'includes/class-lcfa-environment.php';
 require LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
@@ -169,6 +171,58 @@ require LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 
 $scenario = $argv[1] ?? 'all';
+
+@mkdir(get_stylesheet_directory() . '/public/styles/presets', 0777, true);
+@mkdir(get_template_directory(), 0777, true);
+file_put_contents(get_stylesheet_directory() . '/public/styles/presets/daisyui.css', "/** preset */\n@plugin \"daisyui\" {\n    themes: light --default, dark;\n}\n");
+
+final class Test_Design_System_Build_Gateway extends LCFA_Design_System_Build_Gateway {
+    public array $last_build_arguments = [];
+
+    public function __construct(private array $status, private array $build_result) {}
+
+    public function get_status(): array {
+        return $this->status;
+    }
+
+    public function build_windpress_cache(array $arguments = []): array {
+        $this->last_build_arguments = $arguments;
+        return $this->build_result;
+    }
+}
+
+function lcfa_make_design_system_service_for_picostrap(): LCFA_Design_System_Apply {
+    $environment = new LCFA_Environment();
+    $windpress = new LCFA_WindPress_Bridge($environment);
+    $theme_files = new LCFA_Theme_Files_Bridge($environment);
+    $build_gateway = new Test_Design_System_Build_Gateway(['build_available' => false, 'message' => 'disabled'], ['ok' => false, 'message' => 'disabled']);
+
+    return new LCFA_Design_System_Apply(
+        $environment,
+        new LCFA_Design_System_Picostrap_Executor(),
+        new LCFA_Design_System_Picowind_Executor($windpress, $theme_files, $build_gateway)
+    );
+}
+
+function lcfa_make_design_system_service_for_picowind(): LCFA_Design_System_Apply {
+    $GLOBALS['lcfa_test_theme_name'] = 'Picowind Child';
+    $GLOBALS['lcfa_test_stylesheet'] = 'picowind-child';
+    $GLOBALS['lcfa_test_template'] = 'picowind';
+
+    $environment = new LCFA_Environment();
+    $windpress = new LCFA_WindPress_Bridge($environment);
+    $theme_files = new LCFA_Theme_Files_Bridge($environment);
+    $build_gateway = new Test_Design_System_Build_Gateway(
+        ['build_available' => true, 'message' => 'ready'],
+        ['ok' => true, 'result' => ['stored' => true]]
+    );
+
+    return new LCFA_Design_System_Apply(
+        $environment,
+        new LCFA_Design_System_Picostrap_Executor(),
+        new LCFA_Design_System_Picowind_Executor($windpress, $theme_files, $build_gateway)
+    );
+}
 
 if ($scenario === 'picostrap' || $scenario === 'all') {
     $service = lcfa_make_design_system_service_for_picostrap();
@@ -206,12 +260,13 @@ if ($scenario === 'picowind' || $scenario === 'all') {
 
 if ($scenario === 'command' || $scenario === 'all') {
     $environment = new LCFA_Environment();
+    $inventory = new LCFA_Inventory($environment);
     $windpress = new LCFA_WindPress_Bridge($environment);
     $themeFiles = new LCFA_Theme_Files_Bridge($environment);
     $localBridge = new LCFA_Local_MCP_Bridge($environment);
     $remote = new LCFA_Remote_Client();
     $designSystem = lcfa_make_design_system_service_for_picostrap();
-    $commandDeck = new LCFA_Command_Deck($environment, new stdClass(), $windpress, $themeFiles, $localBridge, $remote, $designSystem);
+    $commandDeck = new LCFA_Command_Deck($environment, $inventory, $windpress, $themeFiles, $localBridge, $remote, $designSystem);
 
     lcfa_assert_true(isset($commandDeck->get_actions()['design_system_apply']), 'Command deck should expose the design_system_apply action');
 }
@@ -252,6 +307,7 @@ git commit -m "test: add design system apply phase 1 regressions"
 **Files:**
 - Create: `includes/class-lcfa-design-system-build-gateway.php`
 - Create: `includes/class-lcfa-design-system-picostrap-executor.php`
+- Create: `includes/class-lcfa-design-system-picowind-executor.php`
 - Create: `includes/class-lcfa-design-system-apply.php`
 - Modify: `livecanvas-forge-ai.php`
 - Modify: `tests/php/design_system_apply_phase1.php`
@@ -330,6 +386,9 @@ final class LCFA_Design_System_Picostrap_Executor {
             'action' => 'design_system_apply',
             'mode' => $dry_run ? 'preview' : 'apply',
             'execution_target' => 'local',
+            'message' => $dry_run
+                ? __('Picostrap design system preview prepared.', 'livecanvas-forge-ai')
+                : __('Picostrap design system applied.', 'livecanvas-forge-ai'),
             'target_stack' => 'picostrap',
             'source_of_truth' => 'theme_mods',
             'summary' => $dry_run
@@ -346,10 +405,98 @@ final class LCFA_Design_System_Picostrap_Executor {
             ],
         ];
     }
+
+    private function collect_theme_mod_writes(array $payload): array {
+        $writes = [];
+
+        foreach (self::TOKEN_MAP as $source => $target) {
+            $value = $this->read_nested_value($payload, $source);
+
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $writes[$target] = $value;
+        }
+
+        $font_assets = is_array($payload['font_assets'] ?? null) ? $payload['font_assets'] : [];
+
+        if (!empty($font_assets['body_font_object'])) {
+            $writes['body_font_object'] = $font_assets['body_font_object'];
+        }
+
+        if (!empty($font_assets['headings_font_object'])) {
+            $writes['headings_font_object'] = $font_assets['headings_font_object'];
+        }
+
+        if (array_key_exists('fonts_header_code', $font_assets) && $font_assets['fonts_header_code'] !== '') {
+            $writes['picostrap_fonts_header_code'] = (string) $font_assets['fonts_header_code'];
+        }
+
+        return $writes;
+    }
+
+    private function build_font_warnings(array $payload): array {
+        $font_assets = is_array($payload['font_assets'] ?? null) ? $payload['font_assets'] : [];
+        $typography = is_array($payload['typography'] ?? null) ? $payload['typography'] : [];
+
+        if (($typography['font_family_base'] ?? '') === '' && ($typography['headings_font_family'] ?? '') === '') {
+            return [];
+        }
+
+        if (!empty($font_assets['body_font_object']) || !empty($font_assets['headings_font_object']) || !empty($font_assets['fonts_header_code'])) {
+            return [];
+        }
+
+        return [__('Font family tokens were applied, but no Picostrap font asset metadata was provided.', 'livecanvas-forge-ai')];
+    }
+
+    private function read_nested_value(array $payload, string $path) {
+        $segments = explode('.', $path);
+        $cursor = $payload;
+
+        foreach ($segments as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                return null;
+            }
+
+            $cursor = $cursor[$segment];
+        }
+
+        return $cursor;
+    }
 }
 ```
 
-- [ ] **Step 3: Add the shared coordinator that resolves the active stack**
+- [ ] **Step 3: Add a Picowind shell plus the shared coordinator that resolves the active stack**
+
+```php
+<?php
+// includes/class-lcfa-design-system-picowind-executor.php
+
+defined('ABSPATH') || exit;
+
+final class LCFA_Design_System_Picowind_Executor {
+    public function __construct(
+        private LCFA_WindPress_Bridge $windpress_bridge,
+        private LCFA_Theme_Files_Bridge $theme_files_bridge,
+        private LCFA_Design_System_Build_Gateway $build_gateway
+    ) {}
+
+    public function execute(array $payload, bool $dry_run): array {
+        return [
+            'ok' => false,
+            'action' => 'design_system_apply',
+            'mode' => $dry_run ? 'preview' : 'apply',
+            'execution_target' => 'local',
+            'message' => __('Picowind executor shell was invoked before Task 3 replaced it with the real implementation.', 'livecanvas-forge-ai'),
+            'summary' => '',
+            'warnings' => [],
+            'data' => [],
+        ];
+    }
+}
+```
 
 ```php
 <?php
@@ -386,6 +533,16 @@ final class LCFA_Design_System_Apply {
             'data' => ['requested_framework' => (string) ($payload['framework'] ?? '')],
         ];
     }
+
+    private function resolve_framework(array $payload): string {
+        $explicit = sanitize_key((string) ($payload['framework'] ?? ''));
+
+        if (in_array($explicit, ['picostrap', 'picowind'], true)) {
+            return $explicit;
+        }
+
+        return $this->environment->detect_framework_family();
+    }
 }
 ```
 
@@ -407,14 +564,14 @@ Expected: PASS. The harness should report no assertion failures, and `Picowind` 
 - [ ] **Step 6: Commit the Picostrap slice**
 
 ```bash
-git add livecanvas-forge-ai.php includes/class-lcfa-design-system-build-gateway.php includes/class-lcfa-design-system-picostrap-executor.php includes/class-lcfa-design-system-apply.php tests/php/design_system_apply_phase1.php
+git add livecanvas-forge-ai.php includes/class-lcfa-design-system-build-gateway.php includes/class-lcfa-design-system-picostrap-executor.php includes/class-lcfa-design-system-picowind-executor.php includes/class-lcfa-design-system-apply.php tests/php/design_system_apply_phase1.php
 git commit -m "feat: add picostrap design system executor"
 ```
 
 ### Task 3: Implement The Picowind / WindPress Executor
 
 **Files:**
-- Create: `includes/class-lcfa-design-system-picowind-executor.php`
+- Modify: `includes/class-lcfa-design-system-picowind-executor.php`
 - Modify: `includes/class-lcfa-design-system-apply.php`
 - Modify: `tests/php/design_system_apply_phase1.php`
 
@@ -496,6 +653,9 @@ final class LCFA_Design_System_Picowind_Executor {
             'action' => 'design_system_apply',
             'mode' => $dry_run ? 'preview' : 'apply',
             'execution_target' => 'local',
+            'message' => $dry_run
+                ? __('Picowind design system preview prepared.', 'livecanvas-forge-ai')
+                : __('Picowind design system applied.', 'livecanvas-forge-ai'),
             'target_stack' => 'picowind',
             'source_of_truth' => 'windpress_cache_runtime',
             'summary' => $dry_run
@@ -562,6 +722,40 @@ private function build_theme_json(array $payload): array {
             ],
         ],
     ];
+}
+
+private function collect_changed_keys(array $payload, array $preset): array {
+    $changed = [];
+
+    if (!empty($preset['skin'])) {
+        $changed[] = 'preset.skin';
+    }
+
+    if (!empty($preset['active_theme'])) {
+        $changed[] = 'theme_mod.data_theme';
+    }
+
+    foreach (['primary', 'secondary', 'light', 'dark', 'body_bg', 'body_color'] as $key) {
+        if (!empty($payload['colors'][$key])) {
+            $changed[] = 'theme_json.color.' . $key;
+        }
+    }
+
+    foreach (['font_family_base', 'font_size_base', 'line_height_base'] as $key) {
+        if (!empty($payload['typography'][$key])) {
+            $changed[] = 'theme_json.typography.' . $key;
+        }
+    }
+
+    if (!empty($payload['radius']['border_radius'])) {
+        $changed[] = 'theme_json.radius.border_radius';
+    }
+
+    return $changed;
+}
+
+private function render_daisyui_preset(string $skin): string {
+    return "/**\n * Create a custom theme for yourself using daisyUI theme generator.\n * https://daisyui.com/theme-generator/\n */\n\n@plugin \"daisyui\" {\n    themes: {$skin} --default, dark;\n}\n\n/* @plugin \"@tailwindcss/typography\"; */\n\n/* Add your custom styles below this line */\n\nbody {\n}\n";
 }
 ```
 
@@ -656,7 +850,7 @@ public function __construct(
 
 ```php
 case 'design_system_apply':
-    $result = $this->design_system_apply->run($payload, $dry_run);
+    $result = array_merge($result, $this->design_system_apply->run($payload, $dry_run));
     break;
 ```
 

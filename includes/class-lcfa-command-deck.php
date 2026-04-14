@@ -9,14 +9,31 @@ final class LCFA_Command_Deck {
     private LCFA_Theme_Files_Bridge $theme_files_bridge;
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
     private LCFA_Remote_Client $remote_client;
+    private LCFA_Design_System_Compose $design_system_compose;
+    private LCFA_Design_System_Apply $design_system_apply;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Remote_Client $remote_client) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Remote_Client $remote_client, ?LCFA_Design_System_Apply $design_system_apply = null, ?LCFA_Design_System_Compose $design_system_compose = null) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
         $this->theme_files_bridge = $theme_files_bridge;
         $this->local_mcp_bridge   = $local_mcp_bridge;
         $this->remote_client      = $remote_client;
+        $this->design_system_apply = $design_system_apply ?: new LCFA_Design_System_Apply(
+            $environment,
+            new LCFA_Design_System_Picostrap_Executor(),
+            new LCFA_Design_System_Picowind_Executor(
+                $windpress_bridge,
+                $theme_files_bridge,
+                new LCFA_Design_System_Build_Gateway($local_mcp_bridge)
+            )
+        );
+        $this->design_system_compose = $design_system_compose ?: new LCFA_Design_System_Compose(
+            $environment,
+            new LCFA_Design_System_Picostrap_Composer(),
+            $this->design_system_apply,
+            new LCFA_Design_System_Preview()
+        );
     }
 
     public function get_actions(): array {
@@ -28,6 +45,14 @@ final class LCFA_Command_Deck {
             'page_upsert' => [
                 'label'       => __('Create or update page', 'livecanvas-forge-ai'),
                 'description' => __('Creates a page when no target exists, or updates the existing LiveCanvas page and always returns final URLs.', 'livecanvas-forge-ai'),
+            ],
+            'design_system_compose' => [
+                'label'       => __('Compose design system preview', 'livecanvas-forge-ai'),
+                'description' => __('Turns a simple creative brief into a previewable, apply-ready Picostrap design system without writing.', 'livecanvas-forge-ai'),
+            ],
+            'design_system_apply' => [
+                'label'       => __('Apply design system', 'livecanvas-forge-ai'),
+                'description' => __('Applies stack-native design tokens to Picostrap or Picowind and returns explicit build metadata.', 'livecanvas-forge-ai'),
             ],
             'create_page' => [
                 'label'       => __('Create LiveCanvas page', 'livecanvas-forge-ai'),
@@ -186,6 +211,14 @@ final class LCFA_Command_Deck {
                 );
                 $result['target_type'] = 'audit';
                 $result['inventory']   = $inventory;
+                break;
+
+            case 'design_system_compose':
+                $result = array_merge($result, $this->design_system_compose->run($payload));
+                break;
+
+            case 'design_system_apply':
+                $result = array_merge($result, $this->design_system_apply->run($payload, $dry_run));
                 break;
 
             case 'page_upsert':
@@ -866,6 +899,8 @@ final class LCFA_Command_Deck {
 
     private function requires_livecanvas(string $action): bool {
         return !in_array($action, [
+            'design_system_compose',
+            'design_system_apply',
             'windpress_audit',
             'windpress_scan_provider',
             'windpress_reset_entry',

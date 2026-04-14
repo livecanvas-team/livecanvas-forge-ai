@@ -505,6 +505,13 @@ require LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require LCFA_DIR . 'includes/class-lcfa-context-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-prompt-suggester.php';
 require LCFA_DIR . 'includes/class-lcfa-genesis-planner.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-compose.php';
 require LCFA_DIR . 'includes/class-lcfa-command-deck.php';
 require LCFA_DIR . 'includes/class-lcfa-rest-api.php';
 
