@@ -97,14 +97,32 @@ async function run() {
   const compilePicostrap = tools.find((tool) => tool.name === 'compile_picostrap_bundle')
   assert.ok(compilePicostrap, 'compile_picostrap_bundle should be registered')
 
+  const validateMarkup = tools.find((tool) => tool.name === 'validate_markup_for_framework')
+  assert.ok(validateMarkup, 'validate_markup_for_framework should be registered')
+  assert.ok(validateMarkup.inputSchema.properties.body_html_lines, 'validate_markup_for_framework should expose body_html_lines')
+  assert.ok(validateMarkup.inputSchema.properties.body_html_lines.items, 'validate_markup_for_framework body_html_lines should declare array items')
+  assert.ok(validateMarkup.inputSchema.properties.footer_script_lines, 'validate_markup_for_framework should expose footer_script_lines')
+  assert.ok(validateMarkup.inputSchema.properties.footer_script_lines.items, 'validate_markup_for_framework footer_script_lines should declare array items')
+
   const runLcCommand = tools.find((tool) => tool.name === 'run_lc_command')
   assert.ok(runLcCommand, 'run_lc_command should be registered')
   assert.ok(runLcCommand.inputSchema.properties.auto_apply, 'run_lc_command should expose auto_apply in its schema')
   assert.ok(runLcCommand.inputSchema.properties.prompt, 'run_lc_command should expose prompt in its schema')
+  assert.ok(runLcCommand.inputSchema.properties.body_html, 'run_lc_command should expose body_html for structured page writes')
+  assert.ok(runLcCommand.inputSchema.properties.body_html_lines, 'run_lc_command should expose body_html_lines for structured page writes')
+  assert.ok(runLcCommand.inputSchema.properties.body_html_lines.items, 'run_lc_command should declare array items for body_html_lines')
+  assert.ok(runLcCommand.inputSchema.properties.footer_script, 'run_lc_command should expose footer_script for structured page writes')
+  assert.ok(runLcCommand.inputSchema.properties.footer_script_lines, 'run_lc_command should expose footer_script_lines for structured page writes')
+  assert.ok(runLcCommand.inputSchema.properties.footer_script_lines.items, 'run_lc_command should declare array items for footer_script_lines')
   assert.match(
     runLcCommand.description,
     /DaisyUI-first/i,
     'run_lc_command should explain the DaisyUI-first Picowind policy'
+  )
+  assert.match(
+    runLcCommand.description,
+    /body_html/i,
+    'run_lc_command should document the structured page fast-path'
   )
   assert.match(
     runLcCommand.description,
@@ -120,14 +138,28 @@ async function run() {
     createNoopPicostrapCompiler()
   )
 
+  await frameworkRegistry.invoke('validate_markup_for_framework', {
+    body_html: '<main></main>',
+    footer_script: 'console.log("pricing")'
+  })
+
+  assert.equal(frameworkClient.calls.length, 1, 'validate_markup_for_framework should call the plugin once')
+  assert.equal(frameworkClient.calls[0].action, 'validate_markup_for_framework', 'validate_markup_for_framework should set the command action automatically')
+  assert.equal(frameworkClient.calls[0].framework, 'picowind', 'validate_markup_for_framework should inject the active framework when it is missing from the payload')
+  assert.equal(frameworkClient.calls[0].body_html, '<main></main>', 'validate_markup_for_framework should forward structured body_html payloads unchanged')
+  assert.equal(frameworkClient.calls[0].footer_script, 'console.log("pricing")', 'validate_markup_for_framework should forward structured footer_script payloads unchanged')
+
   await frameworkRegistry.invoke('run_lc_command', {
     action: 'page_upsert',
     title: 'Pricing',
-    content: '<main></main>'
+    body_html: '<main></main>',
+    footer_script: 'console.log("pricing")'
   })
 
-  assert.equal(frameworkClient.calls.length, 1, 'run_lc_command should call the plugin once')
-  assert.equal(frameworkClient.calls[0].framework, 'picowind', 'run_lc_command should inject the active framework when it is missing from the payload')
+  assert.equal(frameworkClient.calls.length, 2, 'run_lc_command should call the plugin once after validation preflight')
+  assert.equal(frameworkClient.calls[1].framework, 'picowind', 'run_lc_command should inject the active framework when it is missing from the payload')
+  assert.equal(frameworkClient.calls[1].body_html, '<main></main>', 'run_lc_command should forward structured body_html payloads unchanged')
+  assert.equal(frameworkClient.calls[1].footer_script, 'console.log("pricing")', 'run_lc_command should forward structured footer_script payloads unchanged')
 }
 
 run()

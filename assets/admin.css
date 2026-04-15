@@ -836,7 +836,12 @@
 
 .lcfa-admin .lcfa-wizard {
     display: grid;
-    gap: 18px;
+    gap: 22px;
+}
+
+.lcfa-admin .lcfa-wizard__intro {
+    display: grid;
+    gap: 16px;
 }
 
 .lcfa-admin .lcfa-wizard__alert {
@@ -1023,6 +1028,55 @@
 
 .lcfa-admin .lcfa-wizard__summary.is-collapsed {
     opacity: 0.82;
+}
+
+.lcfa-admin .lcfa-connections-secondary {
+    display: grid;
+    gap: 22px;
+}
+
+.lcfa-admin .lcfa-connections-secondary__panel {
+    transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.lcfa-admin .lcfa-connections-secondary__panel.is-loading {
+    opacity: 0.96;
+}
+
+.lcfa-admin .lcfa-connections-secondary__panel.is-error {
+    border-color: rgba(238, 30, 149, 0.24);
+}
+
+.lcfa-admin .lcfa-connections-secondary__placeholder {
+    display: grid;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-connections-secondary__line {
+    display: block;
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(53, 208, 242, 0.18), rgba(255, 255, 255, 0.06));
+    background-size: 200% 100%;
+    animation: lcfa-secondary-shimmer 1.25s linear infinite;
+}
+
+.lcfa-admin .lcfa-connections-secondary__line.is-wide {
+    width: min(92%, 720px);
+}
+
+.lcfa-admin .lcfa-connections-secondary__line.is-short {
+    width: min(48%, 320px);
+}
+
+@keyframes lcfa-secondary-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 .lcfa-admin .lcfa-visual-help {

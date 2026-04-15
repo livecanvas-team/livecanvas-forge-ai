@@ -42,6 +42,7 @@ final class LCFA_Prompt_Suggester {
         $score    = 0;
         $post_id  = absint($payload['context_post_id'] ?? $payload['post_id'] ?? 0);
         $post     = $post_id ? get_post($post_id) : null;
+        $active_framework = (string) $this->environment->detect_framework_family();
 
         if ($post instanceof WP_Post && !$suggested['target_id']) {
             if ($post->post_type === 'page') {
@@ -159,6 +160,14 @@ final class LCFA_Prompt_Suggester {
             $reasons[] = __('No specific write target was clear enough, so the safest default is a site audit.', 'livecanvas-forge-ai');
         }
 
+        $preflight = $this->build_preflight_recommendation($suggested, $active_framework);
+        $workflow  = $this->build_suggested_workflow($suggested, $preflight);
+
+        if ($preflight) {
+            $reasons[] = __('Because Picowind is active, validate the generated markup before page_upsert so Bootstrap-like classes are caught before apply.', 'livecanvas-forge-ai');
+            $score += 1;
+        }
+
         return [
             'ok'                => true,
             'message'           => __('Request analyzed.', 'livecanvas-forge-ai'),
@@ -166,8 +175,51 @@ final class LCFA_Prompt_Suggester {
             'confidence'        => $this->confidence_from_score($score),
             'reasons'           => $reasons,
             'warnings'          => $warnings,
+            'preflight'         => $preflight,
+            'workflow'          => $workflow,
             'suggested_payload' => $suggested,
         ];
+    }
+
+    private function build_preflight_recommendation(array $suggested, string $active_framework): array {
+        if ($active_framework !== 'picowind') {
+            return [];
+        }
+
+        if (!in_array((string) ($suggested['action'] ?? ''), ['page_upsert', 'create_page', 'update_page'], true)) {
+            return [];
+        }
+
+        return [
+            'action' => 'validate_markup_for_framework',
+            'execution_target' => (string) ($suggested['execution_target'] ?? 'local'),
+            'payload' => [
+                'framework' => $active_framework,
+                'execution_target' => (string) ($suggested['execution_target'] ?? 'local'),
+            ],
+        ];
+    }
+
+    private function build_suggested_workflow(array $suggested, array $preflight): array {
+        $workflow = [];
+
+        if ($preflight) {
+            $workflow[] = [
+                'phase' => 'preflight',
+                'action' => (string) ($preflight['action'] ?? ''),
+                'execution_target' => (string) ($preflight['execution_target'] ?? ($suggested['execution_target'] ?? 'local')),
+            ];
+        }
+
+        if (!empty($suggested['action'])) {
+            $workflow[] = [
+                'phase' => 'apply',
+                'action' => (string) $suggested['action'],
+                'execution_target' => (string) ($suggested['execution_target'] ?? 'local'),
+            ];
+        }
+
+        return $workflow;
     }
 
     private function detect_page_action(string $prompt, int $target_id): string {

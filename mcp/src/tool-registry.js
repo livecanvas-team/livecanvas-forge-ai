@@ -133,8 +133,35 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => client.suggestCommand(argumentsMap)
     },
     {
+      name: 'validate_markup_for_framework',
+      description: 'Preflight page markup against the active framework policy before page_upsert. The MCP bridge auto-detects the active framework when it is omitted and accepts either a raw content string or the structured page fast-path fields body_html/body_html_lines plus footer_script/footer_script_lines.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          framework: { type: 'string' },
+          content: { type: 'string' },
+          body_html: { type: 'string' },
+          body_html_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          footer_html: { type: 'string' },
+          footer_html_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          footer_script: { type: 'string' },
+          footer_script_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => invokeValidateMarkupForFramework(argumentsMap, client)
+    },
+    {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction.',
+      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -155,6 +182,21 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           file_path: { type: 'string' },
           backup_id: { type: 'string' },
           content: { type: 'string' },
+          body_html: { type: 'string' },
+          body_html_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          footer_html: { type: 'string' },
+          footer_html_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          footer_script: { type: 'string' },
+          footer_script_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
           prompt: { type: 'string' },
           colors: { type: 'object' },
           typography: { type: 'object' },
@@ -605,6 +647,15 @@ async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {
 
     return wrapResultEnvelope(response, merged)
   }
+}
+
+async function invokeValidateMarkupForFramework(argumentsMap, client) {
+  const hydratedArguments = await hydrateFrameworkArgument({
+    ...argumentsMap,
+    action: 'validate_markup_for_framework'
+  }, client)
+
+  return client.runCommand(hydratedArguments)
 }
 
 async function hydrateFrameworkArgument(argumentsMap, client) {

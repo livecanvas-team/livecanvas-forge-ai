@@ -37,6 +37,7 @@ final class LCFA_Admin {
         add_action('admin_menu', [$this, 'register_menus'], 20);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_init', [$this, 'maybe_redirect_after_activation']);
+        add_action('wp_ajax_lcfa_connections_secondary', [$this, 'handle_connections_secondary_ajax']);
         add_action('admin_post_lcfa_setup', [$this, 'handle_setup_post']);
         add_action('admin_post_lcfa_reset_setup', [$this, 'handle_reset_setup_post']);
         add_action('admin_post_lcfa_connections', [$this, 'handle_connections_post']);
@@ -155,6 +156,16 @@ final class LCFA_Admin {
             LCFA_VERSION,
             true
         );
+
+        wp_localize_script('lcfa-admin-script', 'lcfaAdmin', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'connectionsSecondaryAction' => 'lcfa_connections_secondary',
+            'connectionsSecondaryNonce' => wp_create_nonce('lcfa_connections_secondary'),
+            'labels' => [
+                'loading' => __('Loading connection details…', 'livecanvas-forge-ai'),
+                'loadFailed' => __('Failed to load connection details. Refresh the page or try again in a moment.', 'livecanvas-forge-ai'),
+            ],
+        ]);
     }
 
     public function maybe_redirect_after_activation(): void {
@@ -174,6 +185,52 @@ final class LCFA_Admin {
 
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup'));
         exit;
+    }
+
+    public function handle_connections_secondary_ajax(): void {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error([
+                'message' => __('Insufficient permissions.', 'livecanvas-forge-ai'),
+            ], 403);
+        }
+
+        check_ajax_referer('lcfa_connections_secondary', 'nonce');
+
+        $settings         = LCFA_Settings::get();
+        $connections      = LCFA_Settings::get_connections();
+        $preferred_client = $this->normalize_connection_client((string) ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex')));
+        $workspace_root   = (string) ($connections['workspace_root'] ?? '');
+        $mcp_status       = $this->context_builder->get_mcp_status();
+        $mcp_bootstrap    = $this->context_builder->get_bootstrap_payload();
+        $remote_status    = $this->remote_client->get_status();
+        $preferred_bootstrap = $mcp_bootstrap['clients'][$preferred_client] ?? ($mcp_bootstrap['clients']['codex'] ?? ['command' => '', 'env' => []]);
+        $command_example  = wp_json_encode([
+            'action'  => 'site_audit',
+            'dry_run' => true,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        ob_start();
+        $this->render_remote_companion_card($remote_status);
+        $remote_html = (string) ob_get_clean();
+
+        ob_start();
+        $this->render_advanced_connection_settings(
+            $connections,
+            $preferred_client,
+            $mcp_status,
+            $preferred_bootstrap,
+            $this->build_common_bootstrap_block($mcp_bootstrap),
+            $command_example,
+            $workspace_root
+        );
+        $advanced_html = (string) ob_get_clean();
+
+        wp_send_json_success([
+            'panels' => [
+                'remote'   => $remote_html,
+                'advanced' => $advanced_html,
+            ],
+        ]);
     }
 
     public function render_editor_bridge_styles(): void {
@@ -224,6 +281,7 @@ final class LCFA_Admin {
         echo '.lcfa-editor-bridge__result-meta{display:flex;flex-wrap:wrap;gap:8px}';
         echo '.lcfa-editor-bridge__chip{display:inline-flex;align-items:center;padding:6px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-size:11px;font-weight:700;color:#f5f7ff}';
         echo '.lcfa-editor-bridge__list{display:grid;gap:6px;margin:0;padding-left:18px;color:rgba(245,247,255,.76);font-size:12px;line-height:1.55}';
+        echo '.lcfa-editor-bridge__code{margin:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(11,16,32,.54);color:rgba(245,247,255,.84);font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow:auto}';
         echo '.lcfa-editor-bridge__status{font-size:12px;line-height:1.55;color:rgba(245,247,255,.74)}';
         echo '.lcfa-editor-bridge__hint{font-size:12px;line-height:1.6;color:rgba(245,247,255,.62)}';
         echo '@media (max-width:782px){.lcfa-editor-shell{right:12px;left:12px;bottom:12px}.lcfa-editor-launcher{width:100%;justify-content:center}.lcfa-editor-drawer{width:auto;left:0}.lcfa-editor-bridge__actions,.lcfa-editor-bridge__row{grid-template-columns:1fr}}';
@@ -266,6 +324,8 @@ final class LCFA_Admin {
                 'analysisFailed'  => __('The request analysis failed.', 'livecanvas-forge-ai'),
                 'whySuggested'    => __('Why this was suggested', 'livecanvas-forge-ai'),
                 'warnings'        => __('Warnings', 'livecanvas-forge-ai'),
+                'recommendedWorkflow' => __('Recommended workflow', 'livecanvas-forge-ai'),
+                'recommendedPreflight' => __('Recommended preflight payload', 'livecanvas-forge-ai'),
                 'openDeck'        => __('Open suggested payload in Command Deck', 'livecanvas-forge-ai'),
                 'analyzing'       => __('Analyzing request...', 'livecanvas-forge-ai'),
             ],
@@ -338,6 +398,8 @@ final class LCFA_Admin {
         echo '<div class="lcfa-editor-bridge__result-meta" data-lcfa-editor-result-meta></div>';
         echo '<div data-lcfa-editor-result-reasons-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Why this was suggested', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-reasons></ul></div>';
         echo '<div data-lcfa-editor-result-warnings-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Warnings', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-warnings></ul></div>';
+        echo '<div data-lcfa-editor-result-workflow-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</div><ol class="lcfa-editor-bridge__list" data-lcfa-editor-result-workflow></ol></div>';
+        echo '<div data-lcfa-editor-result-preflight-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</div><pre class="lcfa-editor-bridge__code" data-lcfa-editor-result-preflight></pre></div>';
         echo '</div>';
         echo '</div>';
         echo '</div>';
@@ -359,7 +421,182 @@ final class LCFA_Admin {
         echo '</aside>';
         echo '</div>';
         echo '<script type="application/json" data-lcfa-editor-config>' . wp_json_encode($editor_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>';
-        echo '<script id="lcfa-editor-bridge-script">(function(){var shell=document.querySelector("[data-lcfa-editor-shell]");if(!shell||shell.dataset.bound==="1"){return;}shell.dataset.bound="1";var drawer=shell.querySelector(".lcfa-editor-drawer");var openBtn=shell.querySelector("[data-lcfa-editor-open]");var closeBtn=shell.querySelector("[data-lcfa-editor-close]");var configNode=shell.querySelector("[data-lcfa-editor-config]");var config={};try{config=configNode?JSON.parse(configNode.textContent||"{}"):{};}catch(error){config={};}var threadSelect=shell.querySelector("[data-lcfa-editor-thread]");var targetSelect=shell.querySelector("[data-lcfa-editor-target]");var promptInput=shell.querySelector("[data-lcfa-editor-prompt]");var analyzeButton=shell.querySelector("[data-lcfa-editor-analyze]");var openDeckLink=shell.querySelector("[data-lcfa-editor-open-deck]");var resultBox=shell.querySelector("[data-lcfa-editor-result]");var resultSummary=shell.querySelector("[data-lcfa-editor-result-summary]");var resultMeta=shell.querySelector("[data-lcfa-editor-result-meta]");var reasonsWrap=shell.querySelector("[data-lcfa-editor-result-reasons-wrap]");var reasonsList=shell.querySelector("[data-lcfa-editor-result-reasons]");var warningsWrap=shell.querySelector("[data-lcfa-editor-result-warnings-wrap]");var warningsList=shell.querySelector("[data-lcfa-editor-result-warnings]");var setOpen=function(next){shell.classList.toggle(\"is-open\",next);if(drawer){drawer.setAttribute(\"aria-hidden\",next?\"false\":\"true\");}};var updateDeckLink=function(payload){if(!openDeckLink||!config.commandBaseUrl){return;}var url=new URL(config.commandBaseUrl,window.location.origin);var args=payload||{};var threadId=threadSelect&&threadSelect.value?threadSelect.value:(config.threadId||\"default\");url.searchParams.set(\"thread_id\",threadId);if(config.postId){url.searchParams.set(\"post_id\",String(config.postId));}if(promptInput&&promptInput.value.trim()!==\"\"){url.searchParams.set(\"user_prompt\",promptInput.value.trim());}if(args.action){url.searchParams.set(\"suggest_action\",String(args.action));}if(args.execution_target){url.searchParams.set(\"execution_target\",String(args.execution_target));}if(args.target_id){url.searchParams.set(\"target_id\",String(args.target_id));}if(args.variant){url.searchParams.set(\"variant\",String(args.variant));}if(args.title){url.searchParams.set(\"title\",String(args.title));}if(args.slug){url.searchParams.set(\"slug\",String(args.slug));}if(args.provider_id){url.searchParams.set(\"provider_id\",String(args.provider_id));}if(args.relative_path){url.searchParams.set(\"relative_path\",String(args.relative_path));}if(args.root_scope){url.searchParams.set(\"root_scope\",String(args.root_scope));}if(args.file_path){url.searchParams.set(\"file_path\",String(args.file_path));}if(args.backup_id){url.searchParams.set(\"backup_id\",String(args.backup_id));}if(args.status){url.searchParams.set(\"status\",String(args.status));}openDeckLink.href=url.toString();};var renderList=function(listNode,wrapNode,items){if(!listNode||!wrapNode){return;}listNode.innerHTML=\"\";if(!Array.isArray(items)||items.length===0){wrapNode.hidden=true;return;}items.forEach(function(item){var li=document.createElement(\"li\");li.textContent=String(item||\"\");listNode.appendChild(li);});wrapNode.hidden=false;};var renderSuggestion=function(payload,isError){if(!resultBox||!resultSummary||!resultMeta){return;}resultBox.classList.add(\"is-visible\");resultBox.classList.toggle(\"is-error\",Boolean(isError));resultMeta.innerHTML=\"\";var summary=payload&&payload.summary?payload.summary:(payload&&payload.message?payload.message:\"\");resultSummary.textContent=summary;if(payload&&payload.suggested_payload&&payload.suggested_payload.action){[{label:\"Action\",value:payload.suggested_payload.action},{label:\"Confidence\",value:payload.confidence||\"\"},{label:\"Execution\",value:payload.suggested_payload.execution_target||\"\"}].forEach(function(entry){if(!entry.value){return;}var chip=document.createElement(\"span\");chip.className=\"lcfa-editor-bridge__chip\";chip.textContent=entry.label+\": \"+entry.value;resultMeta.appendChild(chip);});updateDeckLink(payload.suggested_payload);}renderList(reasonsList,reasonsWrap,payload&&Array.isArray(payload.reasons)?payload.reasons:[]);renderList(warningsList,warningsWrap,payload&&Array.isArray(payload.warnings)?payload.warnings:[]);};var setBusy=function(next){if(!analyzeButton){return;}analyzeButton.disabled=next;var label=analyzeButton.querySelector(\"span\");if(label){label.textContent=next?(config.labels&&config.labels.analyzing?config.labels.analyzing:\"Analyzing request...\"):\"Analyze request\";}};var analyzeRequest=function(){if(!promptInput){return;}var prompt=promptInput.value.trim();if(prompt===\"\"){renderSuggestion({message:(config.labels&&config.labels.requestRequired)||\"Write a request first so Forge AI can suggest an action.\"},true);return;}setBusy(true);fetch(config.restEndpoint,{method:\"POST\",credentials:\"same-origin\",headers:{\"Content-Type\":\"application/json\",\"X-WP-Nonce\":config.restNonce||\"\"},body:JSON.stringify({user_prompt:prompt,execution_target:targetSelect&&targetSelect.value?targetSelect.value:\"local\",context_post_id:config.postId||0,post_id:config.postId||0,target_id:config.targetId||0,variant:config.variant||\"1\",action:config.defaultAction||\"site_audit\"})}).then(function(response){return response.text().then(function(text){var data={};try{data=text?JSON.parse(text):{};}catch(error){data={};}if(!response.ok){var errorMessage=(data&&data.suggestion&&data.suggestion.message)||(data&&data.error)||(config.labels&&config.labels.analysisFailed)||\"The request analysis failed.\";throw new Error(errorMessage);}return data;});}).then(function(data){renderSuggestion(data&&data.suggestion?data.suggestion:{message:(config.labels&&config.labels.analysisFailed)||\"The request analysis failed.\"},false);}).catch(function(error){renderSuggestion({message:error&&error.message?error.message:((config.labels&&config.labels.analysisFailed)||\"The request analysis failed.\")},true);}).finally(function(){setBusy(false);});};if(openBtn){openBtn.addEventListener(\"click\",function(){setOpen(true);});}if(closeBtn){closeBtn.addEventListener(\"click\",function(){setOpen(false);});}if(analyzeButton){analyzeButton.addEventListener(\"click\",analyzeRequest);}if(promptInput){promptInput.addEventListener(\"keydown\",function(event){if((event.metaKey||event.ctrlKey)&&event.key===\"Enter\"){event.preventDefault();analyzeRequest();}});}if(threadSelect){threadSelect.addEventListener(\"change\",function(){updateDeckLink({action:config.defaultAction||\"site_audit\",execution_target:targetSelect&&targetSelect.value?targetSelect.value:\"local\",target_id:config.targetId||0,variant:config.variant||\"1\"});});}if(targetSelect){targetSelect.addEventListener(\"change\",function(){updateDeckLink({action:config.defaultAction||\"site_audit\",execution_target:targetSelect.value,target_id:config.targetId||0,variant:config.variant||\"1\"});});}updateDeckLink({action:config.defaultAction||\"site_audit\",execution_target:targetSelect&&targetSelect.value?targetSelect.value:\"local\",target_id:config.targetId||0,variant:config.variant||\"1\"});document.addEventListener(\"keydown\",function(event){if(event.key===\"Escape\"){setOpen(false);}});document.addEventListener(\"click\",function(event){if(!shell.classList.contains(\"is-open\")){return;}if(shell.contains(event.target)){return;}setOpen(false);});})();</script>';
+        $editor_bridge_script = <<<'JS'
+(function(){
+  var shell=document.querySelector("[data-lcfa-editor-shell]");
+  if(!shell||shell.dataset.bound==="1"){return;}
+  shell.dataset.bound="1";
+  var drawer=shell.querySelector(".lcfa-editor-drawer");
+  var openBtn=shell.querySelector("[data-lcfa-editor-open]");
+  var closeBtn=shell.querySelector("[data-lcfa-editor-close]");
+  var configNode=shell.querySelector("[data-lcfa-editor-config]");
+  var config={};
+  try{config=configNode?JSON.parse(configNode.textContent||"{}"):{};}catch(error){config={};}
+  var threadSelect=shell.querySelector("[data-lcfa-editor-thread]");
+  var targetSelect=shell.querySelector("[data-lcfa-editor-target]");
+  var promptInput=shell.querySelector("[data-lcfa-editor-prompt]");
+  var analyzeButton=shell.querySelector("[data-lcfa-editor-analyze]");
+  var openDeckLink=shell.querySelector("[data-lcfa-editor-open-deck]");
+  var resultBox=shell.querySelector("[data-lcfa-editor-result]");
+  var resultSummary=shell.querySelector("[data-lcfa-editor-result-summary]");
+  var resultMeta=shell.querySelector("[data-lcfa-editor-result-meta]");
+  var reasonsWrap=shell.querySelector("[data-lcfa-editor-result-reasons-wrap]");
+  var reasonsList=shell.querySelector("[data-lcfa-editor-result-reasons]");
+  var warningsWrap=shell.querySelector("[data-lcfa-editor-result-warnings-wrap]");
+  var warningsList=shell.querySelector("[data-lcfa-editor-result-warnings]");
+  var workflowWrap=shell.querySelector("[data-lcfa-editor-result-workflow-wrap]");
+  var workflowList=shell.querySelector("[data-lcfa-editor-result-workflow]");
+  var preflightWrap=shell.querySelector("[data-lcfa-editor-result-preflight-wrap]");
+  var preflightNode=shell.querySelector("[data-lcfa-editor-result-preflight]");
+  var setOpen=function(next){shell.classList.toggle("is-open",next);if(drawer){drawer.setAttribute("aria-hidden",next?"false":"true");}};
+  var updateDeckLink=function(payload){
+    if(!openDeckLink||!config.commandBaseUrl){return;}
+    var url=new URL(config.commandBaseUrl,window.location.origin);
+    var args=payload||{};
+    var threadId=threadSelect&&threadSelect.value?threadSelect.value:(config.threadId||"default");
+    url.searchParams.set("thread_id",threadId);
+    if(config.postId){url.searchParams.set("post_id",String(config.postId));}
+    if(promptInput&&promptInput.value.trim()!==""){url.searchParams.set("user_prompt",promptInput.value.trim());}
+    if(args.action){url.searchParams.set("suggest_action",String(args.action));}
+    if(args.execution_target){url.searchParams.set("execution_target",String(args.execution_target));}
+    if(args.target_id){url.searchParams.set("target_id",String(args.target_id));}
+    if(args.variant){url.searchParams.set("variant",String(args.variant));}
+    if(args.title){url.searchParams.set("title",String(args.title));}
+    if(args.slug){url.searchParams.set("slug",String(args.slug));}
+    if(args.provider_id){url.searchParams.set("provider_id",String(args.provider_id));}
+    if(args.relative_path){url.searchParams.set("relative_path",String(args.relative_path));}
+    if(args.root_scope){url.searchParams.set("root_scope",String(args.root_scope));}
+    if(args.file_path){url.searchParams.set("file_path",String(args.file_path));}
+    if(args.backup_id){url.searchParams.set("backup_id",String(args.backup_id));}
+    if(args.status){url.searchParams.set("status",String(args.status));}
+    openDeckLink.href=url.toString();
+  };
+  var renderList=function(listNode,wrapNode,items){
+    if(!listNode||!wrapNode){return;}
+    listNode.innerHTML="";
+    if(!Array.isArray(items)||items.length===0){wrapNode.hidden=true;return;}
+    items.forEach(function(item){
+      var li=document.createElement("li");
+      li.textContent=String(item||"");
+      listNode.appendChild(li);
+    });
+    wrapNode.hidden=false;
+  };
+  var renderWorkflow=function(items){
+    if(!workflowList||!workflowWrap){return;}
+    workflowList.innerHTML="";
+    if(!Array.isArray(items)||items.length===0){workflowWrap.hidden=true;return;}
+    items.forEach(function(item){
+      var li=document.createElement("li");
+      var parts=[];
+      if(item&&item.phase){parts.push(String(item.phase).charAt(0).toUpperCase()+String(item.phase).slice(1));}
+      if(item&&item.action){parts.push(String(item.action));}
+      if(item&&item.execution_target){parts.push("execution "+String(item.execution_target));}
+      li.textContent=parts.join(" · ");
+      workflowList.appendChild(li);
+    });
+    workflowWrap.hidden=false;
+  };
+  var renderJson=function(node,wrapNode,value){
+    if(!node||!wrapNode){return;}
+    if(!value||typeof value!=="object"){node.textContent="";wrapNode.hidden=true;return;}
+    try{
+      node.textContent=JSON.stringify(value,null,2);
+      wrapNode.hidden=false;
+    }catch(error){
+      node.textContent="";
+      wrapNode.hidden=true;
+    }
+  };
+  var renderSuggestion=function(payload,isError){
+    if(!resultBox||!resultSummary||!resultMeta){return;}
+    resultBox.classList.add("is-visible");
+    resultBox.classList.toggle("is-error",Boolean(isError));
+    resultMeta.innerHTML="";
+    var summary=payload&&payload.summary?payload.summary:(payload&&payload.message?payload.message:"");
+    resultSummary.textContent=summary;
+    if(payload&&payload.suggested_payload&&payload.suggested_payload.action){
+      [{label:"Action",value:payload.suggested_payload.action},{label:"Confidence",value:payload.confidence||""},{label:"Execution",value:payload.suggested_payload.execution_target||""}].forEach(function(entry){
+        if(!entry.value){return;}
+        var chip=document.createElement("span");
+        chip.className="lcfa-editor-bridge__chip";
+        chip.textContent=entry.label+": "+entry.value;
+        resultMeta.appendChild(chip);
+      });
+      updateDeckLink(payload.suggested_payload);
+    }
+    renderList(reasonsList,reasonsWrap,payload&&Array.isArray(payload.reasons)?payload.reasons:[]);
+    renderList(warningsList,warningsWrap,payload&&Array.isArray(payload.warnings)?payload.warnings:[]);
+    renderWorkflow(payload&&Array.isArray(payload.workflow)?payload.workflow:[]);
+    renderJson(preflightNode,preflightWrap,payload&&payload.preflight&&typeof payload.preflight==="object"?payload.preflight:null);
+  };
+  var setBusy=function(next){
+    if(!analyzeButton){return;}
+    analyzeButton.disabled=next;
+    var label=analyzeButton.querySelector("span");
+    if(label){label.textContent=next?(config.labels&&config.labels.analyzing?config.labels.analyzing:"Analyzing request..."):"Analyze request";}
+  };
+  var analyzeRequest=function(){
+    if(!promptInput){return;}
+    var prompt=promptInput.value.trim();
+    if(prompt===""){
+      renderSuggestion({message:(config.labels&&config.labels.requestRequired)||"Write a request first so Forge AI can suggest an action."},true);
+      return;
+    }
+    setBusy(true);
+    fetch(config.restEndpoint,{
+      method:"POST",
+      credentials:"same-origin",
+      headers:{"Content-Type":"application/json","X-WP-Nonce":config.restNonce||""},
+      body:JSON.stringify({
+        user_prompt:prompt,
+        execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",
+        context_post_id:config.postId||0,
+        post_id:config.postId||0,
+        target_id:config.targetId||0,
+        variant:config.variant||"1",
+        action:config.defaultAction||"site_audit"
+      })
+    }).then(function(response){
+      return response.text().then(function(text){
+        var data={};
+        try{data=text?JSON.parse(text):{};}catch(error){data={};}
+        if(!response.ok){
+          var errorMessage=(data&&data.suggestion&&data.suggestion.message)||(data&&data.error)||(config.labels&&config.labels.analysisFailed)||"The request analysis failed.";
+          throw new Error(errorMessage);
+        }
+        return data;
+      });
+    }).then(function(data){
+      renderSuggestion(data&&data.suggestion?data.suggestion:{message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed."},false);
+    }).catch(function(error){
+      renderSuggestion({message:error&&error.message?error.message:((config.labels&&config.labels.analysisFailed)||"The request analysis failed.")},true);
+    }).finally(function(){setBusy(false);});
+  };
+  if(openBtn){openBtn.addEventListener("click",function(){setOpen(true);});}
+  if(closeBtn){closeBtn.addEventListener("click",function(){setOpen(false);});}
+  if(analyzeButton){analyzeButton.addEventListener("click",analyzeRequest);}
+  if(promptInput){
+    promptInput.addEventListener("keydown",function(event){
+      if((event.metaKey||event.ctrlKey)&&event.key==="Enter"){event.preventDefault();analyzeRequest();}
+    });
+  }
+  if(threadSelect){
+    threadSelect.addEventListener("change",function(){
+      updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
+    });
+  }
+  if(targetSelect){
+    targetSelect.addEventListener("change",function(){
+      updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect.value,target_id:config.targetId||0,variant:config.variant||"1"});
+    });
+  }
+  updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
+  document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});
+  document.addEventListener("click",function(event){if(!shell.classList.contains("is-open")){return;}if(shell.contains(event.target)){return;}setOpen(false);});
+})();
+JS;
+        echo '<script id="lcfa-editor-bridge-script">' . $editor_bridge_script . '</script>';
     }
 
     public function handle_setup_post(): void {
@@ -654,14 +891,34 @@ final class LCFA_Admin {
     private function build_selected_connection_bundle(array $request): array {
         $settings      = LCFA_Settings::get();
         $connections   = LCFA_Settings::get_connections();
-        $mcp_bootstrap = $this->context_builder->get_bootstrap_payload();
-        $remote_status = $this->remote_client->get_status();
         $client_key    = $this->normalize_connection_client((string) ($request['preferred_client'] ?? ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex'))));
         $mode          = $this->normalize_connection_mode((string) ($request['connection_mode'] ?? ($connections['connection_mode'] ?: 'local')));
+        $workspace_root = trim((string) ($request['workspace_root'] ?? $connections['workspace_root']));
+
+        if ($mode === 'local') {
+            $snapshot      = $this->environment->get_snapshot();
+            $mcp_bootstrap = $this->get_lightweight_bootstrap_payload($connections, $snapshot);
+            $client_payload = is_array($mcp_bootstrap['clients'][$client_key] ?? null)
+                ? $mcp_bootstrap['clients'][$client_key]
+                : (is_array($mcp_bootstrap['clients']['codex'] ?? null) ? $mcp_bootstrap['clients']['codex'] : ['command' => '', 'env' => []]);
+
+            return $this->connection_onboarding->build_bundle([
+                'client'         => $client_key,
+                'mode'           => $mode,
+                'workspace_root' => $workspace_root,
+                'common'         => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
+                'client_payload' => [
+                    'command' => (string) ($client_payload['command'] ?? ''),
+                    'env'     => (array) ($client_payload['env'] ?? []),
+                ],
+            ]);
+        }
+
+        $mcp_bootstrap = $this->context_builder->get_bootstrap_payload();
+        $remote_status = $this->remote_client->get_status();
         $client_payload = is_array($mcp_bootstrap['clients'][$client_key] ?? null)
             ? $mcp_bootstrap['clients'][$client_key]
             : (is_array($mcp_bootstrap['clients']['codex'] ?? null) ? $mcp_bootstrap['clients']['codex'] : ['command' => '', 'env' => []]);
-        $workspace_root = trim((string) ($request['workspace_root'] ?? $connections['workspace_root']));
 
         if ($mode === 'remote') {
             $remote_rest_base = (string) ($remote_status['mcp']['rest_base'] ?? ($remote_status['endpoint'] ?? ''));
@@ -699,6 +956,101 @@ final class LCFA_Admin {
 
     private function normalize_connection_mode(string $mode): string {
         return $mode === 'remote' ? 'remote' : 'local';
+    }
+
+    private function get_lightweight_bootstrap_payload(array $connections, array $snapshot): array {
+        $site_url = trailingslashit(home_url('/'));
+        $rest_base = trailingslashit(rest_url('lcfa/v1/'));
+        $mcp_endpoint = LCFA_Settings::get_mcp_endpoint();
+        $mcp_token = (string) ($connections['mcp_token'] ?? '');
+        $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
+        $filesystem_mode = ($snapshot['site_mode'] ?? 'local') === 'local' ? 'local-theme-access' : 'remote-rest-primary';
+        $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
+        $common = [
+            'site_url'       => $site_url,
+            'rest_base'      => $rest_base,
+            'mcp_endpoint'   => $mcp_endpoint,
+            'mcp_token'      => $mcp_token,
+            'wp_root'        => $wp_root,
+            'framework'      => (string) ($snapshot['detected_framework'] ?? 'unknown'),
+            'theme'          => (string) ($snapshot['current_theme_stylesheet'] ?? ''),
+            'transport'      => (string) ($connections['transport'] ?? 'rest'),
+            'filesystem_mode'=> $filesystem_mode,
+        ];
+        $filesystem_env = $filesystem_mode === 'local-theme-access' && $wp_root !== ''
+            ? ['LCFA_WP_ROOT=' . $wp_root]
+            : [];
+
+        return [
+            'common' => $common,
+            'clients' => [
+                'codex' => [
+                    'label'   => 'Codex',
+                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
+                    'env'     => array_merge([
+                        'LCFA_SITE_URL=' . $site_url,
+                        'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
+                        'LCFA_MCP_TOKEN=' . $mcp_token,
+                    ], $filesystem_env),
+                ],
+                'opencode' => [
+                    'label'   => 'OpenCode',
+                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
+                    'env'     => array_merge([
+                        'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_MCP_TOKEN=' . $mcp_token,
+                    ], $filesystem_env),
+                ],
+                'claude-code' => [
+                    'label'   => 'Claude Code',
+                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
+                    'env'     => array_merge([
+                        'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
+                        'LCFA_MCP_TOKEN=' . $mcp_token,
+                    ], $filesystem_env),
+                ],
+                'cursor' => [
+                    'label'   => 'Cursor',
+                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
+                    'env'     => array_merge([
+                        'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_MCP_TOKEN=' . $mcp_token,
+                    ], $filesystem_env),
+                ],
+            ],
+        ];
+    }
+
+    private function get_deferred_mcp_status(array $snapshot): array {
+        return [
+            'enabled'         => true,
+            'endpoint'        => LCFA_Settings::get_mcp_endpoint(),
+            'rest_base'       => trailingslashit(rest_url('lcfa/v1/')),
+            'filesystem_mode' => ($snapshot['site_mode'] ?? 'local') === 'local' ? 'local-theme-access' : 'remote-rest-primary',
+            'local_bridge'    => [
+                'deferred' => true,
+            ],
+        ];
+    }
+
+    private function build_common_bootstrap_block(array $mcp_bootstrap): string {
+        $common = is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [];
+        $environment = array_values(array_filter([
+            !empty($common['site_url']) ? 'LCFA_SITE_URL=' . (string) $common['site_url'] : '',
+            !empty($common['rest_base']) ? 'LCFA_REST_BASE=' . (string) $common['rest_base'] : '',
+            !empty($common['mcp_endpoint']) ? 'LCFA_MCP_ENDPOINT=' . (string) $common['mcp_endpoint'] : '',
+            !empty($common['mcp_token']) ? 'LCFA_MCP_TOKEN=' . (string) $common['mcp_token'] : '',
+            !empty($common['framework']) ? 'LCFA_FRAMEWORK=' . (string) $common['framework'] : '',
+            !empty($common['theme']) ? 'LCFA_THEME=' . (string) $common['theme'] : '',
+        ]));
+
+        if (($common['filesystem_mode'] ?? '') === 'local-theme-access' && !empty($common['wp_root'])) {
+            $environment[] = 'LCFA_WP_ROOT=' . (string) $common['wp_root'];
+        }
+
+        return implode("\n", $environment);
     }
 
     private function write_connection_artifact(string $path, string $content, string $workspace_root, bool $create_backup = false): void {
@@ -1362,16 +1714,12 @@ final class LCFA_Admin {
     private function render_connections_tab(array $settings, array $snapshot): void {
         $connections      = LCFA_Settings::get_connections();
         $connection_test  = LCFA_Settings::consume_connection_test_result();
-        $remote_status    = $this->remote_client->get_status();
         $preferred_client = $this->normalize_connection_client((string) ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex')));
         $selected_mode    = $this->normalize_connection_mode((string) ($connections['connection_mode'] ?: 'local'));
-        $mcp_status       = $this->context_builder->get_mcp_status();
-        $mcp_bootstrap    = $this->context_builder->get_bootstrap_payload();
-        $command_example  = wp_json_encode([
-            'action'  => 'site_audit',
-            'dry_run' => true,
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        $preferred_bootstrap = $mcp_bootstrap['clients'][$preferred_client] ?? ($mcp_bootstrap['clients']['codex'] ?? ['command' => '', 'env' => []]);
+        $is_local_mode    = $selected_mode === 'local';
+        $remote_status    = $is_local_mode ? [] : $this->remote_client->get_status();
+        $mcp_status       = $is_local_mode ? $this->get_deferred_mcp_status($snapshot) : $this->context_builder->get_mcp_status();
+        $mcp_bootstrap    = $is_local_mode ? $this->get_lightweight_bootstrap_payload($connections, $snapshot) : $this->context_builder->get_bootstrap_payload();
         $bundle = $this->build_selected_connection_bundle([
             'preferred_client' => $preferred_client,
             'connection_mode'  => $selected_mode,
@@ -1387,20 +1735,6 @@ final class LCFA_Admin {
             'bundle'           => $bundle,
             'workspace_access' => $workspace_write_state,
         ]);
-        $common_environment = [
-            'LCFA_SITE_URL=' . $mcp_bootstrap['common']['site_url'],
-            'LCFA_REST_BASE=' . $mcp_bootstrap['common']['rest_base'],
-            'LCFA_MCP_ENDPOINT=' . $mcp_bootstrap['common']['mcp_endpoint'],
-            'LCFA_MCP_TOKEN=' . $mcp_bootstrap['common']['mcp_token'],
-            'LCFA_FRAMEWORK=' . $mcp_bootstrap['common']['framework'],
-            'LCFA_THEME=' . $mcp_bootstrap['common']['theme'],
-        ];
-
-        if (($mcp_bootstrap['common']['filesystem_mode'] ?? '') === 'local-theme-access' && !empty($mcp_bootstrap['common']['wp_root'])) {
-            $common_environment[] = 'LCFA_WP_ROOT=' . $mcp_bootstrap['common']['wp_root'];
-        }
-
-        $common_bootstrap = implode("\n", $common_environment);
 
         echo '<div class="lcfa-main">';
 
@@ -1413,14 +1747,18 @@ final class LCFA_Admin {
             $this->render_connection_wizard($wizard_view, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $onboarding_state, $workspace_write_state);
         }
 
-        $this->render_remote_companion_card($remote_status);
-        $this->render_advanced_connection_settings($connections, $preferred_client, $mcp_status, $preferred_bootstrap, $common_bootstrap, $command_example, (string) ($bundle['workspace_root'] ?? ''));
+        $this->render_connections_secondary_panels();
 
         echo '</div>';
     }
 
     private function render_connection_onboarding_hero(array $bundle, array $state, array $mcp_status, array $snapshot, string $selected_mode): void {
         $local_bridge = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
+        $local_bridge_deferred = !empty($local_bridge['deferred']);
+        $local_bridge_ready = !$local_bridge_deferred && !empty($local_bridge['available']);
+        $local_bridge_label = $local_bridge_deferred
+            ? __('Local MCP bridge status loading', 'livecanvas-forge-ai')
+            : ($local_bridge_ready ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai'));
 
         echo '<section class="lcfa-card lcfa-onboarding-hero">';
         echo '<div class="lcfa-card-head">';
@@ -1431,7 +1769,7 @@ final class LCFA_Admin {
         echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(sprintf(__('Client: %s', 'livecanvas-forge-ai'), ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex'))))) . '</span></span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), $selected_mode)) . '</span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Framework: %s', 'livecanvas-forge-ai'), (string) ($snapshot['detected_framework'] ?? 'unknown'))) . '</span>';
-        echo '<span class="lcfa-chip' . (!empty($local_bridge['available']) ? ' is-positive' : '') . '">' . esc_html(!empty($local_bridge['available']) ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai')) . '</span>';
+        echo '<span class="lcfa-chip' . ($local_bridge_ready ? ' is-positive' : ($local_bridge_deferred ? '' : '')) . '">' . esc_html($local_bridge_label) . '</span>';
         echo '<span class="lcfa-chip' . (($state['status'] ?? '') === 'ready' ? ' is-positive' : (($state['status'] ?? '') === 'needs_attention' ? ' is-negative' : '')) . '">' . esc_html(ucfirst(str_replace('_', ' ', (string) ($state['status'] ?? 'not_connected')))) . '</span>';
         echo '</div>';
         if (!empty($state['message'])) {
@@ -1451,13 +1789,44 @@ final class LCFA_Admin {
         echo '<div><h2>' . esc_html__('Connection wizard', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Follow one step at a time. Forge AI will show the next action clearly and only unlock the next stage when the current one is done.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
+        echo '<div class="lcfa-wizard__intro">';
         $this->render_connection_now_alert($banner);
         $this->render_connection_stepper((array) ($wizard_view['steps'] ?? []));
+        echo '</div>';
         $this->render_connection_active_step_panel($panel, $current_step, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $workspace_write_state);
         $this->render_connection_visual_help_strip($wizard_view);
         $this->render_agent_connection_guide($mcp_bootstrap, $settings, $snapshot, $preferred_client, $mcp_status, true);
         $this->render_connection_technical_summary($bundle, !empty($wizard_view['technical_summary']['expanded']));
         echo '</section>';
+    }
+
+    private function render_connections_secondary_panels(): void {
+        echo '<div class="lcfa-connections-secondary" data-lcfa-connections-secondary-root>';
+        echo '<section class="lcfa-card lcfa-connections-secondary__panel is-loading" data-lcfa-connections-panel="remote" aria-busy="true">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('cloud');
+        echo '<div><h2>' . esc_html__('Remote site', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Loading remote companion status and credentials…', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<div class="lcfa-connections-secondary__placeholder">';
+        echo '<span class="lcfa-connections-secondary__line is-wide"></span>';
+        echo '<span class="lcfa-connections-secondary__line"></span>';
+        echo '<span class="lcfa-connections-secondary__line is-short"></span>';
+        echo '</div>';
+        echo '</section>';
+
+        echo '<section class="lcfa-card lcfa-connections-secondary__panel is-loading" data-lcfa-connections-panel="advanced" aria-busy="true">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('plug');
+        echo '<div><h2>' . esc_html__('Advanced settings', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Loading transport overrides, raw commands, and diagnostics…', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<div class="lcfa-connections-secondary__placeholder">';
+        echo '<span class="lcfa-connections-secondary__line is-wide"></span>';
+        echo '<span class="lcfa-connections-secondary__line"></span>';
+        echo '<span class="lcfa-connections-secondary__line"></span>';
+        echo '<span class="lcfa-connections-secondary__line is-short"></span>';
+        echo '</div>';
+        echo '</section>';
+        echo '</div>';
     }
 
     private function render_connection_ready_card(array $wizard_view, array $bundle, array $connections, array $workspace_write_state): void {
@@ -1980,7 +2349,9 @@ final class LCFA_Admin {
             ? 'generic'
             : (isset($guides[$preferred_client]) ? $preferred_client : 'codex');
         $local_bridge  = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
-        $site_mode     = (string) ($settings['site_mode'] ?: ($snapshot['site_mode'] ?? 'local'));
+        $local_bridge_deferred = !empty($local_bridge['deferred']);
+        $local_bridge_ready = !$local_bridge_deferred && !empty($local_bridge['available']);
+        $site_mode     = (string) (($settings['site_mode'] ?? '') ?: ($snapshot['site_mode'] ?? 'local'));
         $filesystem_mode = (string) ($mcp_status['filesystem_mode'] ?? '');
 
         echo '<section class="lcfa-card">';
@@ -1996,7 +2367,7 @@ final class LCFA_Admin {
         echo '<div class="lcfa-chip-row">';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Site mode: %s', 'livecanvas-forge-ai'), $site_mode)) . '</span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $filesystem_mode ?: 'n/a')) . '</span>';
-        echo '<span class="lcfa-chip' . (!empty($local_bridge['available']) ? ' is-positive' : '') . '">' . esc_html(!empty($local_bridge['available']) ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai')) . '</span>';
+        echo '<span class="lcfa-chip' . ($local_bridge_ready ? ' is-positive' : ($local_bridge_deferred ? '' : '')) . '">' . esc_html($local_bridge_deferred ? __('Local MCP bridge status loading', 'livecanvas-forge-ai') : ($local_bridge_ready ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai'))) . '</span>';
         echo '</div>';
 
         echo '<div class="lcfa-guide">';
@@ -3118,6 +3489,8 @@ final class LCFA_Admin {
         $status_icon = $is_success ? 'stars' : 'x-circle';
         $status_label = $is_success ? __('Request analysis', 'livecanvas-forge-ai') : __('Request analysis issue', 'livecanvas-forge-ai');
         $payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
+        $preflight = is_array($suggestion['preflight'] ?? null) ? $suggestion['preflight'] : [];
+        $workflow = is_array($suggestion['workflow'] ?? null) ? $suggestion['workflow'] : [];
         $reasons = is_array($suggestion['reasons'] ?? null) ? $suggestion['reasons'] : [];
         $warnings = is_array($suggestion['warnings'] ?? null) ? $suggestion['warnings'] : [];
 
@@ -3158,6 +3531,36 @@ final class LCFA_Admin {
                 echo '<li>' . esc_html((string) $warning) . '</li>';
             }
             echo '</ul>';
+            echo '</div>';
+        }
+
+        if ($workflow) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</h3>';
+            echo '<ol class="lcfa-bullets">';
+            foreach ($workflow as $step) {
+                $action = (string) ($step['action'] ?? '');
+                $phase = (string) ($step['phase'] ?? '');
+                $execution_target = (string) ($step['execution_target'] ?? '');
+                $parts = array_values(array_filter([
+                    $phase !== '' ? ucfirst($phase) : '',
+                    $action !== '' ? $action : '',
+                    $execution_target !== '' ? sprintf(__('execution %s', 'livecanvas-forge-ai'), $execution_target) : '',
+                ]));
+                echo '<li>' . esc_html(implode(' · ', $parts)) . '</li>';
+            }
+            echo '</ol>';
+            echo '</div>';
+        }
+
+        if ($preflight) {
+            echo '<div class="lcfa-result-panel">';
+            echo '<h3>' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</h3>';
+            $this->render_code_block(wp_json_encode($preflight, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
+                'language'   => 'json',
+                'label'      => __('JSON', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy preflight', 'livecanvas-forge-ai'),
+            ]);
             echo '</div>';
         }
 

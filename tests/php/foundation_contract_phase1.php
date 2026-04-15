@@ -644,6 +644,22 @@ $suggestion = $prompt_suggester->suggest([
 lcfa_assert_true(!empty($suggestion['ok']), 'prompt suggestion should succeed for page requests');
 lcfa_assert_same('page_upsert', $suggestion['suggested_payload']['action'] ?? '', 'page creation prompts should keep page_upsert even when Tailwind is mentioned');
 
+$previous_stylesheet = $GLOBALS['lcfa_test_stylesheet'];
+$previous_template = $GLOBALS['lcfa_test_template'];
+$GLOBALS['lcfa_test_stylesheet'] = 'picowind-child';
+$GLOBALS['lcfa_test_template'] = 'picowind';
+
+$picowind_suggestion = $prompt_suggester->suggest([
+    'user_prompt' => 'Usa livecanvas-forge per creare una pricing page come questa',
+]);
+
+lcfa_assert_true(!empty($picowind_suggestion['ok']), 'prompt suggestion should succeed for Picowind page requests');
+lcfa_assert_same('page_upsert', $picowind_suggestion['suggested_payload']['action'] ?? '', 'Picowind page requests should still target page_upsert');
+lcfa_assert_same('validate_markup_for_framework', $picowind_suggestion['preflight']['action'] ?? '', 'Picowind page requests should recommend framework validation before page_upsert');
+lcfa_assert_same('picowind', $picowind_suggestion['preflight']['payload']['framework'] ?? '', 'Picowind preflight payload should pin the active framework');
+lcfa_assert_same('validate_markup_for_framework', $picowind_suggestion['workflow'][0]['action'] ?? '', 'Picowind workflow should start with validation');
+lcfa_assert_same('page_upsert', $picowind_suggestion['workflow'][1]['action'] ?? '', 'Picowind workflow should continue with page_upsert after validation');
+
 $context_reflection = new ReflectionClass($context_builder);
 $picowind_rules_method = $context_reflection->getMethod('get_output_rules');
 $picowind_rules = $picowind_rules_method->invoke($context_builder, 'picowind');
@@ -655,6 +671,34 @@ lcfa_assert_same('footer', $picowind_rules['page_level_script_placement'] ?? '',
 lcfa_assert_true(($picowind_rules['prefer_daisyui_components'] ?? null) === true, 'Picowind output rules should prefer DaisyUI components first');
 lcfa_assert_true(($picowind_rules['allow_external_libraries'] ?? null) === true, 'Picowind output rules should allow external libraries when necessary');
 lcfa_assert_contains('JavaScript is allowed when it is necessary for the interaction', implode("\n", (array) ($picowind_rules['notes'] ?? [])), 'Picowind notes should explain that JavaScript is allowed when needed');
+
+$picowind_validation_ok = $command_deck->execute([
+    'action'              => 'validate_markup_for_framework',
+    'body_html_lines'     => [
+        '<main class="mx-auto max-w-6xl px-4 py-12">',
+        '  <section class="grid gap-6 md:grid-cols-3"><article class="card bg-base-100 shadow-xl"><div class="card-body"><h2 class="card-title">Team</h2></div></article></section>',
+        '</main>',
+    ],
+    'footer_script_lines' => [
+        '(() => {',
+        '  console.log("pricing ok");',
+        '})();',
+    ],
+]);
+
+lcfa_assert_true($picowind_validation_ok['ok'] === true, 'validate_markup_for_framework should succeed for Tailwind/DaisyUI-friendly markup');
+lcfa_assert_true(($picowind_validation_ok['data']['valid'] ?? false) === true, 'validate_markup_for_framework should mark Tailwind/DaisyUI-friendly markup as valid');
+lcfa_assert_same('picowind', $picowind_validation_ok['data']['framework'] ?? '', 'validate_markup_for_framework should report the active framework');
+
+$picowind_validation_fail = $command_deck->execute([
+    'action'  => 'validate_markup_for_framework',
+    'content' => '<main><div class="container"><div class="row"><div class="col-md-6"><a class="btn btn-primary">Buy</a></div></div></div></main>',
+]);
+
+lcfa_assert_true($picowind_validation_fail['ok'] === true, 'validate_markup_for_framework should return a structured response even when markup is invalid');
+lcfa_assert_true(($picowind_validation_fail['data']['valid'] ?? true) === false, 'validate_markup_for_framework should flag clearly Bootstrap-like Picowind markup as invalid');
+lcfa_assert_contains('row', implode(',', (array) ($picowind_validation_fail['data']['signals'] ?? [])), 'validate_markup_for_framework should expose the matched framework conflict signals');
+lcfa_assert_contains('Picowind', implode("\n", array_merge([(string) ($picowind_validation_fail['message'] ?? '')], (array) ($picowind_validation_fail['warnings'] ?? []))), 'validate_markup_for_framework should explain the active framework conflict');
 
 $page_result = $command_deck->execute([
     'action'  => 'page_upsert',
@@ -683,6 +727,28 @@ lcfa_assert_true($interactive_page_result['ok'] === true, 'page_upsert should al
 lcfa_assert_contains('<input type="radio"', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve form inputs instead of letting KSES strip them');
 lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve page-level scripts instead of saving raw JavaScript text');
 
+$structured_page_result = $command_deck->execute([
+    'action'              => 'page_upsert',
+    'title'               => 'Structured Pricing',
+    'slug'                => 'structured-pricing',
+    'status'              => 'draft',
+    'body_html_lines'     => [
+        '<main>',
+        '  <section class="pricing-grid"><h1>Pricing</h1></section>',
+        '</main>',
+    ],
+    'footer_script_lines' => [
+        '(() => {',
+        '  console.log("structured pricing");',
+        '})();',
+    ],
+]);
+
+lcfa_assert_true($structured_page_result['ok'] === true, 'page_upsert should accept structured page payloads without a raw content blob');
+lcfa_assert_contains('<section class="pricing-grid">', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should persist body_html_lines into post_content');
+lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should wrap footer_script_lines in a script tag');
+lcfa_assert_contains('structured pricing', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should preserve footer_script_lines contents');
+
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
     'post_id' => 100,
@@ -707,12 +773,8 @@ $fallback_edit_result = $command_deck->execute([
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 lcfa_assert_true($fallback_edit_result['ok'] === true, 'page_upsert should still succeed when get_edit_post_link returns empty');
-lcfa_assert_same('https://example.test/wp-admin/post.php?post=102&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
+lcfa_assert_same('https://example.test/wp-admin/post.php?post=103&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
 
-$previous_stylesheet = $GLOBALS['lcfa_test_stylesheet'];
-$previous_template = $GLOBALS['lcfa_test_template'];
-$GLOBALS['lcfa_test_stylesheet'] = 'picowind-child';
-$GLOBALS['lcfa_test_template'] = 'picowind';
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind-child/page-templates', 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind/page-templates', 0777, true);
 @file_put_contents($GLOBALS['lcfa_test_theme_root'] . '/picowind-child/page-templates/empty.php', '<?php // child empty template');

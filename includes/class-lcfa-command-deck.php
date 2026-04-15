@@ -42,6 +42,10 @@ final class LCFA_Command_Deck {
                 'label'       => __('Run site audit', 'livecanvas-forge-ai'),
                 'description' => __('Returns the current stack summary and LiveCanvas inventory without writing.', 'livecanvas-forge-ai'),
             ],
+            'validate_markup_for_framework' => [
+                'label'       => __('Validate markup for framework', 'livecanvas-forge-ai'),
+                'description' => __('Preflights page markup against the active framework rules without writing content.', 'livecanvas-forge-ai'),
+            ],
             'page_upsert' => [
                 'label'       => __('Create or update page', 'livecanvas-forge-ai'),
                 'description' => __('Creates a page when no target exists, or updates the existing LiveCanvas page and always returns final URLs.', 'livecanvas-forge-ai'),
@@ -145,7 +149,11 @@ final class LCFA_Command_Deck {
         $root_scope = sanitize_key($payload['root_scope'] ?? 'stylesheet');
         $execution_target = sanitize_key($payload['execution_target'] ?? 'local');
         $genesis_task_id = sanitize_key((string) ($payload['genesis_task_id'] ?? ''));
-        $content   = wp_unslash((string) ($payload['content'] ?? ''));
+        $content   = $this->resolve_command_content($action, $payload);
+
+        if ($content !== '' && (!isset($payload['content']) || trim((string) $payload['content']) === '')) {
+            $payload['content'] = $content;
+        }
 
         if (!isset($this->get_actions()[$action])) {
             return $this->error_result(__('Unsupported command action.', 'livecanvas-forge-ai'));
@@ -212,6 +220,34 @@ final class LCFA_Command_Deck {
                 );
                 $result['target_type'] = 'audit';
                 $result['inventory']   = $inventory;
+                break;
+
+            case 'validate_markup_for_framework':
+                if (trim($content) === '') {
+                    return $this->error_result(__('Markup content is required for framework validation.', 'livecanvas-forge-ai'));
+                }
+
+                $inspection = $this->inspect_page_markup_for_framework($framework, $content);
+
+                $result['target_type']   = 'framework_validation';
+                $result['target_title']  = $framework;
+                $result['summary']       = sprintf(__('Validate page markup against the %s framework policy.', 'livecanvas-forge-ai'), $framework !== '' ? $framework : __('active', 'livecanvas-forge-ai'));
+                $result['proposed_html'] = $content;
+                $result['message']       = !empty($inspection['valid'])
+                    ? __('Markup validation passed.', 'livecanvas-forge-ai')
+                    : __('Markup validation found framework conflicts.', 'livecanvas-forge-ai');
+                $result['data']          = [
+                    'framework'        => $framework,
+                    'valid'            => !empty($inspection['valid']),
+                    'signal_count'     => count((array) ($inspection['signals'] ?? [])),
+                    'signals'          => array_values((array) ($inspection['signals'] ?? [])),
+                    'content_bytes'    => strlen($content),
+                    'validation_error' => (string) ($inspection['message'] ?? ''),
+                ];
+
+                if (empty($inspection['valid']) && (string) ($inspection['message'] ?? '') !== '') {
+                    $result['warnings'][] = (string) $inspection['message'];
+                }
                 break;
 
             case 'design_system_compose':
@@ -914,6 +950,7 @@ final class LCFA_Command_Deck {
 
     private function requires_livecanvas(string $action): bool {
         return !in_array($action, [
+            'validate_markup_for_framework',
             'design_system_compose',
             'design_system_apply',
             'windpress_audit',
@@ -969,6 +1006,76 @@ final class LCFA_Command_Deck {
         ];
     }
 
+    private function resolve_command_content(string $action, array $payload): string {
+        $content = wp_unslash((string) ($payload['content'] ?? ''));
+
+        if (!$this->supports_structured_page_content($action) || trim($content) !== '') {
+            return $content;
+        }
+
+        $body_html     = $this->coerce_multiline_payload($payload, 'body_html', 'body_html_lines');
+        $footer_html   = $this->coerce_multiline_payload($payload, 'footer_html', 'footer_html_lines');
+        $footer_script = $this->coerce_multiline_payload($payload, 'footer_script', 'footer_script_lines');
+
+        if (trim($body_html) === '' && trim($footer_html) === '' && trim($footer_script) === '') {
+            return '';
+        }
+
+        $parts = [];
+
+        if (trim($body_html) !== '') {
+            $parts[] = trim($body_html);
+        }
+
+        if (trim($footer_html) !== '') {
+            $parts[] = trim($footer_html);
+        }
+
+        if (trim($footer_script) !== '') {
+            $parts[] = $this->wrap_page_footer_script($footer_script);
+        }
+
+        return implode("\n\n", $parts);
+    }
+
+    private function coerce_multiline_payload(array $payload, string $string_key, string $lines_key): string {
+        $string_value = wp_unslash((string) ($payload[$string_key] ?? ''));
+
+        if ($string_value !== '') {
+            return $string_value;
+        }
+
+        $lines = $payload[$lines_key] ?? null;
+
+        if (!is_array($lines)) {
+            return '';
+        }
+
+        $normalized = [];
+
+        foreach ($lines as $line) {
+            if (is_scalar($line) || $line === null) {
+                $normalized[] = wp_unslash((string) $line);
+            }
+        }
+
+        return implode("\n", $normalized);
+    }
+
+    private function wrap_page_footer_script(string $script): string {
+        $trimmed = trim($script);
+
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (preg_match('/<script\b/i', $trimmed)) {
+            return $trimmed;
+        }
+
+        return "<script>\n" . $trimmed . "\n</script>";
+    }
+
     public function evaluate_action_policy_for_rest(string $action, bool $dry_run): array {
         return $this->evaluate_policy($action, $dry_run);
     }
@@ -994,6 +1101,10 @@ final class LCFA_Command_Deck {
         return $this->environment->detect_framework_family();
     }
 
+    private function supports_structured_page_content(string $action): bool {
+        return in_array($action, ['validate_markup_for_framework', 'page_upsert', 'create_page', 'update_page'], true);
+    }
+
     private function resolve_livecanvas_page_template(): string {
         $candidates = [
             trailingslashit(get_stylesheet_directory()) . 'page-templates/empty.php',
@@ -1010,34 +1121,52 @@ final class LCFA_Command_Deck {
     }
 
     private function validate_page_markup_for_framework(string $framework, string $content): string {
+        $inspection = $this->inspect_page_markup_for_framework($framework, $content);
+
+        return (string) ($inspection['message'] ?? '');
+    }
+
+    private function inspect_page_markup_for_framework(string $framework, string $content): array {
         if ($framework !== 'picowind' || trim($content) === '') {
-            return '';
+            return [
+                'valid'   => true,
+                'signals' => [],
+                'message' => '',
+            ];
         }
 
         $patterns = [
-            '/\brow\b/i',
-            '/\bcol-(?:sm|md|lg|xl|xxl)?-?\d+\b/i',
-            '/\bcontainer-fluid\b/i',
-            '/\bg-\d+\b/i',
-            '/\bd-flex\b/i',
-            '/\bjustify-content-[a-z-]+\b/i',
-            '/\balign-items-[a-z-]+\b/i',
-            '/\bbtn\b[^"]*\bbtn-[a-z0-9-]+\b/i',
+            'row'                    => '/\brow\b/i',
+            'col-*'                  => '/\bcol-(?:sm|md|lg|xl|xxl)?-?\d+\b/i',
+            'container-fluid'        => '/\bcontainer-fluid\b/i',
+            'g-*'                    => '/\bg-\d+\b/i',
+            'd-flex'                 => '/\bd-flex\b/i',
+            'justify-content-*'      => '/\bjustify-content-[a-z-]+\b/i',
+            'align-items-*'          => '/\balign-items-[a-z-]+\b/i',
+            'btn btn-*'              => '/\bbtn\b[^"]*\bbtn-[a-z0-9-]+\b/i',
         ];
 
-        $matches = 0;
+        $signals = [];
 
-        foreach ($patterns as $pattern) {
+        foreach ($patterns as $label => $pattern) {
             if (preg_match($pattern, $content)) {
-                $matches++;
+                $signals[] = $label;
             }
         }
 
-        if ($matches < 2) {
-            return '';
+        if (count($signals) < 2) {
+            return [
+                'valid'   => true,
+                'signals' => $signals,
+                'message' => '',
+            ];
         }
 
-        return __('Picowind is active. Regenerate this page with Tailwind or DaisyUI-compatible markup instead of Bootstrap classes.', 'livecanvas-forge-ai');
+        return [
+            'valid'   => false,
+            'signals' => $signals,
+            'message' => __('Picowind is active. Regenerate this page with Tailwind or DaisyUI-compatible markup instead of Bootstrap classes.', 'livecanvas-forge-ai'),
+        ];
     }
 
     private function resolve_edit_post_url(int $post_id): string {
