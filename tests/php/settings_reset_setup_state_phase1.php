@@ -88,6 +88,7 @@ $GLOBALS['lcfa_test_options'][LCFA_Settings::OPTION_KEY] = [
 $GLOBALS['lcfa_test_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = [
     'transport' => 'mcp',
     'preferred_client' => 'codex',
+    'claude_connection_target' => 'desktop_app',
     'workspace_root' => '/Users/example/project',
     'connection_status' => 'ready',
     'connection_mode' => 'local',
@@ -110,6 +111,7 @@ lcfa_assert_same('', $settings['ai_tool'] ?? null, 'reset_setup_state should cle
 lcfa_assert_same(0, $settings['last_completed_step'] ?? null, 'reset_setup_state should clear step progress');
 
 lcfa_assert_same('', $connections['preferred_client'] ?? null, 'reset_setup_state should clear the preferred client');
+lcfa_assert_same('', $connections['claude_connection_target'] ?? null, 'reset_setup_state should clear the saved Claude connection target');
 lcfa_assert_same('', $connections['workspace_root'] ?? null, 'reset_setup_state should clear the workspace root');
 lcfa_assert_same('', $connections['connection_status'] ?? null, 'reset_setup_state should clear the connection status');
 lcfa_assert_same('', $connections['connection_current_step'] ?? null, 'reset_setup_state should clear the connection wizard step');

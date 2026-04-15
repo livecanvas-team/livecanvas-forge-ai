@@ -12,11 +12,13 @@ final class LCFA_Connection_Bundle_Builder {
         $command        = $this->normalize_command($this->tokenize_command($command_input), $workspace_root, $mode);
         $command_string = $this->join_shell_tokens($command);
         $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $workspace_root, $mode);
+        $claude_connection_target = $this->normalize_claude_target($payload, $client);
 
-        $shortcut = $this->build_client_shortcut($client, $command, $environment);
+        $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment);
 
         return [
             'client'              => $client,
+            'claude_connection_target' => $claude_connection_target,
             'mode'                => $mode,
             'server_name'         => 'livecanvas-forge',
             'workspace_root'      => $workspace_root,
@@ -26,8 +28,8 @@ final class LCFA_Connection_Bundle_Builder {
             'shortcut_title'      => $shortcut['title'],
             'shortcut_command'    => $shortcut['command'],
             'environment'         => $environment,
-            'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $command, $environment),
-            'download_files'      => $this->build_download_files($client, $command, $environment),
+            'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment),
+            'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment),
             'smoke_test_command'  => $this->build_smoke_test_command($environment, $command),
             'status'              => 'generated',
         ];
@@ -36,9 +38,28 @@ final class LCFA_Connection_Bundle_Builder {
     private function normalize_client(string $client): string {
         $client = sanitize_key($client);
 
-        return in_array($client, ['codex', 'opencode', 'claude-code', 'cursor', 'generic'], true)
+        if ($client === 'claude-code') {
+            return 'claude';
+        }
+
+        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)
             ? $client
             : 'codex';
+    }
+
+    private function normalize_claude_target(array $payload, string $client): string {
+        if ($client !== 'claude') {
+            return '';
+        }
+
+        $raw_client = sanitize_key((string) ($payload['client'] ?? ''));
+        if ($raw_client === 'claude-code') {
+            return 'cli';
+        }
+
+        $target = sanitize_key((string) ($payload['claude_connection_target'] ?? ''));
+
+        return in_array($target, ['desktop_app', 'cli'], true) ? $target : 'cli';
     }
 
     private function normalize_mode(string $mode): string {
@@ -301,7 +322,7 @@ final class LCFA_Connection_Bundle_Builder {
         return $command;
     }
 
-    private function build_workspace_files(string $client, string $mode, string $workspace_root, array $command, array $environment): array {
+    private function build_workspace_files(string $client, string $mode, string $workspace_root, string $claude_connection_target, array $command, array $environment): array {
         if ($mode !== 'local' || $workspace_root === '') {
             return [];
         }
@@ -328,11 +349,20 @@ final class LCFA_Connection_Bundle_Builder {
                     'label'   => __('Codex registration helper', 'livecanvas-forge-ai'),
                     'content' => $this->build_codex_script($command, $environment),
                 ]];
-            case 'claude-code':
+            case 'claude':
+                if ($claude_connection_target === 'desktop_app') {
+                    return [[
+                        'path'    => $workspace_root . '/livecanvas-forge.claude-desktop.json',
+                        'type'    => 'json',
+                        'label'   => __('Claude Desktop config', 'livecanvas-forge-ai'),
+                        'content' => $this->build_claude_desktop_config($command, $environment),
+                    ]];
+                }
+
                 return [[
-                    'path'    => $workspace_root . '/livecanvas-forge.claude-code.sh',
+                    'path'    => $workspace_root . '/livecanvas-forge.claude-cli.sh',
                     'type'    => 'shell',
-                    'label'   => __('Claude Code registration helper', 'livecanvas-forge-ai'),
+                    'label'   => __('Claude CLI registration helper', 'livecanvas-forge-ai'),
                     'content' => $this->build_claude_script($command, $environment),
                 ]];
             default:
@@ -345,7 +375,7 @@ final class LCFA_Connection_Bundle_Builder {
         }
     }
 
-    private function build_download_files(string $client, array $command, array $environment): array {
+    private function build_download_files(string $client, string $mode, string $claude_connection_target, array $command, array $environment): array {
         switch ($client) {
             case 'opencode':
                 return [[
@@ -365,9 +395,19 @@ final class LCFA_Connection_Bundle_Builder {
                     'mime'    => 'text/x-shellscript',
                     'content' => $this->build_codex_script($command, $environment),
                 ]];
-            case 'claude-code':
+            case 'claude':
+                if ($claude_connection_target === 'desktop_app') {
+                    return [[
+                        'name'    => $mode === 'remote' ? 'livecanvas-forge.claude-desktop.txt' : 'livecanvas-forge.claude-desktop.json',
+                        'mime'    => $mode === 'remote' ? 'text/plain' : 'application/json',
+                        'content' => $mode === 'remote'
+                            ? $this->build_claude_desktop_reference($command, $environment)
+                            : $this->build_claude_desktop_config($command, $environment),
+                    ]];
+                }
+
                 return [[
-                    'name'    => 'livecanvas-forge.claude-code.sh',
+                    'name'    => 'livecanvas-forge.claude-cli.sh',
                     'mime'    => 'text/x-shellscript',
                     'content' => $this->build_claude_script($command, $environment),
                 ]];
@@ -406,6 +446,46 @@ final class LCFA_Connection_Bundle_Builder {
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
     }
 
+    private function build_claude_desktop_config(array $command, array $environment): string {
+        return (string) wp_json_encode([
+            'mcpServers' => [
+                'livecanvas-forge' => [
+                    'type'    => 'stdio',
+                    'command' => $command[0] ?? 'node',
+                    'args'    => array_slice($command, 1),
+                    'env'     => (object) $environment,
+                ],
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    }
+
+    private function build_claude_desktop_reference(array $command, array $environment): string {
+        $lines = [
+            '# Claude Desktop reference',
+            '# Review these values before editing Claude Desktop on another machine or remote target.',
+            '# Command',
+            $command[0] ?? 'node',
+            '',
+            '# Args',
+        ];
+
+        foreach (array_slice($command, 1) as $token) {
+            $lines[] = $token;
+        }
+
+        $lines[] = '';
+        $lines[] = '# Environment';
+        foreach ($environment as $key => $value) {
+            $lines[] = $key . '=' . $value;
+        }
+
+        $lines[] = '';
+        $lines[] = '# Smoke test';
+        $lines[] = $this->build_smoke_test_command($environment, $command);
+
+        return implode("\n", $lines) . "\n";
+    }
+
     private function build_codex_script(array $command, array $environment): string {
         return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_codex_register_command($command, $environment) . "\n";
     }
@@ -414,16 +494,27 @@ final class LCFA_Connection_Bundle_Builder {
         return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_claude_register_command($command, $environment) . "\n";
     }
 
-    private function build_client_shortcut(string $client, array $command, array $environment): array {
+    private function build_client_shortcut(string $client, string $mode, string $claude_connection_target, array $command, array $environment): array {
         switch ($client) {
             case 'codex':
                 return [
                     'title'   => __('Codex shortcut', 'livecanvas-forge-ai'),
                     'command' => $this->build_codex_register_command($command, $environment),
                 ];
-            case 'claude-code':
+            case 'claude':
+                if ($claude_connection_target === 'desktop_app') {
+                    return [
+                        'title'   => $mode === 'remote'
+                            ? __('Claude Desktop reference', 'livecanvas-forge-ai')
+                            : __('Claude Desktop config', 'livecanvas-forge-ai'),
+                        'command' => $mode === 'remote'
+                            ? $this->build_claude_desktop_reference($command, $environment)
+                            : $this->build_claude_desktop_config($command, $environment),
+                    ];
+                }
+
                 return [
-                    'title'   => __('Claude Code shortcut', 'livecanvas-forge-ai'),
+                    'title'   => __('Claude CLI shortcut', 'livecanvas-forge-ai'),
                     'command' => $this->build_claude_register_command($command, $environment),
                 ];
             default:

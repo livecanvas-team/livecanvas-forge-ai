@@ -106,6 +106,8 @@ $nav_markup = (string) ob_get_clean();
 
 lcfa_assert_contains('Step 4. AI Coding Agent', $step_markup, 'step 4 should be titled AI Coding Agent');
 lcfa_assert_contains('Save AI Coding Agent', $step_markup, 'step 4 CTA should reference AI Coding Agent');
+lcfa_assert_contains('>Claude<', $step_markup, 'step 4 should render Claude as the setup option label');
+lcfa_assert_not_contains('>Claude Code<', $step_markup, 'step 4 should no longer render Claude Code as the setup option label');
 lcfa_assert_not_contains('Step 4. AI client', $step_markup, 'step 4 should no longer refer to AI client');
 lcfa_assert_contains('4. AI Coding Agent', $nav_markup, 'step navigation should use AI Coding Agent for step 4');
 lcfa_assert_not_contains('4. Client', $nav_markup, 'step navigation should no longer use Client for step 4');

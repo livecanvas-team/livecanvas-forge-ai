@@ -276,8 +276,8 @@ final class LCFA_Context_Builder {
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
                     ], $filesystem_env),
                 ],
-                'claude-code' => [
-                    'label'   => 'Claude Code',
+                'claude' => [
+                    'label'   => 'Claude',
                     'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude'),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
@@ -295,6 +295,8 @@ final class LCFA_Context_Builder {
                 ],
             ],
         ];
+
+        $this->bootstrap_payload_cache['clients']['claude-code'] = $this->bootstrap_payload_cache['clients']['claude'];
 
         return $this->bootstrap_payload_cache;
     }

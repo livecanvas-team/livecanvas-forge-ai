@@ -92,16 +92,20 @@ final class LCFA_Settings {
     }
 
     public static function get_connections(): array {
-        $connections = get_option(self::CONNECTIONS_OPTION_KEY, []);
+        $stored_connections = get_option(self::CONNECTIONS_OPTION_KEY, []);
+        $connections = $stored_connections;
 
         if (!is_array($connections)) {
             $connections = [];
         }
 
         $connections = wp_parse_args($connections, self::connection_defaults());
+        $connections = self::normalize_connections_snapshot($connections);
 
         if (empty($connections['mcp_token'])) {
             $connections['mcp_token'] = self::generate_mcp_token();
+            update_option(self::CONNECTIONS_OPTION_KEY, $connections);
+        } elseif ($stored_connections !== $connections) {
             update_option(self::CONNECTIONS_OPTION_KEY, $connections);
         }
 
@@ -135,6 +139,7 @@ final class LCFA_Settings {
             'remote_application_password' => '',
             'mcp_server_command'          => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
             'preferred_client'            => '',
+            'claude_connection_target'    => '',
             'workspace_root'              => '',
             'connection_status'           => '',
             'connection_mode'             => '',
@@ -147,6 +152,13 @@ final class LCFA_Settings {
 
     public static function sanitize_connections(array $connections): array {
         $current = self::get_connections();
+        $raw_client = sanitize_key((string) ($connections['preferred_client'] ?? $current['preferred_client']));
+        $preferred_client = self::normalize_preferred_client($raw_client);
+        $claude_connection_target = self::normalize_claude_connection_target(
+            (string) ($connections['claude_connection_target'] ?? ($current['claude_connection_target'] ?? '')),
+            $preferred_client,
+            $raw_client
+        );
         $password = isset($connections['remote_application_password'])
             ? sanitize_text_field($connections['remote_application_password'])
             : $current['remote_application_password'];
@@ -167,6 +179,7 @@ final class LCFA_Settings {
         if ($mcp_port < 1 || $mcp_port > 65535) {
             $mcp_port = 7681;
         }
+        $connection_current_step = (string) ($connections['connection_current_step'] ?? '');
 
         return [
             'transport'                   => in_array($connections['transport'] ?? '', ['rest', 'mcp', 'hybrid'], true) ? $connections['transport'] : 'rest',
@@ -181,15 +194,56 @@ final class LCFA_Settings {
             'remote_username'             => sanitize_text_field($connections['remote_username'] ?? ''),
             'remote_application_password' => $password,
             'mcp_server_command'          => sanitize_textarea_field($connections['mcp_server_command'] ?? ''),
-            'preferred_client'            => sanitize_key($connections['preferred_client'] ?? ''),
+            'preferred_client'            => $preferred_client,
+            'claude_connection_target'    => $claude_connection_target,
             'workspace_root'              => sanitize_text_field($connections['workspace_root'] ?? ''),
             'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
             'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
             'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
             'connection_last_error'       => sanitize_text_field($connections['connection_last_error'] ?? ''),
             'connection_last_bundle_hash' => sanitize_text_field($connections['connection_last_bundle_hash'] ?? ''),
-            'connection_current_step'     => in_array($connections['connection_current_step'] ?? '', ['', 'choose_client', 'choose_mode', 'confirm_details', 'generate_bundle', 'smoke_test', 'ready'], true) ? $connections['connection_current_step'] : '',
+            'connection_current_step'     => in_array($connection_current_step, ['', 'choose_client', 'choose_claude_target', 'choose_mode', 'confirm_details', 'generate_bundle', 'smoke_test', 'ready'], true) ? $connection_current_step : '',
         ];
+    }
+
+    private static function normalize_connections_snapshot(array $connections): array {
+        $raw_client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        $preferred_client = self::normalize_preferred_client($raw_client);
+
+        $connections['preferred_client'] = $preferred_client;
+        $connections['claude_connection_target'] = self::normalize_claude_connection_target(
+            (string) ($connections['claude_connection_target'] ?? ''),
+            $preferred_client,
+            $raw_client
+        );
+
+        return $connections;
+    }
+
+    private static function normalize_preferred_client(string $client): string {
+        if ($client === 'other') {
+            return 'generic';
+        }
+
+        if ($client === 'claude-code') {
+            return 'claude';
+        }
+
+        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $client : '';
+    }
+
+    private static function normalize_claude_connection_target(string $target, string $preferred_client, string $raw_client): string {
+        if ($raw_client === 'claude-code') {
+            return 'cli';
+        }
+
+        if ($preferred_client !== 'claude') {
+            return '';
+        }
+
+        $target = sanitize_key($target);
+
+        return in_array($target, ['desktop_app', 'cli'], true) ? $target : '';
     }
 
     public static function rotate_mcp_token(): array {

@@ -1353,6 +1353,49 @@
     gap: 14px;
 }
 
+.lcfa-admin .lcfa-agent-guide__subtabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid rgba(169, 171, 203, 0.18);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lcfa-admin .lcfa-agent-guide__subtab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+    color: var(--lcfa-text-muted);
+    cursor: pointer;
+    font-weight: 700;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.lcfa-admin .lcfa-agent-guide__subtab:hover {
+    color: var(--lcfa-text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lcfa-admin .lcfa-agent-guide__subpanels {
+    position: relative;
+}
+
+.lcfa-admin .lcfa-agent-guide__subpanel {
+    display: none;
+    gap: 14px;
+}
+
+.lcfa-admin .lcfa-agent-guide__mode-copy {
+    margin: 0;
+    color: var(--lcfa-text-muted);
+    line-height: 1.6;
+}
+
 .lcfa-admin .lcfa-agent-guide__bundle-layout {
     display: grid;
     gap: 14px;
@@ -1401,7 +1444,7 @@
 
 #lcfa-agent-tab-codex:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-codex"],
 #lcfa-agent-tab-cursor:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-cursor"],
-#lcfa-agent-tab-claude-code:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-claude-code"],
+#lcfa-agent-tab-claude:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-claude"],
 #lcfa-agent-tab-opencode:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-opencode"],
 #lcfa-agent-tab-generic:checked ~ .lcfa-agent-guide__tabs label[for="lcfa-agent-tab-generic"] {
     border-color: rgba(38, 198, 218, 0.48);
@@ -1414,9 +1457,23 @@
 
 #lcfa-agent-tab-codex:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--codex,
 #lcfa-agent-tab-cursor:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--cursor,
-#lcfa-agent-tab-claude-code:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--claude-code,
+#lcfa-agent-tab-claude:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--claude,
 #lcfa-agent-tab-opencode:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--opencode,
 #lcfa-agent-tab-generic:checked ~ .lcfa-agent-guide__panels .lcfa-agent-guide__panel--generic {
+    display: grid;
+}
+
+#lcfa-agent-claude-mode-desktop_app:checked ~ .lcfa-agent-guide__subtabs label[for="lcfa-agent-claude-mode-desktop_app"],
+#lcfa-agent-claude-mode-cli:checked ~ .lcfa-agent-guide__subtabs label[for="lcfa-agent-claude-mode-cli"] {
+    background:
+        linear-gradient(180deg, rgba(38, 198, 218, 0.2), rgba(38, 198, 218, 0.08)),
+        rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text);
+    box-shadow: inset 0 0 0 1px rgba(38, 198, 218, 0.18);
+}
+
+#lcfa-agent-claude-mode-desktop_app:checked ~ .lcfa-agent-guide__subpanels .lcfa-agent-guide__subpanel--claude-desktop_app,
+#lcfa-agent-claude-mode-cli:checked ~ .lcfa-agent-guide__subpanels .lcfa-agent-guide__subpanel--claude-cli {
     display: grid;
 }
 

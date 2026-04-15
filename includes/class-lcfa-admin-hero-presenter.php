@@ -100,7 +100,7 @@ final class LCFA_Admin_Hero_Presenter {
             ];
         }
 
-        $client_value = (string) ($settings['preferred_client'] ?? '');
+        $client_value = $this->normalize_client_value((string) ($settings['preferred_client'] ?? ''));
         if ($client_value !== '') {
             $chips[] = [
                 'label' => __('Client', 'livecanvas-forge-ai'),
@@ -146,13 +146,22 @@ final class LCFA_Admin_Hero_Presenter {
             ];
         }
 
-        if (!empty($settings['preferred_client'])) {
+        $preferred_client = $this->normalize_client_value((string) ($settings['preferred_client'] ?? ''));
+        if ($preferred_client !== '') {
             $details[] = [
                 'label' => __('Preferred client', 'livecanvas-forge-ai'),
-                'value' => (string) $settings['preferred_client'],
+                'value' => $preferred_client,
             ];
         }
 
         return $details;
+    }
+
+    private function normalize_client_value(string $client): string {
+        if ($client === 'claude-code') {
+            return 'claude';
+        }
+
+        return $client;
     }
 }

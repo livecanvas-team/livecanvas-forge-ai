@@ -8,6 +8,10 @@ final class LCFA_Connection_Wizard_Presenter {
             'title'  => 'Choose your coding agent',
             'helper' => 'Pick the client',
         ],
+        'choose_claude_target' => [
+            'title'  => 'Choose Claude connection target',
+            'helper' => 'Desktop App or CLI',
+        ],
         'choose_mode' => [
             'title'  => 'Choose local or remote',
             'helper' => 'Choose the target',
@@ -122,6 +126,17 @@ final class LCFA_Connection_Wizard_Presenter {
 
     private function build_active_panel(string $current_step, array $bundle, array $workspace_access): array {
         switch ($current_step) {
+            case 'choose_claude_target':
+                return [
+                    'title'       => __('How are you connecting Claude?', 'livecanvas-forge-ai'),
+                    'description' => __('Choose whether this connection should target Claude Desktop App or the Claude Command Line Interface before you continue.', 'livecanvas-forge-ai'),
+                    'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
+                    'primary_cta' => [
+                        'label'  => __('Continue', 'livecanvas-forge-ai'),
+                        'action' => 'save_selection',
+                    ],
+                ];
+
             case 'choose_mode':
                 return [
                     'title'       => __('Is this local or remote?', 'livecanvas-forge-ai'),

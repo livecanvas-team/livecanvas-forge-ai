@@ -6,6 +6,7 @@ final class LCFA_Connection_Onboarding {
     private LCFA_Connection_Bundle_Builder $bundle_builder;
     private const STEP_ORDER = [
         'choose_client',
+        'choose_claude_target',
         'choose_mode',
         'confirm_details',
         'generate_bundle',
@@ -21,10 +22,12 @@ final class LCFA_Connection_Onboarding {
         $status = sanitize_key((string) ($connections['connection_status'] ?? ''));
         $saved_step = $this->normalize_step((string) ($connections['connection_current_step'] ?? ''));
         $preferred_client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        $claude_connection_target = sanitize_key((string) ($connections['claude_connection_target'] ?? ''));
         $connection_mode = sanitize_key((string) ($connections['connection_mode'] ?? ''));
         $last_verified_at = sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? ''));
         $last_error = sanitize_text_field((string) ($connections['connection_last_error'] ?? ''));
         $is_opencode_local = $this->is_opencode_local($preferred_client, $connection_mode);
+        $is_claude = $this->is_claude($preferred_client);
 
         if ($status === 'ready' && $last_verified_at !== '') {
             return [
@@ -48,6 +51,14 @@ final class LCFA_Connection_Onboarding {
                 'status'       => 'not_connected',
                 'current_step' => 'choose_client',
                 'message'      => __('Choose the coding agent you want to connect.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ($is_claude && !in_array($claude_connection_target, ['desktop_app', 'cli'], true)) {
+            return [
+                'status'       => 'not_connected',
+                'current_step' => 'choose_claude_target',
+                'message'      => __('Choose whether you want to connect Claude through Desktop App or the Command Line Interface.', 'livecanvas-forge-ai'),
             ];
         }
 
@@ -110,10 +121,18 @@ final class LCFA_Connection_Onboarding {
             ];
         }
 
+        if ($this->is_claude($preferred_client)) {
+            return self::STEP_ORDER;
+        }
+
         return self::STEP_ORDER;
     }
 
     private function is_opencode_local(string $preferred_client, string $connection_mode): bool {
         return $preferred_client === 'opencode' && $connection_mode === 'local';
+    }
+
+    private function is_claude(string $preferred_client): bool {
+        return $preferred_client === 'claude';
     }
 }

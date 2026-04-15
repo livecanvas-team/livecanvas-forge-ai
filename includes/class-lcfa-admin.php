@@ -677,8 +677,8 @@ JS;
             case 4:
                 $ai_tool = sanitize_key($_POST['ai_tool'] ?? '');
 
-                if (!in_array($ai_tool, ['codex', 'opencode', 'claude-code', 'cursor', 'other'], true)) {
-                    LCFA_Settings::set_notice(__('Select a valid AI client.', 'livecanvas-forge-ai'), 'error');
+                if (!in_array($ai_tool, ['codex', 'opencode', 'claude', 'cursor', 'other'], true)) {
+                    LCFA_Settings::set_notice(__('Select a valid AI Coding Agent.', 'livecanvas-forge-ai'), 'error');
                     $this->redirect_to_step(4);
                 }
 
@@ -687,10 +687,10 @@ JS;
                     'last_completed_step' => max(4, (int) $settings['last_completed_step']),
                 ]);
                 LCFA_Settings::update_connections(array_merge(LCFA_Settings::get_connections(), [
-                    'preferred_client' => $ai_tool,
+                    'preferred_client' => $ai_tool === 'other' ? 'generic' : $ai_tool,
                 ]));
 
-                LCFA_Settings::set_notice(__('AI client saved.', 'livecanvas-forge-ai'));
+                LCFA_Settings::set_notice(__('AI Coding Agent saved.', 'livecanvas-forge-ai'));
                 $this->redirect_to_step(5);
                 break;
 
@@ -748,9 +748,11 @@ JS;
         }
 
         $preferred_client = sanitize_key($_POST['preferred_client'] ?? '');
-        if (in_array($preferred_client, ['codex', 'opencode', 'claude-code', 'cursor', 'other', 'generic'], true)) {
+        if (in_array($preferred_client, ['codex', 'opencode', 'claude', 'claude-code', 'cursor', 'other', 'generic'], true)) {
             LCFA_Settings::patch([
-                'ai_tool' => $preferred_client === 'generic' ? 'other' : $preferred_client,
+                'ai_tool' => in_array($preferred_client, ['generic', 'other'], true)
+                    ? 'other'
+                    : ($preferred_client === 'claude-code' ? 'claude' : $preferred_client),
             ]);
         }
 
@@ -825,6 +827,7 @@ JS;
 
         $connections = LCFA_Settings::get_connections();
         $connections['preferred_client'] = (string) $bundle['client'];
+        $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
         $connections['connection_mode'] = (string) $bundle['mode'];
         $connections['workspace_root'] = sanitize_text_field($workspace_root !== '' ? $workspace_root : (string) $connections['workspace_root']);
         $connections['connection_last_bundle_hash'] = md5((string) ($target['content'] ?? ''));
@@ -852,6 +855,7 @@ JS;
 
         $connections = LCFA_Settings::get_connections();
         $connections['preferred_client'] = (string) ($bundle['client'] ?? $connections['preferred_client']);
+        $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
         $connections['connection_mode'] = (string) ($bundle['mode'] ?? $connections['connection_mode']);
         $connections['workspace_root'] = sanitize_text_field((string) ($bundle['workspace_root'] ?? $connections['workspace_root']));
         $connections['connection_last_bundle_hash'] = md5((string) ($file['content'] ?? ''));
@@ -885,6 +889,7 @@ JS;
         $connections   = LCFA_Settings::get_connections();
         $client_key    = $this->normalize_connection_client((string) ($request['preferred_client'] ?? ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex'))));
         $mode          = $this->normalize_connection_mode((string) ($request['connection_mode'] ?? ($connections['connection_mode'] ?: 'local')));
+        $claude_connection_target = $this->normalize_claude_connection_target((string) ($request['claude_connection_target'] ?? ($connections['claude_connection_target'] ?? '')));
         $workspace_root = trim((string) ($request['workspace_root'] ?? $connections['workspace_root']));
 
         if ($mode === 'local') {
@@ -895,10 +900,11 @@ JS;
                 : (is_array($mcp_bootstrap['clients']['codex'] ?? null) ? $mcp_bootstrap['clients']['codex'] : ['command' => '', 'env' => []]);
 
             return $this->connection_onboarding->build_bundle([
-                'client'         => $client_key,
-                'mode'           => $mode,
-                'workspace_root' => $workspace_root,
-                'common'         => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
+                'client'                    => $client_key,
+                'claude_connection_target'  => $claude_connection_target,
+                'mode'                      => $mode,
+                'workspace_root'            => $workspace_root,
+                'common'                    => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
                 'client_payload' => [
                     'command' => (string) ($client_payload['command'] ?? ''),
                     'env'     => (array) ($client_payload['env'] ?? []),
@@ -923,10 +929,11 @@ JS;
         }
 
         return $this->connection_onboarding->build_bundle([
-            'client'         => $client_key,
-            'mode'           => $mode,
-            'workspace_root' => $workspace_root,
-            'common'         => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
+            'client'                    => $client_key,
+            'claude_connection_target'  => $claude_connection_target,
+            'mode'                      => $mode,
+            'workspace_root'            => $workspace_root,
+            'common'                    => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
             'client_payload' => [
                 'command' => (string) ($client_payload['command'] ?? ''),
                 'env'     => (array) ($client_payload['env'] ?? []),
@@ -941,13 +948,23 @@ JS;
             return 'generic';
         }
 
-        return in_array($client, ['codex', 'opencode', 'claude-code', 'cursor', 'generic'], true)
+        if ($client === 'claude-code') {
+            return 'claude';
+        }
+
+        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)
             ? $client
             : 'codex';
     }
 
     private function normalize_connection_mode(string $mode): string {
         return $mode === 'remote' ? 'remote' : 'local';
+    }
+
+    private function normalize_claude_connection_target(string $target): string {
+        $target = $this->sanitize_key_compat($target);
+
+        return in_array($target, ['desktop_app', 'cli'], true) ? $target : '';
     }
 
     private function get_lightweight_bootstrap_payload(array $connections, array $snapshot): array {
@@ -973,7 +990,7 @@ JS;
             ? ['LCFA_WP_ROOT=' . $wp_root]
             : [];
 
-        return [
+        $bootstrap = [
             'common' => $common,
             'clients' => [
                 'codex' => [
@@ -994,8 +1011,8 @@ JS;
                         'LCFA_MCP_TOKEN=' . $mcp_token,
                     ], $filesystem_env),
                 ],
-                'claude-code' => [
-                    'label'   => 'Claude Code',
+                'claude' => [
+                    'label'   => 'Claude',
                     'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
@@ -1013,6 +1030,10 @@ JS;
                 ],
             ],
         ];
+
+        $bootstrap['clients']['claude-code'] = $bootstrap['clients']['claude'];
+
+        return $bootstrap;
     }
 
     private function get_deferred_mcp_status(array $snapshot): array {
@@ -1912,6 +1933,8 @@ JS;
     }
 
     private function render_connection_active_step_panel(array $panel, string $current_step, array $bundle, array $connections, string $preferred_client, string $selected_mode, array $mcp_bootstrap, array $settings, array $snapshot, array $mcp_status, array $workspace_write_state): void {
+        $claude_connection_target = $this->normalize_claude_connection_target((string) ($connections['claude_connection_target'] ?? ''));
+
         echo '<section class="lcfa-wizard__panel">';
         echo '<div class="lcfa-wizard__panel-head">';
         echo '<h3>' . esc_html((string) ($panel['title'] ?? __('Connection step', 'livecanvas-forge-ai'))) . '</h3>';
@@ -1921,12 +1944,16 @@ JS;
         echo '</div>';
 
         switch ($current_step) {
+            case 'choose_claude_target':
+                $this->render_connection_choose_claude_target_form($preferred_client, $claude_connection_target, $selected_mode, (string) ($bundle['workspace_root'] ?? ''), (string) ($panel['primary_cta']['label'] ?? __('Continue', 'livecanvas-forge-ai')));
+                break;
+
             case 'choose_mode':
-                $this->render_connection_choose_mode_form($preferred_client, $selected_mode, (string) ($bundle['workspace_root'] ?? ''), (string) ($panel['primary_cta']['label'] ?? __('Continue', 'livecanvas-forge-ai')));
+                $this->render_connection_choose_mode_form($preferred_client, $claude_connection_target, $selected_mode, (string) ($bundle['workspace_root'] ?? ''), (string) ($panel['primary_cta']['label'] ?? __('Continue', 'livecanvas-forge-ai')));
                 break;
 
             case 'confirm_details':
-                $this->render_connection_confirm_details_form($bundle, $preferred_client, $selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Confirm details', 'livecanvas-forge-ai')));
+                $this->render_connection_confirm_details_form($bundle, $preferred_client, $claude_connection_target, $selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Confirm details', 'livecanvas-forge-ai')));
                 break;
 
             case 'generate_bundle':
@@ -1957,7 +1984,7 @@ JS;
         echo '<div class="lcfa-radio-group lcfa-radio-group--agents">';
         $this->render_radio('preferred_client', 'codex', __('Codex', 'livecanvas-forge-ai'), $preferred_client, 'stars');
         $this->render_radio('preferred_client', 'opencode', __('OpenCode', 'livecanvas-forge-ai'), $preferred_client, 'braces');
-        $this->render_radio('preferred_client', 'claude-code', __('Claude Code', 'livecanvas-forge-ai'), $preferred_client, 'cpu');
+        $this->render_radio('preferred_client', 'claude', __('Claude', 'livecanvas-forge-ai'), $preferred_client, 'cpu');
         $this->render_radio('preferred_client', 'cursor', __('Cursor', 'livecanvas-forge-ai'), $preferred_client, 'cursor');
         $this->render_radio('preferred_client', 'generic', __('Generic MCP client', 'livecanvas-forge-ai'), $preferred_client, 'plug');
         echo '</div>';
@@ -1967,12 +1994,31 @@ JS;
         echo '</form>';
     }
 
-    private function render_connection_choose_mode_form(string $preferred_client, string $selected_mode, string $workspace_root, string $button_label): void {
+    private function render_connection_choose_claude_target_form(string $preferred_client, string $selected_target, string $selected_mode, string $workspace_root, string $button_label): void {
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-wizard">';
+        wp_nonce_field('lcfa_connections');
+        echo '<input type="hidden" name="action" value="lcfa_connections">';
+        echo '<input type="hidden" name="connection_current_step" value="choose_claude_target">';
+        echo '<input type="hidden" name="preferred_client" value="' . esc_attr($preferred_client) . '">';
+        echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
+        echo '<input type="hidden" name="workspace_root" value="' . esc_attr($workspace_root) . '">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
+        $this->render_radio('claude_connection_target', 'desktop_app', __('Desktop App', 'livecanvas-forge-ai'), $selected_target, 'window-stack');
+        $this->render_radio('claude_connection_target', 'cli', __('Command Line Interface', 'livecanvas-forge-ai'), $selected_target, 'command');
+        echo '</div>';
+        echo '<div class="lcfa-cta-row">';
+        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '</div>';
+        echo '</form>';
+    }
+
+    private function render_connection_choose_mode_form(string $preferred_client, string $claude_connection_target, string $selected_mode, string $workspace_root, string $button_label): void {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-wizard">';
         wp_nonce_field('lcfa_connections');
         echo '<input type="hidden" name="action" value="lcfa_connections">';
         echo '<input type="hidden" name="connection_current_step" value="choose_mode">';
         echo '<input type="hidden" name="preferred_client" value="' . esc_attr($preferred_client) . '">';
+        echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr($claude_connection_target) . '">';
         echo '<input type="hidden" name="workspace_root" value="' . esc_attr($workspace_root) . '">';
         echo '<label><span>' . esc_html__('Connection mode', 'livecanvas-forge-ai') . '</span>';
         echo '<select name="connection_mode">';
@@ -1985,12 +2031,13 @@ JS;
         echo '</form>';
     }
 
-    private function render_connection_confirm_details_form(array $bundle, string $preferred_client, string $selected_mode, string $button_label): void {
+    private function render_connection_confirm_details_form(array $bundle, string $preferred_client, string $claude_connection_target, string $selected_mode, string $button_label): void {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-wizard">';
         wp_nonce_field('lcfa_connections');
         echo '<input type="hidden" name="action" value="lcfa_connections">';
         echo '<input type="hidden" name="connection_current_step" value="confirm_details">';
         echo '<input type="hidden" name="preferred_client" value="' . esc_attr($preferred_client) . '">';
+        echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr($claude_connection_target) . '">';
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
 
         echo '<div class="lcfa-wizard__details">';
@@ -2017,6 +2064,7 @@ JS;
         $primary_cta = is_array($panel['primary_cta'] ?? null) ? $panel['primary_cta'] : [];
         $primary_action = (string) ($primary_cta['action'] ?? '');
         $copy_text = (string) ($bundle['copy_command_string'] ?? ($bundle['command_string'] ?? ''));
+        $claude_connection_target = (string) ($bundle['claude_connection_target'] ?? '');
 
         echo '<div class="lcfa-choice-grid lcfa-choice-grid--actions">';
         if (($primary_cta['action'] ?? '') === 'copy_command' && $copy_text !== '') {
@@ -2036,6 +2084,7 @@ JS;
             wp_nonce_field('lcfa_install_client_bundle');
             echo '<input type="hidden" name="action" value="lcfa_install_client_bundle">';
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
+            echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr($claude_connection_target) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
             echo '<span class="lcfa-choice-eyebrow">' . esc_html($primary_install['eyebrow']) . '</span>';
@@ -2053,6 +2102,7 @@ JS;
             wp_nonce_field('lcfa_download_client_bundle');
             echo '<input type="hidden" name="action" value="lcfa_download_client_bundle">';
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
+            echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr($claude_connection_target) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
             echo '<span class="lcfa-choice-eyebrow">' . esc_html($primary_download['eyebrow']) . '</span>';
@@ -2079,6 +2129,7 @@ JS;
                 wp_nonce_field('lcfa_download_client_bundle');
                 echo '<input type="hidden" name="action" value="lcfa_download_client_bundle">';
                 echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
+                echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr($claude_connection_target) . '">';
                 echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
                 echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
                 echo '<span class="lcfa-choice-eyebrow">' . esc_html($secondary_download['eyebrow']) . '</span>';
@@ -2233,6 +2284,9 @@ JS;
     }
 
     private function render_connection_bundle_details(array $bundle): void {
+        $is_claude_desktop = (string) ($bundle['client'] ?? '') === 'claude'
+            && (string) ($bundle['claude_connection_target'] ?? '') === 'desktop_app';
+
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Generated bundle', 'livecanvas-forge-ai') . '</h3>';
         echo '<div class="lcfa-agent-guide__bundle-layout">';
@@ -2262,9 +2316,9 @@ JS;
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
             $this->render_code_block((string) $bundle['shortcut_command'], [
-                'language'   => 'bash',
-                'label'      => __('Shell', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
+                'language'   => $is_claude_desktop ? 'json' : 'bash',
+                'label'      => $is_claude_desktop ? __('JSON', 'livecanvas-forge-ai') : __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => $is_claude_desktop ? __('Copy config', 'livecanvas-forge-ai') : __('Copy shortcut', 'livecanvas-forge-ai'),
             ]);
             echo '</div>';
         }
@@ -2413,7 +2467,13 @@ JS;
         $guides        = $this->get_agent_connection_guides($mcp_bootstrap, $settings, $snapshot);
         $selected_key  = $preferred_client === 'other'
             ? 'generic'
-            : (isset($guides[$preferred_client]) ? $preferred_client : 'codex');
+            : ($preferred_client === 'claude-code'
+                ? 'claude'
+                : (isset($guides[$preferred_client]) ? $preferred_client : 'codex'));
+        $selected_claude_mode = $this->normalize_claude_connection_target((string) ($settings['claude_connection_target'] ?? ''));
+        if ($selected_claude_mode === '') {
+            $selected_claude_mode = 'desktop_app';
+        }
         $local_bridge  = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
         $local_bridge_deferred = !empty($local_bridge['deferred']);
         $local_bridge_ready = !$local_bridge_deferred && !empty($local_bridge['available']);
@@ -2457,59 +2517,11 @@ JS;
         foreach ($guides as $key => $guide) {
             echo '<section class="lcfa-agent-guide__panel lcfa-agent-guide__panel--' . esc_attr(sanitize_html_class($key)) . '">';
             echo '<p class="lcfa-agent-guide__intro">' . esc_html($guide['intro']) . '</p>';
-            echo '<div class="lcfa-agent-guide__panel-grid">';
-
-            echo '<div class="lcfa-agent-guide__window">';
-            echo '<h3>' . esc_html__('Step-by-step', 'livecanvas-forge-ai') . '</h3>';
-            echo '<ol class="lcfa-agent-guide__steps">';
-            foreach ($guide['steps'] as $step) {
-                echo '<li>' . esc_html($step) . '</li>';
+            if (!empty($guide['modes']) && is_array($guide['modes'])) {
+                $this->render_agent_connection_mode_switcher($key, $guide, $selected_claude_mode);
+            } else {
+                $this->render_agent_connection_windows($guide);
             }
-            echo '</ol>';
-            if (!empty($guide['note'])) {
-                echo '<p class="lcfa-agent-guide__note">' . esc_html($guide['note']) . '</p>';
-            }
-            echo '</div>';
-
-            if (!empty($guide['shortcut_title']) && !empty($guide['shortcut'])) {
-                echo '<div class="lcfa-agent-guide__window">';
-                echo '<h3>' . esc_html($guide['shortcut_title']) . '</h3>';
-                $this->render_code_block($guide['shortcut'], [
-                    'language'   => 'bash',
-                    'label'      => __('Shell', 'livecanvas-forge-ai'),
-                    'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
-                ]);
-                echo '</div>';
-            }
-
-            echo '<div class="lcfa-agent-guide__window">';
-            echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
-            $this->render_code_block($guide['command'], [
-                'language'   => 'bash',
-                'label'      => __('Shell', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy command', 'livecanvas-forge-ai'),
-            ]);
-            echo '</div>';
-
-            echo '<div class="lcfa-agent-guide__window">';
-            echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
-            $this->render_code_block($guide['environment'], [
-                'language'   => 'bash',
-                'label'      => __('Environment', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy env', 'livecanvas-forge-ai'),
-            ]);
-            echo '</div>';
-
-            echo '<div class="lcfa-agent-guide__window">';
-            echo '<h3>' . esc_html__('Quick terminal test', 'livecanvas-forge-ai') . '</h3>';
-            $this->render_code_block($guide['test_command'], [
-                'language'   => 'bash',
-                'label'      => __('Shell', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy test command', 'livecanvas-forge-ai'),
-            ]);
-            echo '</div>';
-
-            echo '</div>';
             echo '</section>';
         }
         echo '</div>';
@@ -2517,18 +2529,121 @@ JS;
         echo '</section>';
     }
 
+    private function render_agent_connection_mode_switcher(string $client_key, array $guide, string $selected_mode): void {
+        $modes = is_array($guide['modes'] ?? null) ? $guide['modes'] : [];
+        if ($modes === []) {
+            $this->render_agent_connection_windows($guide);
+            return;
+        }
+
+        if (!isset($modes[$selected_mode])) {
+            $selected_mode = (string) array_key_first($modes);
+        }
+
+        foreach ($modes as $mode_key => $mode_guide) {
+            $input_id = 'lcfa-agent-' . $this->sanitize_key_compat($client_key) . '-mode-' . $this->sanitize_key_compat((string) $mode_key);
+            echo '<input class="lcfa-agent-guide__input" type="radio" name="lcfa_agent_' . esc_attr($this->sanitize_key_compat($client_key)) . '_mode" id="' . esc_attr($input_id) . '"' . checked($selected_mode, $mode_key, false) . '>';
+        }
+
+        echo '<div class="lcfa-agent-guide__subtabs" role="tablist" aria-label="' . esc_attr__('Claude connection target', 'livecanvas-forge-ai') . '">';
+        foreach ($modes as $mode_key => $mode_guide) {
+            $input_id = 'lcfa-agent-' . $this->sanitize_key_compat($client_key) . '-mode-' . $this->sanitize_key_compat((string) $mode_key);
+            echo '<label class="lcfa-agent-guide__subtab" for="' . esc_attr($input_id) . '" role="tab">' . esc_html((string) ($mode_guide['label'] ?? $mode_key)) . '</label>';
+        }
+        echo '</div>';
+
+        echo '<div class="lcfa-agent-guide__subpanels">';
+        foreach ($modes as $mode_key => $mode_guide) {
+            echo '<section class="lcfa-agent-guide__subpanel lcfa-agent-guide__subpanel--' . esc_attr(sanitize_html_class($client_key . '-' . $mode_key)) . '">';
+            if (!empty($mode_guide['summary'])) {
+                echo '<p class="lcfa-agent-guide__mode-copy">' . esc_html((string) $mode_guide['summary']) . '</p>';
+            }
+            $this->render_agent_connection_windows($mode_guide);
+            echo '</section>';
+        }
+        echo '</div>';
+    }
+
+    private function render_agent_connection_windows(array $guide): void {
+        $is_claude_desktop = (string) ($guide['mode_key'] ?? '') === 'desktop_app';
+
+        echo '<div class="lcfa-agent-guide__panel-grid">';
+
+        echo '<div class="lcfa-agent-guide__window">';
+        echo '<h3>' . esc_html__('Step-by-step', 'livecanvas-forge-ai') . '</h3>';
+        echo '<ol class="lcfa-agent-guide__steps">';
+        foreach ((array) ($guide['steps'] ?? []) as $step) {
+            echo '<li>' . esc_html((string) $step) . '</li>';
+        }
+        echo '</ol>';
+        if (!empty($guide['note'])) {
+            echo '<p class="lcfa-agent-guide__note">' . esc_html((string) $guide['note']) . '</p>';
+        }
+        echo '</div>';
+
+        if (!empty($guide['shortcut_title']) && !empty($guide['shortcut'])) {
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html((string) $guide['shortcut_title']) . '</h3>';
+            $this->render_code_block((string) $guide['shortcut'], [
+                'language'   => $is_claude_desktop ? 'json' : 'bash',
+                'label'      => $is_claude_desktop ? __('JSON', 'livecanvas-forge-ai') : __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => $is_claude_desktop ? __('Copy config', 'livecanvas-forge-ai') : __('Copy shortcut', 'livecanvas-forge-ai'),
+            ]);
+            echo '</div>';
+        }
+
+        echo '<div class="lcfa-agent-guide__window">';
+        echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block((string) ($guide['command'] ?? ''), [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy command', 'livecanvas-forge-ai'),
+        ]);
+        echo '</div>';
+
+        echo '<div class="lcfa-agent-guide__window">';
+        echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block((string) ($guide['environment'] ?? ''), [
+            'language'   => 'bash',
+            'label'      => __('Environment', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy env', 'livecanvas-forge-ai'),
+        ]);
+        echo '</div>';
+
+        echo '<div class="lcfa-agent-guide__window">';
+        echo '<h3>' . esc_html__('Quick terminal test', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block((string) ($guide['test_command'] ?? ''), [
+            'language'   => 'bash',
+            'label'      => __('Shell', 'livecanvas-forge-ai'),
+            'copy_label' => __('Copy test command', 'livecanvas-forge-ai'),
+        ]);
+        echo '</div>';
+
+        echo '</div>';
+    }
+
     private function get_agent_connection_guides(array $mcp_bootstrap, array $settings, array $snapshot): array {
         $clients = is_array($mcp_bootstrap['clients'] ?? null) ? $mcp_bootstrap['clients'] : [];
         $common  = is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [];
         $is_local_filesystem = (string) ($common['filesystem_mode'] ?? '') === 'local-theme-access';
+        $site_mode = (string) (($settings['site_mode'] ?? '') ?: ($snapshot['site_mode'] ?? 'local'));
+        $is_remote_site = in_array($site_mode, ['remote', 'hybrid'], true);
         $wp_root_note = $is_local_filesystem
             ? __('This site is detected as local, so keep LCFA_WP_ROOT in the environment if you want local file access and local build tools.', 'livecanvas-forge-ai')
             : __('This site is currently handled as remote. In most cases you can leave LCFA_WP_ROOT out of the client environment.', 'livecanvas-forge-ai');
 
         $codex = is_array($clients['codex'] ?? null) ? $clients['codex'] : ['command' => '', 'env' => []];
         $cursor = is_array($clients['cursor'] ?? null) ? $clients['cursor'] : $codex;
-        $claude = is_array($clients['claude-code'] ?? null) ? $clients['claude-code'] : $codex;
+        $claude = is_array($clients['claude'] ?? null)
+            ? $clients['claude']
+            : (is_array($clients['claude-code'] ?? null) ? $clients['claude-code'] : $codex);
         $opencode = is_array($clients['opencode'] ?? null) ? $clients['opencode'] : $codex;
+        $claude_desktop_shortcut_title = $is_remote_site
+            ? __('Claude Desktop reference', 'livecanvas-forge-ai')
+            : __('Claude Desktop config', 'livecanvas-forge-ai');
+        $claude_desktop_shortcut = $is_remote_site
+            ? $this->build_claude_desktop_reference_snippet($claude)
+            : $this->build_claude_desktop_config_snippet($claude);
 
         return [
             'codex' => [
@@ -2561,19 +2676,47 @@ JS;
                 'environment'  => $this->build_environment_block((array) ($cursor['env'] ?? [])),
                 'test_command' => $this->build_manual_mcp_test_command((array) ($cursor['env'] ?? [])),
             ],
-            'claude-code' => [
-                'label'        => __('Claude Code', 'livecanvas-forge-ai'),
-                'intro'        => __('Use this if Claude Code is your main agent. The bridge still runs in stdio mode: the only difference is the client where you register it.', 'livecanvas-forge-ai'),
-                'steps'        => [
-                    __('Open the MCP settings in Claude Code.', 'livecanvas-forge-ai'),
-                    __('Add a new stdio MCP server called livecanvas-forge.', 'livecanvas-forge-ai'),
-                    __('Use the command and environment shown below without changing the token or the REST base.', 'livecanvas-forge-ai'),
-                    __('Reconnect the server and run get_snapshot before asking Claude Code to write anything.', 'livecanvas-forge-ai'),
+            'claude' => [
+                'label' => __('Claude', 'livecanvas-forge-ai'),
+                'intro' => __('Use this if Claude is your main agent. Choose whether you are connecting through Claude Desktop App or through the Command Line Interface.', 'livecanvas-forge-ai'),
+                'modes' => [
+                    'desktop_app' => [
+                        'mode_key'       => 'desktop_app',
+                        'label'          => __('Desktop App', 'livecanvas-forge-ai'),
+                        'summary'        => $is_remote_site
+                            ? __('Use this when Claude Desktop needs to reach a remote WordPress target. Review the reference block before editing the desktop config manually.', 'livecanvas-forge-ai')
+                            : __('Use this when Claude Desktop is your main app. Copy the JSON block into Claude Desktop, reopen it, then verify the bridge with get_snapshot.', 'livecanvas-forge-ai'),
+                        'steps'          => [
+                            __('Open ~/Library/Application Support/Claude/claude_desktop_config.json on your machine.', 'livecanvas-forge-ai'),
+                            __('Add the livecanvas-forge MCP server using the block shown below.', 'livecanvas-forge-ai'),
+                            __('Quit and reopen Claude Desktop.', 'livecanvas-forge-ai'),
+                            __('Ask Claude to run get_snapshot before requesting any writes.', 'livecanvas-forge-ai'),
+                        ],
+                        'note'           => $wp_root_note,
+                        'shortcut_title' => $claude_desktop_shortcut_title,
+                        'shortcut'       => $claude_desktop_shortcut,
+                        'command'        => (string) ($claude['command'] ?? ''),
+                        'environment'    => $this->build_environment_block((array) ($claude['env'] ?? [])),
+                        'test_command'   => $this->build_manual_mcp_test_command((array) ($claude['env'] ?? [])),
+                    ],
+                    'cli' => [
+                        'mode_key'       => 'cli',
+                        'label'          => __('Command Line Interface', 'livecanvas-forge-ai'),
+                        'summary'        => __('Use this when Claude runs from the terminal. Register the MCP server once, verify it, then keep working from the same project root.', 'livecanvas-forge-ai'),
+                        'steps'          => [
+                            __('Open a terminal in the same workspace as your WordPress project.', 'livecanvas-forge-ai'),
+                            __('Run the Claude CLI shortcut below.', 'livecanvas-forge-ai'),
+                            __('Verify the MCP registration with claude mcp list.', 'livecanvas-forge-ai'),
+                            __('Run get_snapshot before requesting any writes.', 'livecanvas-forge-ai'),
+                        ],
+                        'note'           => $wp_root_note,
+                        'shortcut_title' => __('Claude CLI shortcut', 'livecanvas-forge-ai'),
+                        'shortcut'       => $this->build_claude_cli_register_command($claude),
+                        'command'        => (string) ($claude['command'] ?? ''),
+                        'environment'    => $this->build_environment_block((array) ($claude['env'] ?? [])),
+                        'test_command'   => $this->build_manual_mcp_test_command((array) ($claude['env'] ?? [])),
+                    ],
                 ],
-                'note'         => $wp_root_note,
-                'command'      => (string) ($claude['command'] ?? ''),
-                'environment'  => $this->build_environment_block((array) ($claude['env'] ?? [])),
-                'test_command' => $this->build_manual_mcp_test_command((array) ($claude['env'] ?? [])),
             ],
             'opencode' => [
                 'label'        => __('OpenCode', 'livecanvas-forge-ai'),
@@ -2685,6 +2828,114 @@ JS;
         }
 
         return implode("\n", $lines);
+    }
+
+    private function build_claude_cli_register_command(array $client): string {
+        $command = trim((string) ($client['command'] ?? ''));
+        $lines = [
+            'claude mcp add --transport stdio livecanvas-forge \\',
+        ];
+
+        foreach ((array) ($client['env'] ?? []) as $entry) {
+            $parts = explode('=', (string) $entry, 2);
+            $key = trim((string) ($parts[0] ?? ''));
+            $value = (string) ($parts[1] ?? '');
+
+            if ($key === '') {
+                continue;
+            }
+
+            $lines[] = '  --env ' . $key . '=' . $this->quote_shell_value($value) . ' \\';
+        }
+
+        $lines[] = '  -- ' . $command;
+
+        return implode("\n", $lines);
+    }
+
+    private function build_claude_desktop_config_snippet(array $client): string {
+        $command_tokens = $this->tokenize_command_string((string) ($client['command'] ?? ''));
+
+        return (string) wp_json_encode([
+            'mcpServers' => [
+                'livecanvas-forge' => [
+                    'type'    => 'stdio',
+                    'command' => $command_tokens[0] ?? 'node',
+                    'args'    => array_slice($command_tokens, 1),
+                    'env'     => (object) $this->normalize_environment_entries((array) ($client['env'] ?? [])),
+                ],
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    }
+
+    private function build_claude_desktop_reference_snippet(array $client): string {
+        $command_tokens = $this->tokenize_command_string((string) ($client['command'] ?? ''));
+        $environment = $this->normalize_environment_entries((array) ($client['env'] ?? []));
+        $lines = [
+            '# Claude Desktop reference',
+            '# Review these values before editing Claude Desktop on another machine or remote target.',
+            '# Command',
+            $command_tokens[0] ?? 'node',
+            '',
+            '# Args',
+        ];
+
+        foreach (array_slice($command_tokens, 1) as $token) {
+            $lines[] = $token;
+        }
+
+        $lines[] = '';
+        $lines[] = '# Environment';
+        foreach ($environment as $key => $value) {
+            $lines[] = $key . '=' . $value;
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    private function tokenize_command_string(string $command): array {
+        $command = trim($command);
+        if ($command === '') {
+            return [];
+        }
+
+        preg_match_all('/"(?:\\\\.|[^"])*"|\'(?:\\\\.|[^\'])*\'|[^\s]+/', $command, $matches);
+
+        return array_values(array_filter(array_map(static function (string $token): string {
+            $token = trim($token);
+            if ($token === '') {
+                return '';
+            }
+
+            if (($token[0] === '"' && substr($token, -1) === '"') || ($token[0] === "'" && substr($token, -1) === "'")) {
+                return stripcslashes(substr($token, 1, -1));
+            }
+
+            return $token;
+        }, $matches[0] ?? [])));
+    }
+
+    private function normalize_environment_entries(array $environment): array {
+        $normalized = [];
+
+        foreach ($environment as $key => $value) {
+            if (is_int($key)) {
+                $parts = explode('=', (string) $value, 2);
+                $env_key = trim((string) ($parts[0] ?? ''));
+                $env_value = (string) ($parts[1] ?? '');
+            } else {
+                $env_key = trim((string) $key);
+                $env_value = (string) $value;
+            }
+
+            if ($env_key === '') {
+                continue;
+            }
+
+            $normalized[$env_key] = $env_value;
+        }
+
+        return $normalized;
     }
 
     private function build_manual_mcp_test_command(array $environment): string {
@@ -2991,6 +3242,9 @@ JS;
 
     private function render_ai_tool_step(array $settings): void {
         $selected  = $settings['ai_tool'] ?: 'codex';
+        if ($selected === 'claude-code') {
+            $selected = 'claude';
+        }
         $site_mode = LCFA_Settings::get()['site_mode'] ?: 'local';
 
         echo '<section class="lcfa-card">';
@@ -3006,7 +3260,7 @@ JS;
         echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
         $this->render_radio('ai_tool', 'codex', __('Codex', 'livecanvas-forge-ai'), $selected, 'stars');
         $this->render_radio('ai_tool', 'opencode', __('OpenCode', 'livecanvas-forge-ai'), $selected, 'braces');
-        $this->render_radio('ai_tool', 'claude-code', __('Claude Code', 'livecanvas-forge-ai'), $selected, 'cpu');
+        $this->render_radio('ai_tool', 'claude', __('Claude', 'livecanvas-forge-ai'), $selected, 'cpu');
         $this->render_radio('ai_tool', 'cursor', __('Cursor', 'livecanvas-forge-ai'), $selected, 'cursor');
         $this->render_radio('ai_tool', 'other', __('Other compatible client', 'livecanvas-forge-ai'), $selected, 'plug');
         echo '</div>';
@@ -3014,7 +3268,7 @@ JS;
         echo '</form>';
 
         $guides = $this->get_tool_guides($site_mode);
-        $guide  = $guides[$selected] ?? $guides['other'];
+        $guide  = $guides[$selected] ?? ($selected === 'claude-code' ? ($guides['claude'] ?? $guides['other']) : $guides['other']);
 
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Configuration guide', 'livecanvas-forge-ai') . '</h3>';
@@ -4225,8 +4479,8 @@ JS;
                     $remote_suffix,
                 ],
             ],
-            'claude-code' => [
-                'summary' => __('Claude Code can talk through the same MCP or REST bridge and should follow the same permission matrix.', 'livecanvas-forge-ai'),
+            'claude' => [
+                'summary' => __('Claude can talk through the same MCP or REST bridge and should follow the same permission matrix.', 'livecanvas-forge-ai'),
                 'steps'   => [
                     __('Configure the companion MCP server when available.', 'livecanvas-forge-ai'),
                     __('If MCP is not in place yet, use REST plus Application Passwords.', 'livecanvas-forge-ai'),
@@ -4801,11 +5055,15 @@ JS;
 
     private function get_agent_icon_url(string $client): string {
         $map = [
-            'codex'       => 'assets/agent-icons/codex-color.svg',
-            'opencode'    => 'assets/agent-icons/opencode.png',
-            'cursor'      => 'assets/agent-icons/cursor.png',
-            'claude-code' => 'assets/agent-icons/claude-color.svg',
+            'codex'    => 'assets/agent-icons/codex-color.svg',
+            'opencode' => 'assets/agent-icons/opencode.png',
+            'cursor'   => 'assets/agent-icons/cursor.png',
+            'claude'   => 'assets/agent-icons/claude-color.svg',
         ];
+
+        if ($client === 'claude-code') {
+            $client = 'claude';
+        }
 
         if (empty($map[$client])) {
             return '';
@@ -4843,6 +5101,7 @@ JS;
         $map = [
             'codex' => 'stars',
             'opencode' => 'braces',
+            'claude' => 'cpu',
             'claude-code' => 'cpu',
             'cursor' => 'cursor',
             'generic' => 'plug',

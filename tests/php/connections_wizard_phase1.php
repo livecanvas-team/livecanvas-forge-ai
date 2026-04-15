@@ -281,6 +281,22 @@ $choose_client_state = $onboarding->derive_state([
 lcfa_assert_same('not_connected', $choose_client_state['status'] ?? '', 'missing client should keep the connection in not_connected');
 lcfa_assert_same('choose_client', $choose_client_state['current_step'] ?? '', 'missing client should open the choose_client step');
 
+$claude_target_state = $onboarding->derive_state([
+    'preferred_client'            => 'claude',
+    'claude_connection_target'    => '',
+    'connection_mode'             => '',
+    'workspace_root'              => '/Users/commander/Studio/consultala',
+    'connection_status'           => '',
+    'connection_last_verified_at' => '',
+    'connection_last_error'       => '',
+    'connection_current_step'     => '',
+], [
+    'local_ready'  => true,
+    'remote_ready' => false,
+]);
+
+lcfa_assert_same('choose_claude_target', $claude_target_state['current_step'] ?? '', 'Claude should stop on choose_claude_target before connection mode is selected');
+
 $state = $onboarding->derive_state([
     'preferred_client'            => 'opencode',
     'connection_mode'             => 'local',
@@ -313,6 +329,27 @@ $fast_path_state = $onboarding->derive_state([
 lcfa_assert_same('confirm_details', $fast_path_state['current_step'] ?? '', 'OpenCode local flow should skip the separate choose_mode step once local mode is known');
 
 $presenter = new LCFA_Connection_Wizard_Presenter();
+$claude_target_view = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'choose_claude_target',
+    ],
+    'bundle' => [
+        'client'         => 'claude',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ],
+]);
+
+lcfa_assert_same('choose_claude_target', $claude_target_view['steps'][1]['key'] ?? '', 'Claude wizard should insert choose_claude_target after choose_client');
+lcfa_assert_same('Choose Claude connection target', $claude_target_view['steps'][1]['title'] ?? '', 'Claude wizard should name the Claude target step explicitly');
+lcfa_assert_same('active', $claude_target_view['steps'][1]['state'] ?? '', 'Claude target step should become active when the target is missing');
+
 $opencode_fast_path = $presenter->build([
     'state' => [
         'status'       => 'not_connected',
