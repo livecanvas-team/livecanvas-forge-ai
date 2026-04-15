@@ -2912,7 +2912,7 @@ JS;
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="3">';
 
-        echo '<div class="lcfa-radio-group">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
         $this->render_radio('site_mode', 'local', __('This WordPress runs locally', 'livecanvas-forge-ai'), $selected, 'laptop');
         $this->render_radio('site_mode', 'remote', __('This WordPress runs remotely', 'livecanvas-forge-ai'), $selected, 'cloud');
         $this->render_radio('site_mode', 'hybrid', __('I will use both local and remote targets', 'livecanvas-forge-ai'), $selected, 'shuffle');
@@ -2937,7 +2937,7 @@ JS;
         wp_nonce_field('lcfa_setup');
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="4">';
-        echo '<div class="lcfa-radio-group">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
         $this->render_radio('ai_tool', 'codex', __('Codex', 'livecanvas-forge-ai'), $selected, 'stars');
         $this->render_radio('ai_tool', 'opencode', __('OpenCode', 'livecanvas-forge-ai'), $selected, 'braces');
         $this->render_radio('ai_tool', 'claude-code', __('Claude Code', 'livecanvas-forge-ai'), $selected, 'cpu');
@@ -2976,7 +2976,7 @@ JS;
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="5">';
 
-        echo '<div class="lcfa-radio-group">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
         $this->render_radio('permission_profile', 'read_only', __('Read only', 'livecanvas-forge-ai'), $selected, 'eye');
         $this->render_radio('permission_profile', 'draft_preview', __('Drafts and previews', 'livecanvas-forge-ai'), $selected, 'file-earmark');
         $this->render_radio('permission_profile', 'confirmed_apply', __('Apply with confirmation', 'livecanvas-forge-ai'), $selected, 'check2-square');
@@ -3117,7 +3117,7 @@ JS;
 
     private function render_radio(string $name, string $value, string $label, string $selected, string $icon): void {
         echo '<label class="lcfa-radio">';
-        echo '<input type="radio" name="' . esc_attr($name) . '" value="' . esc_attr($value) . '"' . checked($selected, $value, false) . '>';
+        echo '<input class="lcfa-radio-input" type="radio" name="' . esc_attr($name) . '" value="' . esc_attr($value) . '"' . checked($selected, $value, false) . '>';
         echo '<span class="lcfa-radio-icon">' . $this->get_radio_icon_markup($name, $value, $icon) . '</span>';
         echo '<span class="lcfa-radio-copy">' . esc_html($label) . '</span>';
         echo '</label>';
