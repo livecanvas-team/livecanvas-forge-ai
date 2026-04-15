@@ -3,20 +3,76 @@
         return window.lcfaAdmin && typeof window.lcfaAdmin === 'object' ? window.lcfaAdmin : {};
     }
 
+    function setCopiedFeedback(button, copiedLabel, originalLabel) {
+        button.textContent = copiedLabel;
+        window.setTimeout(function () {
+            button.textContent = originalLabel;
+        }, 1800);
+    }
+
+    function legacyCopyText(value) {
+        var textarea;
+
+        if (!document.body || !document.createElement || !document.execCommand) {
+            return false;
+        }
+
+        textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        if (typeof textarea.setSelectionRange === 'function') {
+            textarea.setSelectionRange(0, textarea.value.length);
+        }
+
+        try {
+            return !!document.execCommand('copy');
+        } catch (error) {
+            return false;
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+
     function copyText(button) {
         var value = button.getAttribute('data-lcfa-copy-text') || '';
-        if (!value || !navigator.clipboard || !navigator.clipboard.writeText) {
+        var clipboard = typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function'
+            ? navigator.clipboard
+            : null;
+        var didCopy = false;
+
+        if (!value || !clipboard) {
+            didCopy = legacyCopyText(value);
+
+            if (didCopy) {
+                setCopiedFeedback(
+                    button,
+                    button.getAttribute('data-lcfa-copied-label') || 'Copied',
+                    button.getAttribute('data-lcfa-copy-label') || button.textContent || 'Copy'
+                );
+            }
+
             return;
         }
 
         var copiedLabel = button.getAttribute('data-lcfa-copied-label') || 'Copied';
         var originalLabel = button.getAttribute('data-lcfa-copy-label') || button.textContent || 'Copy';
 
-        navigator.clipboard.writeText(value).then(function () {
-            button.textContent = copiedLabel;
-            window.setTimeout(function () {
-                button.textContent = originalLabel;
-            }, 1800);
+        clipboard.writeText(value).then(function () {
+            setCopiedFeedback(button, copiedLabel, originalLabel);
+        }).catch(function () {
+            if (legacyCopyText(value)) {
+                setCopiedFeedback(button, copiedLabel, originalLabel);
+            }
         });
     }
 

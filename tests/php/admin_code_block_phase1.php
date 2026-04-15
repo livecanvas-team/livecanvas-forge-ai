@@ -132,5 +132,8 @@ $bundle_markup = (string) ob_get_clean();
 
 lcfa_assert_contains('Copy shortcut', $bundle_markup, 'Codex shortcut window should expose a dedicated copy shortcut action');
 lcfa_assert_contains('language-bash', $bundle_markup, 'bundle command blocks should default to shell highlighting');
+lcfa_assert_contains('lcfa-agent-guide__bundle-layout', $bundle_markup, 'bundle details should render a dedicated bundle layout wrapper');
+lcfa_assert_contains('lcfa-agent-guide__window lcfa-agent-guide__window--files', $bundle_markup, 'bundle details should render Files in a dedicated full-width row');
+lcfa_assert_contains('lcfa-agent-guide__panel-grid lcfa-agent-guide__panel-grid--bundle', $bundle_markup, 'bundle details should render the remaining windows in a responsive bundle grid');
 
 echo "PASS\n";

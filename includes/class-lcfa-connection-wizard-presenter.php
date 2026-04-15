@@ -152,10 +152,12 @@ final class LCFA_Connection_Wizard_Presenter {
                 return [
                     'title'       => __('How do you want to continue?', 'livecanvas-forge-ai'),
                     'description' => $is_codex_local
-                        ? __('Register the MCP server in Codex once, then come back here for verification.', 'livecanvas-forge-ai')
+                        ? ($local_writable
+                            ? __('Choose one path below. Recommended: let Forge write the Codex helper directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
+                            : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai'))
                         : ($is_opencode_local
-                        ? __('Download the OpenCode config, then switch to OpenCode once.', 'livecanvas-forge-ai')
-                        : __('Create the client configuration now, then move to verification.', 'livecanvas-forge-ai')),
+                        ? __('Choose one path below. Recommended: download the OpenCode config and place it in the project root before switching to OpenCode.', 'livecanvas-forge-ai')
+                        : __('Choose one path below. Recommended: create the client configuration now. Use the manual option only if you want to place the bundle yourself.', 'livecanvas-forge-ai')),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
                         'label'  => $is_codex_local && !$local_writable

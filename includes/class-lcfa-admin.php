@@ -935,7 +935,7 @@ JS;
     }
 
     private function normalize_connection_client(string $client): string {
-        $client = sanitize_key($client);
+        $client = $this->sanitize_key_compat($client);
 
         if ($client === 'other') {
             return 'generic';
@@ -1083,8 +1083,8 @@ JS;
 
         check_admin_referer('lcfa_reset_setup');
 
-        LCFA_Settings::update(LCFA_Settings::defaults());
-        LCFA_Settings::set_notice(__('Forge Setup has been reset. Connections, history, and the project brief were preserved.', 'livecanvas-forge-ai'), 'success');
+        LCFA_Settings::reset_setup_state();
+        LCFA_Settings::set_notice(__('Forge state reset. Setup and connection status were cleared, a new MCP token was generated, and existing workspace files were left untouched.', 'livecanvas-forge-ai'), 'success');
 
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=1'));
         exit;
@@ -1368,14 +1368,6 @@ JS;
         }
         echo '</nav>';
 
-        if ((int) $settings['last_completed_step'] > 0 || !empty($settings['completed'])) {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
-            wp_nonce_field('lcfa_reset_setup');
-            echo '<input type="hidden" name="action" value="lcfa_reset_setup">';
-            echo '<button class="button" type="submit">' . esc_html__('Restart Forge Setup', 'livecanvas-forge-ai') . '</button>';
-            echo '</form>';
-        }
-
         echo '</div>';
     }
 
@@ -1410,6 +1402,8 @@ JS;
                 $this->render_finish_step($settings, $snapshot);
                 break;
         }
+
+        $this->render_setup_reset_panel();
 
         echo '</div>';
     }
@@ -2024,27 +2018,50 @@ JS;
         $primary_action = (string) ($primary_cta['action'] ?? '');
         $copy_text = (string) ($bundle['copy_command_string'] ?? ($bundle['command_string'] ?? ''));
 
-        echo '<div class="lcfa-cta-row lcfa-cta-row--stacked">';
+        echo '<div class="lcfa-choice-grid lcfa-choice-grid--actions">';
         if (($primary_cta['action'] ?? '') === 'copy_command' && $copy_text !== '') {
-            echo '<button class="button button-primary" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</button>';
+            $primary_copy = $this->get_generate_bundle_action_copy($bundle, 'copy_command', true);
+            echo '<div class="lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--primary">';
+            echo '<span class="lcfa-choice-eyebrow">' . esc_html($primary_copy['eyebrow']) . '</span>';
+            echo '<span class="lcfa-choice-copy">';
+            echo '<strong>' . esc_html($primary_copy['title']) . '</strong>';
+            echo '<span>' . esc_html($primary_copy['description']) . '</span>';
+            echo '<small>' . esc_html($primary_copy['note']) . '</small>';
+            echo '</span>';
+            echo '<button class="button button-primary lcfa-button--wide" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</button>';
+            echo '</div>';
         } elseif ($show_workspace_install && ($primary_cta['action'] ?? '') === 'install') {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            $primary_install = $this->get_generate_bundle_action_copy($bundle, 'install', true);
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--primary">';
             wp_nonce_field('lcfa_install_client_bundle');
             echo '<input type="hidden" name="action" value="lcfa_install_client_bundle">';
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-            echo '<label class="lcfa-checkbox"><input type="checkbox" name="create_backup" value="1"> ' . esc_html__('Create backup before overwrite', 'livecanvas-forge-ai') . '</label>';
-            echo '<button class="button button-primary" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Write config in workspace', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<span class="lcfa-choice-eyebrow">' . esc_html($primary_install['eyebrow']) . '</span>';
+            echo '<span class="lcfa-choice-copy">';
+            echo '<strong>' . esc_html($primary_install['title']) . '</strong>';
+            echo '<span>' . esc_html($primary_install['description']) . '</span>';
+            echo '<small>' . esc_html($primary_install['note']) . '</small>';
+            echo '</span>';
+            echo '<label class="lcfa-checkbox lcfa-checkbox--card"><input type="checkbox" name="create_backup" value="1"> ' . esc_html__('Create backup before overwrite', 'livecanvas-forge-ai') . '</label>';
+            echo '<button class="button button-primary lcfa-button--wide" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Write config in workspace', 'livecanvas-forge-ai'))) . '</button>';
             echo '</form>';
         } else {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            $primary_download = $this->get_generate_bundle_action_copy($bundle, 'download', true);
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--primary">';
             wp_nonce_field('lcfa_download_client_bundle');
             echo '<input type="hidden" name="action" value="lcfa_download_client_bundle">';
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-            echo '<button class="button button-primary" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Download client bundle', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<span class="lcfa-choice-eyebrow">' . esc_html($primary_download['eyebrow']) . '</span>';
+            echo '<span class="lcfa-choice-copy">';
+            echo '<strong>' . esc_html($primary_download['title']) . '</strong>';
+            echo '<span>' . esc_html($primary_download['description']) . '</span>';
+            echo '<small>' . esc_html($primary_download['note']) . '</small>';
+            echo '</span>';
+            echo '<button class="button button-primary lcfa-button--wide" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Download client bundle', 'livecanvas-forge-ai'))) . '</button>';
             echo '</form>';
         }
 
@@ -2057,19 +2074,35 @@ JS;
             }
 
             if ($action === 'download') {
-                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+                $secondary_download = $this->get_generate_bundle_action_copy($bundle, 'download', false);
+                echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--secondary">';
                 wp_nonce_field('lcfa_download_client_bundle');
                 echo '<input type="hidden" name="action" value="lcfa_download_client_bundle">';
                 echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
                 echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
                 echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-                echo '<button class="button" type="submit">' . esc_html($label ?: __('Download client bundle', 'livecanvas-forge-ai')) . '</button>';
+                echo '<span class="lcfa-choice-eyebrow">' . esc_html($secondary_download['eyebrow']) . '</span>';
+                echo '<span class="lcfa-choice-copy">';
+                echo '<strong>' . esc_html($secondary_download['title']) . '</strong>';
+                echo '<span>' . esc_html($secondary_download['description']) . '</span>';
+                echo '<small>' . esc_html($secondary_download['note']) . '</small>';
+                echo '</span>';
+                echo '<button class="button lcfa-button--wide" type="submit">' . esc_html($label ?: __('Download client bundle', 'livecanvas-forge-ai')) . '</button>';
                 echo '</form>';
             }
 
             if ($action === 'copy_command' && $copy_text !== '') {
                 $copy_label = $label ?: __('Copy command', 'livecanvas-forge-ai');
-                echo '<button class="button" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html($copy_label) . '</button>';
+                $secondary_copy = $this->get_generate_bundle_action_copy($bundle, 'copy_command', false);
+                echo '<div class="lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--secondary">';
+                echo '<span class="lcfa-choice-eyebrow">' . esc_html($secondary_copy['eyebrow']) . '</span>';
+                echo '<span class="lcfa-choice-copy">';
+                echo '<strong>' . esc_html($secondary_copy['title']) . '</strong>';
+                echo '<span>' . esc_html($secondary_copy['description']) . '</span>';
+                echo '<small>' . esc_html($secondary_copy['note']) . '</small>';
+                echo '</span>';
+                echo '<button class="button lcfa-button--wide" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html($copy_label) . '</button>';
+                echo '</div>';
             }
         }
         echo '</div>';
@@ -2087,6 +2120,44 @@ JS;
         }
     }
 
+    private function get_generate_bundle_action_copy(array $bundle, string $action, bool $is_primary): array {
+        $is_codex_local = $this->normalize_connection_client((string) ($bundle['client'] ?? '')) === 'codex'
+            && (($bundle['mode'] ?? 'local') === 'local');
+        $is_opencode_local = $this->normalize_connection_client((string) ($bundle['client'] ?? '')) === 'opencode'
+            && (($bundle['mode'] ?? 'local') === 'local');
+
+        if ($action === 'install') {
+            return [
+                'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Alternative', 'livecanvas-forge-ai'),
+                'title'       => __('Write the config for me', 'livecanvas-forge-ai'),
+                'description' => $is_codex_local
+                    ? __('Forge writes the generated Codex helper directly into this workspace now. This is the fastest path when the browser can reach the project folder.', 'livecanvas-forge-ai')
+                    : __('Forge writes the generated client config directly into this workspace now, so you can verify the connection immediately after.', 'livecanvas-forge-ai'),
+                'note'        => __('Optional: enable the backup toggle first if you want to preserve the current file before overwrite.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ($action === 'copy_command') {
+            return [
+                'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Alternative', 'livecanvas-forge-ai'),
+                'title'       => $is_codex_local ? __('Copy and run the Codex shortcut', 'livecanvas-forge-ai') : __('Copy the setup command', 'livecanvas-forge-ai'),
+                'description' => $is_codex_local
+                    ? __('Run it once from this exact project root, then return here and move to the smoke test.', 'livecanvas-forge-ai')
+                    : __('Use this if you want to execute the setup manually from your coding agent shell.', 'livecanvas-forge-ai'),
+                'note'        => __('Best when the browser cannot write into the host workspace directly.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Manual option', 'livecanvas-forge-ai'),
+            'title'       => $is_opencode_local ? __('Download the OpenCode config', 'livecanvas-forge-ai') : __('Download and place it yourself', 'livecanvas-forge-ai'),
+            'description' => $is_opencode_local
+                ? __('Save the generated OpenCode config and place it in the project root before you switch back to OpenCode.', 'livecanvas-forge-ai')
+                : __('Use this if you prefer a manual install, want to move the bundle to another machine, or do not want the browser to write inside the workspace.', 'livecanvas-forge-ai'),
+            'note'        => __('After the file is in place, come back here and run the smoke test.', 'livecanvas-forge-ai'),
+        ];
+    }
+
     private function render_connection_smoke_test_form(string $selected_mode, string $button_label): void {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
         wp_nonce_field('lcfa_test_connections');
@@ -2099,7 +2170,7 @@ JS;
     private function render_connection_visual_help_strip(array $wizard_view): void {
         $visual_help = is_array($wizard_view['visual_help'] ?? null) ? $wizard_view['visual_help'] : [];
         $items = is_array($visual_help['items'] ?? null) ? $visual_help['items'] : [];
-        $client = sanitize_key((string) ($visual_help['client'] ?? ''));
+        $client = $this->sanitize_key_compat((string) ($visual_help['client'] ?? ''));
 
         if ($items === []) {
             return;
@@ -2164,20 +2235,9 @@ JS;
     private function render_connection_bundle_details(array $bundle): void {
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Generated bundle', 'livecanvas-forge-ai') . '</h3>';
-        echo '<div class="lcfa-agent-guide__panel-grid">';
+        echo '<div class="lcfa-agent-guide__bundle-layout">';
 
-        if (!empty($bundle['shortcut_command'])) {
-            echo '<div class="lcfa-agent-guide__window">';
-            echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
-            $this->render_code_block((string) $bundle['shortcut_command'], [
-                'language'   => 'bash',
-                'label'      => __('Shell', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
-            ]);
-            echo '</div>';
-        }
-
-        echo '<div class="lcfa-agent-guide__window">';
+        echo '<div class="lcfa-agent-guide__window lcfa-agent-guide__window--files">';
         echo '<h3>' . esc_html__('Files', 'livecanvas-forge-ai') . '</h3>';
         if (!empty($bundle['workspace_files'])) {
             echo '<ul class="lcfa-bullets">';
@@ -2195,6 +2255,19 @@ JS;
             echo '<p>' . esc_html__('This client currently uses copy or command-based setup.', 'livecanvas-forge-ai') . '</p>';
         }
         echo '</div>';
+
+        echo '<div class="lcfa-agent-guide__panel-grid lcfa-agent-guide__panel-grid--bundle">';
+
+        if (!empty($bundle['shortcut_command'])) {
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
+            $this->render_code_block((string) $bundle['shortcut_command'], [
+                'language'   => 'bash',
+                'label'      => __('Shell', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy shortcut', 'livecanvas-forge-ai'),
+            ]);
+            echo '</div>';
+        }
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
@@ -2223,6 +2296,7 @@ JS;
         ]);
         echo '</div>';
 
+        echo '</div>';
         echo '</div>';
         echo '</div>';
     }
@@ -2368,13 +2442,13 @@ JS;
 
         echo '<div class="lcfa-agent-guide">';
         foreach ($guides as $key => $guide) {
-            $input_id = 'lcfa-agent-tab-' . sanitize_key($key);
+            $input_id = 'lcfa-agent-tab-' . $this->sanitize_key_compat($key);
             echo '<input class="lcfa-agent-guide__input" type="radio" name="lcfa_agent_tab" id="' . esc_attr($input_id) . '"' . checked($selected_key, $key, false) . '>';
         }
 
         echo '<div class="lcfa-agent-guide__tabs" role="tablist" aria-label="' . esc_attr__('Coding agent quickstart tabs', 'livecanvas-forge-ai') . '">';
         foreach ($guides as $key => $guide) {
-            $input_id = 'lcfa-agent-tab-' . sanitize_key($key);
+            $input_id = 'lcfa-agent-tab-' . $this->sanitize_key_compat($key);
             echo '<label class="lcfa-agent-guide__tab" for="' . esc_attr($input_id) . '" role="tab">' . $this->get_agent_icon_markup($key, $this->get_client_fallback_icon($key), 'lcfa-agent-icon lcfa-agent-icon--tab') . '<span>' . esc_html($guide['label']) . '</span></label>';
         }
         echo '</div>';
@@ -2922,7 +2996,7 @@ JS;
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
-        echo '<div><h2>' . esc_html__('Step 4. AI client', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Choose the main client you want to use first. The setup guide adapts to the current site profile and connection strategy.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Step 4. AI Coding Agent', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Choose the main coding agent you want to use first. The setup guide adapts to the current site profile and connection strategy.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
@@ -2936,7 +3010,7 @@ JS;
         $this->render_radio('ai_tool', 'cursor', __('Cursor', 'livecanvas-forge-ai'), $selected, 'cursor');
         $this->render_radio('ai_tool', 'other', __('Other compatible client', 'livecanvas-forge-ai'), $selected, 'plug');
         echo '</div>';
-        echo '<button class="button button-primary">' . esc_html__('Save AI client', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button button-primary">' . esc_html__('Save AI Coding Agent', 'livecanvas-forge-ai') . '</button>';
         echo '</form>';
 
         $guides = $this->get_tool_guides($site_mode);
@@ -3002,12 +3076,38 @@ JS;
         echo '</section>';
     }
 
+    private function render_setup_reset_panel(): void {
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('x-circle');
+        echo '<div><h2>' . esc_html__('Reset setup', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this when you want to switch AI Coding Agent, change the site profile, or rerun the setup wizard from scratch.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        echo '<ul class="lcfa-bullets">';
+        echo '<li>' . esc_html__('This does not uninstall the plugin or remove pages, sections, templates, or other WordPress content.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Connections are cleared and a new MCP token is generated.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Project Brief and Command Deck history stay intact.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('If you already wrote a client config into your workspace, reset will not delete that file.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Any previously written or downloaded client bundle may no longer match the new token after reset.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('The wizard goes back to step 1 and asks for framework, site profile, AI Coding Agent, and access confirmation again.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ul>';
+
+        echo '<div class="lcfa-cta-row">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+        wp_nonce_field('lcfa_reset_setup');
+        echo '<input type="hidden" name="action" value="lcfa_reset_setup">';
+        echo '<button class="button" type="submit">' . esc_html__('Reset setup and start again', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+        echo '</div>';
+        echo '</section>';
+    }
+
     private function render_step_nav(int $current_step, array $settings, array $snapshot): void {
         $steps = [
             1 => ['label' => __('Preflight', 'livecanvas-forge-ai'), 'icon' => 'shield-check'],
             2 => ['label' => __('Framework', 'livecanvas-forge-ai'), 'icon' => 'layers'],
             3 => ['label' => __('Site', 'livecanvas-forge-ai'), 'icon' => 'globe'],
-            4 => ['label' => __('Client', 'livecanvas-forge-ai'), 'icon' => 'command'],
+            4 => ['label' => __('AI Coding Agent', 'livecanvas-forge-ai'), 'icon' => 'command'],
             5 => ['label' => __('Access', 'livecanvas-forge-ai'), 'icon' => 'shield-lock'],
             6 => ['label' => __('Finish', 'livecanvas-forge-ai'), 'icon' => 'rocket'],
         ];
@@ -4701,10 +4801,10 @@ JS;
 
     private function get_agent_icon_url(string $client): string {
         $map = [
-            'codex'       => 'assets/agent-icons/codex.png',
+            'codex'       => 'assets/agent-icons/codex-color.svg',
             'opencode'    => 'assets/agent-icons/opencode.png',
             'cursor'      => 'assets/agent-icons/cursor.png',
-            'claude-code' => 'assets/agent-icons/claude-code.svg',
+            'claude-code' => 'assets/agent-icons/claude-color.svg',
         ];
 
         if (empty($map[$client])) {
@@ -4781,6 +4881,17 @@ JS;
         $svg = $icons[$name] ?? $icons['stars'];
 
         return '<span class="lcfa-icon lcfa-icon-' . esc_attr($name) . '">' . $svg . '</span>';
+    }
+
+    private function sanitize_key_compat(string $value): string {
+        if (function_exists('sanitize_key')) {
+            return sanitize_key($value);
+        }
+
+        $value = strtolower($value);
+        $value = preg_replace('/[^a-z0-9_-]/', '', $value);
+
+        return is_string($value) ? $value : '';
     }
 
     private function redirect_to_step(int $step): void {

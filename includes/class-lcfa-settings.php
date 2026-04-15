@@ -283,6 +283,12 @@ final class LCFA_Settings {
         delete_option(self::GENESIS_PROGRESS_OPTION_KEY);
     }
 
+    public static function reset_setup_state(): void {
+        self::update(self::defaults());
+        self::update_connections(self::connection_defaults());
+        self::clear_runtime_feedback();
+    }
+
     public static function update_genesis_task_progress(string $task_id, array $state, ?string $brief_hash = null): array {
         $normalized_task_id = sanitize_key($task_id);
 
@@ -512,6 +518,22 @@ final class LCFA_Settings {
         }
 
         return is_array($notice) ? $notice : null;
+    }
+
+    private static function clear_runtime_feedback(): void {
+        if (!function_exists('get_current_user_id') || !function_exists('delete_transient')) {
+            return;
+        }
+
+        $user_id = (int) get_current_user_id();
+
+        if ($user_id < 1) {
+            return;
+        }
+
+        delete_transient(self::COMMAND_RESULT_PREFIX . $user_id);
+        delete_transient(self::COMMAND_SUGGESTION_PREFIX . $user_id);
+        delete_transient(self::CONNECTION_TEST_PREFIX . $user_id);
     }
 
     private static function default_thread(): array {

@@ -154,7 +154,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 38px;
+    min-height: 14px;
     padding: 8px 12px;
     border-radius: 999px;
     border: 1px solid var(--lcfa-border);
@@ -190,7 +190,7 @@
 }
 
 .lcfa-admin .lcfa-hero-details-panel {
-    width: 100%;
+    width: fit-content;
     border: 1px solid var(--lcfa-border);
     border-radius: 18px;
     background: rgba(17, 19, 32, 0.32);
@@ -597,7 +597,7 @@
     border-radius: 14px;
 }
 
-.lcfa-admin .lcfa-inline-form .button,
+.lcfa-admin .lcfa-inline-form .button:not(.button-primary),
 .lcfa-admin .lcfa-cta-row .button:not(.button-primary) {
     min-height: 44px;
     padding: 0 16px;
@@ -606,8 +606,8 @@
     color: #fff;
 }
 
-.lcfa-admin .lcfa-inline-form .button:hover,
-.lcfa-admin .lcfa-inline-form .button:focus,
+.lcfa-admin .lcfa-inline-form .button:not(.button-primary):hover,
+.lcfa-admin .lcfa-inline-form .button:not(.button-primary):focus,
 .lcfa-admin .lcfa-cta-row .button:not(.button-primary):hover,
 .lcfa-admin .lcfa-cta-row .button:not(.button-primary):focus {
     border-color: rgba(232, 62, 140, 0.36);
@@ -791,6 +791,78 @@
 .lcfa-admin .lcfa-choice-copy small {
     color: var(--lcfa-text-muted);
     line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-choice-grid--actions {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 10px;
+}
+
+.lcfa-admin .lcfa-choice-card--action {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    min-height: 0;
+    padding: 18px;
+}
+
+.lcfa-admin .lcfa-choice-card--primary {
+    border-color: rgba(232, 62, 140, 0.24);
+    background:
+        radial-gradient(circle at bottom left, rgba(232, 62, 140, 0.12), transparent 48%),
+        rgba(255, 255, 255, 0.04);
+    box-shadow: 0 18px 34px rgba(232, 62, 140, 0.12);
+}
+
+.lcfa-admin .lcfa-choice-card--secondary {
+    border-color: rgba(169, 171, 203, 0.16);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lcfa-admin .lcfa-choice-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(38, 198, 218, 0.22);
+    background: rgba(38, 198, 218, 0.08);
+    color: var(--color1);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-choice-card--secondary .lcfa-choice-eyebrow {
+    border-color: rgba(169, 171, 203, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d8dbf0;
+}
+
+.lcfa-admin .lcfa-checkbox--card {
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(12, 13, 22, 0.34);
+    color: #e7e9f8;
+}
+
+.lcfa-admin .lcfa-checkbox--card input {
+    margin-top: 2px;
+    flex: 0 0 auto;
+}
+
+.lcfa-admin .lcfa-button--wide {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 50px;
 }
 
 .lcfa-admin .lcfa-choice-media {
@@ -1281,6 +1353,15 @@
     gap: 14px;
 }
 
+.lcfa-admin .lcfa-agent-guide__bundle-layout {
+    display: grid;
+    gap: 14px;
+}
+
+.lcfa-admin .lcfa-agent-guide__panel-grid--bundle {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .lcfa-admin .lcfa-agent-guide__window {
     display: grid;
     gap: 12px;
@@ -1288,6 +1369,10 @@
     border-radius: 18px;
     border: 1px solid rgba(169, 171, 203, 0.14);
     background: rgba(255, 255, 255, 0.035);
+}
+
+.lcfa-admin .lcfa-agent-guide__window--files {
+    width: 100%;
 }
 
 .lcfa-admin .lcfa-agent-guide__window h3 {
