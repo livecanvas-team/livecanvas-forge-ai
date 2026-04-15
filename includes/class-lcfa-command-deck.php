@@ -1226,8 +1226,10 @@ final class LCFA_Command_Deck {
         $settings = LCFA_Settings::get();
         $profile  = in_array($settings['permission_profile'] ?? '', ['read_only', 'draft_preview', 'confirmed_apply', 'advanced_templates'], true)
             ? (string) $settings['permission_profile']
-            : 'draft_preview';
-        $allow_file_fallback = !empty($settings['allow_file_fallback']);
+            : 'advanced_templates';
+        $allow_file_fallback = array_key_exists('allow_file_fallback', $settings)
+            ? !empty($settings['allow_file_fallback'])
+            : true;
         $is_read_action      = $this->is_read_action($action);
         $is_advanced_action  = $this->is_advanced_action($action);
         $is_file_action      = $this->is_file_fallback_action($action);

@@ -695,21 +695,13 @@ JS;
                 break;
 
             case 5:
-                $permission_profile  = sanitize_key($_POST['permission_profile'] ?? 'draft_preview');
-                $allow_file_fallback = !empty($_POST['allow_file_fallback']);
-
-                if (!in_array($permission_profile, ['read_only', 'draft_preview', 'confirmed_apply', 'advanced_templates'], true)) {
-                    LCFA_Settings::set_notice(__('Select a valid permission profile.', 'livecanvas-forge-ai'), 'error');
-                    $this->redirect_to_step(5);
-                }
-
                 LCFA_Settings::patch([
-                    'permission_profile'  => $permission_profile,
-                    'allow_file_fallback' => $allow_file_fallback,
+                    'permission_profile'  => 'advanced_templates',
+                    'allow_file_fallback' => true,
                     'last_completed_step' => max(5, (int) $settings['last_completed_step']),
                 ]);
 
-                LCFA_Settings::set_notice(__('Operational policy saved.', 'livecanvas-forge-ai'));
+                LCFA_Settings::set_notice(__('Full access enabled.', 'livecanvas-forge-ai'));
                 $this->redirect_to_step(6);
                 break;
 
@@ -2726,7 +2718,7 @@ JS;
         echo '<h3>' . esc_html__('Execution policy', 'livecanvas-forge-ai') . '</h3>';
         echo '<p>' . esc_html(sprintf(
             __('Active profile: %1$s. File fallback: %2$s.', 'livecanvas-forge-ai'),
-            (string) ($settings['permission_profile'] ?: 'draft_preview'),
+            (string) ($settings['permission_profile'] ?: 'advanced_templates'),
             !empty($settings['allow_file_fallback']) ? __('enabled', 'livecanvas-forge-ai') : __('disabled', 'livecanvas-forge-ai')
         )) . '</p>';
         echo '<p>' . esc_html__('The Command Deck now enforces this profile directly. Some apply operations may be downgraded to preview when the policy requires it.', 'livecanvas-forge-ai') . '</p>';
@@ -2963,12 +2955,10 @@ JS;
     }
 
     private function render_permissions_step(array $settings): void {
-        $selected = $settings['permission_profile'] ?: 'draft_preview';
-
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('shield-lock');
-        echo '<div><h2>' . esc_html__('Step 5. Operational policy', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('The companion should stay conservative by default. Define how far it can go before it must ask for confirmation.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Step 5. Enable Full Access', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Continue only if you want Forge to operate with the broadest execution scope for this project.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
@@ -2976,17 +2966,14 @@ JS;
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="5">';
 
-        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
-        $this->render_radio('permission_profile', 'read_only', __('Read only', 'livecanvas-forge-ai'), $selected, 'eye');
-        $this->render_radio('permission_profile', 'draft_preview', __('Drafts and previews', 'livecanvas-forge-ai'), $selected, 'file-earmark');
-        $this->render_radio('permission_profile', 'confirmed_apply', __('Apply with confirmation', 'livecanvas-forge-ai'), $selected, 'check2-square');
-        $this->render_radio('permission_profile', 'advanced_templates', __('Advanced templates, headers, and footers', 'livecanvas-forge-ai'), $selected, 'window-stack');
-        echo '</div>';
+        echo '<p>' . esc_html__('This grants the companion the broadest operating scope: it can create and update pages, sections, templates, headers, footers, and other advanced outputs without stopping on intermediate policy choices.', 'livecanvas-forge-ai') . '</p>';
+        echo '<ul class="lcfa-bullets">';
+        echo '<li>' . esc_html__('Advanced template actions are enabled immediately.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Theme or PHP file fallback is allowed only as a last resort when the active stack requires it.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('By continuing, you are explicitly authorizing Forge to operate with these permissions on this site.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ul>';
 
-        echo '<label class="lcfa-checkbox"><input type="checkbox" name="allow_file_fallback" value="1"' . checked((bool) $settings['allow_file_fallback'], true, false) . '> ';
-        echo esc_html__('Allow theme or PHP file fallbacks only as a last resort.', 'livecanvas-forge-ai') . '</label>';
-
-        echo '<button class="button button-primary">' . esc_html__('Save policy', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button button-primary">' . esc_html__('Continue', 'livecanvas-forge-ai') . '</button>';
         echo '</form>';
         echo '</section>';
     }
@@ -3002,7 +2989,8 @@ JS;
         echo '<li>' . esc_html(sprintf(__('Confirmed framework: %s.', 'livecanvas-forge-ai'), $settings['framework'] ?: $snapshot['detected_framework'])) . '</li>';
         echo '<li>' . esc_html(sprintf(__('Site profile: %s.', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode'])) . '</li>';
         echo '<li>' . esc_html(sprintf(__('Primary AI client: %s.', 'livecanvas-forge-ai'), $settings['ai_tool'] ?: 'codex')) . '</li>';
-        echo '<li>' . esc_html(sprintf(__('Permission profile: %s.', 'livecanvas-forge-ai'), $settings['permission_profile'])) . '</li>';
+        echo '<li>' . esc_html__('Access mode: Full access enabled.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Fallback policy: theme or PHP file fallback is available only as a last resort.', 'livecanvas-forge-ai') . '</li>';
         echo '</ul>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
@@ -3020,7 +3008,7 @@ JS;
             2 => ['label' => __('Framework', 'livecanvas-forge-ai'), 'icon' => 'layers'],
             3 => ['label' => __('Site', 'livecanvas-forge-ai'), 'icon' => 'globe'],
             4 => ['label' => __('Client', 'livecanvas-forge-ai'), 'icon' => 'command'],
-            5 => ['label' => __('Policy', 'livecanvas-forge-ai'), 'icon' => 'shield-lock'],
+            5 => ['label' => __('Access', 'livecanvas-forge-ai'), 'icon' => 'shield-lock'],
             6 => ['label' => __('Finish', 'livecanvas-forge-ai'), 'icon' => 'rocket'],
         ];
 

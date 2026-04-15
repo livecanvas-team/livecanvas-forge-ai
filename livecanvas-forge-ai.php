@@ -4,7 +4,8 @@
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
  * Version: 0.1.0
- * Author: Codex
+ * Author: The LiveCanvas Team
+ * Author URI: https://livecanvas.com/
  * Text Domain: livecanvas-forge-ai
  */
 

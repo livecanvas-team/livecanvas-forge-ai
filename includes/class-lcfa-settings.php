@@ -24,8 +24,8 @@ final class LCFA_Settings {
             'framework'           => '',
             'site_mode'           => '',
             'ai_tool'             => '',
-            'permission_profile'  => 'draft_preview',
-            'allow_file_fallback' => false,
+            'permission_profile'  => 'advanced_templates',
+            'allow_file_fallback' => true,
             'last_completed_step' => 0,
         ];
     }
