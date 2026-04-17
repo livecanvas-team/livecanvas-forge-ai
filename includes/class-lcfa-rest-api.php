@@ -2,7 +2,15 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) {
+    require_once LCFA_DIR . 'includes/class-lcfa-thread-message-actions.php';
+}
+if (!class_exists('LCFA_Genesis_Executor', false) && defined('LCFA_DIR')) {
+    require_once LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
+}
+
 final class LCFA_Rest_Api {
+    private const COMMAND_EXECUTION_TRANSIENT_PREFIX = 'lcfa_command_execution_';
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
     private LCFA_WindPress_Bridge $windpress_bridge;
@@ -12,9 +20,10 @@ final class LCFA_Rest_Api {
     private LCFA_Command_Deck $command_deck;
     private LCFA_Prompt_Suggester $prompt_suggester;
     private LCFA_Genesis_Planner $genesis_planner;
+    private LCFA_Genesis_Executor $genesis_executor;
     private LCFA_Picostrap_Compile_Service $picostrap_compile_service;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
@@ -24,6 +33,7 @@ final class LCFA_Rest_Api {
         $this->command_deck       = $command_deck;
         $this->prompt_suggester   = $prompt_suggester;
         $this->genesis_planner    = $genesis_planner;
+        $this->genesis_executor   = $genesis_executor ?: new LCFA_Genesis_Executor($environment, $command_deck);
         $this->picostrap_compile_service = new LCFA_Picostrap_Compile_Service($environment);
     }
 
@@ -65,6 +75,24 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/genesis/plan/generate', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'generate_genesis_plan'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/genesis/execution-plan', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_genesis_execution_plan'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/genesis/execute-next', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'execute_next_genesis_task'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/genesis/execute-task', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'execute_genesis_task'],
             'permission_callback' => [$this, 'can_write'],
         ]);
 
@@ -172,10 +200,35 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_write'],
         ]);
 
+        register_rest_route('lcfa/v1', '/chat/send', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'send_chat_message'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/chat/thread', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'manage_chat_thread'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
         register_rest_route('lcfa/v1', '/command', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'run_command'],
             'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/command/execution', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'enqueue_command_execution'],
+                'permission_callback' => [$this, 'can_write'],
+            ],
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_command_execution_status'],
+                'permission_callback' => [$this, 'can_read'],
+            ],
         ]);
 
         register_rest_route('lcfa/v1', '/mcp/status', [
@@ -368,6 +421,67 @@ final class LCFA_Rest_Api {
             'plan' => $plan,
             'progress' => LCFA_Settings::get_genesis_progress(),
         ]);
+    }
+
+    public function get_genesis_execution_plan(): WP_REST_Response {
+        return new WP_REST_Response($this->genesis_executor->get_execution_plan());
+    }
+
+    public function execute_next_genesis_task(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $result = $this->genesis_executor->execute_next([
+            'dry_run'          => !empty($payload['dry_run']),
+            'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+            'thread_id'        => sanitize_key((string) ($payload['thread_id'] ?? 'default')),
+            'request_context'  => [
+                'thread_id' => sanitize_key((string) ($payload['thread_id'] ?? 'default')),
+            ],
+            'overrides'        => is_array($payload['overrides'] ?? null) ? $payload['overrides'] : [],
+        ]);
+
+        return new WP_REST_Response($result, !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function execute_genesis_task(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $task_id = sanitize_key((string) ($payload['task_id'] ?? ''));
+
+        if ($task_id === '') {
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => __('A valid Genesis task_id is required.', 'livecanvas-forge-ai'),
+            ], 400);
+        }
+
+        $result = $this->genesis_executor->execute_task($task_id, [
+            'dry_run'          => !empty($payload['dry_run']),
+            'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+            'thread_id'        => sanitize_key((string) ($payload['thread_id'] ?? 'default')),
+            'request_context'  => [
+                'thread_id' => sanitize_key((string) ($payload['thread_id'] ?? 'default')),
+            ],
+            'overrides'        => is_array($payload['overrides'] ?? null) ? $payload['overrides'] : [],
+        ]);
+
+        return new WP_REST_Response($result, !empty($result['ok']) ? 200 : 400);
     }
 
     public function get_page_html(WP_REST_Request $request): WP_REST_Response {
@@ -576,6 +690,118 @@ final class LCFA_Rest_Api {
         ], $status);
     }
 
+    public function send_chat_message(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
+        $user_prompt = sanitize_textarea_field((string) ($payload['user_prompt'] ?? $payload['message'] ?? ''));
+        $attachments = $this->sanitize_chat_attachments((array) ($payload['attachments'] ?? []));
+
+        if ($user_prompt === '') {
+            return new WP_REST_Response([
+                'suggestion' => [
+                    'ok'      => false,
+                    'message' => __('A user prompt is required.', 'livecanvas-forge-ai'),
+                ],
+                'thread' => $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id),
+            ], 400);
+        }
+
+        LCFA_Settings::append_thread_message($thread_id, [
+            'role'    => 'user',
+            'label'   => __('Request', 'livecanvas-forge-ai'),
+            'content' => $user_prompt,
+            'meta'    => [
+                'action'           => sanitize_key((string) ($payload['action'] ?? '')),
+                'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+                'post_id'          => absint($payload['post_id'] ?? 0),
+                'context_post_id'  => absint($payload['context_post_id'] ?? 0),
+                'target_id'        => absint($payload['target_id'] ?? 0),
+                'variant'          => sanitize_text_field((string) ($payload['variant'] ?? '1')),
+            ],
+            'attachments' => $attachments,
+        ]);
+
+        $payload['attachments'] = $attachments;
+        $payload['attachment_count'] = count($attachments);
+        $suggestion = $this->prompt_suggester->suggest($payload);
+        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_chat_suggestion_message($suggestion, $payload, $thread_id));
+        $thread = $this->decorate_thread($thread, $thread_id);
+        $status = !empty($suggestion['ok']) ? 200 : 400;
+
+        return new WP_REST_Response([
+            'suggestion' => $suggestion,
+            'thread'     => $thread,
+        ], $status);
+    }
+
+    public function manage_chat_thread(WP_REST_Request $request): WP_REST_Response {
+        $payload = $request->get_json_params();
+        $default_thread_id = LCFA_Settings::normalize_thread_id('default');
+
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+
+        $operation = sanitize_key((string) ($payload['operation'] ?? ''));
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
+        $title = sanitize_text_field((string) ($payload['title'] ?? ''));
+
+        switch ($operation) {
+            case 'create':
+                $thread = LCFA_Settings::create_thread($title);
+                break;
+
+            case 'duplicate':
+                $thread = LCFA_Settings::duplicate_thread($thread_id, $title);
+                break;
+
+            case 'rename':
+                if ($title === '') {
+                    return new WP_REST_Response([
+                        'error' => __('Thread rename requires a title.', 'livecanvas-forge-ai'),
+                    ], 400);
+                }
+
+                $thread = LCFA_Settings::rename_thread($thread_id, $title);
+                break;
+
+            case 'clear':
+                $thread = LCFA_Settings::clear_thread($thread_id);
+                break;
+
+            case 'delete':
+                if ($thread_id === $default_thread_id) {
+                    return new WP_REST_Response([
+                        'error' => __('The default thread cannot be deleted.', 'livecanvas-forge-ai'),
+                    ], 400);
+                }
+
+                $thread = LCFA_Settings::delete_thread($thread_id);
+                break;
+
+            default:
+                return new WP_REST_Response([
+                    'error' => __('Unsupported thread operation.', 'livecanvas-forge-ai'),
+                ], 400);
+        }
+
+        $selected_thread_id = $operation === 'delete'
+            ? $default_thread_id
+            : LCFA_Settings::normalize_thread_id((string) ($thread['id'] ?? $thread_id));
+
+        return new WP_REST_Response([
+            'thread'             => $this->decorate_thread($thread, $selected_thread_id),
+            'threads'            => $this->get_chat_thread_payloads(),
+            'thread_summaries'   => array_values(LCFA_Settings::get_thread_summaries()),
+            'selected_thread_id' => $selected_thread_id,
+        ]);
+    }
+
     public function get_mcp_status(): WP_REST_Response {
         return new WP_REST_Response([
             'mcp' => $this->context_builder->get_mcp_status(),
@@ -647,23 +873,315 @@ final class LCFA_Rest_Api {
     }
 
     public function run_command(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+
+        $append_thread = array_key_exists('thread_id', $payload);
+        $thread_id = $append_thread
+            ? LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'))
+            : '';
+        $result = $this->command_deck->execute($payload);
+        $thread = null;
+
+        if ($append_thread) {
+            $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_command_result_message($result, $payload));
+            $thread = $this->decorate_thread($thread, $thread_id);
+        }
+
+        $status = !empty($result['ok']) ? 200 : 400;
+
+        $response = [
+            'result' => $result,
+        ];
+
+        if (is_array($thread)) {
+            $response['thread'] = $thread;
+        }
+
+        return new WP_REST_Response($response, $status);
+    }
+
+    public function enqueue_command_execution(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $record = $this->create_command_execution_record($payload);
+        $this->store_command_execution_record($record);
+
+        return new WP_REST_Response([
+            'execution' => $this->build_command_execution_response($record),
+        ], 202);
+    }
+
+    public function get_command_execution_status(WP_REST_Request $request): WP_REST_Response {
+        $execution_id = sanitize_key((string) ($request->get_param('execution_id') ?: $request->get_param('id') ?: ''));
+        $record = $this->get_command_execution_record($execution_id);
+
+        if (!is_array($record)) {
+            return new WP_REST_Response([
+                'error' => __('Inline execution not found.', 'livecanvas-forge-ai'),
+            ], 404);
+        }
+
+        if (($record['status'] ?? 'queued') === 'queued') {
+            $record['status'] = 'running';
+            $record['started_at'] = current_time('mysql', true);
+            $this->store_command_execution_record($record);
+            $record = $this->resolve_command_execution_record($record);
+        }
+
+        return new WP_REST_Response([
+            'execution' => $this->build_command_execution_response($record),
+        ], 200);
+    }
+
+    private function build_chat_suggestion_message(array $suggestion, array $request_payload = [], string $thread_id = 'default'): array {
+        $suggested_payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
+        $summary = (string) ($suggestion['summary'] ?? $suggestion['message'] ?? '');
+
+        return [
+            'role'    => 'suggestion_result',
+            'label'   => !empty($suggestion['ok']) ? __('Suggestion ready', 'livecanvas-forge-ai') : __('Suggestion failed', 'livecanvas-forge-ai'),
+            'content' => $summary !== '' ? $summary : __('No suggestion summary available.', 'livecanvas-forge-ai'),
+            'meta'    => [
+                'ok'               => !empty($suggestion['ok']),
+                'action'           => sanitize_key((string) ($suggested_payload['action'] ?? '')),
+                'execution_target' => sanitize_key((string) ($suggested_payload['execution_target'] ?? '')),
+                'confidence'       => sanitize_text_field((string) ($suggestion['confidence'] ?? '')),
+                'attachment_count' => absint($request_payload['attachment_count'] ?? 0),
+                'warnings'         => array_map('sanitize_text_field', (array) ($suggestion['warnings'] ?? [])),
+                'reasons'          => array_map('sanitize_text_field', (array) ($suggestion['reasons'] ?? [])),
+            ],
+            'actions' => LCFA_Thread_Message_Actions::build_suggestion_actions($suggested_payload, $request_payload, [
+                'thread_id' => LCFA_Settings::normalize_thread_id($thread_id),
+            ]),
+        ];
+    }
+
+    private function build_command_result_message(array $result, array $payload): array {
+        $lines = [];
+        $summary = trim((string) ($result['summary'] ?? ''));
+        $message = trim((string) ($result['message'] ?? ''));
+        $execution_target = sanitize_key((string) ($payload['execution_target'] ?? 'local'));
+        $target_type = (string) ($result['target_type'] ?? '');
+
+        if ($summary !== '') {
+            $lines[] = $summary;
+        }
+
+        if ($message !== '' && $message !== $summary) {
+            $lines[] = $message;
+        }
+
+        if (!empty($result['target_title'])) {
+            $lines[] = sprintf(__('Target label: %s', 'livecanvas-forge-ai'), (string) $result['target_title']);
+        } elseif (!empty($result['target_type'])) {
+            $lines[] = sprintf(__('Target type: %s', 'livecanvas-forge-ai'), (string) $result['target_type']);
+        }
+
+        if (!empty($result['data']['backup_file'])) {
+            $lines[] = sprintf(__('Backup captured before write: %s', 'livecanvas-forge-ai'), (string) $result['data']['backup_file']);
+        }
+
+        if (!empty($result['data']['restored_from_backup']['backup_id'])) {
+            $lines[] = sprintf(__('Restored from backup: %s', 'livecanvas-forge-ai'), (string) ($result['data']['restored_from_backup']['backup_id'] ?? ''));
+        }
+
+        $message = [
+            'role'    => 'tool_result',
+            'label'   => !empty($result['ok']) ? __('Execution result', 'livecanvas-forge-ai') : __('Execution error', 'livecanvas-forge-ai'),
+            'content' => implode("\n", array_filter($lines)),
+            'meta'    => [
+                'action'           => (string) ($result['action'] ?? ''),
+                'mode'             => (string) ($result['mode'] ?? ''),
+                'execution_target' => $execution_target,
+                'genesis_task_id'  => sanitize_key((string) ($payload['genesis_task_id'] ?? '')),
+                'ok'               => !empty($result['ok']),
+                'target_type'      => $target_type,
+                'target_id'        => (int) ($result['target_id'] ?? 0),
+                'target_title'     => (string) ($result['target_title'] ?? ''),
+            ],
+            'actions' => LCFA_Thread_Message_Actions::build_result_actions($result, $payload, [
+                'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
+            ]),
+        ];
+
+        return LCFA_Thread_Message_Actions::decorate_message($message, [
+            'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
+        ]);
+    }
+
+    private function get_request_payload(WP_REST_Request $request): array {
         $payload = $request->get_json_params();
 
         if (!is_array($payload)) {
             $payload = $request->get_params();
         }
 
-        if (!is_array($payload)) {
-            $payload = [];
+        return is_array($payload) ? $payload : [];
+    }
+
+    private function sanitize_chat_attachments(array $attachments): array {
+        $sanitized = [];
+
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment)) {
+                continue;
+            }
+
+            $kind = sanitize_key((string) ($attachment['kind'] ?? ''));
+            $mime = sanitize_text_field((string) ($attachment['mime'] ?? ''));
+            $data_url = trim((string) ($attachment['data_url'] ?? ''));
+
+            if ($kind !== 'image' || $mime === '' || strpos($mime, 'image/') !== 0 || strpos($data_url, 'data:image/') !== 0) {
+                continue;
+            }
+
+            if (strlen($data_url) > 500000) {
+                continue;
+            }
+
+            $sanitized[] = [
+                'kind'     => 'image',
+                'name'     => sanitize_text_field((string) ($attachment['name'] ?? '')),
+                'mime'     => $mime,
+                'caption'  => sanitize_text_field((string) ($attachment['caption'] ?? '')),
+                'data_url' => $data_url,
+                'size'     => absint($attachment['size'] ?? 0),
+            ];
         }
 
-        $result = $this->command_deck->execute($payload);
+        return array_slice($sanitized, 0, 2);
+    }
 
-        $status = !empty($result['ok']) ? 200 : 400;
+    private function create_command_execution_record(array $payload): array {
+        $execution_id = sanitize_key('exec-' . strtolower(wp_generate_password(10, false, false)));
+        $payload['thread_id'] = LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
 
-        return new WP_REST_Response([
-            'result' => $result,
-        ], $status);
+        return [
+            'id'               => $execution_id,
+            'status'           => 'queued',
+            'action'           => sanitize_key((string) ($payload['action'] ?? '')),
+            'mode'             => !empty($payload['dry_run']) ? 'preview' : 'apply',
+            'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+            'thread_id'        => (string) ($payload['thread_id'] ?? 'default'),
+            'created_at'       => current_time('mysql', true),
+            'payload'          => $payload,
+        ];
+    }
+
+    private function resolve_command_execution_record(array $record): array {
+        $payload = is_array($record['payload'] ?? null) ? $record['payload'] : [];
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($record['thread_id'] ?? ($payload['thread_id'] ?? 'default')));
+
+        try {
+            $result = $this->command_deck->execute($payload);
+            $thread = null;
+
+            if ($thread_id !== '') {
+                $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_command_result_message($result, $payload));
+                $thread = $this->decorate_thread($thread, $thread_id);
+            }
+
+            $record['status'] = !empty($result['ok']) ? 'completed' : 'failed';
+            $record['completed_at'] = current_time('mysql', true);
+            $record['result'] = $result;
+
+            if (is_array($thread)) {
+                $record['thread'] = $thread;
+            }
+        } catch (Throwable $throwable) {
+            $record['status'] = 'failed';
+            $record['completed_at'] = current_time('mysql', true);
+            $record['result'] = [
+                'ok'               => false,
+                'action'           => sanitize_key((string) ($payload['action'] ?? '')),
+                'mode'             => !empty($payload['dry_run']) ? 'preview' : 'apply',
+                'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+                'message'          => $throwable->getMessage(),
+                'summary'          => $throwable->getMessage(),
+                'warnings'         => [],
+                'diff_html'        => '',
+                'existing_html'    => '',
+                'proposed_html'    => '',
+                'data'             => [],
+            ];
+        }
+
+        $this->store_command_execution_record($record);
+
+        return $record;
+    }
+
+    private function build_command_execution_response(array $record): array {
+        return [
+            'id'               => sanitize_key((string) ($record['id'] ?? '')),
+            'status'           => sanitize_key((string) ($record['status'] ?? 'queued')),
+            'action'           => sanitize_key((string) ($record['action'] ?? '')),
+            'mode'             => sanitize_key((string) ($record['mode'] ?? 'apply')),
+            'execution_target' => sanitize_key((string) ($record['execution_target'] ?? 'local')),
+            'thread_id'        => LCFA_Settings::normalize_thread_id((string) ($record['thread_id'] ?? 'default')),
+            'created_at'       => sanitize_text_field((string) ($record['created_at'] ?? '')),
+            'started_at'       => sanitize_text_field((string) ($record['started_at'] ?? '')),
+            'completed_at'     => sanitize_text_field((string) ($record['completed_at'] ?? '')),
+            'result'           => is_array($record['result'] ?? null) ? $record['result'] : null,
+            'thread'           => is_array($record['thread'] ?? null) ? $record['thread'] : null,
+        ];
+    }
+
+    private function get_command_execution_record(string $execution_id): ?array {
+        if ($execution_id === '') {
+            return null;
+        }
+
+        $record = get_transient($this->get_command_execution_transient_key($execution_id));
+
+        return is_array($record) ? $record : null;
+    }
+
+    private function store_command_execution_record(array $record): void {
+        if (empty($record['id'])) {
+            return;
+        }
+
+        $expiration = defined('MINUTE_IN_SECONDS') ? (15 * MINUTE_IN_SECONDS) : 900;
+        set_transient($this->get_command_execution_transient_key((string) $record['id']), $record, $expiration);
+    }
+
+    private function get_command_execution_transient_key(string $execution_id): string {
+        $user_id = function_exists('get_current_user_id') ? (int) get_current_user_id() : 0;
+
+        return self::COMMAND_EXECUTION_TRANSIENT_PREFIX . $user_id . '_' . sanitize_key($execution_id);
+    }
+
+    private function decorate_thread(array $thread, string $thread_id): array {
+        $messages = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
+
+        $thread['messages'] = array_map(static function ($message) use ($thread_id) {
+            return is_array($message)
+                ? LCFA_Thread_Message_Actions::decorate_message($message, ['thread_id' => $thread_id])
+                : $message;
+        }, $messages);
+
+        return $thread;
+    }
+
+    private function get_chat_thread_payloads(): array {
+        $payloads = [];
+
+        foreach (array_slice(LCFA_Settings::get_thread_summaries(), 0, 8) as $thread_summary) {
+            if (!is_array($thread_summary)) {
+                continue;
+            }
+
+            $thread_id = LCFA_Settings::normalize_thread_id((string) ($thread_summary['id'] ?? 'default'));
+            $thread = $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id);
+
+            $payloads[$thread_id] = [
+                'id'       => $thread_id,
+                'title'    => (string) ($thread_summary['title'] ?? $thread_id),
+                'messages' => array_values(is_array($thread['messages'] ?? null) ? $thread['messages'] : []),
+            ];
+        }
+
+        return $payloads;
     }
 
     public function rotate_mcp_token(): WP_REST_Response {

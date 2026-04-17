@@ -28,7 +28,9 @@ final class LCFA_Context_Builder {
         $brief_hash = LCFA_Settings::get_project_brief_hash($brief);
         $genesis_plan = LCFA_Settings::get_genesis_plan();
         $genesis_progress = LCFA_Settings::get_genesis_progress();
+        $genesis_execution = $this->build_genesis_execution_summary($genesis_plan, $genesis_progress);
         $plan_stack = is_array($genesis_plan['stack'] ?? null) ? $genesis_plan['stack'] : [];
+        $target_contexts = $this->build_target_contexts($inventory, $snapshot, $genesis_plan, $genesis_execution);
         $target     = null;
 
         if ($post_id > 0) {
@@ -38,6 +40,8 @@ final class LCFA_Context_Builder {
                 $post_type = $target['post']['post_type'];
             }
         }
+
+        $target = $this->decorate_current_target($target, $target_contexts);
 
         if ($post_type === '') {
             $post_type = 'page';
@@ -80,12 +84,14 @@ final class LCFA_Context_Builder {
                 ),
                 'plan'       => $genesis_plan,
                 'progress'   => $genesis_progress,
+                'execution'  => $genesis_execution,
             ],
             'connections'   => LCFA_Settings::get_public_connections(),
             'mcp'           => $this->get_mcp_status(),
             'windpress'     => $this->get_windpress_context(),
             'output_rules'  => $this->get_output_rules($snapshot['detected_framework']),
             'tool_contract' => $this->get_tool_contract(),
+            'target_contexts' => $target_contexts,
             'inventory'     => [
                 'summary'           => $inventory['summary'],
                 'livecanvas_pages'  => array_slice($inventory['livecanvas_pages'], 0, 20),
@@ -116,6 +122,8 @@ final class LCFA_Context_Builder {
             'windpress'    => $context['windpress'],
             'output_rules' => $context['output_rules'],
             'acf'          => $context['acf'],
+            'target_contexts' => $context['target_contexts'],
+            'current_target' => $context['current_target'],
         ];
     }
 
@@ -141,6 +149,143 @@ final class LCFA_Context_Builder {
                 'view_url'           => get_permalink($post->ID),
             ],
             'content' => (string) get_post_field('post_content', $post->ID, 'raw'),
+        ];
+    }
+
+    private function build_genesis_execution_summary(array $plan, array $progress): array {
+        $plan_tasks     = is_array($plan['tasks'] ?? null) ? $plan['tasks'] : [];
+        $progress_tasks = is_array($progress['tasks'] ?? null) ? $progress['tasks'] : [];
+        $counts         = [
+            'pending'   => 0,
+            'previewed' => 0,
+            'applied'   => 0,
+            'failed'    => 0,
+            'total'     => count($plan_tasks),
+        ];
+        $next_task = null;
+
+        foreach ($plan_tasks as $task) {
+            if (!is_array($task)) {
+                continue;
+            }
+
+            $task_id = sanitize_key((string) ($task['id'] ?? ''));
+
+            if ($task_id === '') {
+                continue;
+            }
+
+            $status = in_array($progress_tasks[$task_id]['status'] ?? '', ['pending', 'previewed', 'applied', 'failed'], true)
+                ? (string) $progress_tasks[$task_id]['status']
+                : 'pending';
+
+            if (!isset($counts[$status])) {
+                $counts[$status] = 0;
+            }
+
+            $counts[$status]++;
+
+            if ($next_task === null && $status !== 'applied') {
+                $next_task = [
+                    'id'              => $task_id,
+                    'label'           => sanitize_text_field((string) ($task['label'] ?? '')),
+                    'stage'           => sanitize_key((string) ($task['stage'] ?? '')),
+                    'status'          => $status,
+                    'requires_action' => !empty($task['payload']['action']),
+                    'action'          => sanitize_key((string) ($task['payload']['action'] ?? '')),
+                ];
+            }
+        }
+
+        return [
+            'counts'       => $counts,
+            'next_task'    => $next_task,
+            'next_task_id' => sanitize_key((string) ($next_task['id'] ?? '')),
+        ];
+    }
+
+    private function build_target_contexts(array $inventory, array $snapshot, array $genesis_plan, array $genesis_execution): array {
+        $summary = is_array($inventory['summary'] ?? null) ? $inventory['summary'] : [];
+        $task_count = count(is_array($genesis_plan['tasks'] ?? null) ? $genesis_plan['tasks'] : []);
+        $local_files_supported = (string) ($snapshot['site_mode'] ?? '') === 'local';
+
+        return [
+            'page' => [
+                'label'          => __('Page', 'livecanvas-forge-ai'),
+                'target_type'    => 'page',
+                'command_action' => 'page_upsert',
+                'count'          => (int) ($summary['pages'] ?? 0),
+                'supports_preview' => true,
+                'notes'          => [
+                    __('Use for full page generation or major page refreshes when the current target is a LiveCanvas-enabled page.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'header' => [
+                'label'          => __('Header partial', 'livecanvas-forge-ai'),
+                'target_type'    => 'header',
+                'command_action' => 'update_header',
+                'count'          => (int) ($summary['headers'] ?? 0),
+                'preferred_variant' => '1',
+                'supports_preview' => true,
+                'notes'          => [
+                    __('Targets the LiveCanvas header partial for global navigation and top-of-page chrome.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'footer' => [
+                'label'          => __('Footer partial', 'livecanvas-forge-ai'),
+                'target_type'    => 'footer',
+                'command_action' => 'update_footer',
+                'count'          => (int) ($summary['footers'] ?? 0),
+                'preferred_variant' => '1',
+                'supports_preview' => true,
+                'notes'          => [
+                    __('Targets the LiveCanvas footer partial for global closing sections and legal/footer UI.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'dynamic_template' => [
+                'label'          => __('Dynamic template', 'livecanvas-forge-ai'),
+                'target_type'    => 'dynamic_template',
+                'command_action' => 'update_dynamic_template',
+                'count'          => (int) ($summary['dynamic_templates'] ?? 0),
+                'supports_preview' => true,
+                'notes'          => [
+                    __('Use when editing archive, single, or query-driven LiveCanvas templates instead of a static page.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'theme_file' => [
+                'label'          => __('Theme file', 'livecanvas-forge-ai'),
+                'target_type'    => 'theme_file',
+                'command_action' => 'write_theme_file',
+                'available'      => $local_files_supported,
+                'roots'          => [
+                    'stylesheet' => get_stylesheet_directory(),
+                    'template'   => get_template_directory(),
+                ],
+                'notes'          => [
+                    __('Use for local theme files when changes should live outside post content or partials.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'backup_restore' => [
+                'label'          => __('Backup restore', 'livecanvas-forge-ai'),
+                'target_type'    => 'backup_restore',
+                'command_action' => 'restore_theme_backup',
+                'available'      => $local_files_supported,
+                'notes'          => [
+                    __('Use when recovering a previously backed up theme or template file through the filesystem bridge.', 'livecanvas-forge-ai'),
+                ],
+            ],
+            'genesis_task' => [
+                'label'          => __('Genesis task', 'livecanvas-forge-ai'),
+                'target_type'    => 'genesis_task',
+                'available'      => $task_count > 0,
+                'task_count'     => $task_count,
+                'next_task_id'   => sanitize_key((string) ($genesis_execution['next_task_id'] ?? '')),
+                'next_task'      => is_array($genesis_execution['next_task'] ?? null) ? $genesis_execution['next_task'] : null,
+                'counts'         => is_array($genesis_execution['counts'] ?? null) ? $genesis_execution['counts'] : [],
+                'notes'          => [
+                    __('Use when a request should advance the stored Genesis execution plan instead of targeting a specific page or partial directly.', 'livecanvas-forge-ai'),
+                ],
+            ],
         ];
     }
 
@@ -309,6 +454,53 @@ final class LCFA_Context_Builder {
         }
 
         return $page;
+    }
+
+    private function decorate_current_target(?array $target, array $target_contexts): ?array {
+        if (!is_array($target) || !is_array($target['post'] ?? null)) {
+            return $target;
+        }
+
+        $target_type = $this->detect_target_type($target);
+        $target['target_type'] = $target_type;
+        $target['context_pack'] = $target_contexts[$target_type] ?? [
+            'label'          => __('Generic target', 'livecanvas-forge-ai'),
+            'target_type'    => $target_type,
+            'command_action' => '',
+            'notes'          => [
+                __('No specialized target pack is available for this content type yet. Keep changes conservative.', 'livecanvas-forge-ai'),
+            ],
+        ];
+
+        return $target;
+    }
+
+    private function detect_target_type(array $target): string {
+        $post = is_array($target['post'] ?? null) ? $target['post'] : [];
+        $post_id = (int) ($post['id'] ?? 0);
+        $post_type = sanitize_key((string) ($post['post_type'] ?? ''));
+
+        if ($post_type === 'lc_partial') {
+            if ($post_id > 0 && get_post_meta($post_id, 'is_header', true) === '1') {
+                return 'header';
+            }
+
+            if ($post_id > 0 && get_post_meta($post_id, 'is_footer', true) === '1') {
+                return 'footer';
+            }
+
+            return 'partial';
+        }
+
+        if ($post_type === 'lc_dynamic_template') {
+            return 'dynamic_template';
+        }
+
+        if ($post_type === 'page') {
+            return 'page';
+        }
+
+        return $post_type !== '' ? $post_type : 'unknown';
     }
 
     private function get_output_rules(string $framework): array {

@@ -70,6 +70,45 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => client.generateGenesisPlan(argumentsMap)
     },
     {
+      name: 'get_genesis_execution_plan',
+      description: 'Read the current Genesis execution state, including task statuses and the next actionable task.',
+      inputSchema: {
+        type: 'object',
+        properties: {}
+      },
+      invoke: async () => client.getGenesisExecutionPlan()
+    },
+    {
+      name: 'execute_genesis_next',
+      description: 'Execute the next pending Genesis task, optionally as preview-only, while updating Genesis progress.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dry_run: { type: 'boolean' },
+          execution_target: { type: 'string' },
+          thread_id: { type: 'string' },
+          overrides: { type: 'object' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.executeGenesisNext(argumentsMap)
+    },
+    {
+      name: 'execute_genesis_task',
+      description: 'Execute one specific Genesis task by id, optionally overriding part of its payload.',
+      inputSchema: {
+        type: 'object',
+        required: ['task_id'],
+        properties: {
+          task_id: { type: 'string' },
+          dry_run: { type: 'boolean' },
+          execution_target: { type: 'string' },
+          thread_id: { type: 'string' },
+          overrides: { type: 'object' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.executeGenesisTask(argumentsMap)
+    },
+    {
       name: 'get_page_html',
       description: 'Read the raw post_content HTML for a WordPress post or page.',
       inputSchema: {

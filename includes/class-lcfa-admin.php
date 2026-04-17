@@ -2,6 +2,13 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) {
+    require_once LCFA_DIR . 'includes/class-lcfa-thread-message-actions.php';
+}
+if (!class_exists('LCFA_Genesis_Executor', false) && defined('LCFA_DIR')) {
+    require_once LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
+}
+
 final class LCFA_Admin {
     private LCFA_Environment $environment;
     private LCFA_Installer $installer;
@@ -16,8 +23,9 @@ final class LCFA_Admin {
     private LCFA_Command_Deck $command_deck;
     private LCFA_Prompt_Suggester $prompt_suggester;
     private LCFA_Genesis_Planner $genesis_planner;
+    private ?LCFA_Genesis_Executor $genesis_executor = null;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer, LCFA_Inventory $inventory, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Connection_Tester $connection_tester, LCFA_Remote_Client $remote_client, LCFA_Context_Builder $context_builder, LCFA_Connection_Onboarding $connection_onboarding, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner) {
+    public function __construct(LCFA_Environment $environment, LCFA_Installer $installer, LCFA_Inventory $inventory, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Connection_Tester $connection_tester, LCFA_Remote_Client $remote_client, LCFA_Context_Builder $context_builder, LCFA_Connection_Onboarding $connection_onboarding, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null) {
         $this->environment  = $environment;
         $this->installer    = $installer;
         $this->inventory    = $inventory;
@@ -31,6 +39,7 @@ final class LCFA_Admin {
         $this->command_deck = $command_deck;
         $this->prompt_suggester = $prompt_suggester;
         $this->genesis_planner = $genesis_planner;
+        $this->genesis_executor = $genesis_executor;
     }
 
     public function hooks(): void {
@@ -47,6 +56,7 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_reconfigure_connection', [$this, 'handle_reconfigure_connection_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
         add_action('admin_post_lcfa_generate_plan', [$this, 'handle_generate_plan_post']);
+        add_action('admin_post_lcfa_genesis_execute', [$this, 'handle_genesis_execute_post']);
         add_action('admin_post_lcfa_create_thread', [$this, 'handle_create_thread_post']);
         add_action('admin_post_lcfa_command', [$this, 'handle_command_post']);
         add_action('lc_editor_header', [$this, 'render_editor_bridge_styles']);
@@ -238,54 +248,12 @@ final class LCFA_Admin {
             return;
         }
 
-        echo '<style id="lcfa-editor-bridge-styles">';
-        echo '.lcfa-editor-shell{position:fixed;right:20px;bottom:20px;z-index:999999;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}';
-        echo '.lcfa-editor-launcher{display:inline-flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid rgba(53,208,242,.28);border-radius:999px;background:rgba(15,18,32,.94);box-shadow:0 20px 60px rgba(0,0,0,.45);color:#f5f7ff;cursor:pointer;backdrop-filter:blur(16px);font-size:13px;font-weight:700;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}';
-        echo '.lcfa-editor-launcher:hover{transform:translateY(-1px);border-color:rgba(53,208,242,.44)}';
-        echo '.lcfa-editor-launcher .lcfa-icon{width:16px;height:16px;color:#35d0f2}';
-        echo '.lcfa-editor-drawer{position:absolute;right:0;bottom:0;width:360px;max-width:min(360px,calc(100vw - 32px));padding:18px;border-radius:22px;background:linear-gradient(180deg,rgba(17,22,38,.96),rgba(13,16,29,.96));border:1px solid rgba(53,208,242,.2);box-shadow:0 24px 80px rgba(0,0,0,.52);backdrop-filter:blur(18px);color:#f5f7ff;opacity:0;transform:translateY(10px) scale(.98);pointer-events:none;transition:opacity .22s ease,transform .22s ease}';
-        echo '.lcfa-editor-shell.is-open .lcfa-editor-drawer{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}';
-        echo '.lcfa-editor-shell.is-open .lcfa-editor-launcher{opacity:0;pointer-events:none;transform:translateY(6px)}';
-        echo '.lcfa-editor-bridge__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}';
-        echo '.lcfa-editor-bridge__eyebrow{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#35d0f2;font-weight:700;margin-bottom:6px}';
-        echo '.lcfa-editor-bridge__title{font-size:17px;line-height:1.35;font-weight:700;margin:0;color:#fff}';
-        echo '.lcfa-editor-bridge__close{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#ff62bf;cursor:pointer}';
-        echo '.lcfa-editor-bridge__close:hover{background:rgba(238,30,149,.16)}';
-        echo '.lcfa-editor-bridge__stack{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}';
-        echo '.lcfa-editor-bridge__pill{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:rgba(53,208,242,.08);border:1px solid rgba(53,208,242,.2);color:#35d0f2}';
-        echo '.lcfa-editor-bridge__pill.is-secondary{background:rgba(238,30,149,.1);border-color:rgba(238,30,149,.26);color:#ff62bf}';
-        echo '.lcfa-editor-bridge__section{padding:12px 0;border-top:1px solid rgba(255,255,255,.07)}';
-        echo '.lcfa-editor-bridge__section:first-of-type{border-top:none;padding-top:0}';
-        echo '.lcfa-editor-bridge__label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(245,247,255,.54);font-weight:700;margin-bottom:6px}';
-        echo '.lcfa-editor-bridge__meta{font-size:13px;line-height:1.6;color:rgba(245,247,255,.78)}';
-        echo '.lcfa-editor-bridge__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}';
-        echo '.lcfa-editor-bridge__button{display:flex;align-items:center;gap:8px;min-height:42px;padding:10px 12px;border-radius:14px;text-decoration:none;font-size:12px;font-weight:700;border:1px solid transparent;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}';
-        echo '.lcfa-editor-bridge__button:hover{transform:translateY(-1px)}';
-        echo '.lcfa-editor-bridge__button .lcfa-icon{width:14px;height:14px}';
-        echo '.lcfa-editor-bridge__button.is-primary{background:#35d0f2;color:#0b1020}';
-        echo '.lcfa-editor-bridge__button.is-primary .lcfa-icon{color:#0b1020}';
-        echo '.lcfa-editor-bridge__button.is-secondary{background:rgba(238,30,149,.12);border-color:rgba(238,30,149,.22);color:#ff62bf}';
-        echo '.lcfa-editor-bridge__button.is-neutral{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08);color:#f5f7ff}';
-        echo '.lcfa-editor-bridge__button.is-neutral .lcfa-icon{color:#35d0f2}';
-        echo '.lcfa-editor-bridge__button[disabled]{opacity:.45;pointer-events:none}';
-        echo '.lcfa-editor-bridge__controls{display:grid;gap:10px}';
-        echo '.lcfa-editor-bridge__row{display:grid;grid-template-columns:1fr 1fr;gap:10px}';
-        echo '.lcfa-editor-bridge__field{display:grid;gap:6px}';
-        echo '.lcfa-editor-bridge__field span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(245,247,255,.54);font-weight:700}';
-        echo '.lcfa-editor-bridge__field select,.lcfa-editor-bridge__field textarea{width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#f5f7ff;padding:10px 12px;box-shadow:none}';
-        echo '.lcfa-editor-bridge__field select option{color:#111}';
-        echo '.lcfa-editor-bridge__field textarea{min-height:96px;resize:vertical;line-height:1.55}';
-        echo '.lcfa-editor-bridge__result{display:none;gap:10px;margin-top:10px;padding:12px;border-radius:16px;border:1px solid rgba(53,208,242,.18);background:rgba(53,208,242,.06)}';
-        echo '.lcfa-editor-bridge__result.is-visible{display:grid}';
-        echo '.lcfa-editor-bridge__result.is-error{border-color:rgba(238,30,149,.24);background:rgba(238,30,149,.08)}';
-        echo '.lcfa-editor-bridge__result-meta{display:flex;flex-wrap:wrap;gap:8px}';
-        echo '.lcfa-editor-bridge__chip{display:inline-flex;align-items:center;padding:6px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-size:11px;font-weight:700;color:#f5f7ff}';
-        echo '.lcfa-editor-bridge__list{display:grid;gap:6px;margin:0;padding-left:18px;color:rgba(245,247,255,.76);font-size:12px;line-height:1.55}';
-        echo '.lcfa-editor-bridge__code{margin:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(11,16,32,.54);color:rgba(245,247,255,.84);font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow:auto}';
-        echo '.lcfa-editor-bridge__status{font-size:12px;line-height:1.55;color:rgba(245,247,255,.74)}';
-        echo '.lcfa-editor-bridge__hint{font-size:12px;line-height:1.6;color:rgba(245,247,255,.62)}';
-        echo '@media (max-width:782px){.lcfa-editor-shell{right:12px;left:12px;bottom:12px}.lcfa-editor-launcher{width:100%;justify-content:center}.lcfa-editor-drawer{width:auto;left:0}.lcfa-editor-bridge__actions,.lcfa-editor-bridge__row{grid-template-columns:1fr}}';
-        echo '</style>';
+        $asset_version = rawurlencode((string) LCFA_VERSION);
+        $css_url       = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.css');
+        $js_url        = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.js');
+
+        echo '<link rel="stylesheet" id="lcfa-editor-chat-css" href="' . esc_url($css_url) . '">';
+        echo '<script id="lcfa-editor-chat-js" src="' . esc_url($js_url) . '" defer></script>';
     }
 
     public function render_editor_bridge(): void {
@@ -304,6 +272,57 @@ final class LCFA_Admin {
         $actions = $this->get_editor_bridge_actions($post, $context);
         $thread_summaries = array_slice(LCFA_Settings::get_thread_summaries(), 0, 8);
         $current_thread_id = LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default'));
+        $thread_payloads = [];
+        $current_thread_messages = [];
+
+        foreach ($thread_summaries as $thread_summary) {
+            if (!is_array($thread_summary)) {
+                continue;
+            }
+
+            $thread_id = LCFA_Settings::normalize_thread_id((string) ($thread_summary['id'] ?? 'default'));
+            $thread = LCFA_Settings::get_thread($thread_id);
+            $thread_messages = array_map(function ($message) use ($thread_id) {
+                return is_array($message)
+                    ? LCFA_Thread_Message_Actions::decorate_message($message, [
+                        'thread_id' => $thread_id,
+                        'command_url_builder' => [$this, 'get_command_url'],
+                    ])
+                    : $message;
+            }, array_slice((array) ($thread['messages'] ?? []), -8));
+
+            $thread_payloads[$thread_id] = [
+                'id'       => $thread_id,
+                'title'    => (string) ($thread_summary['title'] ?? $thread_id),
+                'state'    => $this->get_editor_initial_conversation_state($thread_messages),
+                'messages' => $thread_messages,
+            ];
+
+            if ($thread_id === $current_thread_id) {
+                $current_thread_messages = $thread_messages;
+            }
+        }
+
+        if ($current_thread_messages === []) {
+            $current_thread = LCFA_Settings::get_thread($current_thread_id);
+            $current_thread_messages = array_map(function ($message) use ($current_thread_id) {
+                return is_array($message)
+                    ? LCFA_Thread_Message_Actions::decorate_message($message, [
+                        'thread_id' => $current_thread_id,
+                        'command_url_builder' => [$this, 'get_command_url'],
+                    ])
+                    : $message;
+            }, array_slice((array) ($current_thread['messages'] ?? []), -8));
+            $thread_payloads[$current_thread_id] = [
+                'id'       => $current_thread_id,
+                'title'    => $current_thread_id,
+                'state'    => $this->get_editor_initial_conversation_state($current_thread_messages),
+                'messages' => $current_thread_messages,
+            ];
+        }
+
+        $initial_conversation_state = $this->get_editor_initial_conversation_state($current_thread_messages);
+        $initial_conversation_label = $this->get_editor_conversation_state_label($initial_conversation_state);
         $remote_status = $this->remote_client->get_status();
         $default_action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
         $command_base_url = $this->get_command_url([
@@ -311,7 +330,10 @@ final class LCFA_Admin {
             'thread_id' => $current_thread_id,
         ]);
         $editor_config = [
-            'restEndpoint' => rest_url('lcfa/v1/command/suggest'),
+            'restEndpoint' => rest_url('lcfa/v1/chat/send'),
+            'threadEndpoint' => rest_url('lcfa/v1/chat/thread'),
+            'commandEndpoint' => rest_url('lcfa/v1/command'),
+            'commandExecutionEndpoint' => rest_url('lcfa/v1/command/execution'),
             'restNonce'    => wp_create_nonce('wp_rest'),
             'commandBaseUrl' => $command_base_url,
             'postId'       => (int) $post->ID,
@@ -319,6 +341,8 @@ final class LCFA_Admin {
             'variant'      => (string) ($context['variant'] ?? '1'),
             'defaultAction'=> $default_action,
             'threadId'     => $current_thread_id,
+            'threads'      => $thread_payloads,
+            'threadSummaries' => array_values($thread_summaries),
             'labels'       => [
                 'requestRequired' => __('Write a request first so Forge AI can suggest an action.', 'livecanvas-forge-ai'),
                 'analysisFailed'  => __('The request analysis failed.', 'livecanvas-forge-ai'),
@@ -327,22 +351,64 @@ final class LCFA_Admin {
                 'recommendedWorkflow' => __('Recommended workflow', 'livecanvas-forge-ai'),
                 'recommendedPreflight' => __('Recommended preflight payload', 'livecanvas-forge-ai'),
                 'openDeck'        => __('Open suggested payload in Command Deck', 'livecanvas-forge-ai'),
+                'previewSuggestion' => __('Preview inline', 'livecanvas-forge-ai'),
+                'previewing'      => __('Preparing preview...', 'livecanvas-forge-ai'),
+                'applySuggestion' => __('Apply inline', 'livecanvas-forge-ai'),
+                'applying'        => __('Applying...', 'livecanvas-forge-ai'),
+                'applyFailed'     => __('The inline execution failed.', 'livecanvas-forge-ai'),
+                'idleState'       => __('Ready for a new request.', 'livecanvas-forge-ai'),
+                'thinkingState'   => __('Analyzing request...', 'livecanvas-forge-ai'),
+                'suggestedState'  => __('Suggestion ready. Review it or run it inline.', 'livecanvas-forge-ai'),
+                'previewedState'  => __('Preview ready. Review the support details below.', 'livecanvas-forge-ai'),
+                'appliedState'    => __('Inline action completed.', 'livecanvas-forge-ai'),
+                'failedState'     => __('The current request failed. Review the support details below.', 'livecanvas-forge-ai'),
+                'queuedState'     => __('Queued for inline execution.', 'livecanvas-forge-ai'),
+                'runningState'    => __('Running inline execution...', 'livecanvas-forge-ai'),
+                'creatingThread'  => __('Creating thread...', 'livecanvas-forge-ai'),
+                'duplicatingThread' => __('Duplicating thread...', 'livecanvas-forge-ai'),
+                'renamingThread'  => __('Renaming thread...', 'livecanvas-forge-ai'),
+                'clearingThread'  => __('Clearing thread...', 'livecanvas-forge-ai'),
+                'deletingThread'  => __('Deleting thread...', 'livecanvas-forge-ai'),
+                'renameThreadPrompt' => __('Rename the current thread', 'livecanvas-forge-ai'),
+                'confirmClearThread' => __('Clear all messages from the current thread?', 'livecanvas-forge-ai'),
+                'confirmDeleteThread' => __('Delete the current thread and switch back to the default one?', 'livecanvas-forge-ai'),
+                'newThreadLabel'  => __('New thread', 'livecanvas-forge-ai'),
+                'duplicateThreadLabel' => __('Duplicate current', 'livecanvas-forge-ai'),
+                'renameThreadLabel' => __('Rename current', 'livecanvas-forge-ai'),
+                'clearThreadLabel' => __('Clear current', 'livecanvas-forge-ai'),
+                'deleteThreadLabel' => __('Delete current', 'livecanvas-forge-ai'),
+                'viewPage'        => __('View page', 'livecanvas-forge-ai'),
+                'editPage'        => __('Edit page', 'livecanvas-forge-ai'),
+                'openTemplate'    => __('Open template', 'livecanvas-forge-ai'),
+                'openThemeFile'   => __('Open theme file', 'livecanvas-forge-ai'),
+                'openThemeTemplate' => __('Open theme template', 'livecanvas-forge-ai'),
+                'openBackup'      => __('Open backup', 'livecanvas-forge-ai'),
                 'analyzing'       => __('Analyzing request...', 'livecanvas-forge-ai'),
+                'attachScreenshot' => __('Attach screenshot', 'livecanvas-forge-ai'),
+                'clearScreenshot' => __('Clear screenshot', 'livecanvas-forge-ai'),
+                'screenshotReady' => __('Screenshot ready for this request.', 'livecanvas-forge-ai'),
+                'diffPreview'     => __('Diff preview', 'livecanvas-forge-ai'),
+                'currentMarkup'   => __('Current markup', 'livecanvas-forge-ai'),
+                'proposedMarkup'  => __('Proposed markup', 'livecanvas-forge-ai'),
             ],
         ];
 
         echo '<div class="lcfa-editor-shell" data-lcfa-editor-shell>';
         echo '<button type="button" class="lcfa-editor-launcher" data-lcfa-editor-open>';
         echo $this->get_icon_svg('stars');
-        echo '<span>' . esc_html__('Open Forge AI', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-editor-launcher__label">' . esc_html__('Forge AI', 'livecanvas-forge-ai') . '</span>';
         echo '</button>';
         echo '<aside class="lcfa-editor-drawer" aria-hidden="true">';
         echo '<div class="lcfa-editor-bridge__head">';
         echo '<div>';
         echo '<span class="lcfa-editor-bridge__eyebrow">' . esc_html__('Forge AI bridge', 'livecanvas-forge-ai') . '</span>';
         echo '<p class="lcfa-editor-bridge__title">' . esc_html(get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai')) . '</p>';
+        echo '<p class="lcfa-editor-bridge__target-line" data-lcfa-editor-target-summary>' . esc_html($this->get_editor_target_summary($post, $context)) . '</p>';
         echo '</div>';
+        echo '<div class="lcfa-editor-bridge__head-actions">';
+        echo '<a class="lcfa-editor-bridge__head-link" href="' . esc_url($command_base_url) . '" target="_blank" rel="noreferrer noopener" data-lcfa-editor-open-deck>' . esc_html__('Command Deck', 'livecanvas-forge-ai') . '</a>';
         echo '<button type="button" class="lcfa-editor-bridge__close" data-lcfa-editor-close aria-label="' . esc_attr__('Close Forge AI panel', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('x-circle') . '</button>';
+        echo '</div>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__stack">';
         echo '<span class="lcfa-editor-bridge__pill">' . esc_html(strtoupper((string) ($snapshot['detected_framework'] ?: 'unknown'))) . '</span>';
@@ -350,12 +416,23 @@ final class LCFA_Admin {
         echo '<span class="lcfa-editor-bridge__pill' . (!empty($snapshot['windpress_active']) ? '' : ' is-secondary') . '">' . esc_html(!empty($snapshot['windpress_active']) ? __('WindPress active', 'livecanvas-forge-ai') : __('WindPress inactive', 'livecanvas-forge-ai')) . '</span>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Current target', 'livecanvas-forge-ai') . '</div>';
-        echo '<div class="lcfa-editor-bridge__meta">' . esc_html($this->get_editor_target_summary($post, $context)) . '</div>';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Thread log', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__thread-bar">';
+        echo '<span class="lcfa-editor-bridge__thread-status" data-lcfa-editor-status data-state="' . esc_attr($initial_conversation_state) . '">' . esc_html($initial_conversation_label) . '</span>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-thread-log" data-lcfa-editor-thread-log>';
+        foreach ($current_thread_messages as $message) {
+            if (!is_array($message)) {
+                continue;
+            }
+
+            $this->render_editor_bridge_thread_message($message);
+        }
+        echo '</div>';
+        echo '<p class="lcfa-editor-thread-empty"' . ($current_thread_messages ? ' hidden' : '') . ' data-lcfa-editor-thread-empty>' . esc_html__('No messages yet. Send a request to start this thread.', 'livecanvas-forge-ai') . '</p>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Prompt composer', 'livecanvas-forge-ai') . '</div>';
-        echo '<div class="lcfa-editor-bridge__hint">' . esc_html__('Analyze a natural-language request against the current LiveCanvas target, then open the full Command Deck with the suggested payload already filled in.', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Request', 'livecanvas-forge-ai') . '</div>';
         echo '<div class="lcfa-editor-bridge__controls" data-lcfa-editor-composer>';
         echo '<div class="lcfa-editor-bridge__row">';
         echo '<label class="lcfa-editor-bridge__field">';
@@ -379,32 +456,63 @@ final class LCFA_Admin {
         echo '</select>';
         echo '</label>';
         echo '</div>';
-        echo '<label class="lcfa-editor-bridge__field">';
-        echo '<span>' . esc_html__('Request', 'livecanvas-forge-ai') . '</span>';
+        echo '<div class="lcfa-editor-bridge__actions is-thread-tools">';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-thread-create>';
+        echo $this->get_icon_svg('plus');
+        echo '<span>' . esc_html__('New thread', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-thread-duplicate>';
+        echo $this->get_icon_svg('copy');
+        echo '<span>' . esc_html__('Duplicate current', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-thread-rename>';
+        echo $this->get_icon_svg('file-earmark');
+        echo '<span>' . esc_html__('Rename current', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-thread-clear>';
+        echo $this->get_icon_svg('trash');
+        echo '<span>' . esc_html__('Clear current', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-thread-delete>';
+        echo $this->get_icon_svg('x-circle');
+        echo '<span>' . esc_html__('Delete current', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '</div>';
         echo '<textarea data-lcfa-editor-prompt placeholder="' . esc_attr__('Example: refresh this header with a simpler navigation and keep the current logo.', 'livecanvas-forge-ai') . '"></textarea>';
+        echo '<div class="lcfa-editor-bridge__attachment-row">';
+        echo '<label class="lcfa-editor-bridge__button is-neutral is-upload">';
+        echo '<input type="file" accept="image/*" hidden data-lcfa-editor-attachment>';
+        echo $this->get_icon_svg('file-earmark');
+        echo '<span>' . esc_html__('Attach screenshot', 'livecanvas-forge-ai') . '</span>';
         echo '</label>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" hidden data-lcfa-editor-attachment-clear>';
+        echo $this->get_icon_svg('x-circle');
+        echo '<span>' . esc_html__('Clear screenshot', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__attachment-preview" data-lcfa-editor-attachment-preview hidden>';
+        echo '<img class="lcfa-editor-bridge__attachment-image" src="" alt="" data-lcfa-editor-attachment-preview-image>';
+        echo '<div class="lcfa-editor-bridge__attachment-meta" data-lcfa-editor-attachment-preview-meta></div>';
+        echo '</div>';
         echo '<div class="lcfa-editor-bridge__actions">';
         echo '<button type="button" class="lcfa-editor-bridge__button is-primary" data-lcfa-editor-analyze>';
         echo $this->get_icon_svg('stars');
         echo '<span>' . esc_html__('Analyze request', 'livecanvas-forge-ai') . '</span>';
         echo '</button>';
-        echo '<a class="lcfa-editor-bridge__button is-neutral" href="' . esc_url($command_base_url) . '" target="_blank" rel="noreferrer noopener" data-lcfa-editor-open-deck>';
-        echo $this->get_icon_svg('command');
-        echo '<span>' . esc_html__('Open Command Deck', 'livecanvas-forge-ai') . '</span>';
-        echo '</a>';
-        echo '</div>';
-        echo '<div class="lcfa-editor-bridge__result" data-lcfa-editor-result aria-live="polite">';
-        echo '<div class="lcfa-editor-bridge__status" data-lcfa-editor-result-summary></div>';
-        echo '<div class="lcfa-editor-bridge__result-meta" data-lcfa-editor-result-meta></div>';
-        echo '<div data-lcfa-editor-result-reasons-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Why this was suggested', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-reasons></ul></div>';
-        echo '<div data-lcfa-editor-result-warnings-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Warnings', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-warnings></ul></div>';
-        echo '<div data-lcfa-editor-result-workflow-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</div><ol class="lcfa-editor-bridge__list" data-lcfa-editor-result-workflow></ol></div>';
-        echo '<div data-lcfa-editor-result-preflight-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</div><pre class="lcfa-editor-bridge__code" data-lcfa-editor-result-preflight></pre></div>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-secondary" hidden data-lcfa-editor-preview>';
+        echo $this->get_icon_svg('eye');
+        echo '<span>' . esc_html__('Preview inline', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-secondary" hidden data-lcfa-editor-apply>';
+        echo $this->get_icon_svg('rocket');
+        echo '<span>' . esc_html__('Apply inline', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
         echo '</div>';
         echo '</div>';
         echo '</div>';
-        echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Quick actions', 'livecanvas-forge-ai') . '</div>';
+        echo '<details class="lcfa-editor-bridge__details" data-lcfa-editor-quick-actions>';
+        echo '<summary>' . esc_html__('Quick actions', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-editor-bridge__details-body">';
         echo '<div class="lcfa-editor-bridge__actions">';
         foreach ($actions as $action) {
             echo '<a class="lcfa-editor-bridge__button is-' . esc_attr($action['tone']) . '" href="' . esc_url($action['url']) . '" target="_blank" rel="noreferrer noopener">';
@@ -414,189 +522,28 @@ final class LCFA_Admin {
         }
         echo '</div>';
         echo '</div>';
-        echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Workflow note', 'livecanvas-forge-ai') . '</div>';
-        echo '<div class="lcfa-editor-bridge__hint">' . esc_html__('Use the current target action for content changes. Use WindPress audit when you are working on Picowind styles, cache, or theme.json.', 'livecanvas-forge-ai') . '</div>';
+        echo '</details>';
+        echo '<details class="lcfa-editor-bridge__details is-support" data-lcfa-editor-support-details>';
+        echo '<summary>' . esc_html__('Support details', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-editor-bridge__details-body">';
+        echo '<div class="lcfa-editor-bridge__result" data-lcfa-editor-result aria-live="polite">';
+        echo '<div class="lcfa-editor-bridge__status" data-lcfa-editor-result-summary></div>';
+        echo '<div class="lcfa-editor-bridge__result-meta" data-lcfa-editor-result-meta></div>';
+        echo '<div data-lcfa-editor-result-reasons-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Why this was suggested', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-reasons></ul></div>';
+        echo '<div data-lcfa-editor-result-warnings-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Warnings', 'livecanvas-forge-ai') . '</div><ul class="lcfa-editor-bridge__list" data-lcfa-editor-result-warnings></ul></div>';
+        echo '<div data-lcfa-editor-result-workflow-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</div><ol class="lcfa-editor-bridge__list" data-lcfa-editor-result-workflow></ol></div>';
+        echo '<div data-lcfa-editor-result-preflight-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</div><pre class="lcfa-editor-bridge__code" data-lcfa-editor-result-preflight></pre></div>';
+        echo '<div data-lcfa-editor-result-diff-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Diff preview', 'livecanvas-forge-ai') . '</div><div class="lcfa-editor-bridge__diff" data-lcfa-editor-result-diff></div></div>';
+        echo '<div class="lcfa-editor-bridge__support-grid">';
+        echo '<div data-lcfa-editor-result-existing-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Current markup', 'livecanvas-forge-ai') . '</div><pre class="lcfa-editor-bridge__code" data-lcfa-editor-result-existing></pre></div>';
+        echo '<div data-lcfa-editor-result-proposed-wrap hidden><div class="lcfa-editor-bridge__label">' . esc_html__('Proposed markup', 'livecanvas-forge-ai') . '</div><pre class="lcfa-editor-bridge__code" data-lcfa-editor-result-proposed></pre></div>';
         echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        echo '</details>';
         echo '</aside>';
         echo '</div>';
         echo '<script type="application/json" data-lcfa-editor-config>' . wp_json_encode($editor_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>';
-        $editor_bridge_script = <<<'JS'
-(function(){
-  var shell=document.querySelector("[data-lcfa-editor-shell]");
-  if(!shell||shell.dataset.bound==="1"){return;}
-  shell.dataset.bound="1";
-  var drawer=shell.querySelector(".lcfa-editor-drawer");
-  var openBtn=shell.querySelector("[data-lcfa-editor-open]");
-  var closeBtn=shell.querySelector("[data-lcfa-editor-close]");
-  var configNode=shell.querySelector("[data-lcfa-editor-config]");
-  var config={};
-  try{config=configNode?JSON.parse(configNode.textContent||"{}"):{};}catch(error){config={};}
-  var threadSelect=shell.querySelector("[data-lcfa-editor-thread]");
-  var targetSelect=shell.querySelector("[data-lcfa-editor-target]");
-  var promptInput=shell.querySelector("[data-lcfa-editor-prompt]");
-  var analyzeButton=shell.querySelector("[data-lcfa-editor-analyze]");
-  var openDeckLink=shell.querySelector("[data-lcfa-editor-open-deck]");
-  var resultBox=shell.querySelector("[data-lcfa-editor-result]");
-  var resultSummary=shell.querySelector("[data-lcfa-editor-result-summary]");
-  var resultMeta=shell.querySelector("[data-lcfa-editor-result-meta]");
-  var reasonsWrap=shell.querySelector("[data-lcfa-editor-result-reasons-wrap]");
-  var reasonsList=shell.querySelector("[data-lcfa-editor-result-reasons]");
-  var warningsWrap=shell.querySelector("[data-lcfa-editor-result-warnings-wrap]");
-  var warningsList=shell.querySelector("[data-lcfa-editor-result-warnings]");
-  var workflowWrap=shell.querySelector("[data-lcfa-editor-result-workflow-wrap]");
-  var workflowList=shell.querySelector("[data-lcfa-editor-result-workflow]");
-  var preflightWrap=shell.querySelector("[data-lcfa-editor-result-preflight-wrap]");
-  var preflightNode=shell.querySelector("[data-lcfa-editor-result-preflight]");
-  var setOpen=function(next){shell.classList.toggle("is-open",next);if(drawer){drawer.setAttribute("aria-hidden",next?"false":"true");}};
-  var updateDeckLink=function(payload){
-    if(!openDeckLink||!config.commandBaseUrl){return;}
-    var url=new URL(config.commandBaseUrl,window.location.origin);
-    var args=payload||{};
-    var threadId=threadSelect&&threadSelect.value?threadSelect.value:(config.threadId||"default");
-    url.searchParams.set("thread_id",threadId);
-    if(config.postId){url.searchParams.set("post_id",String(config.postId));}
-    if(promptInput&&promptInput.value.trim()!==""){url.searchParams.set("user_prompt",promptInput.value.trim());}
-    if(args.action){url.searchParams.set("suggest_action",String(args.action));}
-    if(args.execution_target){url.searchParams.set("execution_target",String(args.execution_target));}
-    if(args.target_id){url.searchParams.set("target_id",String(args.target_id));}
-    if(args.variant){url.searchParams.set("variant",String(args.variant));}
-    if(args.title){url.searchParams.set("title",String(args.title));}
-    if(args.slug){url.searchParams.set("slug",String(args.slug));}
-    if(args.provider_id){url.searchParams.set("provider_id",String(args.provider_id));}
-    if(args.relative_path){url.searchParams.set("relative_path",String(args.relative_path));}
-    if(args.root_scope){url.searchParams.set("root_scope",String(args.root_scope));}
-    if(args.file_path){url.searchParams.set("file_path",String(args.file_path));}
-    if(args.backup_id){url.searchParams.set("backup_id",String(args.backup_id));}
-    if(args.status){url.searchParams.set("status",String(args.status));}
-    openDeckLink.href=url.toString();
-  };
-  var renderList=function(listNode,wrapNode,items){
-    if(!listNode||!wrapNode){return;}
-    listNode.innerHTML="";
-    if(!Array.isArray(items)||items.length===0){wrapNode.hidden=true;return;}
-    items.forEach(function(item){
-      var li=document.createElement("li");
-      li.textContent=String(item||"");
-      listNode.appendChild(li);
-    });
-    wrapNode.hidden=false;
-  };
-  var renderWorkflow=function(items){
-    if(!workflowList||!workflowWrap){return;}
-    workflowList.innerHTML="";
-    if(!Array.isArray(items)||items.length===0){workflowWrap.hidden=true;return;}
-    items.forEach(function(item){
-      var li=document.createElement("li");
-      var parts=[];
-      if(item&&item.phase){parts.push(String(item.phase).charAt(0).toUpperCase()+String(item.phase).slice(1));}
-      if(item&&item.action){parts.push(String(item.action));}
-      if(item&&item.execution_target){parts.push("execution "+String(item.execution_target));}
-      li.textContent=parts.join(" · ");
-      workflowList.appendChild(li);
-    });
-    workflowWrap.hidden=false;
-  };
-  var renderJson=function(node,wrapNode,value){
-    if(!node||!wrapNode){return;}
-    if(!value||typeof value!=="object"){node.textContent="";wrapNode.hidden=true;return;}
-    try{
-      node.textContent=JSON.stringify(value,null,2);
-      wrapNode.hidden=false;
-    }catch(error){
-      node.textContent="";
-      wrapNode.hidden=true;
-    }
-  };
-  var renderSuggestion=function(payload,isError){
-    if(!resultBox||!resultSummary||!resultMeta){return;}
-    resultBox.classList.add("is-visible");
-    resultBox.classList.toggle("is-error",Boolean(isError));
-    resultMeta.innerHTML="";
-    var summary=payload&&payload.summary?payload.summary:(payload&&payload.message?payload.message:"");
-    resultSummary.textContent=summary;
-    if(payload&&payload.suggested_payload&&payload.suggested_payload.action){
-      [{label:"Action",value:payload.suggested_payload.action},{label:"Confidence",value:payload.confidence||""},{label:"Execution",value:payload.suggested_payload.execution_target||""}].forEach(function(entry){
-        if(!entry.value){return;}
-        var chip=document.createElement("span");
-        chip.className="lcfa-editor-bridge__chip";
-        chip.textContent=entry.label+": "+entry.value;
-        resultMeta.appendChild(chip);
-      });
-      updateDeckLink(payload.suggested_payload);
-    }
-    renderList(reasonsList,reasonsWrap,payload&&Array.isArray(payload.reasons)?payload.reasons:[]);
-    renderList(warningsList,warningsWrap,payload&&Array.isArray(payload.warnings)?payload.warnings:[]);
-    renderWorkflow(payload&&Array.isArray(payload.workflow)?payload.workflow:[]);
-    renderJson(preflightNode,preflightWrap,payload&&payload.preflight&&typeof payload.preflight==="object"?payload.preflight:null);
-  };
-  var setBusy=function(next){
-    if(!analyzeButton){return;}
-    analyzeButton.disabled=next;
-    var label=analyzeButton.querySelector("span");
-    if(label){label.textContent=next?(config.labels&&config.labels.analyzing?config.labels.analyzing:"Analyzing request..."):"Analyze request";}
-  };
-  var analyzeRequest=function(){
-    if(!promptInput){return;}
-    var prompt=promptInput.value.trim();
-    if(prompt===""){
-      renderSuggestion({message:(config.labels&&config.labels.requestRequired)||"Write a request first so Forge AI can suggest an action."},true);
-      return;
-    }
-    setBusy(true);
-    fetch(config.restEndpoint,{
-      method:"POST",
-      credentials:"same-origin",
-      headers:{"Content-Type":"application/json","X-WP-Nonce":config.restNonce||""},
-      body:JSON.stringify({
-        user_prompt:prompt,
-        execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",
-        context_post_id:config.postId||0,
-        post_id:config.postId||0,
-        target_id:config.targetId||0,
-        variant:config.variant||"1",
-        action:config.defaultAction||"site_audit"
-      })
-    }).then(function(response){
-      return response.text().then(function(text){
-        var data={};
-        try{data=text?JSON.parse(text):{};}catch(error){data={};}
-        if(!response.ok){
-          var errorMessage=(data&&data.suggestion&&data.suggestion.message)||(data&&data.error)||(config.labels&&config.labels.analysisFailed)||"The request analysis failed.";
-          throw new Error(errorMessage);
-        }
-        return data;
-      });
-    }).then(function(data){
-      renderSuggestion(data&&data.suggestion?data.suggestion:{message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed."},false);
-    }).catch(function(error){
-      renderSuggestion({message:error&&error.message?error.message:((config.labels&&config.labels.analysisFailed)||"The request analysis failed.")},true);
-    }).finally(function(){setBusy(false);});
-  };
-  if(openBtn){openBtn.addEventListener("click",function(){setOpen(true);});}
-  if(closeBtn){closeBtn.addEventListener("click",function(){setOpen(false);});}
-  if(analyzeButton){analyzeButton.addEventListener("click",analyzeRequest);}
-  if(promptInput){
-    promptInput.addEventListener("keydown",function(event){
-      if((event.metaKey||event.ctrlKey)&&event.key==="Enter"){event.preventDefault();analyzeRequest();}
-    });
-  }
-  if(threadSelect){
-    threadSelect.addEventListener("change",function(){
-      updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
-    });
-  }
-  if(targetSelect){
-    targetSelect.addEventListener("change",function(){
-      updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect.value,target_id:config.targetId||0,variant:config.variant||"1"});
-    });
-  }
-  updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
-  document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});
-  document.addEventListener("click",function(event){if(!shell.classList.contains("is-open")){return;}if(shell.contains(event.target)){return;}setOpen(false);});
-})();
-JS;
-        echo '<script id="lcfa-editor-bridge-script">' . $editor_bridge_script . '</script>';
     }
 
     public function handle_setup_post(): void {
@@ -1150,6 +1097,106 @@ JS;
         exit;
     }
 
+    public function handle_genesis_execute_post(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_genesis_execute');
+
+        $execution_mode = sanitize_key((string) ($_POST['execution_mode'] ?? ''));
+        $task_id        = sanitize_key((string) ($_POST['task_id'] ?? ''));
+        $thread_id      = LCFA_Settings::normalize_thread_id((string) ($_POST['thread_id'] ?? 'default'));
+        $execution_target = sanitize_key((string) ($_POST['execution_target'] ?? 'local'));
+
+        if (!in_array($execution_target, ['local', 'remote'], true)) {
+            $execution_target = 'local';
+        }
+
+        $result = null;
+
+        switch ($execution_mode) {
+            case 'preview_next':
+                $result = $this->get_genesis_executor()->execute_next([
+                    'dry_run'          => true,
+                    'execution_target' => $execution_target,
+                    'thread_id'        => $thread_id,
+                    'request_context'  => [
+                        'thread_id' => $thread_id,
+                    ],
+                ]);
+                break;
+
+            case 'apply_next':
+                $result = $this->get_genesis_executor()->execute_next([
+                    'dry_run'          => false,
+                    'execution_target' => $execution_target,
+                    'thread_id'        => $thread_id,
+                    'request_context'  => [
+                        'thread_id' => $thread_id,
+                    ],
+                ]);
+                break;
+
+            case 'preview_task':
+                if ($task_id === '') {
+                    LCFA_Settings::set_notice(__('Choose a valid Genesis task before previewing it.', 'livecanvas-forge-ai'), 'error');
+                    wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
+                    exit;
+                }
+
+                $result = $this->get_genesis_executor()->execute_task($task_id, [
+                    'dry_run'          => true,
+                    'execution_target' => $execution_target,
+                    'thread_id'        => $thread_id,
+                    'request_context'  => [
+                        'thread_id' => $thread_id,
+                    ],
+                ]);
+                break;
+
+            case 'apply_task':
+            case 'retry_task':
+            case 'acknowledge_task':
+                if ($task_id === '') {
+                    LCFA_Settings::set_notice(__('Choose a valid Genesis task before applying it.', 'livecanvas-forge-ai'), 'error');
+                    wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
+                    exit;
+                }
+
+                $result = $this->get_genesis_executor()->execute_task($task_id, [
+                    'dry_run'          => false,
+                    'execution_target' => $execution_target,
+                    'thread_id'        => $thread_id,
+                    'request_context'  => [
+                        'thread_id' => $thread_id,
+                    ],
+                ]);
+                break;
+        }
+
+        if (!is_array($result)) {
+            LCFA_Settings::set_notice(__('Choose a valid Genesis execution action.', 'livecanvas-forge-ai'), 'error');
+            wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
+            exit;
+        }
+
+        if (!empty($result['ok'])) {
+            $notice = trim((string) ($result['message'] ?? ''));
+
+            if ($notice === '') {
+                $notice = __('Genesis task executed.', 'livecanvas-forge-ai');
+            }
+
+            LCFA_Settings::set_notice($notice, 'success');
+        } else {
+            LCFA_Settings::set_notice((string) ($result['message'] ?? __('The Genesis task could not be executed.', 'livecanvas-forge-ai')), 'error');
+        }
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
+        exit;
+    }
+
     public function handle_create_thread_post(): void {
         if (!current_user_can('edit_pages')) {
             wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
@@ -1175,13 +1222,83 @@ JS;
 
         check_admin_referer('lcfa_command');
 
-        $thread_id   = LCFA_Settings::normalize_thread_id((string) ($_POST['thread_id'] ?? 'default'));
-        $genesis_task_id = sanitize_key((string) ($_POST['genesis_task_id'] ?? ''));
-        $user_prompt = sanitize_textarea_field((string) ($_POST['user_prompt'] ?? ''));
+        $request_payload = $this->get_command_request_payload($_POST);
+        $thread_id       = LCFA_Settings::normalize_thread_id((string) ($request_payload['thread_id'] ?? 'default'));
+        $thread_operation = sanitize_key((string) ($request_payload['thread_operation'] ?? ''));
+        $thread_title    = sanitize_text_field((string) ($request_payload['thread_title'] ?? ''));
+        $genesis_task_id = sanitize_key((string) ($request_payload['genesis_task_id'] ?? ''));
+        $user_prompt     = sanitize_textarea_field((string) ($request_payload['user_prompt'] ?? ''));
 
-        if (!empty($_POST['analyze_request'])) {
-            $suggestion = $this->prompt_suggester->suggest($_POST);
+        if ($thread_operation !== '') {
+            $default_thread_id = LCFA_Settings::normalize_thread_id('default');
+            $redirect_thread_id = $thread_id;
+
+            switch ($thread_operation) {
+                case 'create':
+                    $thread = LCFA_Settings::create_thread($thread_title);
+                    $redirect_thread_id = LCFA_Settings::normalize_thread_id((string) ($thread['id'] ?? $default_thread_id));
+                    LCFA_Settings::set_notice(__('Command thread created.', 'livecanvas-forge-ai'));
+                    break;
+
+                case 'duplicate':
+                    $thread = LCFA_Settings::duplicate_thread($thread_id, $thread_title);
+                    $redirect_thread_id = LCFA_Settings::normalize_thread_id((string) ($thread['id'] ?? $default_thread_id));
+                    LCFA_Settings::set_notice(__('Command thread duplicated.', 'livecanvas-forge-ai'));
+                    break;
+
+                case 'rename':
+                    if ($thread_title === '') {
+                        LCFA_Settings::set_notice(__('Thread rename requires a title.', 'livecanvas-forge-ai'), 'error');
+                    } else {
+                        LCFA_Settings::rename_thread($thread_id, $thread_title);
+                        LCFA_Settings::set_notice(__('Command thread renamed.', 'livecanvas-forge-ai'));
+                    }
+                    break;
+
+                case 'clear':
+                    LCFA_Settings::clear_thread($thread_id);
+                    LCFA_Settings::set_notice(__('Command thread cleared.', 'livecanvas-forge-ai'));
+                    break;
+
+                case 'delete':
+                    if ($thread_id === $default_thread_id) {
+                        LCFA_Settings::set_notice(__('The default thread cannot be deleted.', 'livecanvas-forge-ai'), 'error');
+                    } else {
+                        LCFA_Settings::delete_thread($thread_id);
+                        $redirect_thread_id = $default_thread_id;
+                        LCFA_Settings::set_notice(__('Command thread deleted.', 'livecanvas-forge-ai'));
+                    }
+                    break;
+            }
+
+            $redirect_args = [
+                'thread_id' => $redirect_thread_id,
+            ];
+
+            if ($genesis_task_id !== '') {
+                $redirect_args['genesis_task_id'] = $genesis_task_id;
+            }
+
+            if (!empty($request_payload['context_post_id'])) {
+                $redirect_args['post_id'] = absint($request_payload['context_post_id']);
+            }
+
+            if ($user_prompt !== '') {
+                $redirect_args['user_prompt'] = $user_prompt;
+            }
+
+            wp_safe_redirect($this->get_command_url($redirect_args));
+            exit;
+        }
+
+        if (!empty($request_payload['analyze_request'])) {
+            if ($user_prompt !== '') {
+                LCFA_Settings::append_thread_message($thread_id, $this->build_thread_request_message($user_prompt, $request_payload, $genesis_task_id));
+            }
+
+            $suggestion = $this->prompt_suggester->suggest($request_payload);
             LCFA_Settings::set_command_suggestion($suggestion);
+            LCFA_Settings::append_thread_message($thread_id, $this->build_thread_suggestion_message($suggestion, $request_payload, $thread_id));
 
             if (!empty($suggestion['ok'])) {
                 LCFA_Settings::set_notice(__('Request analyzed. Suggested action prepared in the Command Deck.', 'livecanvas-forge-ai'));
@@ -1198,8 +1315,8 @@ JS;
                 $redirect_args['genesis_task_id'] = $genesis_task_id;
             }
 
-            if (!empty($_POST['context_post_id'])) {
-                $redirect_args['post_id'] = absint($_POST['context_post_id']);
+            if (!empty($request_payload['context_post_id'])) {
+                $redirect_args['post_id'] = absint($request_payload['context_post_id']);
             }
 
             if (!empty($suggestion['ok']) && is_array($suggestion['suggested_payload'] ?? null)) {
@@ -1211,30 +1328,20 @@ JS;
         }
 
         if ($user_prompt !== '') {
-            LCFA_Settings::append_thread_message($thread_id, [
-                'role'    => 'user',
-                'label'   => __('Request', 'livecanvas-forge-ai'),
-                'content' => $user_prompt,
-                'meta'    => [
-                    'action'           => sanitize_key((string) ($_POST['action'] ?? '')),
-                    'execution_target' => sanitize_key((string) ($_POST['execution_target'] ?? 'local')),
-                    'dry_run'          => !empty($_POST['dry_run']),
-                    'genesis_task_id'  => $genesis_task_id,
-                ],
-            ]);
+            LCFA_Settings::append_thread_message($thread_id, $this->build_thread_request_message($user_prompt, $request_payload, $genesis_task_id));
         }
 
-        $result = $this->command_deck->execute($_POST);
+        $result = $this->command_deck->execute($request_payload);
         LCFA_Settings::set_command_result($result);
-        LCFA_Settings::append_thread_message($thread_id, $this->build_thread_result_message($result, $_POST));
+        LCFA_Settings::append_thread_message($thread_id, $this->build_thread_result_message($result, $request_payload));
 
         if ($genesis_task_id !== '') {
             LCFA_Settings::update_genesis_task_progress($genesis_task_id, [
-                'status'       => !empty($result['ok']) ? ($result['mode'] === 'preview' ? 'previewed' : 'applied') : 'failed',
+                'status'       => !empty($result['ok']) ? (($result['mode'] ?? '') === 'preview' ? 'previewed' : 'applied') : 'failed',
                 'updated_at'   => current_time('mysql', true),
                 'thread_id'    => $thread_id,
-                'action'       => (string) ($result['action'] ?? sanitize_key((string) ($_POST['action'] ?? ''))),
-                'mode'         => (string) ($result['mode'] ?? (!empty($_POST['dry_run']) ? 'preview' : 'apply')),
+                'action'       => (string) ($result['action'] ?? sanitize_key((string) ($request_payload['action'] ?? ''))),
+                'mode'         => (string) ($result['mode'] ?? (!empty($request_payload['dry_run']) ? 'preview' : 'apply')),
                 'ok'           => !empty($result['ok']),
                 'message'      => (string) ($result['message'] ?? ''),
                 'target_type'  => (string) ($result['target_type'] ?? ''),
@@ -1253,10 +1360,79 @@ JS;
             LCFA_Settings::set_notice($result['message'] ?: __('The command failed.', 'livecanvas-forge-ai'), 'error');
         }
 
-        wp_safe_redirect($this->get_command_url([
+        $redirect_args = [
             'thread_id' => $thread_id,
-        ]));
+        ];
+
+        if ($genesis_task_id !== '') {
+            $redirect_args['genesis_task_id'] = $genesis_task_id;
+        }
+
+        if (!empty($request_payload['context_post_id'])) {
+            $redirect_args['post_id'] = absint($request_payload['context_post_id']);
+        }
+
+        if ($user_prompt !== '') {
+            $redirect_args['user_prompt'] = $user_prompt;
+        }
+
+        wp_safe_redirect($this->get_command_url($redirect_args));
         exit;
+    }
+
+    private function get_command_request_payload(array $source): array {
+        $payload = $source;
+
+        if (!empty($source['command_payload_json']) && is_string($source['command_payload_json'])) {
+            $decoded = json_decode(wp_unslash((string) $source['command_payload_json']), true);
+
+            if (is_array($decoded)) {
+                $payload = array_merge($payload, $decoded);
+            }
+        }
+
+        if (!empty($source['command_payload']) && is_array($source['command_payload'])) {
+            $payload = array_merge($payload, (array) $source['command_payload']);
+        }
+
+        return $payload;
+    }
+
+    private function build_thread_request_message(string $user_prompt, array $payload, string $genesis_task_id = ''): array {
+        return [
+            'role'    => 'user',
+            'label'   => __('Request', 'livecanvas-forge-ai'),
+            'content' => $user_prompt,
+            'meta'    => [
+                'action'           => sanitize_key((string) ($payload['action'] ?? '')),
+                'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+                'dry_run'          => !empty($payload['dry_run']),
+                'genesis_task_id'  => $genesis_task_id,
+            ],
+        ];
+    }
+
+    private function build_thread_suggestion_message(array $suggestion, array $request_payload, string $thread_id): array {
+        $suggested_payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
+        $summary           = (string) ($suggestion['summary'] ?? $suggestion['message'] ?? '');
+
+        return [
+            'role'    => 'suggestion_result',
+            'label'   => !empty($suggestion['ok']) ? __('Suggestion ready', 'livecanvas-forge-ai') : __('Suggestion failed', 'livecanvas-forge-ai'),
+            'content' => $summary !== '' ? $summary : __('No suggestion summary available.', 'livecanvas-forge-ai'),
+            'meta'    => [
+                'ok'               => !empty($suggestion['ok']),
+                'action'           => sanitize_key((string) ($suggested_payload['action'] ?? '')),
+                'execution_target' => sanitize_key((string) ($suggested_payload['execution_target'] ?? '')),
+                'confidence'       => sanitize_text_field((string) ($suggestion['confidence'] ?? '')),
+                'warnings'         => array_map('sanitize_text_field', (array) ($suggestion['warnings'] ?? [])),
+                'reasons'          => array_map('sanitize_text_field', (array) ($suggestion['reasons'] ?? [])),
+            ],
+            'actions' => LCFA_Thread_Message_Actions::build_suggestion_actions($suggested_payload, $request_payload, [
+                'thread_id'          => LCFA_Settings::normalize_thread_id($thread_id),
+                'command_url_builder' => [$this, 'get_command_url'],
+            ]),
+        ];
     }
 
     public function render_setup_page(): void {
@@ -1435,6 +1611,8 @@ JS;
         $plan_counts     = is_array($plan['counts'] ?? null) ? $plan['counts'] : [];
         $plan_stack      = is_array($plan['stack'] ?? null) ? $plan['stack'] : [];
         $progress_tasks  = is_array($progress['tasks'] ?? null) ? $progress['tasks'] : [];
+        $execution_plan  = $this->get_genesis_executor()->get_execution_plan();
+        $execution_counts = is_array($execution_plan['counts'] ?? null) ? $execution_plan['counts'] : [];
         $plan_available  = !empty($plan);
         $plan_stale      = $plan_available && (
             (string) ($plan['brief_hash'] ?? '') !== $brief_hash
@@ -1442,7 +1620,9 @@ JS;
             || (string) ($plan_stack['theme'] ?? '') !== (string) ($snapshot['current_theme_stylesheet'] ?? '')
             || (string) ($plan_stack['site_mode'] ?? '') !== (string) ($snapshot['site_mode'] ?? '')
         );
-        $next_task       = !$plan_stale ? $this->get_next_genesis_task($plan_tasks, $progress_tasks) : null;
+        $next_task       = !$plan_stale && is_array($execution_plan['next_task'] ?? null)
+            ? $execution_plan['next_task']
+            : (!$plan_stale ? $this->get_next_genesis_task($plan_tasks, $progress_tasks) : null);
 
         echo '<div class="lcfa-main">';
 
@@ -1499,9 +1679,10 @@ JS;
             echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Pages: %d', 'livecanvas-forge-ai'), (int) $plan_counts['pages'])) . '</span>';
         }
         if ($plan_available) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Previewed: %d', 'livecanvas-forge-ai'), $this->count_genesis_tasks_by_status($progress_tasks, 'previewed'))) . '</span>';
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Completed: %d', 'livecanvas-forge-ai'), $this->count_genesis_tasks_by_status($progress_tasks, 'applied'))) . '</span>';
-            echo '<span class="lcfa-chip' . ($this->count_genesis_tasks_by_status($progress_tasks, 'failed') > 0 ? ' is-negative' : '') . '">' . esc_html(sprintf(__('Failed: %d', 'livecanvas-forge-ai'), $this->count_genesis_tasks_by_status($progress_tasks, 'failed'))) . '</span>';
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Pending: %d', 'livecanvas-forge-ai'), (int) ($execution_counts['pending'] ?? $this->count_genesis_tasks_by_status($progress_tasks, 'pending')))) . '</span>';
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Previewed: %d', 'livecanvas-forge-ai'), (int) ($execution_counts['previewed'] ?? $this->count_genesis_tasks_by_status($progress_tasks, 'previewed')))) . '</span>';
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Completed: %d', 'livecanvas-forge-ai'), (int) ($execution_counts['applied'] ?? $this->count_genesis_tasks_by_status($progress_tasks, 'applied')))) . '</span>';
+            echo '<span class="lcfa-chip' . (((int) ($execution_counts['failed'] ?? $this->count_genesis_tasks_by_status($progress_tasks, 'failed'))) > 0 ? ' is-negative' : '') . '">' . esc_html(sprintf(__('Failed: %d', 'livecanvas-forge-ai'), (int) ($execution_counts['failed'] ?? $this->count_genesis_tasks_by_status($progress_tasks, 'failed')))) . '</span>';
         }
         echo '</div>';
 
@@ -1513,21 +1694,35 @@ JS;
             echo '<p>' . esc_html(sprintf(__('Last generated at %s.', 'livecanvas-forge-ai'), get_date_from_gmt((string) $plan['generated_at'], get_option('date_format') . ' ' . get_option('time_format')))) . '</p>';
         }
 
+        echo '<details class="lcfa-command-details" data-lcfa-command-thread-tools>';
+        echo '<summary>' . esc_html__('Thread tools', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-command-details__body">';
         echo '<div class="lcfa-cta-row">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
         wp_nonce_field('lcfa_generate_plan');
         echo '<input type="hidden" name="action" value="lcfa_generate_plan">';
         echo '<button class="button button-primary" type="submit">' . esc_html($plan_available ? __('Regenerate build plan', 'livecanvas-forge-ai') : __('Generate build plan', 'livecanvas-forge-ai')) . '</button>';
         echo '</form>';
-        if (is_array($next_task)) {
-            $next_task_url = $this->get_genesis_task_command_url($next_task);
-            if ($next_task_url !== '') {
-                echo '<a class="button button-primary" href="' . esc_url($next_task_url) . '">' . esc_html__('Continue next task', 'livecanvas-forge-ai') . '</a>';
-            }
+        if ($plan_available && !$plan_stale && is_array($next_task)) {
+            echo $this->render_genesis_execute_form('preview_next', '', __('Preview next task', 'livecanvas-forge-ai'), false, 'button');
+            echo $this->render_genesis_execute_form('apply_next', '', __('Apply next task', 'livecanvas-forge-ai'), false, 'button button-primary');
         }
         echo '<a class="button" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=command')) . '">' . esc_html__('Open Command Deck', 'livecanvas-forge-ai') . '</a>';
         echo '<a class="button" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=connections')) . '">' . esc_html__('Open Connections', 'livecanvas-forge-ai') . '</a>';
         echo '</div>';
+
+        if ($plan_available && !$plan_stale && is_array($next_task)) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Execution controls', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html__('Use Genesis as the execution queue for the project brief. Preview first when you want to inspect output, or apply directly when the task is deterministic.', 'livecanvas-forge-ai') . '</p>';
+            echo '<div class="lcfa-chip-row">';
+            if (!empty($next_task['stage'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Next stage: %s', 'livecanvas-forge-ai'), (string) $next_task['stage'])) . '</span>';
+            }
+            echo '<span class="lcfa-chip is-positive">' . esc_html(sprintf(__('Next task: %s', 'livecanvas-forge-ai'), (string) ($next_task['label'] ?? __('Genesis task', 'livecanvas-forge-ai')))) . '</span>';
+            echo '</div>';
+            echo '</div>';
+        }
 
         if ($plan_available) {
             $this->render_genesis_plan_panel($plan_pages, $plan_tasks, $progress_tasks);
@@ -1620,16 +1815,27 @@ JS;
             if (!empty($task_progress['message'])) {
                 echo '<p class="lcfa-result-message">' . esc_html((string) $task_progress['message']) . '</p>';
             }
-            if ($task_url !== '') {
-                echo '<div class="lcfa-cta-row">';
-                echo '<a class="button button-small button-primary" href="' . esc_url($task_url) . '">' . esc_html__('Load in Command Deck', 'livecanvas-forge-ai') . '</a>';
-                echo '</div>';
+            echo '<div class="lcfa-cta-row">';
+            if (!empty($payload['action'])) {
+                echo $this->render_genesis_execute_form('preview_task', $task_id, __('Preview task', 'livecanvas-forge-ai'), true, 'button button-small');
+                $apply_label = (($task_progress['status'] ?? '') === 'failed')
+                    ? __('Retry task', 'livecanvas-forge-ai')
+                    : __('Apply task', 'livecanvas-forge-ai');
+                echo $this->render_genesis_execute_form(($task_progress['status'] ?? '') === 'failed' ? 'retry_task' : 'apply_task', $task_id, $apply_label, true, 'button button-small button-primary');
+            } else {
+                echo $this->render_genesis_execute_form('acknowledge_task', $task_id, __('Mark reviewed', 'livecanvas-forge-ai'), true, 'button button-small');
             }
+            if ($task_url !== '') {
+                echo '<a class="button button-small button-primary" href="' . esc_url($task_url) . '">' . esc_html__('Load in Command Deck', 'livecanvas-forge-ai') . '</a>';
+            }
+            echo '</div>';
             echo '</article>';
         }
 
         echo '</div>';
         echo '</div>';
+        echo '</details>';
+        echo '</details>';
     }
 
     private function get_genesis_task_command_url(array $task): string {
@@ -1673,6 +1879,37 @@ JS;
         }
 
         return null;
+    }
+
+    private function get_genesis_executor(): LCFA_Genesis_Executor {
+        if (!$this->genesis_executor instanceof LCFA_Genesis_Executor) {
+            $this->genesis_executor = new LCFA_Genesis_Executor($this->environment, $this->command_deck);
+        }
+
+        return $this->genesis_executor;
+    }
+
+    private function render_genesis_execute_form(string $execution_mode, string $task_id, string $label, bool $small = false, string $button_class = 'button'): string {
+        $classes = trim($button_class);
+
+        if ($small && strpos($classes, 'button-small') === false) {
+            $classes .= ' button-small';
+        }
+
+        ob_start();
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+        wp_nonce_field('lcfa_genesis_execute');
+        echo '<input type="hidden" name="action" value="lcfa_genesis_execute">';
+        echo '<input type="hidden" name="execution_mode" value="' . esc_attr($execution_mode) . '">';
+        echo '<input type="hidden" name="thread_id" value="default">';
+        echo '<input type="hidden" name="execution_target" value="local">';
+        if ($task_id !== '') {
+            echo '<input type="hidden" name="task_id" value="' . esc_attr($task_id) . '">';
+        }
+        echo '<button class="' . esc_attr($classes) . '" type="submit">' . esc_html($label) . '</button>';
+        echo '</form>';
+
+        return (string) ob_get_clean();
     }
 
     private function count_genesis_tasks_by_status(array $progress_tasks, string $status): int {
@@ -1925,8 +2162,7 @@ JS;
             echo '<li class="is-' . esc_attr($state) . '">';
             echo '<span class="lcfa-wizard__step-number">' . esc_html((string) ($step['number'] ?? '')) . '</span>';
             echo '<strong>' . esc_html((string) ($step['title'] ?? '')) . '</strong>';
-            echo '<span class="lcfa-wizard__step-helper">' . esc_html((string) ($step['helper'] ?? '')) . '</span>';
-            echo '<span class="lcfa-wizard__step-state">' . esc_html(ucfirst($state === 'done' ? __('Done', 'livecanvas-forge-ai') : ($state === 'active' ? __('Active', 'livecanvas-forge-ai') : __('Locked', 'livecanvas-forge-ai')))) . '</span>';
+            echo '<span class="lcfa-wizard__step-state">' . esc_html(ucfirst($state === 'done' ? __('Done', 'livecanvas-forge-ai') : ($state === 'active' ? __('Current', 'livecanvas-forge-ai') : __('Locked', 'livecanvas-forge-ai')))) . '</span>';
             echo '</li>';
         }
         echo '</ol>';
@@ -2051,6 +2287,9 @@ JS;
         }
         echo '</div>';
 
+        echo '<details class="lcfa-command-details" data-lcfa-command-thread-tools>';
+        echo '<summary>' . esc_html__('Thread tools', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-command-details__body">';
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
         echo '<button class="button" type="submit" name="rotate_mcp_token" value="1">' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</button>';
@@ -2289,6 +2528,9 @@ JS;
 
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Generated bundle', 'livecanvas-forge-ai') . '</h3>';
+        if ($is_claude_desktop) {
+            echo '<p class="lcfa-guide-copy">' . esc_html__('For Claude Desktop, this JSON is a snippet. Merge livecanvas-forge into ~/Library/Application Support/Claude/claude_desktop_config.json under mcpServers. Do not paste it as a second top-level JSON object and do not replace your existing preferences block.', 'livecanvas-forge-ai') . '</p>';
+        }
         echo '<div class="lcfa-agent-guide__bundle-layout">';
 
         echo '<div class="lcfa-agent-guide__window lcfa-agent-guide__window--files">';
@@ -2315,6 +2557,9 @@ JS;
         if (!empty($bundle['shortcut_command'])) {
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
+            if ($is_claude_desktop) {
+                $this->render_claude_desktop_merge_guide();
+            }
             $this->render_code_block((string) $bundle['shortcut_command'], [
                 'language'   => $is_claude_desktop ? 'json' : 'bash',
                 'label'      => $is_claude_desktop ? __('JSON', 'livecanvas-forge-ai') : __('Shell', 'livecanvas-forge-ai'),
@@ -2352,6 +2597,7 @@ JS;
 
         echo '</div>';
         echo '</div>';
+        echo '</details>';
         echo '</div>';
     }
 
@@ -2584,6 +2830,9 @@ JS;
         if (!empty($guide['shortcut_title']) && !empty($guide['shortcut'])) {
             echo '<div class="lcfa-agent-guide__window">';
             echo '<h3>' . esc_html((string) $guide['shortcut_title']) . '</h3>';
+            if ($is_claude_desktop) {
+                $this->render_claude_desktop_merge_guide();
+            }
             $this->render_code_block((string) $guide['shortcut'], [
                 'language'   => $is_claude_desktop ? 'json' : 'bash',
                 'label'      => $is_claude_desktop ? __('JSON', 'livecanvas-forge-ai') : __('Shell', 'livecanvas-forge-ai'),
@@ -2685,10 +2934,11 @@ JS;
                         'label'          => __('Desktop App', 'livecanvas-forge-ai'),
                         'summary'        => $is_remote_site
                             ? __('Use this when Claude Desktop needs to reach a remote WordPress target. Review the reference block before editing the desktop config manually.', 'livecanvas-forge-ai')
-                            : __('Use this when Claude Desktop is your main app. Copy the JSON block into Claude Desktop, reopen it, then verify the bridge with get_snapshot.', 'livecanvas-forge-ai'),
+                            : __('Use this when Claude Desktop is your main app. Merge the JSON block under mcpServers inside your existing Claude Desktop config, reopen the app, then verify the bridge with get_snapshot.', 'livecanvas-forge-ai'),
                         'steps'          => [
                             __('Open ~/Library/Application Support/Claude/claude_desktop_config.json on your machine.', 'livecanvas-forge-ai'),
-                            __('Add the livecanvas-forge MCP server using the block shown below.', 'livecanvas-forge-ai'),
+                            __('Merge the JSON block under mcpServers inside your existing Claude Desktop config.', 'livecanvas-forge-ai'),
+                            __('Do not paste it as a second top-level JSON object or replace your preferences block.', 'livecanvas-forge-ai'),
                             __('Quit and reopen Claude Desktop.', 'livecanvas-forge-ai'),
                             __('Ask Claude to run get_snapshot before requesting any writes.', 'livecanvas-forge-ai'),
                         ],
@@ -2854,7 +3104,11 @@ JS;
     }
 
     private function build_claude_desktop_config_snippet(array $client): string {
-        $command_tokens = $this->tokenize_command_string((string) ($client['command'] ?? ''));
+        $environment = $this->normalize_environment_entries((array) ($client['env'] ?? []));
+        $command_tokens = $this->resolve_claude_desktop_command_tokens(
+            $this->tokenize_command_string((string) ($client['command'] ?? '')),
+            $environment
+        );
 
         return (string) wp_json_encode([
             'mcpServers' => [
@@ -2862,15 +3116,18 @@ JS;
                     'type'    => 'stdio',
                     'command' => $command_tokens[0] ?? 'node',
                     'args'    => array_slice($command_tokens, 1),
-                    'env'     => (object) $this->normalize_environment_entries((array) ($client['env'] ?? [])),
+                    'env'     => (object) $environment,
                 ],
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
     }
 
     private function build_claude_desktop_reference_snippet(array $client): string {
-        $command_tokens = $this->tokenize_command_string((string) ($client['command'] ?? ''));
         $environment = $this->normalize_environment_entries((array) ($client['env'] ?? []));
+        $command_tokens = $this->resolve_claude_desktop_command_tokens(
+            $this->tokenize_command_string((string) ($client['command'] ?? '')),
+            $environment
+        );
         $lines = [
             '# Claude Desktop reference',
             '# Review these values before editing Claude Desktop on another machine or remote target.',
@@ -2938,6 +3195,42 @@ JS;
         return $normalized;
     }
 
+    private function resolve_claude_desktop_command_tokens(array $command_tokens, array $environment): array {
+        if ($command_tokens === []) {
+            return [];
+        }
+
+        $wp_root = trim((string) ($environment['LCFA_WP_ROOT'] ?? ''));
+        if ($wp_root === '' || count($command_tokens) < 2) {
+            return $command_tokens;
+        }
+
+        $relative_script = 'wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
+        $script_path = str_replace('\\', '/', (string) ($command_tokens[1] ?? ''));
+        $normalized_script_path = ltrim($script_path, './');
+
+        if ($normalized_script_path !== $relative_script) {
+            return $command_tokens;
+        }
+
+        $command_tokens[1] = rtrim($wp_root, "/\\") . '/' . $relative_script;
+
+        return $command_tokens;
+    }
+
+    private function render_claude_desktop_merge_guide(): void {
+        echo '<div class="lcfa-agent-guide__callout">';
+        echo '<strong>' . esc_html__('What to do', 'livecanvas-forge-ai') . '</strong>';
+        echo '<ol class="lcfa-agent-guide__callout-list">';
+        echo '<li>' . esc_html__('Open Claude Desktop config', 'livecanvas-forge-ai') . ': <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>';
+        echo '<li>' . esc_html__('If mcpServers already exists, paste only the livecanvas-forge entry inside it.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('If mcpServers does not exist, paste the full mcpServers block from below.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Do not replace your existing preferences or paste a second top-level JSON object.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Save the file and reopen Claude Desktop.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ol>';
+        echo '</div>';
+    }
+
     private function build_manual_mcp_test_command(array $environment): string {
         $lines = [];
 
@@ -3002,7 +3295,7 @@ JS;
         echo '<div class="lcfa-main">';
         $this->render_command_result($command_result);
         $this->render_command_suggestion($command_suggestion);
-        $this->render_command_thread_panel($current_thread, $thread_summaries);
+        $this->render_command_thread_panel($current_thread, $thread_summaries, $command_form);
 
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
@@ -3576,7 +3869,7 @@ JS;
         echo '<span class="lcfa-badge is-' . esc_attr($tone_class) . '"><strong>' . esc_html($label) . '</strong><span>' . esc_html($value) . '</span></span>';
     }
 
-    private function render_command_thread_panel(array $current_thread, array $thread_summaries): void {
+    private function render_command_thread_panel(array $current_thread, array $thread_summaries, array $command_context = []): void {
         $current_thread_id = (string) ($current_thread['id'] ?? 'default');
         $messages = array_reverse((array) ($current_thread['messages'] ?? []));
 
@@ -3594,9 +3887,23 @@ JS;
             }
 
             $thread_id = (string) ($thread_summary['id'] ?? '');
-            $thread_url = $this->get_command_url([
+            $thread_url_args = [
                 'thread_id' => $thread_id,
-            ]);
+            ];
+
+            if (!empty($command_context['context_post_id'])) {
+                $thread_url_args['post_id'] = absint($command_context['context_post_id']);
+            }
+
+            if (!empty($command_context['genesis_task_id'])) {
+                $thread_url_args['genesis_task_id'] = sanitize_key((string) $command_context['genesis_task_id']);
+            }
+
+            if (!empty($command_context['user_prompt'])) {
+                $thread_url_args['user_prompt'] = sanitize_textarea_field((string) $command_context['user_prompt']);
+            }
+
+            $thread_url = $this->get_command_url($thread_url_args);
 
             echo '<a class="lcfa-thread-switch' . ($thread_id === $current_thread_id ? ' is-current' : '') . '" href="' . esc_url($thread_url) . '">';
             echo '<strong>' . esc_html((string) ($thread_summary['title'] ?? __('Thread', 'livecanvas-forge-ai'))) . '</strong>';
@@ -3605,13 +3912,85 @@ JS;
         }
         echo '</div>';
 
+        echo '<details class="lcfa-command-details" data-lcfa-command-thread-tools>';
+        echo '<summary>' . esc_html__('Thread tools', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-command-details__body">';
+        echo '<div class="lcfa-cta-row">';
+
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-thread-form">';
-        wp_nonce_field('lcfa_create_thread');
-        echo '<input type="hidden" name="action" value="lcfa_create_thread">';
+        wp_nonce_field('lcfa_command');
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+        echo '<input type="hidden" name="thread_operation" value="create">';
+        echo '<input type="hidden" name="thread_id" value="' . esc_attr($current_thread_id) . '">';
+        $this->render_command_thread_context_inputs($command_context);
         echo '<input type="text" name="thread_title" value="" placeholder="' . esc_attr__('New thread title', 'livecanvas-forge-ai') . '">';
         echo '<button class="button" type="submit">' . esc_html__('New thread', 'livecanvas-forge-ai') . '</button>';
         echo '</form>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+        wp_nonce_field('lcfa_command');
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+        echo '<input type="hidden" name="thread_operation" value="duplicate">';
+        echo '<input type="hidden" name="thread_id" value="' . esc_attr($current_thread_id) . '">';
+        $this->render_command_thread_context_inputs($command_context);
+        echo '<button class="button" type="submit">' . esc_html__('Duplicate current', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-thread-form">';
+        wp_nonce_field('lcfa_command');
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+        echo '<input type="hidden" name="thread_operation" value="rename">';
+        echo '<input type="hidden" name="thread_id" value="' . esc_attr($current_thread_id) . '">';
+        $this->render_command_thread_context_inputs($command_context);
+        echo '<input type="text" name="thread_title" value="' . esc_attr((string) ($current_thread['title'] ?? '')) . '" placeholder="' . esc_attr__('Rename current thread', 'livecanvas-forge-ai') . '">';
+        echo '<button class="button" type="submit">' . esc_html__('Rename current', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+        wp_nonce_field('lcfa_command');
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+        echo '<input type="hidden" name="thread_operation" value="clear">';
+        echo '<input type="hidden" name="thread_id" value="' . esc_attr($current_thread_id) . '">';
+        $this->render_command_thread_context_inputs($command_context);
+        echo '<button class="button" type="submit">' . esc_html__('Clear current', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+
+        if ($current_thread_id !== 'default') {
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            wp_nonce_field('lcfa_command');
+            echo '<input type="hidden" name="action" value="lcfa_command">';
+            echo '<input type="hidden" name="thread_operation" value="delete">';
+            echo '<input type="hidden" name="thread_id" value="' . esc_attr($current_thread_id) . '">';
+            $this->render_command_thread_context_inputs($command_context);
+            echo '<button class="button" type="submit">' . esc_html__('Delete current', 'livecanvas-forge-ai') . '</button>';
+            echo '</form>';
+        }
+
         echo '</div>';
+        echo '</div>';
+        echo '</details>';
+        echo '</div>';
+
+        if (!empty($command_context['context_post_id']) || !empty($command_context['genesis_task_id']) || !empty($command_context['user_prompt'])) {
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Current context', 'livecanvas-forge-ai') . '</h3>';
+            echo '<div class="lcfa-chip-row">';
+
+            if (!empty($command_context['context_post_id'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Post %d', 'livecanvas-forge-ai'), absint($command_context['context_post_id']))) . '</span>';
+            }
+
+            if (!empty($command_context['genesis_task_id'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Genesis task %s', 'livecanvas-forge-ai'), sanitize_key((string) $command_context['genesis_task_id']))) . '</span>';
+            }
+
+            if (!empty($command_context['user_prompt'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Prompt: %s', 'livecanvas-forge-ai'), sanitize_textarea_field((string) $command_context['user_prompt']))) . '</span>';
+            }
+
+            echo '</div>';
+            echo '</div>';
+        }
 
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html((string) ($current_thread['title'] ?? __('Thread', 'livecanvas-forge-ai'))) . '</h3>';
@@ -3640,8 +4019,27 @@ JS;
         echo '</section>';
     }
 
+    private function render_command_thread_context_inputs(array $command_context): void {
+        if (!empty($command_context['context_post_id'])) {
+            echo '<input type="hidden" name="context_post_id" value="' . esc_attr((string) absint($command_context['context_post_id'])) . '">';
+        }
+
+        if (!empty($command_context['genesis_task_id'])) {
+            echo '<input type="hidden" name="genesis_task_id" value="' . esc_attr((string) sanitize_key((string) $command_context['genesis_task_id'])) . '">';
+        }
+
+        if (!empty($command_context['user_prompt'])) {
+            echo '<input type="hidden" name="user_prompt" value="' . esc_attr((string) sanitize_textarea_field((string) $command_context['user_prompt'])) . '">';
+        }
+    }
+
     private function render_command_thread_message(array $message): void {
-        $role = in_array($message['role'] ?? '', ['user', 'assistant', 'system'], true) ? (string) $message['role'] : 'assistant';
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default'));
+        $message = LCFA_Thread_Message_Actions::decorate_message($message, [
+            'thread_id' => $thread_id,
+            'command_url_builder' => [$this, 'get_command_url'],
+        ]);
+        $role = in_array($message['role'] ?? '', ['user', 'assistant', 'suggestion_result', 'system', 'tool_result'], true) ? (string) $message['role'] : 'assistant';
         $time = !empty($message['time'])
             ? get_date_from_gmt((string) $message['time'], get_option('date_format') . ' ' . get_option('time_format'))
             : '';
@@ -3659,24 +4057,115 @@ JS;
         if ($content !== '') {
             echo '<div class="lcfa-thread-message__body"><pre>' . esc_html($content) . '</pre></div>';
         }
-        if ($meta) {
+        $actions = $this->get_thread_message_actions($message);
+        if ($actions) {
+            $this->render_command_message_actions($actions, $thread_id);
+        }
+        $meta_badges = $this->get_thread_message_meta_badges($meta);
+        if ($meta_badges) {
             echo '<div class="lcfa-chip-row">';
-            foreach ($meta as $key => $value) {
-                if (is_array($value)) {
-                    $value = implode(', ', array_map('strval', $value));
-                } elseif (is_bool($value)) {
-                    $value = $value ? 'true' : 'false';
-                }
-
-                if ($value === '') {
-                    continue;
-                }
-
-                echo '<span class="lcfa-chip">' . esc_html(sprintf('%1$s: %2$s', $key, (string) $value)) . '</span>';
+            foreach ($meta_badges as $badge) {
+                echo '<span class="lcfa-chip">' . esc_html($badge) . '</span>';
             }
             echo '</div>';
         }
         echo '</article>';
+    }
+
+    private function get_thread_message_meta_badges(array $meta): array {
+        $badges = [];
+
+        if (!empty($meta['action'])) {
+            $badges[] = sprintf(__('Action: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['action']));
+        }
+
+        if (!empty($meta['execution_target'])) {
+            $badges[] = sprintf(__('Execution: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['execution_target']));
+        }
+
+        if (!empty($meta['mode'])) {
+            $badges[] = sprintf(__('Mode: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['mode']));
+        }
+
+        if (!empty($meta['genesis_task_id'])) {
+            $badges[] = sprintf(__('Genesis task: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['genesis_task_id']));
+        }
+
+        if (!empty($meta['confidence'])) {
+            $badges[] = sprintf(__('Confidence: %s', 'livecanvas-forge-ai'), sanitize_text_field((string) $meta['confidence']));
+        }
+
+        if (!empty($meta['target_type'])) {
+            $badges[] = sprintf(__('Target: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['target_type']));
+        }
+
+        if (!empty($meta['target_title'])) {
+            $badges[] = sprintf(__('Label: %s', 'livecanvas-forge-ai'), sanitize_text_field((string) $meta['target_title']));
+        }
+
+        if (!empty($meta['target_id'])) {
+            $badges[] = sprintf(__('ID: %d', 'livecanvas-forge-ai'), absint($meta['target_id']));
+        }
+
+        if (!empty($meta['warnings']) && is_array($meta['warnings'])) {
+            $badges[] = sprintf(__('Warnings: %d', 'livecanvas-forge-ai'), count($meta['warnings']));
+        }
+
+        if (!empty($meta['reasons']) && is_array($meta['reasons'])) {
+            $badges[] = sprintf(__('Reasons: %d', 'livecanvas-forge-ai'), count($meta['reasons']));
+        }
+
+        return $badges;
+    }
+
+    private function render_command_thread_apply_form(array $action, string $thread_id): void {
+        $payload = $this->prepare_command_thread_action_payload((array) ($action['payload'] ?? []));
+        $request_context = $this->get_current_command_request_context();
+        $context_post_id = absint($request_context['context_post_id'] ?? 0);
+        $genesis_task_id = sanitize_key((string) ($request_context['genesis_task_id'] ?? ''));
+        $user_prompt = sanitize_textarea_field((string) ($request_context['user_prompt'] ?? ''));
+
+        if (empty($payload['action'])) {
+            return;
+        }
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-inline-form--compact">';
+        if (function_exists('wp_nonce_field')) {
+            wp_nonce_field('lcfa_command');
+        } else {
+            echo '<input type="hidden" name="_wpnonce" value="">';
+        }
+        echo '<input type="hidden" name="action" value="lcfa_command">';
+        echo '<input type="hidden" name="thread_id" value="' . esc_attr($thread_id) . '">';
+        echo '<input type="hidden" name="command_payload_json" value="' . esc_attr(wp_json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) . '">';
+        if ($context_post_id > 0) {
+            echo '<input type="hidden" name="context_post_id" value="' . esc_attr((string) $context_post_id) . '">';
+        }
+        if ($genesis_task_id !== '') {
+            echo '<input type="hidden" name="genesis_task_id" value="' . esc_attr($genesis_task_id) . '">';
+        }
+        if ($user_prompt !== '') {
+            echo '<input type="hidden" name="user_prompt" value="' . esc_attr($user_prompt) . '">';
+        }
+        echo '<button class="button button-small" type="submit">' . esc_html((string) ($action['label'] ?? __('Apply inline', 'livecanvas-forge-ai'))) . '</button>';
+        echo '</form>';
+    }
+
+    private function render_command_message_actions(array $actions, string $thread_id): void {
+        if (!$actions) {
+            return;
+        }
+
+        echo '<div class="lcfa-target-actions">';
+        foreach ($actions as $action) {
+            if (($action['kind'] ?? 'url') === 'apply' && !empty($action['payload'])) {
+                $this->render_command_thread_apply_form((array) $action, $thread_id);
+                continue;
+            }
+
+            echo '<a class="button button-small" href="' . esc_url((string) ($action['url'] ?? '')) . '" target="_blank" rel="noreferrer noopener">' . esc_html((string) ($action['label'] ?? '')) . '</a>';
+        }
+        echo '</div>';
     }
 
     private function build_thread_result_message(array $result, array $payload): array {
@@ -3684,6 +4173,7 @@ JS;
         $summary = trim((string) ($result['summary'] ?? ''));
         $message = trim((string) ($result['message'] ?? ''));
         $execution_target = sanitize_key((string) ($payload['execution_target'] ?? 'local'));
+        $target_type = (string) ($result['target_type'] ?? '');
 
         if ($summary !== '') {
             $lines[] = $summary;
@@ -3707,8 +4197,8 @@ JS;
             $lines[] = sprintf(__('Restored from backup: %s', 'livecanvas-forge-ai'), (string) $result['data']['restored_from_backup']['backup_id']);
         }
 
-        return [
-            'role'    => 'assistant',
+        $message = [
+            'role'    => 'tool_result',
             'label'   => !empty($result['ok']) ? __('Execution result', 'livecanvas-forge-ai') : __('Execution error', 'livecanvas-forge-ai'),
             'content' => implode("\n", array_filter($lines)),
             'meta'    => [
@@ -3717,10 +4207,65 @@ JS;
                 'execution_target' => $execution_target,
                 'genesis_task_id'  => sanitize_key((string) ($payload['genesis_task_id'] ?? '')),
                 'ok'               => !empty($result['ok']),
-                'target_type'      => (string) ($result['target_type'] ?? ''),
+                'target_type'      => $target_type,
                 'target_id'        => (int) ($result['target_id'] ?? 0),
+                'target_title'     => (string) ($result['target_title'] ?? ''),
             ],
+            'actions' => LCFA_Thread_Message_Actions::build_result_actions($result, $payload, [
+                'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
+                'command_url_builder' => [$this, 'get_command_url'],
+            ]),
         ];
+
+        return LCFA_Thread_Message_Actions::decorate_message($message, [
+            'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
+            'command_url_builder' => [$this, 'get_command_url'],
+        ]);
+    }
+
+    private function get_thread_message_actions(array $message): array {
+        $decorated = LCFA_Thread_Message_Actions::decorate_message($message, [
+            'thread_id' => LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default')),
+            'command_url_builder' => [$this, 'get_command_url'],
+        ]);
+
+        return LCFA_Thread_Message_Actions::sanitize_actions((array) ($decorated['actions'] ?? []));
+    }
+
+    private function prepare_command_thread_action_payload(array $payload): array {
+        $prepared = $payload;
+
+        if (empty($prepared['context_post_id']) && !empty($_GET['post_id'])) {
+            $prepared['context_post_id'] = absint($_GET['post_id']);
+        }
+
+        if (empty($prepared['genesis_task_id']) && !empty($_GET['genesis_task_id'])) {
+            $prepared['genesis_task_id'] = sanitize_key((string) $_GET['genesis_task_id']);
+        }
+
+        return $prepared;
+    }
+
+    private function get_current_command_request_context(): array {
+        $context = [];
+        $post_id = absint($_GET['post_id'] ?? 0);
+        $genesis_task_id = sanitize_key((string) ($_GET['genesis_task_id'] ?? ''));
+        $user_prompt = sanitize_textarea_field((string) ($_GET['user_prompt'] ?? ''));
+
+        if ($post_id > 0) {
+            $context['post_id'] = $post_id;
+            $context['context_post_id'] = $post_id;
+        }
+
+        if ($genesis_task_id !== '') {
+            $context['genesis_task_id'] = $genesis_task_id;
+        }
+
+        if ($user_prompt !== '') {
+            $context['user_prompt'] = $user_prompt;
+        }
+
+        return $context;
     }
 
     private function render_command_result(?array $result): void {
@@ -3730,50 +4275,35 @@ JS;
 
         $is_success = !empty($result['ok']);
         $status_icon = $is_success ? 'check-circle' : 'x-circle';
-        $status_label = $is_success ? __('Command result', 'livecanvas-forge-ai') : __('Command error', 'livecanvas-forge-ai');
+        $status_label = __('Support details', 'livecanvas-forge-ai');
 
         echo '<section class="lcfa-card lcfa-command-result' . ($is_success ? ' is-success' : ' is-error') . '">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg($status_icon);
         echo '<div><h2>' . esc_html($status_label) . '</h2><p>' . esc_html($result['summary'] ?: $result['message']) . '</p></div>';
         echo '</div>';
-
-        echo '<div class="lcfa-result-meta">';
-        if (!empty($result['action'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Action: %s', 'livecanvas-forge-ai'), $result['action'])) . '</span>';
-        }
-        if (!empty($result['mode'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), $result['mode'])) . '</span>';
-        }
-        if (!empty($result['data']['genesis_task_id'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Genesis task: %s', 'livecanvas-forge-ai'), (string) $result['data']['genesis_task_id'])) . '</span>';
-        }
-        if (!empty($result['data']['execution_target'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Execution: %s', 'livecanvas-forge-ai'), (string) $result['data']['execution_target'])) . '</span>';
-        }
-        if (!empty($result['target_type'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Target: %s', 'livecanvas-forge-ai'), $result['target_type'])) . '</span>';
-        }
-        if (!empty($result['target_id'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('ID: %d', 'livecanvas-forge-ai'), (int) $result['target_id'])) . '</span>';
-        }
-        if (!empty($result['target_title'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Label: %s', 'livecanvas-forge-ai'), $result['target_title'])) . '</span>';
-        }
-        echo '</div>';
+        echo '<p class="lcfa-result-message">' . esc_html__('The thread above is the primary execution log. Use this panel for structured payloads, diffs, and supporting inspection details.', 'livecanvas-forge-ai') . '</p>';
 
         if (!empty($result['message']) && $result['message'] !== ($result['summary'] ?? '')) {
             echo '<p class="lcfa-result-message">' . esc_html($result['message']) . '</p>';
         }
 
         if (!empty($result['inventory']) && is_array($result['inventory'])) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="inventory">';
+            echo '<summary>' . esc_html__('Audit inventory', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-guide">';
             echo '<h3>' . esc_html__('Audit inventory', 'livecanvas-forge-ai') . '</h3>';
             $this->render_inventory_panel($result['inventory']);
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if (!empty($result['data']) && is_array($result['data'])) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="payload">';
+            echo '<summary>' . esc_html__('Structured payload', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-result-panel">';
             echo '<h3>' . esc_html__('Structured payload', 'livecanvas-forge-ai') . '</h3>';
             $this->render_code_block(wp_json_encode($result['data'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
@@ -3782,9 +4312,14 @@ JS;
                 'copy_label' => __('Copy payload', 'livecanvas-forge-ai'),
             ]);
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if (!empty($result['diff_html']) || $result['existing_html'] !== '' || $result['proposed_html'] !== '') {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="preview">';
+            echo '<summary>' . esc_html__('Markup preview', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-result-grid">';
 
             if (!empty($result['diff_html'])) {
@@ -3817,6 +4352,8 @@ JS;
             }
 
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         echo '</section>';
@@ -3829,7 +4366,7 @@ JS;
 
         $is_success = !empty($suggestion['ok']);
         $status_icon = $is_success ? 'stars' : 'x-circle';
-        $status_label = $is_success ? __('Request analysis', 'livecanvas-forge-ai') : __('Request analysis issue', 'livecanvas-forge-ai');
+        $status_label = __('Support details', 'livecanvas-forge-ai');
         $payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
         $preflight = is_array($suggestion['preflight'] ?? null) ? $suggestion['preflight'] : [];
         $workflow = is_array($suggestion['workflow'] ?? null) ? $suggestion['workflow'] : [];
@@ -3841,20 +4378,22 @@ JS;
         echo $this->get_icon_svg($status_icon);
         echo '<div><h2>' . esc_html($status_label) . '</h2><p>' . esc_html((string) ($suggestion['summary'] ?? $suggestion['message'] ?? '')) . '</p></div>';
         echo '</div>';
+        echo '<p class="lcfa-result-message">' . esc_html__('The thread above is the primary suggestion log. Use this panel for reasoning, warnings, workflow, and payload inspection.', 'livecanvas-forge-ai') . '</p>';
 
-        echo '<div class="lcfa-result-meta">';
         if (!empty($payload['action'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Suggested action: %s', 'livecanvas-forge-ai'), (string) $payload['action'])) . '</span>';
+            $thread_id = LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default'));
+            $suggestion_actions = LCFA_Thread_Message_Actions::build_suggestion_actions($payload, $this->get_current_command_request_context(), [
+                'thread_id'           => $thread_id,
+                'command_url_builder' => [$this, 'get_command_url'],
+            ]);
+
+            $this->render_command_message_actions($suggestion_actions, $thread_id);
         }
-        if (!empty($suggestion['confidence'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Confidence: %s', 'livecanvas-forge-ai'), (string) $suggestion['confidence'])) . '</span>';
-        }
-        if (!empty($payload['execution_target'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Execution: %s', 'livecanvas-forge-ai'), (string) $payload['execution_target'])) . '</span>';
-        }
-        echo '</div>';
 
         if ($reasons) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="reasons">';
+            echo '<summary>' . esc_html__('Why this was suggested', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-guide">';
             echo '<h3>' . esc_html__('Why this was suggested', 'livecanvas-forge-ai') . '</h3>';
             echo '<ul class="lcfa-bullets">';
@@ -3863,9 +4402,14 @@ JS;
             }
             echo '</ul>';
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if ($warnings) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="warnings">';
+            echo '<summary>' . esc_html__('Warnings', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-guide">';
             echo '<h3>' . esc_html__('Warnings', 'livecanvas-forge-ai') . '</h3>';
             echo '<ul class="lcfa-bullets">';
@@ -3874,9 +4418,14 @@ JS;
             }
             echo '</ul>';
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if ($workflow) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="workflow">';
+            echo '<summary>' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-guide">';
             echo '<h3>' . esc_html__('Recommended workflow', 'livecanvas-forge-ai') . '</h3>';
             echo '<ol class="lcfa-bullets">';
@@ -3893,9 +4442,14 @@ JS;
             }
             echo '</ol>';
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if ($preflight) {
+            echo '<details class="lcfa-command-details" data-lcfa-command-details="preflight">';
+            echo '<summary>' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-command-details__body">';
             echo '<div class="lcfa-result-panel">';
             echo '<h3>' . esc_html__('Recommended preflight payload', 'livecanvas-forge-ai') . '</h3>';
             $this->render_code_block(wp_json_encode($preflight, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), [
@@ -3904,6 +4458,8 @@ JS;
                 'copy_label' => __('Copy preflight', 'livecanvas-forge-ai'),
             ]);
             echo '</div>';
+            echo '</div>';
+            echo '</details>';
         }
 
         if ($payload) {
@@ -4985,6 +5541,126 @@ JS;
             $post->post_type,
             $label
         );
+    }
+
+    private function get_editor_initial_conversation_state(array $messages): string {
+        $latest_message = null;
+
+        foreach (array_reverse($messages) as $message) {
+            if (is_array($message)) {
+                $latest_message = $message;
+                break;
+            }
+        }
+
+        if (!is_array($latest_message)) {
+            return 'idle';
+        }
+
+        $role = (string) ($latest_message['role'] ?? '');
+        $meta = is_array($latest_message['meta'] ?? null) ? $latest_message['meta'] : [];
+
+        if ($role === 'suggestion_result') {
+            return 'suggested';
+        }
+
+        if ($role === 'tool_result') {
+            if (array_key_exists('ok', $meta) && empty($meta['ok'])) {
+                return 'failed';
+            }
+
+            $mode = sanitize_key((string) ($meta['mode'] ?? ''));
+
+            if (in_array($mode, ['preview', 'dry_run'], true)) {
+                return 'previewed';
+            }
+
+            return 'applied';
+        }
+
+        return 'idle';
+    }
+
+    private function get_editor_conversation_state_label(string $state): string {
+        switch ($state) {
+            case 'thinking':
+                return __('Analyzing request...', 'livecanvas-forge-ai');
+            case 'queueing':
+                return __('Queued for inline execution.', 'livecanvas-forge-ai');
+            case 'running':
+                return __('Running inline execution...', 'livecanvas-forge-ai');
+            case 'suggested':
+                return __('Suggestion ready. Review it or run it inline.', 'livecanvas-forge-ai');
+            case 'previewed':
+                return __('Preview ready. Review the support details below.', 'livecanvas-forge-ai');
+            case 'applied':
+                return __('Inline action completed.', 'livecanvas-forge-ai');
+            case 'failed':
+                return __('The current request failed. Review the support details below.', 'livecanvas-forge-ai');
+            case 'idle':
+            default:
+                return __('Ready for a new request.', 'livecanvas-forge-ai');
+        }
+    }
+
+    private function render_editor_bridge_thread_message(array $message): void {
+        $message = LCFA_Thread_Message_Actions::decorate_message($message, [
+            'thread_id' => LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default')),
+            'command_url_builder' => [$this, 'get_command_url'],
+        ]);
+        $role = in_array((string) ($message['role'] ?? ''), ['user', 'assistant', 'suggestion_result', 'system', 'tool_result'], true)
+            ? (string) $message['role']
+            : 'assistant';
+
+        echo '<article class="lcfa-editor-thread-message is-' . esc_attr($role) . '">';
+        echo '<div class="lcfa-editor-thread-message__head">';
+        echo '<span>' . esc_html((string) ($message['label'] ?? ucfirst($role))) . '</span>';
+        echo '<span>' . esc_html((string) ($message['time'] ?? '')) . '</span>';
+        echo '</div>';
+        echo '<pre class="lcfa-editor-thread-message__body">' . esc_html((string) ($message['content'] ?? '')) . '</pre>';
+        $attachments = is_array($message['attachments'] ?? null) ? (array) $message['attachments'] : [];
+        if ($attachments) {
+            echo '<div class="lcfa-editor-thread-message__attachments">';
+            foreach ($attachments as $attachment) {
+                if (!is_array($attachment) || ($attachment['kind'] ?? '') !== 'image' || empty($attachment['data_url'])) {
+                    continue;
+                }
+
+                echo '<figure class="lcfa-editor-thread-message__attachment">';
+                echo '<img class="lcfa-editor-thread-message__attachment-image" src="' . esc_attr((string) $attachment['data_url']) . '" alt="">';
+                $attachment_copy = trim(implode(' • ', array_filter([
+                    (string) ($attachment['name'] ?? ''),
+                    (string) ($attachment['caption'] ?? ''),
+                ])));
+                if ($attachment_copy !== '') {
+                    echo '<figcaption class="lcfa-editor-thread-message__attachment-copy">' . esc_html($attachment_copy) . '</figcaption>';
+                }
+                echo '</figure>';
+            }
+            echo '</div>';
+        }
+        $meta_badges = $this->get_thread_message_meta_badges(is_array($message['meta'] ?? null) ? (array) $message['meta'] : []);
+        if ($meta_badges) {
+            echo '<div class="lcfa-editor-thread-message__meta">';
+            foreach ($meta_badges as $badge) {
+                echo '<span class="lcfa-editor-thread-message__chip">' . esc_html($badge) . '</span>';
+            }
+            echo '</div>';
+        }
+        $actions = LCFA_Thread_Message_Actions::sanitize_actions((array) ($message['actions'] ?? []));
+        if ($actions) {
+            echo '<div class="lcfa-editor-thread-message__actions">';
+            foreach ($actions as $action) {
+                if (($action['kind'] ?? 'url') === 'apply' && !empty($action['payload'])) {
+                    echo '<button type="button" class="lcfa-editor-thread-message__link" data-lcfa-editor-thread-apply="' . esc_attr(wp_json_encode($action['payload'])) . '">' . esc_html((string) $action['label']) . '</button>';
+                    continue;
+                }
+
+                echo '<a class="lcfa-editor-thread-message__link" href="' . esc_url((string) ($action['url'] ?? '')) . '" target="_blank" rel="noreferrer noopener">' . esc_html((string) $action['label']) . '</a>';
+            }
+            echo '</div>';
+        }
+        echo '</article>';
     }
 
     private function get_action_label(string $action): string {

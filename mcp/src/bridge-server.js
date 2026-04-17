@@ -90,6 +90,11 @@ async function handleHttpRequest(request, response, client, tools, themeFiles, w
     return
   }
 
+  if (request.method === 'GET' && url.pathname === '/genesis/execution-plan') {
+    sendJson(response, 200, await client.getGenesisExecutionPlan())
+    return
+  }
+
   if (request.method === 'GET' && url.pathname === '/page-html') {
     sendJson(response, 200, await client.getPageHtml(url.searchParams.get('post_id')))
     return
@@ -223,6 +228,18 @@ async function handleHttpRequest(request, response, client, tools, themeFiles, w
   if (request.method === 'POST' && url.pathname === '/genesis/plan/generate') {
     const payload = await readJsonBody(request)
     sendJson(response, 200, await client.generateGenesisPlan(payload))
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/genesis/execute-next') {
+    const payload = await readJsonBody(request)
+    sendJson(response, 200, await client.executeGenesisNext(payload))
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/genesis/execute-task') {
+    const payload = await readJsonBody(request)
+    sendJson(response, 200, await client.executeGenesisTask(payload))
     return
   }
 

@@ -28,6 +28,18 @@ class WPClient {
     return this.request('POST', 'genesis/plan/generate', { body: payload })
   }
 
+  async getGenesisExecutionPlan() {
+    return this.request('GET', 'genesis/execution-plan')
+  }
+
+  async executeGenesisNext(payload = {}) {
+    return this.request('POST', 'genesis/execute-next', { body: payload })
+  }
+
+  async executeGenesisTask(payload = {}) {
+    return this.request('POST', 'genesis/execute-task', { body: payload })
+  }
+
   async getPageHtml(postId) {
     return this.request('GET', 'page-html', {
       query: { post_id: postId }

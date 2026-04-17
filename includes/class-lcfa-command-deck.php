@@ -1018,6 +1018,10 @@ final class LCFA_Command_Deck {
         $footer_script = $this->coerce_multiline_payload($payload, 'footer_script', 'footer_script_lines');
 
         if (trim($body_html) === '' && trim($footer_html) === '' && trim($footer_script) === '') {
+            if (in_array($action, ['page_upsert', 'create_page', 'update_page'], true)) {
+                return $this->build_page_starter_content($payload);
+            }
+
             return '';
         }
 
@@ -1036,6 +1040,267 @@ final class LCFA_Command_Deck {
         }
 
         return implode("\n\n", $parts);
+    }
+
+    private function build_page_starter_content(array $payload): string {
+        $strategy = sanitize_key((string) ($payload['content_strategy'] ?? ''));
+        $section_intent = sanitize_key((string) ($payload['section_intent'] ?? ''));
+
+        if ($strategy !== 'section_starter' || $section_intent === '') {
+            return '';
+        }
+
+        $framework = $this->resolve_framework($payload);
+        $operation = $this->normalize_section_operation((string) ($payload['section_operation'] ?? ''));
+        $target_id = absint($payload['target_id'] ?? $payload['post_id'] ?? 0);
+        $existing_html = '';
+
+        if ($target_id > 0) {
+            $existing = $this->inventory->get_target_content('page', $target_id);
+            $existing_html = (string) ($existing['content'] ?? '');
+        }
+
+        $section_html = $this->build_section_starter_html($section_intent, $framework, $payload);
+
+        if ($section_html === '') {
+            return '';
+        }
+
+        return $this->merge_section_starter_into_page($existing_html, $section_html, $operation);
+    }
+
+    private function normalize_section_operation(string $operation): string {
+        return in_array($operation, ['prepend', 'append'], true) ? $operation : 'append';
+    }
+
+    private function build_section_starter_html(string $section_intent, string $framework, array $payload): string {
+        $is_picowind = $framework === 'picowind';
+        $eyebrow = __('Forge AI starter', 'livecanvas-forge-ai');
+
+        switch ($section_intent) {
+            case 'hero':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--hero mx-auto max-w-6xl px-4 py-16">
+  <div class="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
+    <div class="space-y-5">
+      <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+      <div class="space-y-3">
+        <h1 class="text-4xl font-semibold tracking-tight text-base-content sm:text-5xl">A clearer headline for the next test pass.</h1>
+        <p class="max-w-2xl text-base leading-7 text-base-content/75">Use this hero starter to validate the full loop: prompt, preview, apply, and follow-up refinement inside the current page context.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a class="inline-flex items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-content no-underline" href="#pricing">See pricing</a>
+        <a class="inline-flex items-center justify-center rounded-full border border-base-300 px-5 py-3 text-sm font-semibold text-base-content no-underline" href="#contact">Talk to sales</a>
+      </div>
+    </div>
+    <aside class="rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-[0.2em] text-base-content/55">What to validate</p>
+      <ul class="mt-4 space-y-3 text-sm leading-6 text-base-content/75">
+        <li>Context-aware headline and CTA structure</li>
+        <li>Preview/apply loop from the editor drawer</li>
+        <li>Framework-safe section markup for {$framework}</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--hero py-5 py-lg-6">
+  <div class="container">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-7">
+        <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+        <h1 class="display-4 fw-bold mb-3">A clearer headline for the next test pass.</h1>
+        <p class="lead text-body-secondary mb-4">Use this hero starter to validate the full loop: prompt, preview, apply, and follow-up refinement inside the current page context.</p>
+        <div class="d-flex flex-wrap gap-3">
+          <a class="btn btn-primary btn-lg" href="#pricing">See pricing</a>
+          <a class="btn btn-outline-secondary btn-lg" href="#contact">Talk to sales</a>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 p-xl-5">
+            <p class="text-uppercase fw-semibold small text-body-secondary mb-3">What to validate</p>
+            <ul class="mb-0 ps-3 text-body-secondary">
+              <li>Context-aware headline and CTA structure</li>
+              <li>Preview/apply loop from the editor drawer</li>
+              <li>Framework-safe section markup for {$framework}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'pricing':
+                if ($is_picowind) {
+                    return <<<HTML
+<section id="pricing" class="lcfa-section-starter lcfa-section--pricing mx-auto max-w-6xl px-4 py-16">
+  <div class="mx-auto max-w-3xl text-center">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content sm:text-4xl">Pricing ready for an editor test.</h2>
+    <p class="mt-4 text-base leading-7 text-base-content/75">Three plans are enough to validate section insertion, visual hierarchy, and inline follow-up prompts.</p>
+  </div>
+  <div class="mt-10 grid gap-6 md:grid-cols-3">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-sm font-semibold uppercase tracking-[0.2em] text-base-content/55">Starter</p><h3 class="mt-4 text-2xl font-semibold text-base-content">€29</h3><p class="mt-2 text-sm text-base-content/70">For lightweight launches.</p></article>
+    <article class="rounded-3xl border border-primary/40 bg-primary/10 p-6 shadow-xl"><p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Growth</p><h3 class="mt-4 text-2xl font-semibold text-base-content">€79</h3><p class="mt-2 text-sm text-base-content/70">For teams that need faster iteration.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-sm font-semibold uppercase tracking-[0.2em] text-base-content/55">Scale</p><h3 class="mt-4 text-2xl font-semibold text-base-content">Custom</h3><p class="mt-2 text-sm text-base-content/70">For complex production flows.</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section id="pricing" class="lcfa-section-starter lcfa-section--pricing py-5 py-lg-6 bg-light">
+  <div class="container">
+    <div class="text-center mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-3">Pricing ready for an editor test.</h2>
+      <p class="lead text-body-secondary mb-0">Three plans are enough to validate section insertion, visual hierarchy, and inline follow-up prompts.</p>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="text-uppercase fw-semibold small text-body-secondary mb-3">Starter</p><h3 class="display-6 fw-bold mb-2">€29</h3><p class="text-body-secondary mb-0">For lightweight launches.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-primary shadow"><div class="card-body p-4"><p class="text-uppercase fw-semibold small text-primary mb-3">Growth</p><h3 class="display-6 fw-bold mb-2">€79</h3><p class="text-body-secondary mb-0">For teams that need faster iteration.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="text-uppercase fw-semibold small text-body-secondary mb-3">Scale</p><h3 class="display-6 fw-bold mb-2">Custom</h3><p class="text-body-secondary mb-0">For complex production flows.</p></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'features':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--features mx-auto max-w-6xl px-4 py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Feature highlights you can refine from the next prompt.</h2>
+  </div>
+  <div class="mt-10 grid gap-6 md:grid-cols-3">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Context-aware edits</h3><p class="mt-3 text-sm leading-6 text-base-content/75">The page context stays attached while you iterate.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Inline preview</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Preview and apply without leaving the editor.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Framework safety</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Generated markup respects the active stack rules.</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--features py-5 py-lg-6">
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">Feature highlights you can refine from the next prompt.</h2>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Context-aware edits</h3><p class="text-body-secondary mb-0">The page context stays attached while you iterate.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Inline preview</h3><p class="text-body-secondary mb-0">Preview and apply without leaving the editor.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Framework safety</h3><p class="text-body-secondary mb-0">Generated markup respects the active stack rules.</p></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'testimonials':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--testimonials mx-auto max-w-6xl px-4 py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Proof points ready for a second pass.</h2>
+  </div>
+  <div class="mt-10 grid gap-6 md:grid-cols-3">
+    <blockquote class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-base leading-7 text-base-content/80">“The first draft already gave us a solid structure to refine.”</p><footer class="mt-4 text-sm font-semibold text-base-content">Product Lead</footer></blockquote>
+    <blockquote class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-base leading-7 text-base-content/80">“Preview mode made the decision cycle much faster.”</p><footer class="mt-4 text-sm font-semibold text-base-content">Agency Founder</footer></blockquote>
+    <blockquote class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-base leading-7 text-base-content/80">“We could keep iterating without losing the page context.”</p><footer class="mt-4 text-sm font-semibold text-base-content">Ops Manager</footer></blockquote>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--testimonials py-5 py-lg-6 bg-light">
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">Proof points ready for a second pass.</h2>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="mb-4 text-body-secondary">“The first draft already gave us a solid structure to refine.”</p><strong>Product Lead</strong></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="mb-4 text-body-secondary">“Preview mode made the decision cycle much faster.”</p><strong>Agency Founder</strong></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="mb-4 text-body-secondary">“We could keep iterating without losing the page context.”</p><strong>Ops Manager</strong></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'cta':
+                if ($is_picowind) {
+                    return <<<HTML
+<section id="contact" class="lcfa-section-starter lcfa-section--cta mx-auto max-w-6xl px-4 py-16">
+  <div class="rounded-[2rem] border border-primary/30 bg-primary/10 px-6 py-10 text-center shadow-xl sm:px-10">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-base-content">Ready for the next revision?</h2>
+    <p class="mt-4 text-base leading-7 text-base-content/75">Use this CTA block to validate insertion, tone, and next-step prompts from the same page context.</p>
+    <div class="mt-6">
+      <a class="inline-flex items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-content no-underline" href="#contact">Start the conversation</a>
+    </div>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section id="contact" class="lcfa-section-starter lcfa-section--cta py-5 py-lg-6">
+  <div class="container">
+    <div class="rounded-4 bg-primary-subtle p-4 p-lg-5 text-center">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-3">Ready for the next revision?</h2>
+      <p class="lead text-body-secondary mb-4">Use this CTA block to validate insertion, tone, and next-step prompts from the same page context.</p>
+      <a class="btn btn-primary btn-lg" href="#contact">Start the conversation</a>
+    </div>
+  </div>
+</section>
+HTML;
+        }
+
+        return '';
+    }
+
+    private function merge_section_starter_into_page(string $existing_html, string $section_html, string $operation): string {
+        $existing_html = trim($existing_html);
+        $section_html = trim($section_html);
+
+        if ($section_html === '') {
+            return $existing_html;
+        }
+
+        if ($existing_html === '') {
+            return "<main>\n" . $section_html . "\n</main>";
+        }
+
+        if ($operation === 'prepend') {
+            if (preg_match('/<main\b[^>]*>/i', $existing_html, $matches, PREG_OFFSET_CAPTURE)) {
+                $opening_tag = (string) $matches[0][0];
+                $insert_at = (int) $matches[0][1] + strlen($opening_tag);
+
+                return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+            }
+
+            return $section_html . "\n\n" . $existing_html;
+        }
+
+        if (preg_match('/<\/main>/i', $existing_html, $matches, PREG_OFFSET_CAPTURE)) {
+            $insert_at = (int) $matches[0][1];
+
+            return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+        }
+
+        return $existing_html . "\n\n" . $section_html;
     }
 
     private function coerce_multiline_payload(array $payload, string $string_key, string $lines_key): string {
@@ -1115,6 +1380,12 @@ final class LCFA_Command_Deck {
             if (file_exists($path)) {
                 return 'page-templates/empty.php';
             }
+        }
+
+        // LiveCanvas-aware stacks conventionally use this slug even when the current
+        // runtime cannot resolve the underlying file path deterministically.
+        if ($this->environment->is_livecanvas_active()) {
+            return 'page-templates/empty.php';
         }
 
         return '';

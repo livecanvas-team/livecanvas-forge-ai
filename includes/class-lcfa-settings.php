@@ -425,7 +425,11 @@ final class LCFA_Settings {
                 'updated_at'    => (string) ($thread['updated_at'] ?? ''),
                 'message_count' => count($messages),
                 'last_role'     => is_array($last_message) ? (string) ($last_message['role'] ?? '') : '',
-                'last_preview'  => is_array($last_message) ? wp_trim_words((string) ($last_message['content'] ?? ''), 14, '...') : '',
+                'last_preview'  => is_array($last_message)
+                    ? (function_exists('wp_trim_words')
+                        ? wp_trim_words((string) ($last_message['content'] ?? ''), 14, '...')
+                        : substr(trim((string) ($last_message['content'] ?? '')), 0, 120))
+                    : '',
             ];
         }
 
@@ -446,7 +450,7 @@ final class LCFA_Settings {
     public static function create_thread(string $title = ''): array {
         $threads    = self::get_threads();
         $timestamp  = current_time('mysql', true);
-        $thread_id  = 'thread-' . strtolower(wp_generate_password(8, false, false));
+        $thread_id  = self::generate_thread_id($threads);
         $thread     = [
             'id'         => $thread_id,
             'title'      => $title !== '' ? sanitize_text_field($title) : __('New command thread', 'livecanvas-forge-ai'),
@@ -470,6 +474,92 @@ final class LCFA_Settings {
         return self::get_thread($thread_id);
     }
 
+    public static function duplicate_thread(string $thread_id, string $title = ''): array {
+        $source_thread_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        $threads = self::get_threads();
+        $source = $threads[$source_thread_id] ?? self::default_thread();
+        $timestamp = current_time('mysql', true);
+        $new_thread_id = self::generate_thread_id($threads);
+        $source_title = sanitize_text_field((string) ($source['title'] ?? __('Command thread', 'livecanvas-forge-ai')));
+
+        $thread = [
+            'id'         => $new_thread_id,
+            'title'      => $title !== '' ? sanitize_text_field($title) : sprintf(__('%s copy', 'livecanvas-forge-ai'), $source_title),
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+            'messages'   => array_slice((array) ($source['messages'] ?? []), -80),
+        ];
+
+        $threads[$new_thread_id] = self::normalize_thread($thread, $new_thread_id);
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread($new_thread_id);
+    }
+
+    public static function clear_thread(string $thread_id): array {
+        $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        $threads = self::get_threads();
+        $thread = $threads[$normalized_id] ?? ($normalized_id === self::DEFAULT_THREAD_ID ? self::default_thread() : [
+            'id'         => $normalized_id,
+            'title'      => __('Command thread', 'livecanvas-forge-ai'),
+            'created_at' => current_time('mysql', true),
+            'updated_at' => current_time('mysql', true),
+            'messages'   => [],
+        ]);
+
+        $thread['messages'] = [];
+        $thread['updated_at'] = current_time('mysql', true);
+        $thread['title'] = sanitize_text_field((string) ($thread['title'] ?? __('Command thread', 'livecanvas-forge-ai')));
+        $thread['created_at'] = sanitize_text_field((string) ($thread['created_at'] ?? current_time('mysql', true)));
+        $thread['id'] = $normalized_id;
+
+        $threads[$normalized_id] = self::normalize_thread($thread, $normalized_id);
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread($normalized_id);
+    }
+
+    public static function rename_thread(string $thread_id, string $title = ''): array {
+        $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        $threads = self::get_threads();
+        $thread = $threads[$normalized_id] ?? ($normalized_id === self::DEFAULT_THREAD_ID ? self::default_thread() : [
+            'id'         => $normalized_id,
+            'title'      => __('Command thread', 'livecanvas-forge-ai'),
+            'created_at' => current_time('mysql', true),
+            'updated_at' => current_time('mysql', true),
+            'messages'   => [],
+        ]);
+        $next_title = sanitize_text_field($title);
+
+        if ($next_title === '') {
+            $next_title = sanitize_text_field((string) ($thread['title'] ?? __('Command thread', 'livecanvas-forge-ai')));
+        }
+
+        $thread['title'] = $next_title;
+        $thread['updated_at'] = current_time('mysql', true);
+        $thread['created_at'] = sanitize_text_field((string) ($thread['created_at'] ?? current_time('mysql', true)));
+        $thread['id'] = $normalized_id;
+
+        $threads[$normalized_id] = self::normalize_thread($thread, $normalized_id);
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread($normalized_id);
+    }
+
+    public static function delete_thread(string $thread_id): array {
+        $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+
+        if ($normalized_id === self::DEFAULT_THREAD_ID) {
+            return self::get_thread(self::DEFAULT_THREAD_ID);
+        }
+
+        $threads = self::get_threads();
+        unset($threads[$normalized_id]);
+        update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
+
+        return self::get_thread(self::DEFAULT_THREAD_ID);
+    }
+
     public static function append_thread_message(string $thread_id, array $message): array {
         $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
         $threads       = self::get_threads();
@@ -477,14 +567,17 @@ final class LCFA_Settings {
         $messages      = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
         $timestamp     = current_time('mysql', true);
         $meta          = is_array($message['meta'] ?? null) ? $message['meta'] : [];
+        $valid_roles   = ['user', 'assistant', 'suggestion_result', 'system', 'tool_result'];
 
         $messages[] = [
             'id'      => sanitize_key((string) ($message['id'] ?? ('msg-' . strtolower(wp_generate_password(10, false, false))))),
-            'role'    => in_array($message['role'] ?? '', ['user', 'assistant', 'system'], true) ? (string) $message['role'] : 'assistant',
+            'role'    => in_array($message['role'] ?? '', $valid_roles, true) ? (string) $message['role'] : 'assistant',
             'label'   => sanitize_text_field((string) ($message['label'] ?? '')),
             'time'    => sanitize_text_field((string) ($message['time'] ?? $timestamp)),
             'content' => sanitize_textarea_field((string) ($message['content'] ?? '')),
             'meta'    => self::sanitize_thread_meta($meta),
+            'attachments' => self::sanitize_thread_attachments((array) ($message['attachments'] ?? [])),
+            'actions' => self::sanitize_thread_actions((array) ($message['actions'] ?? [])),
         ];
 
         $messages = array_slice($messages, -80);
@@ -602,6 +695,7 @@ final class LCFA_Settings {
 
     private static function normalize_thread(array $thread, string $thread_id): array {
         $messages = [];
+        $valid_roles = ['user', 'assistant', 'suggestion_result', 'system', 'tool_result'];
 
         foreach ((array) ($thread['messages'] ?? []) as $message) {
             if (!is_array($message)) {
@@ -610,11 +704,13 @@ final class LCFA_Settings {
 
             $messages[] = [
                 'id'      => sanitize_key((string) ($message['id'] ?? ('msg-' . strtolower(wp_generate_password(10, false, false))))),
-                'role'    => in_array($message['role'] ?? '', ['user', 'assistant', 'system'], true) ? (string) $message['role'] : 'assistant',
+                'role'    => in_array($message['role'] ?? '', $valid_roles, true) ? (string) $message['role'] : 'assistant',
                 'label'   => sanitize_text_field((string) ($message['label'] ?? '')),
                 'time'    => sanitize_text_field((string) ($message['time'] ?? current_time('mysql', true))),
                 'content' => sanitize_textarea_field((string) ($message['content'] ?? '')),
                 'meta'    => self::sanitize_thread_meta((array) ($message['meta'] ?? [])),
+                'attachments' => self::sanitize_thread_attachments((array) ($message['attachments'] ?? [])),
+                'actions' => self::sanitize_thread_actions((array) ($message['actions'] ?? [])),
             ];
         }
 
@@ -659,6 +755,127 @@ final class LCFA_Settings {
         return $sanitized;
     }
 
+    private static function sanitize_thread_actions(array $actions): array {
+        $sanitized = [];
+
+        foreach ($actions as $action) {
+            if (!is_array($action)) {
+                continue;
+            }
+
+            $kind = sanitize_key((string) ($action['kind'] ?? 'url'));
+            $label = sanitize_text_field((string) ($action['label'] ?? ''));
+
+            if ($label === '') {
+                continue;
+            }
+
+            if ($kind === 'apply') {
+                $payload = self::sanitize_thread_action_payload($action['payload'] ?? []);
+
+                if (!is_array($payload) || empty($payload['action'])) {
+                    continue;
+                }
+
+                $sanitized[] = [
+                    'kind'    => 'apply',
+                    'label'   => $label,
+                    'payload' => $payload,
+                ];
+                continue;
+            }
+
+            $url = self::sanitize_thread_action_url((string) ($action['url'] ?? ''));
+
+            if ($url === '') {
+                continue;
+            }
+
+            $sanitized[] = [
+                'kind'  => 'url',
+                'label' => $label,
+                'url'   => $url,
+            ];
+        }
+
+        return array_slice($sanitized, 0, 3);
+    }
+
+    private static function sanitize_thread_attachments(array $attachments): array {
+        $sanitized = [];
+
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment)) {
+                continue;
+            }
+
+            $kind = sanitize_key((string) ($attachment['kind'] ?? ''));
+            $mime = sanitize_text_field((string) ($attachment['mime'] ?? ''));
+            $name = sanitize_text_field((string) ($attachment['name'] ?? ''));
+            $caption = sanitize_text_field((string) ($attachment['caption'] ?? ''));
+            $data_url = trim((string) ($attachment['data_url'] ?? ''));
+
+            if ($kind !== 'image' || $mime === '' || strpos($mime, 'image/') !== 0) {
+                continue;
+            }
+
+            if ($data_url === '' || strpos($data_url, 'data:image/') !== 0) {
+                continue;
+            }
+
+            if (strlen($data_url) > 500000) {
+                continue;
+            }
+
+            $sanitized[] = [
+                'kind'     => 'image',
+                'name'     => $name,
+                'mime'     => $mime,
+                'caption'  => $caption,
+                'data_url' => $data_url,
+                'size'     => absint($attachment['size'] ?? 0),
+            ];
+        }
+
+        return array_slice($sanitized, 0, 2);
+    }
+
+    private static function sanitize_thread_action_url(string $url): string {
+        if (function_exists('esc_url_raw')) {
+            return esc_url_raw($url);
+        }
+
+        if (function_exists('esc_url')) {
+            return esc_url($url);
+        }
+
+        return trim($url);
+    }
+
+    private static function sanitize_thread_action_payload($value) {
+        if (is_bool($value) || is_numeric($value) || $value === null) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+
+            foreach ($value as $key => $item) {
+                $sanitized_key = is_string($key) ? sanitize_key($key) : $key;
+
+                if ($sanitized_key === '') {
+                    continue;
+                }
+
+                $sanitized[$sanitized_key] = self::sanitize_thread_action_payload($item);
+            }
+
+            return $sanitized;
+        }
+
+        return sanitize_text_field((string) $value);
+    }
+
     private static function sort_threads_by_updated_at(array $threads): array {
         uasort($threads, static function (array $left, array $right): int {
             return strtotime((string) ($right['updated_at'] ?? '')) <=> strtotime((string) ($left['updated_at'] ?? ''));
@@ -676,5 +893,18 @@ final class LCFA_Settings {
         $threads[self::DEFAULT_THREAD_ID] = $default;
 
         return self::sort_threads_by_updated_at($threads);
+    }
+
+    private static function generate_thread_id(array $threads): string {
+        $base = 'thread-' . strtolower(wp_generate_password(8, false, false));
+        $candidate = self::normalize_thread_id($base);
+        $suffix = 2;
+
+        while ($candidate === '' || isset($threads[$candidate])) {
+            $candidate = self::normalize_thread_id($base . '-' . $suffix);
+            $suffix++;
+        }
+
+        return $candidate !== '' ? $candidate : 'thread-' . (string) time();
     }
 }

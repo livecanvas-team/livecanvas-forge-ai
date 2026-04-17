@@ -8,6 +8,7 @@ final class LCFA_Plugin {
     private LCFA_Installer $installer;
     private LCFA_Inventory $inventory;
     private LCFA_Genesis_Planner $genesis_planner;
+    private LCFA_Genesis_Executor $genesis_executor;
     private LCFA_WindPress_Bridge $windpress_bridge;
     private LCFA_Theme_Files_Bridge $theme_files_bridge;
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
@@ -76,8 +77,9 @@ final class LCFA_Plugin {
             $this->design_system_preview
         );
         $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client, $design_system_apply, $design_system_compose);
-        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
-        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner);
+        $this->genesis_executor = new LCFA_Genesis_Executor($this->environment, $this->command_deck);
+        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor);
+        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor);
 
         add_action('plugins_loaded', [$this, 'boot']);
     }

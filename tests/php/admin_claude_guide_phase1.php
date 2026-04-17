@@ -144,5 +144,12 @@ lcfa_assert_contains('>Claude<', $markup, 'guide tabs should show Claude as the 
 lcfa_assert_contains('Desktop App', $markup, 'Claude guide should expose the Desktop App mode');
 lcfa_assert_contains('Command Line Interface', $markup, 'Claude guide should expose the CLI mode');
 lcfa_assert_not_contains('>Claude Code<', $markup, 'guide tabs should not use Claude Code as the top-level client label');
+lcfa_assert_contains('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', $markup, 'Claude Desktop guide should render an absolute MCP script path for Desktop App');
+lcfa_assert_contains('Merge the JSON block under mcpServers inside your existing Claude Desktop config.', $markup, 'Claude Desktop guide should explain that the JSON must be merged into the existing config');
+lcfa_assert_contains('Do not paste it as a second top-level JSON object or replace your preferences block.', $markup, 'Claude Desktop guide should warn against invalid top-level JSON merges');
+lcfa_assert_contains('Open Claude Desktop config', $markup, 'Claude Desktop guide should render an explicit action checklist above the JSON snippet');
+lcfa_assert_contains('If mcpServers already exists, paste only the livecanvas-forge entry inside it.', $markup, 'Claude Desktop guide should explain the copy path when mcpServers already exists');
+lcfa_assert_contains('If mcpServers does not exist, paste the full mcpServers block from below.', $markup, 'Claude Desktop guide should explain the copy path when mcpServers is missing');
+lcfa_assert_contains('Save the file and reopen Claude Desktop.', $markup, 'Claude Desktop guide should finish the checklist with the reopen step');
 
 echo "PASS\n";

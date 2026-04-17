@@ -454,6 +454,7 @@ $hero_content_method = new ReflectionMethod('LCFA_Admin', 'get_dashboard_hero_co
 $reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconfigured_connections');
 $visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
 $admin_codex_command_method = new ReflectionMethod('LCFA_Admin', 'build_codex_register_command');
+$stepper_method = new ReflectionMethod('LCFA_Admin', 'render_connection_stepper');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -484,6 +485,15 @@ $visual_help_markup = (string) ob_get_clean();
 
 lcfa_assert_true(strpos($visual_help_markup, 'What this looks like in OpenCode') !== false, 'admin should render the visual strip title');
 lcfa_assert_true(strpos($visual_help_markup, 'Check MCP: livecanvas-forge') !== false, 'admin should render the OpenCode MCP instruction');
+
+ob_start();
+$stepper_method->invoke($admin_instance, $opencode_fast_path['steps']);
+$stepper_markup = (string) ob_get_clean();
+
+lcfa_assert_false(strpos($stepper_markup, 'lcfa-wizard__step-helper') !== false, 'wizard stepper should no longer render helper spans');
+lcfa_assert_false(strpos($stepper_markup, 'Pick the client') !== false, 'wizard stepper should no longer render helper copy inside the step cards');
+lcfa_assert_true(strpos($stepper_markup, 'Current') !== false, 'wizard stepper should label the active step as Current');
+lcfa_assert_false(strpos($stepper_markup, '>Active<') !== false, 'wizard stepper should no longer label the active step as Active');
 
 $ready_state = $onboarding->derive_state([
     'preferred_client'            => 'opencode',

@@ -122,6 +122,7 @@ $GLOBALS['lcfa_test_uploads'] = LCFA_TEST_TMP . '/wp-content/uploads';
 $GLOBALS['lcfa_test_remote_get_map'] = [];
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 $GLOBALS['lcfa_test_filters'] = [];
+$GLOBALS['lcfa_test_transients'] = [];
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates', 0777, true);
@@ -146,6 +147,57 @@ function wp_generate_password(int $length = 12, bool $special_chars = false, boo
 
 function wp_json_encode($value, int $flags = 0): string {
     return (string) json_encode($value, $flags);
+}
+
+function wp_strip_all_tags(string $text): string {
+    return strip_tags($text);
+}
+
+function get_post_types(array $args = [], string $output = 'names'): array {
+    if ($output === 'objects') {
+        return [
+            'page' => (object) [
+                'name'         => 'page',
+                'label'        => 'Pages',
+                'public'       => true,
+                'show_ui'      => true,
+                'has_archive'  => false,
+                'show_in_rest' => true,
+            ],
+        ];
+    }
+
+    return ['page'];
+}
+
+function get_bloginfo(string $show = ''): string {
+    if ($show === 'description') {
+        return 'Test site description';
+    }
+
+    return 'Test site';
+}
+
+function get_locale(): string {
+    return 'en_US';
+}
+
+function wp_timezone_string(): string {
+    return 'UTC';
+}
+
+function set_transient(string $key, $value, int $expiration = 0): bool {
+    $GLOBALS['lcfa_test_transients'][$key] = $value;
+    return true;
+}
+
+function get_transient(string $key) {
+    return $GLOBALS['lcfa_test_transients'][$key] ?? false;
+}
+
+function delete_transient(string $key): bool {
+    unset($GLOBALS['lcfa_test_transients'][$key]);
+    return true;
 }
 
 function wp_parse_args($args, $defaults = []): array {
@@ -607,6 +659,7 @@ require LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require LCFA_DIR . 'includes/class-lcfa-context-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-prompt-suggester.php';
 require LCFA_DIR . 'includes/class-lcfa-genesis-planner.php';
+require LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
@@ -618,6 +671,7 @@ require LCFA_DIR . 'includes/class-lcfa-picostrap-compile-manifest.php';
 require LCFA_DIR . 'includes/class-lcfa-picostrap-bundle-store.php';
 require LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
 require LCFA_DIR . 'includes/class-lcfa-command-deck.php';
+require LCFA_DIR . 'includes/class-lcfa-thread-message-actions.php';
 require LCFA_DIR . 'includes/class-lcfa-rest-api.php';
 
 $environment = new LCFA_Environment();
@@ -630,12 +684,260 @@ $context_builder = new LCFA_Context_Builder($environment, $inventory, $windpress
 $prompt_suggester = new LCFA_Prompt_Suggester($environment, $inventory);
 $genesis_planner = new LCFA_Genesis_Planner($environment, $inventory);
 $command_deck = new LCFA_Command_Deck($environment, $inventory, $windpress_bridge, $theme_files_bridge, $local_mcp_bridge, $remote_client);
-$rest_api = new LCFA_Rest_Api($environment, $inventory, $windpress_bridge, $theme_files_bridge, $local_mcp_bridge, $context_builder, $command_deck, $prompt_suggester, $genesis_planner);
+$genesis_executor = new LCFA_Genesis_Executor($environment, $command_deck);
+$rest_api = new LCFA_Rest_Api($environment, $inventory, $windpress_bridge, $theme_files_bridge, $local_mcp_bridge, $context_builder, $command_deck, $prompt_suggester, $genesis_planner, $genesis_executor);
 
 LCFA_Settings::update([
     'permission_profile'  => 'advanced_templates',
     'allow_file_fallback' => true,
 ]);
+
+$editor_thread = LCFA_Settings::create_thread('Editor chat');
+lcfa_assert_true(method_exists($rest_api, 'send_chat_message'), 'REST API should expose send_chat_message for the editor chat flow');
+lcfa_assert_true(method_exists($rest_api, 'manage_chat_thread'), 'REST API should expose manage_chat_thread for editor thread operations');
+lcfa_assert_true(method_exists($rest_api, 'enqueue_command_execution'), 'REST API should expose enqueue_command_execution for async inline execution');
+lcfa_assert_true(method_exists($rest_api, 'get_command_execution_status'), 'REST API should expose get_command_execution_status for async inline execution polling');
+lcfa_assert_true(method_exists($rest_api, 'get_genesis_execution_plan'), 'REST API should expose get_genesis_execution_plan for Genesis execution state');
+lcfa_assert_true(method_exists($rest_api, 'execute_next_genesis_task'), 'REST API should expose execute_next_genesis_task for Genesis execution');
+lcfa_assert_true(method_exists($rest_api, 'execute_genesis_task'), 'REST API should expose execute_genesis_task for explicit Genesis task execution');
+
+if (method_exists($rest_api, 'send_chat_message')) {
+    $chat_response = $rest_api->send_chat_message(new WP_REST_Request([
+        'thread_id'        => (string) ($editor_thread['id'] ?? 'default'),
+        'user_prompt'      => 'Refresh the hero with a simpler CTA and keep the current logo.',
+        'execution_target' => 'local',
+        'post_id'          => 42,
+        'context_post_id'  => 42,
+        'target_id'        => 42,
+        'variant'          => '1',
+        'genesis_task_id'  => 'task-42',
+        'action'           => 'update_header',
+        'attachments'      => [
+            [
+                'kind'     => 'image',
+                'name'     => 'hero-reference.png',
+                'mime'     => 'image/png',
+                'data_url' => 'data:image/png;base64,AAAA',
+                'caption'  => 'Hero reference screenshot',
+            ],
+        ],
+    ]));
+
+    $chat_payload = $chat_response->get_data();
+    $thread_after_chat = $chat_payload['thread'] ?? [];
+    $messages_after_chat = is_array($thread_after_chat['messages'] ?? null) ? $thread_after_chat['messages'] : [];
+    $last_user_message = $messages_after_chat[count($messages_after_chat) - 2] ?? [];
+    $last_suggestion_message = $messages_after_chat[count($messages_after_chat) - 1] ?? [];
+
+    lcfa_assert_same(200, $chat_response->get_status(), 'send_chat_message should return a success response for valid editor prompts');
+    lcfa_assert_true(is_array($chat_payload['suggestion'] ?? null), 'send_chat_message should return a suggestion payload');
+    lcfa_assert_same((string) ($editor_thread['id'] ?? 'default'), (string) ($thread_after_chat['id'] ?? ''), 'send_chat_message should return the updated selected thread');
+    lcfa_assert_same('user', (string) ($last_user_message['role'] ?? ''), 'send_chat_message should append the editor prompt as a user message');
+    lcfa_assert_same('image', (string) ($last_user_message['attachments'][0]['kind'] ?? ''), 'send_chat_message should persist screenshot attachments on the user message');
+    lcfa_assert_contains('data:image/png;base64,AAAA', (string) ($last_user_message['attachments'][0]['data_url'] ?? ''), 'send_chat_message should keep a previewable data URL for screenshot attachments');
+    lcfa_assert_same('suggestion_result', (string) ($last_suggestion_message['role'] ?? ''), 'send_chat_message should append the suggestion summary as a suggestion_result message');
+    lcfa_assert_same('page_upsert', (string) ($last_suggestion_message['meta']['action'] ?? ''), 'suggestion_result chat message metadata should persist the suggested action');
+    lcfa_assert_same(1, (int) ($last_suggestion_message['meta']['attachment_count'] ?? 0), 'suggestion_result metadata should keep the current attachment count');
+    lcfa_assert_same('apply', (string) ($last_suggestion_message['actions'][0]['kind'] ?? ''), 'suggestion_result messages should persist a preview-inline action first');
+    lcfa_assert_same('page_upsert', (string) ($last_suggestion_message['actions'][0]['payload']['action'] ?? ''), 'suggestion_result preview-inline action should keep the suggested payload');
+    lcfa_assert_true(!empty($last_suggestion_message['actions'][0]['payload']['dry_run']), 'suggestion_result preview-inline action should force dry_run');
+    lcfa_assert_same('apply', (string) ($last_suggestion_message['actions'][1]['kind'] ?? ''), 'suggestion_result messages should persist an apply-inline action second');
+    lcfa_assert_same('page_upsert', (string) ($last_suggestion_message['actions'][1]['payload']['action'] ?? ''), 'suggestion_result apply-inline action should keep the suggested payload');
+    lcfa_assert_true(empty($last_suggestion_message['actions'][1]['payload']['dry_run']), 'suggestion_result apply-inline action should stay in apply mode');
+    lcfa_assert_same('url', (string) ($last_suggestion_message['actions'][2]['kind'] ?? ''), 'suggestion_result messages should persist a command-deck deeplink action');
+    lcfa_assert_contains('suggest_action=page_upsert', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should open the suggested payload in Command Deck');
+    lcfa_assert_contains('post_id=42', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the current post context');
+    lcfa_assert_contains('thread_id=' . (string) ($editor_thread['id'] ?? 'default'), (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the active thread id');
+    lcfa_assert_contains('genesis_task_id=task-42', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the current Genesis task context');
+    lcfa_assert_contains('user_prompt=Refresh+the+hero+with+a+simpler+CTA+and+keep+the+current+logo.', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the current prompt');
+}
+
+if (method_exists($rest_api, 'manage_chat_thread')) {
+    $created_thread_response = $rest_api->manage_chat_thread(new WP_REST_Request([
+        'operation' => 'create',
+        'title'     => 'New editor flow',
+    ]));
+    $created_thread_payload = $created_thread_response->get_data();
+    $created_thread = $created_thread_payload['thread'] ?? [];
+
+    lcfa_assert_same(200, $created_thread_response->get_status(), 'manage_chat_thread(create) should return success');
+    lcfa_assert_same('New editor flow', (string) ($created_thread['title'] ?? ''), 'manage_chat_thread(create) should use the requested thread title');
+    lcfa_assert_true(!empty($created_thread_payload['threads']), 'manage_chat_thread(create) should return the refreshed thread payload collection');
+
+    LCFA_Settings::append_thread_message((string) ($created_thread['id'] ?? ''), [
+        'role'    => 'user',
+        'label'   => 'Prompt',
+        'content' => 'Make the hero tighter.',
+        'meta'    => [],
+    ]);
+
+    $duplicated_thread_response = $rest_api->manage_chat_thread(new WP_REST_Request([
+        'operation' => 'duplicate',
+        'thread_id' => (string) ($created_thread['id'] ?? ''),
+        'title'     => 'New editor flow copy',
+    ]));
+    $duplicated_thread_payload = $duplicated_thread_response->get_data();
+    $duplicated_thread = $duplicated_thread_payload['thread'] ?? [];
+    $duplicated_contents = array_map(static function ($message): string {
+        return is_array($message) ? (string) ($message['content'] ?? '') : '';
+    }, (array) ($duplicated_thread['messages'] ?? []));
+
+    lcfa_assert_same(200, $duplicated_thread_response->get_status(), 'manage_chat_thread(duplicate) should return success');
+    lcfa_assert_same('New editor flow copy', (string) ($duplicated_thread['title'] ?? ''), 'manage_chat_thread(duplicate) should use the requested duplicate title');
+    lcfa_assert_true(in_array('Make the hero tighter.', $duplicated_contents, true), 'manage_chat_thread(duplicate) should preserve source thread messages');
+
+    $cleared_thread_response = $rest_api->manage_chat_thread(new WP_REST_Request([
+        'operation' => 'clear',
+        'thread_id' => (string) ($duplicated_thread['id'] ?? ''),
+    ]));
+    $cleared_thread_payload = $cleared_thread_response->get_data();
+    $cleared_thread = $cleared_thread_payload['thread'] ?? [];
+
+    lcfa_assert_same(200, $cleared_thread_response->get_status(), 'manage_chat_thread(clear) should return success');
+    lcfa_assert_same(0, count((array) ($cleared_thread['messages'] ?? [])), 'manage_chat_thread(clear) should empty the selected thread messages');
+
+    $renamed_thread_response = $rest_api->manage_chat_thread(new WP_REST_Request([
+        'operation' => 'rename',
+        'thread_id' => (string) ($duplicated_thread['id'] ?? ''),
+        'title'     => 'Renamed editor flow',
+    ]));
+    $renamed_thread_payload = $renamed_thread_response->get_data();
+    $renamed_thread = $renamed_thread_payload['thread'] ?? [];
+
+    lcfa_assert_same(200, $renamed_thread_response->get_status(), 'manage_chat_thread(rename) should return success');
+    lcfa_assert_same('Renamed editor flow', (string) ($renamed_thread['title'] ?? ''), 'manage_chat_thread(rename) should update the selected thread title');
+
+    $deleted_thread_response = $rest_api->manage_chat_thread(new WP_REST_Request([
+        'operation' => 'delete',
+        'thread_id' => (string) ($renamed_thread['id'] ?? ''),
+    ]));
+    $deleted_thread_payload = $deleted_thread_response->get_data();
+
+    lcfa_assert_same(200, $deleted_thread_response->get_status(), 'manage_chat_thread(delete) should return success for non-default threads');
+    lcfa_assert_same('default', (string) ($deleted_thread_payload['selected_thread_id'] ?? ''), 'manage_chat_thread(delete) should fall back to the default thread');
+    lcfa_assert_true(!isset(($deleted_thread_payload['threads'] ?? [])[(string) ($renamed_thread['id'] ?? '')]), 'manage_chat_thread(delete) should remove the deleted thread from the refreshed payload collection');
+}
+
+$inline_apply_thread = LCFA_Settings::create_thread('Inline apply');
+$inline_apply_response = $rest_api->run_command(new WP_REST_Request([
+    'thread_id'        => (string) ($inline_apply_thread['id'] ?? 'default'),
+    'action'           => 'validate_markup_for_framework',
+    'execution_target' => 'local',
+    'content'          => '<main><section><h1>Inline apply test</h1></section></main>',
+]));
+$inline_apply_payload = $inline_apply_response->get_data();
+$inline_apply_thread_after = $inline_apply_payload['thread'] ?? [];
+$inline_apply_messages = is_array($inline_apply_thread_after['messages'] ?? null) ? $inline_apply_thread_after['messages'] : [];
+$inline_apply_last_message = $inline_apply_messages[count($inline_apply_messages) - 1] ?? [];
+
+lcfa_assert_same(200, $inline_apply_response->get_status(), 'run_command should keep successful inline apply responses in the success range');
+lcfa_assert_true(is_array($inline_apply_payload['result'] ?? null), 'run_command should still return the command result payload');
+lcfa_assert_same((string) ($inline_apply_thread['id'] ?? 'default'), (string) ($inline_apply_thread_after['id'] ?? ''), 'run_command should return the updated thread when thread_id is provided');
+lcfa_assert_same('tool_result', (string) ($inline_apply_last_message['role'] ?? ''), 'run_command should append the execution outcome as a tool_result thread message');
+lcfa_assert_same('validate_markup_for_framework', (string) ($inline_apply_last_message['meta']['action'] ?? ''), 'run_command should persist the executed action in thread message metadata');
+lcfa_assert_contains('Validate page markup', (string) ($inline_apply_last_message['content'] ?? ''), 'run_command should append the execution summary to the thread message content');
+
+$async_preview_thread = LCFA_Settings::create_thread('Async preview');
+$async_enqueue_response = $rest_api->enqueue_command_execution(new WP_REST_Request([
+    'thread_id'        => (string) ($async_preview_thread['id'] ?? 'default'),
+    'action'           => 'page_upsert',
+    'execution_target' => 'local',
+    'post_id'          => 42,
+    'context_post_id'  => 42,
+    'target_id'        => 42,
+    'variant'          => '1',
+    'title'            => 'Async Pricing',
+    'slug'             => 'async-pricing',
+    'content'          => '<main><section><h1>Async pricing preview</h1></section></main>',
+    'dry_run'          => true,
+]));
+$async_enqueue_payload = $async_enqueue_response->get_data();
+$async_execution = is_array($async_enqueue_payload['execution'] ?? null) ? $async_enqueue_payload['execution'] : [];
+$async_execution_id = sanitize_key((string) ($async_execution['id'] ?? ''));
+
+lcfa_assert_same(202, $async_enqueue_response->get_status(), 'enqueue_command_execution should accept async inline executions');
+lcfa_assert_true($async_execution_id !== '', 'enqueue_command_execution should return an execution id');
+lcfa_assert_same('queued', (string) ($async_execution['status'] ?? ''), 'enqueue_command_execution should queue the execution first');
+lcfa_assert_same('preview', (string) ($async_execution['mode'] ?? ''), 'enqueue_command_execution should describe the preview mode for dry runs');
+
+$async_status_response = $rest_api->get_command_execution_status(new WP_REST_Request([
+    'execution_id' => $async_execution_id,
+]));
+$async_status_payload = $async_status_response->get_data();
+$async_status_execution = is_array($async_status_payload['execution'] ?? null) ? $async_status_payload['execution'] : [];
+$async_status_thread = is_array($async_status_execution['thread'] ?? null) ? $async_status_execution['thread'] : [];
+$async_status_messages = is_array($async_status_thread['messages'] ?? null) ? $async_status_thread['messages'] : [];
+$async_status_last_message = $async_status_messages[count($async_status_messages) - 1] ?? [];
+
+lcfa_assert_same(200, $async_status_response->get_status(), 'get_command_execution_status should resolve queued executions');
+lcfa_assert_same('completed', (string) ($async_status_execution['status'] ?? ''), 'get_command_execution_status should complete queued executions on poll');
+lcfa_assert_same('preview', (string) ($async_status_execution['result']['mode'] ?? ''), 'get_command_execution_status should return the preview result payload');
+lcfa_assert_true((string) ($async_status_execution['result']['proposed_html'] ?? '') !== '', 'async preview executions should expose proposed HTML for support details');
+lcfa_assert_same('tool_result', (string) ($async_status_last_message['role'] ?? ''), 'async executions should append a tool_result to the thread');
+lcfa_assert_same('preview', (string) ($async_status_last_message['meta']['mode'] ?? ''), 'async preview executions should persist preview mode in the thread');
+
+$rest_api_reflection = new ReflectionClass('LCFA_Rest_Api');
+$build_command_result_message = $rest_api_reflection->getMethod('build_command_result_message');
+$decorated_result_message = $build_command_result_message->invoke($rest_api, [
+    'ok'           => true,
+    'action'       => 'page_upsert',
+    'summary'      => 'Created pricing page.',
+    'message'      => 'LiveCanvas page created.',
+    'target_type'  => 'theme_file',
+    'target_id'    => 42,
+    'target_title' => 'assets/theme.css',
+    'frontend_url' => 'https://example.test/pricing/',
+    'edit_url'     => 'https://example.test/wp-admin/post.php?post=42&action=edit',
+    'data'         => [
+        'restored_from_backup' => [
+            'backup_id' => '2026-04-16/theme.css.bak',
+        ],
+    ],
+], [
+    'thread_id'        => (string) ($inline_apply_thread['id'] ?? 'default'),
+    'execution_target' => 'local',
+    'file_path'        => 'assets/theme.css',
+    'root_scope'       => 'stylesheet',
+]);
+$decorated_actions = is_array($decorated_result_message['actions'] ?? null) ? $decorated_result_message['actions'] : [];
+
+lcfa_assert_same(2, count($decorated_actions), 'build_command_result_message should attach at most two ranked actions');
+lcfa_assert_same('View page', (string) ($decorated_actions[0]['label'] ?? ''), 'build_command_result_message should prioritize the frontend action first');
+lcfa_assert_same('Edit page', (string) ($decorated_actions[1]['label'] ?? ''), 'build_command_result_message should prioritize the edit action second');
+lcfa_assert_true(!array_key_exists('frontend_url', (array) ($decorated_result_message['meta'] ?? [])), 'build_command_result_message should not keep frontend_url in meta when actions are already attached');
+lcfa_assert_true(!array_key_exists('edit_url', (array) ($decorated_result_message['meta'] ?? [])), 'build_command_result_message should not keep edit_url in meta when actions are already attached');
+lcfa_assert_true(!array_key_exists('file_path', (array) ($decorated_result_message['meta'] ?? [])), 'build_command_result_message should not keep file_path in meta when actions are already attached');
+lcfa_assert_true(!array_key_exists('root_scope', (array) ($decorated_result_message['meta'] ?? [])), 'build_command_result_message should not keep root_scope in meta when actions are already attached');
+lcfa_assert_true(!array_key_exists('backup_id', (array) ($decorated_result_message['meta'] ?? [])), 'build_command_result_message should not keep backup_id in meta when actions are already attached');
+
+$failed_result_message = $build_command_result_message->invoke($rest_api, [
+    'ok'      => false,
+    'action'  => 'page_upsert',
+    'summary' => 'Page creation failed.',
+    'message' => 'The generated markup must be reviewed before apply.',
+], [
+    'thread_id'        => (string) ($inline_apply_thread['id'] ?? 'default'),
+    'action'           => 'page_upsert',
+    'execution_target' => 'local',
+    'title'            => 'Retry Pricing',
+    'slug'             => 'retry-pricing',
+    'post_id'          => 42,
+    'genesis_task_id'  => 'task-retry',
+    'user_prompt'      => 'Retry the pricing page with lighter markup.',
+]);
+$failed_actions = is_array($failed_result_message['actions'] ?? null) ? $failed_result_message['actions'] : [];
+
+lcfa_assert_same(3, count($failed_actions), 'failed tool_result messages should expose recovery actions');
+lcfa_assert_same('apply', (string) ($failed_actions[0]['kind'] ?? ''), 'failed tool_result messages should offer a preview retry first');
+lcfa_assert_same('Preview inline', (string) ($failed_actions[0]['label'] ?? ''), 'failed tool_result messages should label the first recovery action as Preview inline');
+lcfa_assert_true(!empty($failed_actions[0]['payload']['dry_run']), 'failed tool_result preview recovery should force dry_run');
+lcfa_assert_same('apply', (string) ($failed_actions[1]['kind'] ?? ''), 'failed tool_result messages should offer a retry apply action second');
+lcfa_assert_same('Retry inline', (string) ($failed_actions[1]['label'] ?? ''), 'failed tool_result messages should label the second recovery action as Retry inline');
+lcfa_assert_true(empty($failed_actions[1]['payload']['dry_run']), 'failed tool_result retry should stay in apply mode');
+lcfa_assert_same('url', (string) ($failed_actions[2]['kind'] ?? ''), 'failed tool_result messages should keep a Command Deck recovery deeplink');
+lcfa_assert_contains('suggest_action=page_upsert', (string) ($failed_actions[2]['url'] ?? ''), 'failed tool_result recovery deeplink should preserve the action');
+lcfa_assert_contains('thread_id=' . (string) ($inline_apply_thread['id'] ?? 'default'), (string) ($failed_actions[2]['url'] ?? ''), 'failed tool_result recovery deeplink should preserve the thread');
+lcfa_assert_contains('genesis_task_id=task-retry', (string) ($failed_actions[2]['url'] ?? ''), 'failed tool_result recovery deeplink should preserve the Genesis task');
 
 $suggestion = $prompt_suggester->suggest([
     'user_prompt' => 'Crea una landing page Tailwind con hero, feature e CTA',
@@ -666,6 +968,263 @@ $picowind_rules = $picowind_rules_method->invoke($context_builder, 'picowind');
 
 lcfa_assert_true(($picowind_rules['html_only'] ?? null) === false, 'Picowind output rules should not force HTML-only output');
 lcfa_assert_true(($picowind_rules['allow_javascript'] ?? null) === true, 'Picowind output rules should allow JavaScript when needed');
+
+$audit_page_id = 42;
+$GLOBALS['lcfa_test_posts'][$audit_page_id] = new WP_Post([
+    'ID'           => $audit_page_id,
+    'post_title'   => 'Existing Audit Page',
+    'post_name'    => 'existing-audit-page',
+    'post_type'    => 'page',
+    'post_status'  => 'publish',
+    'post_content' => '<main><section>Existing page</section></main>',
+]);
+
+LCFA_Settings::update_project_brief([
+    'project_mode'   => 'step_by_step',
+    'brand_name'     => 'Consultala',
+    'sector'         => 'Consulting',
+    'tone'           => 'Precise',
+    'logo_status'    => 'existing',
+    'required_pages' => "Home\nAbout",
+    'notes'          => 'Audit current structure before changes.',
+]);
+
+$generated_execution_plan_response = $rest_api->generate_genesis_plan(new WP_REST_Request([
+    'project_mode'   => 'step_by_step',
+    'brand_name'     => 'Consultala',
+    'sector'         => 'Consulting',
+    'tone'           => 'Precise',
+    'logo_status'    => 'existing',
+    'required_pages' => "Home\nAbout",
+    'notes'          => 'Audit current structure before changes.',
+]));
+
+lcfa_assert_same(200, $generated_execution_plan_response->get_status(), 'generate_genesis_plan should still succeed for step-by-step execution tests');
+
+$execution_plan_response = $rest_api->get_genesis_execution_plan();
+$execution_plan_payload = $execution_plan_response->get_data();
+$initial_next_task_id = sanitize_key((string) ($execution_plan_payload['next_task_id'] ?? ''));
+$initial_next_task = null;
+$safe_preview_task_id = '';
+$safe_preview_task = null;
+$seen_safe_task = false;
+
+foreach ((array) ($execution_plan_payload['tasks'] ?? []) as $candidate_task) {
+    if (is_array($candidate_task) && sanitize_key((string) ($candidate_task['id'] ?? '')) === $initial_next_task_id) {
+        $initial_next_task = $candidate_task;
+    }
+
+    if (!$seen_safe_task && is_array($candidate_task) && in_array((string) ($candidate_task['payload']['action'] ?? ''), ['site_audit', 'theme_files_audit', 'windpress_audit'], true)) {
+        $safe_preview_task_id = sanitize_key((string) ($candidate_task['id'] ?? ''));
+        $safe_preview_task = $candidate_task;
+        $seen_safe_task = true;
+    }
+}
+
+lcfa_assert_same(200, $execution_plan_response->get_status(), 'get_genesis_execution_plan should return success');
+lcfa_assert_true(!empty($execution_plan_payload['available']), 'get_genesis_execution_plan should report availability after plan generation');
+lcfa_assert_true($initial_next_task_id !== '', 'get_genesis_execution_plan should expose the first actionable Genesis task');
+lcfa_assert_true(((int) ($execution_plan_payload['counts']['pending'] ?? 0)) >= 1, 'get_genesis_execution_plan should count pending Genesis tasks');
+lcfa_assert_true($safe_preview_task_id !== '', 'get_genesis_execution_plan should expose at least one safe read-only task for orchestration tests');
+
+foreach ((array) ($execution_plan_payload['tasks'] ?? []) as $candidate_task) {
+    if (!is_array($candidate_task)) {
+        continue;
+    }
+
+    $candidate_task_id = sanitize_key((string) ($candidate_task['id'] ?? ''));
+
+    if ($candidate_task_id === '' || $candidate_task_id === $safe_preview_task_id) {
+        break;
+    }
+
+    LCFA_Settings::update_genesis_task_progress($candidate_task_id, [
+        'status'    => 'applied',
+        'thread_id' => 'default',
+        'action'    => sanitize_key((string) ($candidate_task['payload']['action'] ?? '')),
+        'mode'      => 'apply',
+        'ok'        => true,
+        'message'   => 'Pre-applied for safe executor test.',
+    ]);
+}
+
+$safe_execution_plan_response = $rest_api->get_genesis_execution_plan();
+$safe_execution_plan_payload = $safe_execution_plan_response->get_data();
+
+$preview_next_response = $rest_api->execute_next_genesis_task(new WP_REST_Request([
+    'dry_run'          => true,
+    'execution_target' => 'local',
+    'thread_id'        => 'default',
+]));
+$preview_next_payload = $preview_next_response->get_data();
+
+lcfa_assert_same(200, $preview_next_response->get_status(), 'execute_next_genesis_task should return success when previewing the next task');
+lcfa_assert_same($safe_preview_task_id, (string) ($safe_execution_plan_payload['next_task_id'] ?? ''), 'get_genesis_execution_plan should advance to the selected safe read-only task after pre-applying earlier steps');
+lcfa_assert_same($safe_preview_task_id, (string) ($preview_next_payload['task_id'] ?? ''), 'execute_next_genesis_task should execute the selected safe pending task');
+lcfa_assert_same('previewed', (string) ($preview_next_payload['execution_plan']['progress']['tasks'][$safe_preview_task_id]['status'] ?? ''), 'execute_next_genesis_task should mark dry-run tasks as previewed');
+lcfa_assert_same((string) ($safe_preview_task['payload']['action'] ?? ''), (string) ($preview_next_payload['result']['action'] ?? ''), 'execute_next_genesis_task should reuse the Command Deck action from the Genesis task payload');
+
+$apply_next_response = $rest_api->execute_next_genesis_task(new WP_REST_Request([
+    'execution_target' => 'local',
+    'thread_id'        => 'default',
+]));
+$apply_next_payload = $apply_next_response->get_data();
+
+lcfa_assert_same(200, $apply_next_response->get_status(), 'execute_next_genesis_task should return success when applying the next task');
+lcfa_assert_same($safe_preview_task_id, (string) ($apply_next_payload['task_id'] ?? ''), 'execute_next_genesis_task should re-run the previewed task until applied');
+lcfa_assert_same('applied', (string) ($apply_next_payload['execution_plan']['progress']['tasks'][$safe_preview_task_id]['status'] ?? ''), 'execute_next_genesis_task should mark applied tasks as applied');
+
+$execution_context_builder = new LCFA_Context_Builder($environment, $inventory);
+$execution_context = $execution_context_builder->build_context();
+
+lcfa_assert_same($apply_next_payload['execution_plan']['next_task_id'] ?? '', $execution_context['genesis']['execution']['next_task_id'] ?? '', 'build_context should expose the same next Genesis task id after execution updates');
+lcfa_assert_true(((int) ($execution_context['genesis']['execution']['counts']['applied'] ?? 0)) >= 1, 'build_context should expose Genesis execution counts');
+
+$GLOBALS['lcfa_test_post_meta'][$audit_page_id]['_lc_livecanvas_enabled'] = '1';
+$GLOBALS['lcfa_test_posts'][43] = new WP_Post([
+    'ID'           => 43,
+    'post_title'   => 'Header Partial',
+    'post_name'    => 'header-partial',
+    'post_type'    => 'lc_partial',
+    'post_status'  => 'publish',
+    'post_content' => '<header>Header partial</header>',
+]);
+$GLOBALS['lcfa_test_post_meta'][43]['is_header'] = '1';
+$GLOBALS['lcfa_test_posts'][44] = new WP_Post([
+    'ID'           => 44,
+    'post_title'   => 'Footer Partial',
+    'post_name'    => 'footer-partial',
+    'post_type'    => 'lc_partial',
+    'post_status'  => 'publish',
+    'post_content' => '<footer>Footer partial</footer>',
+]);
+$GLOBALS['lcfa_test_post_meta'][44]['is_footer'] = '1';
+$GLOBALS['lcfa_test_posts'][45] = new WP_Post([
+    'ID'           => 45,
+    'post_title'   => 'Single Service Template',
+    'post_name'    => 'single-service-template',
+    'post_type'    => 'lc_dynamic_template',
+    'post_status'  => 'publish',
+    'post_content' => '<main>Dynamic template</main>',
+]);
+
+$target_inventory = new LCFA_Inventory($environment);
+$target_context_builder = new LCFA_Context_Builder($environment, $target_inventory);
+$targeted_context = $target_context_builder->build_context([
+    'post_id' => $audit_page_id,
+]);
+$target_contexts = is_array($targeted_context['target_contexts'] ?? null) ? $targeted_context['target_contexts'] : [];
+$current_target_pack = is_array($targeted_context['current_target']['context_pack'] ?? null) ? $targeted_context['current_target']['context_pack'] : [];
+$theme_context_with_target = $target_context_builder->get_theme_context([
+    'post_id' => $audit_page_id,
+]);
+
+lcfa_assert_same('page', (string) ($targeted_context['current_target']['target_type'] ?? ''), 'build_context should classify standard pages as page targets');
+lcfa_assert_same('page_upsert', (string) ($target_contexts['page']['command_action'] ?? ''), 'target_contexts should expose page command guidance');
+lcfa_assert_same('update_header', (string) ($target_contexts['header']['command_action'] ?? ''), 'target_contexts should expose header command guidance');
+lcfa_assert_same(1, (int) ($target_contexts['header']['count'] ?? 0), 'target_contexts should count header partials from inventory');
+lcfa_assert_same('update_footer', (string) ($target_contexts['footer']['command_action'] ?? ''), 'target_contexts should expose footer command guidance');
+lcfa_assert_same('update_dynamic_template', (string) ($target_contexts['dynamic_template']['command_action'] ?? ''), 'target_contexts should expose dynamic template command guidance');
+lcfa_assert_same('write_theme_file', (string) ($target_contexts['theme_file']['command_action'] ?? ''), 'target_contexts should expose theme file command guidance');
+lcfa_assert_same('restore_theme_backup', (string) ($target_contexts['backup_restore']['command_action'] ?? ''), 'target_contexts should expose backup restore guidance');
+lcfa_assert_same($execution_context['genesis']['execution']['next_task_id'] ?? '', (string) ($target_contexts['genesis_task']['next_task_id'] ?? ''), 'target_contexts should surface the next Genesis task id');
+lcfa_assert_same('page_upsert', (string) ($current_target_pack['command_action'] ?? ''), 'current_target should inherit the matching target context pack');
+lcfa_assert_true(!empty($theme_context_with_target['target_contexts']), 'get_theme_context should expose target_contexts for consumers that only read the theme context contract');
+lcfa_assert_same('page', (string) ($theme_context_with_target['current_target']['target_type'] ?? ''), 'get_theme_context should expose the resolved current target when post_id is provided');
+
+$header_context_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Refresh this partial with a slimmer nav and a single CTA.',
+    'post_id'         => 43,
+    'context_post_id' => 43,
+]);
+$footer_context_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Tighten this layout and add legal links.',
+    'post_id'         => 44,
+    'context_post_id' => 44,
+]);
+$dynamic_template_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Refine this template to feel more editorial.',
+    'post_id'         => 45,
+    'context_post_id' => 45,
+]);
+
+lcfa_assert_same('update_header', (string) ($header_context_suggestion['suggested_payload']['action'] ?? ''), 'prompt suggestion should prefer update_header when the current context target is a header partial');
+lcfa_assert_same(43, (int) ($header_context_suggestion['suggested_payload']['target_id'] ?? 0), 'prompt suggestion should preserve the current header partial target id');
+lcfa_assert_same('update_footer', (string) ($footer_context_suggestion['suggested_payload']['action'] ?? ''), 'prompt suggestion should prefer update_footer when the current context target is a footer partial');
+lcfa_assert_same(44, (int) ($footer_context_suggestion['suggested_payload']['target_id'] ?? 0), 'prompt suggestion should preserve the current footer partial target id');
+lcfa_assert_same('update_dynamic_template', (string) ($dynamic_template_suggestion['suggested_payload']['action'] ?? ''), 'prompt suggestion should prefer update_dynamic_template when the current context target is a dynamic template');
+lcfa_assert_same(45, (int) ($dynamic_template_suggestion['suggested_payload']['target_id'] ?? 0), 'prompt suggestion should preserve the current dynamic template target id');
+
+$hero_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Fammi una hero più chiara per questa pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$pricing_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una pricing con tre piani per questa pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$features_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Inserisci una sezione features con tre punti chiave.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$testimonials_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Metti dei testimonials più credibili in questa pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$cta_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una CTA finale più forte.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+
+lcfa_assert_same('page_upsert', (string) ($hero_section_suggestion['suggested_payload']['action'] ?? ''), 'natural hero prompts should stay on page_upsert in the page editor');
+lcfa_assert_same('hero', (string) ($hero_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'natural hero prompts should expose the detected hero section intent');
+lcfa_assert_same('prepend', (string) ($hero_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'hero suggestions should default to a prepend operation');
+lcfa_assert_same('section_starter', (string) ($hero_section_suggestion['suggested_payload']['content_strategy'] ?? ''), 'hero suggestions should mark the payload as section starter driven');
+lcfa_assert_same($audit_page_id, (int) ($hero_section_suggestion['suggested_payload']['target_id'] ?? 0), 'hero suggestions should preserve the current page target id');
+lcfa_assert_same('pricing', (string) ($pricing_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'pricing prompts should expose the detected pricing section intent');
+lcfa_assert_same('append', (string) ($pricing_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'pricing suggestions should default to append');
+lcfa_assert_same('features', (string) ($features_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'features prompts should expose the detected features section intent');
+lcfa_assert_same('testimonials', (string) ($testimonials_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'testimonials prompts should expose the detected testimonials section intent');
+lcfa_assert_same('cta', (string) ($cta_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'CTA prompts should expose the detected CTA section intent');
+
+LCFA_Settings::update_project_brief([
+    'project_mode'   => 'from_scratch',
+    'brand_name'     => 'Consultala',
+    'sector'         => 'Consulting',
+    'tone'           => 'Precise',
+    'logo_status'    => 'to_generate',
+    'required_pages' => "Home\nAbout",
+    'notes'          => 'Logo still missing.',
+]);
+
+$generated_advisory_plan_response = $rest_api->generate_genesis_plan(new WP_REST_Request([
+    'project_mode'   => 'from_scratch',
+    'brand_name'     => 'Consultala',
+    'sector'         => 'Consulting',
+    'tone'           => 'Precise',
+    'logo_status'    => 'to_generate',
+    'required_pages' => "Home\nAbout",
+    'notes'          => 'Logo still missing.',
+]));
+
+lcfa_assert_same(200, $generated_advisory_plan_response->get_status(), 'generate_genesis_plan should support advisory-task execution tests');
+
+$advisory_task_response = $rest_api->execute_genesis_task(new WP_REST_Request([
+    'task_id'  => 'brand-logo',
+    'thread_id'=> 'default',
+]));
+$advisory_task_payload = $advisory_task_response->get_data();
+
+lcfa_assert_same(200, $advisory_task_response->get_status(), 'execute_genesis_task should return success for advisory Genesis tasks');
+lcfa_assert_same('brand-logo', (string) ($advisory_task_payload['task_id'] ?? ''), 'execute_genesis_task should return the executed advisory task id');
+lcfa_assert_true(!empty($advisory_task_payload['result']['data']['advisory']), 'execute_genesis_task should expose advisory metadata for payload-less Genesis tasks');
+lcfa_assert_same('applied', (string) ($advisory_task_payload['execution_plan']['progress']['tasks']['brand-logo']['status'] ?? ''), 'execute_genesis_task should mark advisory tasks as applied once acknowledged');
+lcfa_assert_contains('logo', strtolower((string) ($advisory_task_payload['message'] ?? '')), 'execute_genesis_task should surface the advisory task guidance message');
 lcfa_assert_true(($picowind_rules['allow_page_level_inline_script'] ?? null) === true, 'Picowind output rules should allow small page-level scripts when needed');
 lcfa_assert_same('footer', $picowind_rules['page_level_script_placement'] ?? '', 'Picowind page-level scripts should be placed at the end of the page');
 lcfa_assert_true(($picowind_rules['prefer_daisyui_components'] ?? null) === true, 'Picowind output rules should prefer DaisyUI components first');
@@ -748,6 +1307,36 @@ lcfa_assert_true($structured_page_result['ok'] === true, 'page_upsert should acc
 lcfa_assert_contains('<section class="pricing-grid">', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should persist body_html_lines into post_content');
 lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should wrap footer_script_lines in a script tag');
 lcfa_assert_contains('structured pricing', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should preserve footer_script_lines contents');
+
+$section_preview_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $audit_page_id,
+    'section_intent'    => 'hero',
+    'section_operation' => 'prepend',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Fammi una hero più chiara per questa pagina.',
+    'dry_run'           => true,
+]);
+
+lcfa_assert_true($section_preview_result['ok'] === true, 'page_upsert should generate a preview for section starter payloads without explicit content');
+lcfa_assert_contains('Existing page', $section_preview_result['existing_html'] ?? '', 'section starter previews should keep the current page HTML as the diff baseline');
+lcfa_assert_contains('Forge AI starter', $section_preview_result['proposed_html'] ?? '', 'section starter previews should synthesize starter HTML when the payload only carries section intent');
+lcfa_assert_contains('lcfa-section--hero', $section_preview_result['proposed_html'] ?? '', 'section starter previews should mark the generated hero section');
+lcfa_assert_true($section_preview_result['diff_html'] !== '', 'section starter previews should generate a diff against the current page content');
+
+$section_apply_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $audit_page_id,
+    'section_intent'    => 'pricing',
+    'section_operation' => 'append',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Aggiungi una pricing con tre piani per questa pagina.',
+]);
+
+lcfa_assert_true($section_apply_result['ok'] === true, 'page_upsert should apply section starter payloads without explicit content');
+lcfa_assert_contains('Existing page', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should preserve the existing page markup');
+lcfa_assert_contains('lcfa-section--pricing', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should append the generated pricing section markup');
+lcfa_assert_contains('Forge AI starter', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should persist the generated starter copy');
 
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',

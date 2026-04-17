@@ -22,6 +22,8 @@ final class LCFA_Prompt_Suggester {
         }
 
         $prompt = strtolower($user_prompt);
+        $section_intent = $this->detect_section_intent($prompt);
+        $attachment_count = absint($payload['attachment_count'] ?? 0);
         $suggested = [
             'action'           => 'site_audit',
             'execution_target' => $this->normalize_execution_target((string) ($payload['execution_target'] ?? 'local')),
@@ -35,6 +37,9 @@ final class LCFA_Prompt_Suggester {
             'file_path'        => sanitize_text_field((string) ($payload['file_path'] ?? '')),
             'backup_id'        => sanitize_text_field((string) ($payload['backup_id'] ?? '')),
             'status'           => $this->normalize_status((string) ($payload['status'] ?? 'draft')),
+            'section_intent'   => $section_intent,
+            'section_operation'=> $this->default_section_operation($section_intent),
+            'content_strategy' => $section_intent !== '' ? 'section_starter' : '',
         ];
 
         $reasons  = [];
@@ -42,14 +47,21 @@ final class LCFA_Prompt_Suggester {
         $score    = 0;
         $post_id  = absint($payload['context_post_id'] ?? $payload['post_id'] ?? 0);
         $post     = $post_id ? get_post($post_id) : null;
+        $context_target_type = $post instanceof WP_Post ? $this->detect_context_target_type($post) : '';
         $active_framework = (string) $this->environment->detect_framework_family();
 
         if ($post instanceof WP_Post && !$suggested['target_id']) {
-            if ($post->post_type === 'page') {
-                $suggested['target_id'] = (int) $post->ID;
-            } elseif ($post->post_type === 'lc_dynamic_template') {
-                $suggested['target_id'] = (int) $post->ID;
-            }
+            $suggested['target_id'] = (int) $post->ID;
+        }
+
+        if ($attachment_count > 0) {
+            $reasons[] = sprintf(
+                $attachment_count === 1
+                    ? __('The request includes %d visual reference attachment.', 'livecanvas-forge-ai')
+                    : __('The request includes %d visual reference attachments.', 'livecanvas-forge-ai'),
+                $attachment_count
+            );
+            $score += 1;
         }
 
         if ($this->prompt_mentions_remote($prompt)) {
@@ -65,7 +77,7 @@ final class LCFA_Prompt_Suggester {
             $score += 2;
         }
 
-        $prioritize_page_intent = $this->should_prioritize_page_intent($prompt, $suggested['target_id']);
+        $prioritize_page_intent = $this->should_prioritize_page_intent($prompt, $suggested['target_id'], $section_intent);
 
         if ($this->contains_any($prompt, ['restore', 'rollback', 'revert']) && $this->contains_any($prompt, ['backup', 'previous version'])) {
             $suggested['action'] = 'restore_theme_backup';
@@ -89,10 +101,27 @@ final class LCFA_Prompt_Suggester {
             $suggested['action'] = $this->contains_any($prompt, ['create', 'new', 'generate']) ? 'create_dynamic_template' : 'update_dynamic_template';
             $reasons[] = __('Detected a dynamic template request.', 'livecanvas-forge-ai');
             $score += 2;
+        } elseif ($context_target_type === 'header' && $this->looks_like_write_request($prompt)) {
+            $suggested['action'] = 'update_header';
+            $reasons[] = __('The current editor context is a header partial, so the request maps to update_header.', 'livecanvas-forge-ai');
+            $score += 2;
+        } elseif ($context_target_type === 'footer' && $this->looks_like_write_request($prompt)) {
+            $suggested['action'] = 'update_footer';
+            $reasons[] = __('The current editor context is a footer partial, so the request maps to update_footer.', 'livecanvas-forge-ai');
+            $score += 2;
+        } elseif ($context_target_type === 'dynamic_template' && $this->looks_like_write_request($prompt)) {
+            $suggested['action'] = 'update_dynamic_template';
+            $reasons[] = __('The current editor context is a dynamic template, so the request maps to update_dynamic_template.', 'livecanvas-forge-ai');
+            $score += 2;
         } elseif ($prioritize_page_intent) {
             $suggested['action'] = $this->detect_page_action($prompt, $suggested['target_id']);
             $reasons[] = __('Detected a page-oriented request.', 'livecanvas-forge-ai');
             $score += 2;
+
+            if ($section_intent !== '') {
+                $reasons[] = sprintf(__('Detected a %s section request inside the current page context.', 'livecanvas-forge-ai'), $section_intent);
+                $score += 2;
+            }
         } elseif ($this->contains_any($prompt, ['windpress', 'tailwind', 'theme.json', 'utility classes', 'daisyui'])) {
             $windpress_action = $this->detect_windpress_action($prompt);
 
@@ -226,9 +255,96 @@ final class LCFA_Prompt_Suggester {
         return 'page_upsert';
     }
 
-    private function should_prioritize_page_intent(string $prompt, int $target_id): bool {
+    private function detect_section_intent(string $prompt): string {
+        $map = [
+            'hero' => ['hero', 'above the fold', 'headline section'],
+            'pricing' => ['pricing', 'prezzi', 'price table', 'plans', 'piani'],
+            'features' => ['features', 'feature', 'benefits', 'vantaggi', 'usp'],
+            'testimonials' => ['testimonials', 'testimonial', 'reviews', 'recensioni', 'social proof'],
+            'cta' => ['cta', 'call to action', 'final offer', 'finale'],
+        ];
+
+        foreach ($map as $intent => $needles) {
+            if ($this->contains_any($prompt, $needles)) {
+                return $intent;
+            }
+        }
+
+        return '';
+    }
+
+    private function default_section_operation(string $section_intent): string {
+        if ($section_intent === 'hero') {
+            return 'prepend';
+        }
+
+        if ($section_intent !== '') {
+            return 'append';
+        }
+
+        return '';
+    }
+
+    private function detect_context_target_type(WP_Post $post): string {
+        if ($post->post_type === 'lc_partial') {
+            if (get_post_meta((int) $post->ID, 'is_header', true) === '1') {
+                return 'header';
+            }
+
+            if (get_post_meta((int) $post->ID, 'is_footer', true) === '1') {
+                return 'footer';
+            }
+
+            return 'partial';
+        }
+
+        if ($post->post_type === 'lc_dynamic_template') {
+            return 'dynamic_template';
+        }
+
+        if ($post->post_type === 'page') {
+            return 'page';
+        }
+
+        return sanitize_key((string) $post->post_type);
+    }
+
+    private function looks_like_write_request(string $prompt): bool {
+        return $this->contains_any($prompt, [
+            'create',
+            'new',
+            'generate',
+            'build',
+            'make',
+            'add',
+            'insert',
+            'append',
+            'update',
+            'edit',
+            'modify',
+            'rewrite',
+            'refresh',
+            'tighten',
+            'refine',
+            'replace',
+            'adjust',
+            'crea',
+            'genera',
+            'aggiorna',
+            'aggiungi',
+            'inserisci',
+            'metti',
+            'fammi',
+            'creami',
+            'modifica',
+            'riscrivi',
+            'rifinisci',
+        ]);
+    }
+
+    private function should_prioritize_page_intent(string $prompt, int $target_id, string $section_intent = ''): bool {
         $mentions_page = $this->contains_any($prompt, ['landing page', 'homepage', 'home page', 'page', 'pagina']);
-        $mentions_page_write = $this->contains_any($prompt, ['create', 'new', 'generate', 'build', 'make', 'update', 'edit', 'modify', 'rewrite', 'refresh', 'crea', 'genera', 'aggiorna', 'modifica', 'riscrivi']);
+        $mentions_page_write = $this->contains_any($prompt, ['create', 'new', 'generate', 'build', 'make', 'add', 'insert', 'append', 'update', 'edit', 'modify', 'rewrite', 'refresh', 'crea', 'genera', 'aggiorna', 'aggiungi', 'inserisci', 'metti', 'fammi', 'creami', 'modifica', 'riscrivi']);
         $explicit_windpress_runtime = $this->contains_any($prompt, [
             'build tailwind cache',
             'compile tailwind',
@@ -253,11 +369,11 @@ final class LCFA_Prompt_Suggester {
             return false;
         }
 
-        if ($mentions_page && $mentions_page_write) {
+        if ($mentions_page && ($mentions_page_write || $section_intent !== '')) {
             return true;
         }
 
-        return $target_id > 0 && $mentions_page_write;
+        return $target_id > 0 && ($mentions_page_write || $section_intent !== '');
     }
 
     private function detect_windpress_action(string $prompt): string {
