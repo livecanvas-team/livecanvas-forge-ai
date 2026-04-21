@@ -38,7 +38,7 @@ final class LCFA_Prompt_Suggester {
             'backup_id'        => sanitize_text_field((string) ($payload['backup_id'] ?? '')),
             'status'           => $this->normalize_status((string) ($payload['status'] ?? 'draft')),
             'section_intent'   => $section_intent,
-            'section_operation'=> $this->default_section_operation($section_intent),
+            'section_operation'=> $this->detect_section_operation($prompt, $section_intent),
             'content_strategy' => $section_intent !== '' ? 'section_starter' : '',
         ];
 
@@ -258,10 +258,14 @@ final class LCFA_Prompt_Suggester {
     private function detect_section_intent(string $prompt): string {
         $map = [
             'hero' => ['hero', 'above the fold', 'headline section'],
+            'metrics' => ['metrics', 'stats', 'numbers', 'statistiche', 'metriche', 'metrica', 'kpis'],
             'pricing' => ['pricing', 'prezzi', 'price table', 'plans', 'piani'],
             'features' => ['features', 'feature', 'benefits', 'vantaggi', 'usp'],
             'testimonials' => ['testimonials', 'testimonial', 'reviews', 'recensioni', 'social proof'],
             'cta' => ['cta', 'call to action', 'final offer', 'finale'],
+            'faq' => ['faq', 'frequently asked questions', 'questions', 'domande frequenti'],
+            'team' => ['team', 'members', 'staff', 'people', 'profili'],
+            'contact' => ['contact section', 'contact form', 'contact block', 'contatti', 'contact'],
         ];
 
         foreach ($map as $intent => $needles) {
@@ -283,6 +287,33 @@ final class LCFA_Prompt_Suggester {
         }
 
         return '';
+    }
+
+    private function detect_section_operation(string $prompt, string $section_intent): string {
+        if ($section_intent === '') {
+            return '';
+        }
+
+        if ($this->contains_any($prompt, [
+            'before footer',
+            'before the footer',
+            'prima del footer',
+            'before footer of this page',
+        ])) {
+            return 'before_footer';
+        }
+
+        if ($section_intent === 'hero' && $this->contains_any($prompt, [
+            'replace',
+            'swap',
+            'sostituisci',
+            'rimpiazza',
+            'rifai',
+        ])) {
+            return 'replace_hero';
+        }
+
+        return $this->default_section_operation($section_intent);
     }
 
     private function detect_context_target_type(WP_Post $post): string {

@@ -15,6 +15,10 @@ function __(string $text, string $domain = ''): string {
     return $text;
 }
 
+function esc_html__(string $text, string $domain = ''): string {
+    return $text;
+}
+
 function sanitize_key(string $value): string {
     $value = strtolower($value);
 
@@ -45,8 +49,46 @@ function esc_attr(string $value): string {
     return $value;
 }
 
+function esc_attr__(string $value, string $domain = 'default'): string {
+    return $value;
+}
+
 function esc_url(string $value): string {
     return $value;
+}
+
+function admin_url(string $path = ''): string {
+    return 'http://example.test/wp-admin/' . ltrim($path, '/');
+}
+
+function wp_nonce_field(string $action = '', string $name = '_wpnonce', bool $referer = true, bool $display = true): string {
+    $markup = '<input type="hidden" name="' . $name . '" value="test-nonce">';
+
+    if ($display) {
+        echo $markup;
+    }
+
+    return $markup;
+}
+
+function selected($selected, $current = true, bool $display = true): string {
+    $result = $selected === $current ? ' selected="selected"' : '';
+
+    if ($display) {
+        echo $result;
+    }
+
+    return $result;
+}
+
+function checked($checked, $current = true, bool $display = true): string {
+    $result = $checked === $current ? ' checked="checked"' : '';
+
+    if ($display) {
+        echo $result;
+    }
+
+    return $result;
 }
 
 function sanitize_html_class(string $value): string {
@@ -297,6 +339,13 @@ $claude_target_state = $onboarding->derive_state([
 
 lcfa_assert_same('choose_claude_target', $claude_target_state['current_step'] ?? '', 'Claude should stop on choose_claude_target before connection mode is selected');
 
+$codex_next_step = $onboarding->next_step('choose_client', [
+    'preferred_client' => 'codex',
+    'connection_mode'  => 'local',
+]);
+
+lcfa_assert_same('choose_mode', $codex_next_step, 'Codex should move from choose_client to choose_mode, never to the Claude target step');
+
 $state = $onboarding->derive_state([
     'preferred_client'            => 'opencode',
     'connection_mode'             => 'local',
@@ -379,6 +428,29 @@ lcfa_assert_same('confirm_details', $opencode_fast_path['steps'][1]['key'] ?? ''
 lcfa_assert_same('active', $opencode_fast_path['steps'][2]['state'] ?? '', 'generate_bundle should be the active step in the shortened path');
 lcfa_assert_same('locked', $opencode_fast_path['steps'][3]['state'] ?? '', 'smoke_test should remain locked before bundle completion');
 
+$codex_view = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'choose_client',
+    ],
+    'bundle' => [
+        'client'         => 'codex',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ],
+]);
+
+lcfa_assert_same('choose_mode', $codex_view['steps'][1]['key'] ?? '', 'Codex wizard should show choose_mode immediately after choose_client');
+lcfa_assert_true(
+    !in_array('choose_claude_target', array_column((array) ($codex_view['steps'] ?? []), 'key'), true),
+    'Codex wizard should not render the Claude target step at all'
+);
+
 $opencode_smoke = $presenter->build([
     'state' => [
         'status'       => 'not_connected',
@@ -455,6 +527,9 @@ $reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconf
 $visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
 $admin_codex_command_method = new ReflectionMethod('LCFA_Admin', 'build_codex_register_command');
 $stepper_method = new ReflectionMethod('LCFA_Admin', 'render_connection_stepper');
+$connection_wizard_method = new ReflectionMethod('LCFA_Admin', 'render_connection_wizard');
+$active_step_panel_method = new ReflectionMethod('LCFA_Admin', 'render_connection_active_step_panel');
+$connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_onboarding_hero');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -492,8 +567,73 @@ $stepper_markup = (string) ob_get_clean();
 
 lcfa_assert_false(strpos($stepper_markup, 'lcfa-wizard__step-helper') !== false, 'wizard stepper should no longer render helper spans');
 lcfa_assert_false(strpos($stepper_markup, 'Pick the client') !== false, 'wizard stepper should no longer render helper copy inside the step cards');
-lcfa_assert_true(strpos($stepper_markup, 'Current') !== false, 'wizard stepper should label the active step as Current');
+lcfa_assert_false(strpos($stepper_markup, 'Current') !== false, 'wizard stepper should stop rendering the Current badge');
+lcfa_assert_false(strpos($stepper_markup, 'Done') !== false, 'wizard stepper should stop rendering the Done badge');
 lcfa_assert_false(strpos($stepper_markup, '>Active<') !== false, 'wizard stepper should no longer label the active step as Active');
+
+ob_start();
+$connection_hero_method->invoke(
+    $admin_instance,
+    [
+        'client' => 'claude',
+    ],
+    [
+        'status'  => 'not_connected',
+        'message' => 'Confirm the connection details and generate the client bundle.',
+    ],
+    [
+        'local_bridge' => [
+            'deferred'  => true,
+            'available' => false,
+        ],
+    ],
+    [
+        'detected_framework' => 'picostrap',
+    ],
+    'local'
+);
+$connection_hero_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($connection_hero_markup, 'AI agent: Claude') !== false, 'connections hero should foreground only the selected AI agent');
+lcfa_assert_true(strpos($connection_hero_markup, 'Not connected') !== false, 'connections hero should foreground the connection status');
+lcfa_assert_false(strpos($connection_hero_markup, 'Mode:') !== false, 'connections hero should stop repeating the mode chip');
+lcfa_assert_false(strpos($connection_hero_markup, 'Framework:') !== false, 'connections hero should stop repeating the framework chip');
+lcfa_assert_false(strpos($connection_hero_markup, 'Local MCP bridge status') !== false, 'connections hero should stop repeating local bridge loading copy');
+
+ob_start();
+$connection_wizard_method->invoke(
+    $admin_instance,
+    $opencode_fast_path,
+    [
+        'client'         => 'claude',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    [
+        'preferred_client'         => 'claude',
+        'claude_connection_target' => 'desktop_app',
+        'connection_mode'          => 'local',
+        'workspace_root'           => '/Users/commander/Studio/consultala',
+    ],
+    'claude',
+    'local',
+    [],
+    [],
+    [],
+    [],
+    [
+        'current_step' => 'smoke_test',
+    ],
+    [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$connection_wizard_markup = (string) ob_get_clean();
+
+lcfa_assert_false(strpos($connection_wizard_markup, 'lcfa-wizard__alert') !== false, 'wizard should stop rendering the redundant What to do now banner');
+lcfa_assert_false(strpos($connection_wizard_markup, 'What to do now') !== false, 'wizard should not repeat the step callout above the blocking panel');
 
 $ready_state = $onboarding->derive_state([
     'preferred_client'            => 'opencode',
@@ -548,5 +688,119 @@ lcfa_assert_same('', $reconfigured_connections['connection_status'] ?? '', 'reco
 lcfa_assert_same('', $reconfigured_connections['connection_last_verified_at'] ?? '', 'reconfiguring should clear the verification timestamp');
 lcfa_assert_same('', $reconfigured_connections['connection_last_error'] ?? '', 'reconfiguring should clear the last error state');
 lcfa_assert_same('choose_client', $reconfigured_connections['connection_current_step'] ?? '', 'reconfiguring should reopen the wizard from choose_client');
+
+ob_start();
+$active_step_panel_method->invoke(
+    $admin_instance,
+    [
+        'title'       => 'Choose local or remote',
+        'description' => 'Pick how this client should connect.',
+    ],
+    'choose_mode',
+    [
+        'client'         => 'opencode',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    [
+        'preferred_client'         => 'opencode',
+        'claude_connection_target' => '',
+        'connection_mode'          => 'local',
+        'workspace_root'           => '/Users/commander/Studio/consultala',
+    ],
+    'opencode',
+    'local',
+    [],
+    [],
+    [],
+    [],
+    [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$active_step_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($active_step_markup, 'lcfa_reconfigure_connection') !== false, 'non-ready wizard steps should expose a reconfigure action');
+lcfa_assert_true(strpos($active_step_markup, 'Change coding agent') !== false, 'non-ready wizard steps should let the user change the coding agent without finishing the flow');
+
+ob_start();
+$active_step_panel_method->invoke(
+    $admin_instance,
+    [
+        'title'       => 'Are these connection details correct?',
+        'description' => 'Review the generated connection details before you create the client bundle.',
+        'primary_cta' => [
+            'label' => 'Confirm details',
+        ],
+    ],
+    'confirm_details',
+    [
+        'client' => 'codex',
+        'mode'   => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+        'environment' => [
+            'LCFA_REST_BASE' => 'http://localhost:8887/wp-json/lcfa/v1/',
+            'LCFA_MCP_TOKEN' => 'test-token',
+        ],
+    ],
+    [
+        'preferred_client'         => 'codex',
+        'claude_connection_target' => '',
+        'connection_mode'          => 'local',
+        'workspace_root'           => '/Users/commander/Studio/consultala',
+    ],
+    'codex',
+    'local',
+    [],
+    [],
+    [],
+    [],
+    [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$confirm_details_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($confirm_details_markup, 'Confirm details') !== false, 'confirm details step should expose the primary CTA directly in the panel');
+lcfa_assert_false(strpos($confirm_details_markup, 'Thread tools') !== false, 'confirm details step should not hide the primary CTA inside a thread tools disclosure');
+
+ob_start();
+$active_step_panel_method->invoke(
+    $admin_instance,
+    [
+        'title'       => 'Ready to verify the connection?',
+        'description' => 'Run the smoke test after the client bundle is in place.',
+    ],
+    'smoke_test',
+    [
+        'client'         => 'opencode',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    [
+        'preferred_client'         => 'opencode',
+        'claude_connection_target' => '',
+        'connection_mode'          => 'local',
+        'workspace_root'           => '/Users/commander/Studio/consultala',
+    ],
+    'opencode',
+    'local',
+    [],
+    [],
+    [],
+    [],
+    [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$smoke_step_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($smoke_step_markup, 'lcfa-wizard__panel--blocking') !== false, 'smoke-test panel should render a dedicated blocking style hook');
 
 echo "PASS\n";

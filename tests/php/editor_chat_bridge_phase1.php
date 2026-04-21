@@ -216,6 +216,15 @@ function lcfa_assert_not_contains(string $needle, string $haystack, string $mess
     }
 }
 
+function lcfa_assert_same($expected, $actual, string $message): void {
+    if ($expected !== $actual) {
+        fwrite(STDERR, $message . PHP_EOL);
+        fwrite(STDERR, 'Expected: ' . var_export($expected, true) . PHP_EOL);
+        fwrite(STDERR, 'Actual: ' . var_export($actual, true) . PHP_EOL);
+        exit(1);
+    }
+}
+
 final class LCFA_Environment {
     public function get_snapshot(): array {
         return [
@@ -345,10 +354,19 @@ lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed', $editor_header_mar
 lcfa_assert_contains('.lcfa-editor-shell{position:fixed;top:', $editor_chat_css, 'editor bridge stylesheet asset should pin the launcher near the top edge instead of the bottom-right overlay zone');
 lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed;right:20px;bottom:20px', $editor_chat_css, 'editor bridge stylesheet asset should no longer anchor the launcher over the bottom-right section controls');
 lcfa_assert_contains('width:392px', $editor_chat_css, 'editor bridge stylesheet asset should slim the drawer width for a more balanced editor footprint');
+lcfa_assert_contains('min-height:132px', $editor_chat_css, 'editor bridge stylesheet asset should enlarge the request textarea because the prompt composer is the primary interaction');
 lcfa_assert_contains('.lcfa-editor-bridge__details>summary', $editor_chat_css, 'editor bridge stylesheet asset should support collapsible secondary sections for a leaner window');
+lcfa_assert_contains('.lcfa-editor-bridge__head-link.is-icon-only', $editor_chat_css, 'editor bridge stylesheet asset should support a minimal icon-only Command Deck shortcut');
+lcfa_assert_contains('.lcfa-editor-bridge__close .lcfa-icon', $editor_chat_css, 'editor bridge stylesheet asset should make the close/power control icon clearly visible');
+lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card', $editor_chat_css, 'editor bridge stylesheet asset should style a dedicated uploaded-image preview card');
+lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card[hidden]{display:none!important}', $editor_chat_css, 'editor bridge stylesheet asset should force-hide the upload preview card until an image is attached');
+lcfa_assert_contains('.lcfa-editor-bridge__connection', $editor_chat_css, 'editor bridge stylesheet asset should style the connection status badge in the drawer header');
 lcfa_assert_contains('var shell=document.querySelector("[data-lcfa-editor-shell]")', $editor_chat_js, 'editor bridge script asset should bootstrap the drawer runtime');
 lcfa_assert_contains('commandExecutionEndpoint', $editor_chat_js, 'editor bridge runtime asset should support async command execution endpoints');
 lcfa_assert_contains('new FileReader()', $editor_chat_js, 'editor bridge runtime asset should support screenshot attachments through FileReader');
+lcfa_assert_contains('attachmentTriggerButton.addEventListener("click"', $editor_chat_js, 'editor bridge runtime asset should open the upload picker from a dedicated button');
+lcfa_assert_not_contains('attachmentDropzone.addEventListener("dragover"', $editor_chat_js, 'editor bridge runtime asset should no longer depend on drag-and-drop screenshot uploads');
+lcfa_assert_contains('attachmentPreviewImage.addEventListener("error"', $editor_chat_js, 'editor bridge runtime asset should gracefully hide a broken screenshot preview image without dropping the attachment');
 
 ob_start();
 $admin->render_editor_bridge();
@@ -359,12 +377,13 @@ lcfa_assert_contains('http://example.test/wp-json/lcfa/v1/chat/thread', $markup,
 lcfa_assert_contains('http://example.test/wp-json/lcfa/v1/command/execution', $markup, 'editor bridge should expose the dedicated async command execution endpoint');
 lcfa_assert_not_contains('http://example.test/wp-json/lcfa/v1/command/suggest', $markup, 'editor bridge should no longer post prompts directly to command/suggest');
 lcfa_assert_contains('http://example.test/wp-json/lcfa/v1/command', $markup, 'editor bridge should expose the command endpoint for inline apply');
+lcfa_assert_not_contains('lcfa-editor-bridge__stack', $markup, 'editor bridge should remove the high-visibility framework/site stack because the user already knows the installed stack');
 lcfa_assert_contains('data-lcfa-editor-thread-log', $markup, 'editor bridge should render a thread log container');
 lcfa_assert_contains('data-lcfa-editor-thread-empty', $markup, 'editor bridge should render an empty-state container for thread messages');
 lcfa_assert_contains('data-lcfa-editor-status', $markup, 'editor bridge should render a dedicated conversation status node');
 lcfa_assert_contains('data-state="applied"', $markup, 'editor bridge should derive the initial conversation state from the latest persisted thread message');
-lcfa_assert_contains('data-lcfa-editor-preview', $markup, 'editor bridge should render an inline preview control for actionable suggestions');
-lcfa_assert_contains('data-lcfa-editor-apply', $markup, 'editor bridge should render an inline apply control for actionable suggestions');
+lcfa_assert_not_contains('data-lcfa-editor-preview', $markup, 'editor bridge should remove the inline preview control from the composer');
+lcfa_assert_not_contains('data-lcfa-editor-apply', $markup, 'editor bridge should remove the inline apply control from the composer');
 lcfa_assert_contains('data-lcfa-editor-thread-create', $markup, 'editor bridge should render a create-thread control inside the drawer');
 lcfa_assert_contains('data-lcfa-editor-thread-duplicate', $markup, 'editor bridge should render a duplicate-thread control inside the drawer');
 lcfa_assert_contains('data-lcfa-editor-thread-clear', $markup, 'editor bridge should render a clear-thread control inside the drawer');
@@ -376,17 +395,30 @@ lcfa_assert_contains('Duplicate current', $markup, 'editor bridge should label t
 lcfa_assert_contains('Clear current', $markup, 'editor bridge should label the clear-thread control clearly');
 lcfa_assert_contains('Rename current', $markup, 'editor bridge should label the rename-thread control clearly');
 lcfa_assert_contains('Delete current', $markup, 'editor bridge should label the delete-thread control clearly');
+lcfa_assert_contains('Describe the change you want on this page', $markup, 'editor bridge should lead with a prompt-first helper so the user understands the primary interaction');
+lcfa_assert_contains('Send', $markup, 'editor bridge should label the primary action as a simple send step');
+lcfa_assert_not_contains('>Preview<', $markup, 'editor bridge should not expose a secondary preview button in the composer');
+lcfa_assert_not_contains('>Apply<', $markup, 'editor bridge should not expose a secondary apply button in the composer');
 lcfa_assert_contains('data-lcfa-editor-attachment', $markup, 'editor bridge should expose a screenshot attachment input');
+lcfa_assert_contains('data-lcfa-editor-attachment-trigger', $markup, 'editor bridge should expose a dedicated upload-image trigger');
 lcfa_assert_contains('data-lcfa-editor-attachment-preview', $markup, 'editor bridge should expose a screenshot preview surface');
+lcfa_assert_contains('lcfa-icon-command', $markup, 'editor bridge should add an icon to the Command Deck shortcut');
+lcfa_assert_contains('lcfa-icon-power', $markup, 'editor bridge should render a dedicated power icon for the drawer close control');
+lcfa_assert_contains('data-lcfa-editor-attachment-preview-image', $markup, 'editor bridge should render a real screenshot preview image after upload');
 lcfa_assert_contains('data-lcfa-editor-result-diff', $markup, 'editor bridge should expose a diff preview support pane');
 lcfa_assert_contains('data-lcfa-editor-result-existing', $markup, 'editor bridge should expose a current markup support pane');
 lcfa_assert_contains('data-lcfa-editor-result-proposed', $markup, 'editor bridge should expose a proposed markup support pane');
 lcfa_assert_contains('data-lcfa-editor-quick-actions', $markup, 'editor bridge should collapse quick actions into a secondary details panel');
+lcfa_assert_contains('data-lcfa-editor-session-details', $markup, 'editor bridge should move thread and execution settings into a secondary session details panel');
 lcfa_assert_contains('data-lcfa-editor-support-details', $markup, 'editor bridge should wrap support details inside a collapsible details panel');
 lcfa_assert_contains('data-lcfa-editor-target-summary', $markup, 'editor bridge should keep the target summary visible in a compact header slot');
 lcfa_assert_contains('Support details', $markup, 'editor bridge should de-emphasize the result panel as a support details section');
 lcfa_assert_not_contains('<div class="lcfa-editor-bridge__label">Current target</div>', $markup, 'editor bridge should remove the standalone current target section to save vertical space');
 lcfa_assert_not_contains('Workflow note', $markup, 'editor bridge should remove non-essential workflow note copy from the drawer');
+lcfa_assert_contains('You are in:', $markup, 'editor bridge header should orient the user explicitly about the current location');
+lcfa_assert_not_contains('Create or update page', $markup, 'editor bridge header should stop repeating the current command action in the target summary');
+lcfa_assert_contains('Target: Page', $markup, 'editor bridge header should summarize the current target type for orientation');
+lcfa_assert_not_contains('>Command Deck<', $markup, 'editor bridge should render the Command Deck shortcut as an icon-only control');
 lcfa_assert_contains('data-lcfa-editor-config', $markup, 'editor bridge should keep the JSON config bootstrap in markup');
 lcfa_assert_not_contains('lcfa-editor-bridge-script', $markup, 'editor bridge should no longer inline the editor chat runtime script');
 lcfa_assert_not_contains('var shell=document.querySelector("[data-lcfa-editor-shell]")', $markup, 'editor bridge should no longer embed the drawer runtime inline');
@@ -394,15 +426,24 @@ lcfa_assert_contains('context_post_id:payload.context_post_id||config.postId||0'
 lcfa_assert_contains('post_id:payload.post_id||config.postId||0', $editor_chat_js, 'editor bridge runtime asset should keep the current post id when replaying persisted thread actions');
 lcfa_assert_contains('window.localStorage', $editor_chat_js, 'editor bridge runtime asset should persist the selected thread in browser localStorage when available');
 lcfa_assert_contains('lcfa-editor-thread:', $editor_chat_js, 'editor bridge runtime asset should namespace the selected-thread persistence key by editor post id');
-lcfa_assert_contains('Suggestion ready. Review it or run it inline.', $markup, 'editor bridge should expose a dedicated suggested conversation state label');
+lcfa_assert_contains('Request prepared.', $markup, 'editor bridge should expose a dedicated prepared conversation state label');
 lcfa_assert_contains('Preview ready. Review the support details below.', $markup, 'editor bridge should expose a dedicated previewed conversation state label');
-lcfa_assert_contains('Inline action completed.', $markup, 'editor bridge should expose a dedicated applied conversation state label');
+lcfa_assert_contains('Change applied inline.', $markup, 'editor bridge should expose a dedicated applied conversation state label');
 lcfa_assert_contains('The current request failed. Review the support details below.', $markup, 'editor bridge should expose a dedicated failed conversation state label');
 lcfa_assert_contains('Queued for inline execution.', $markup, 'editor bridge should expose a queued async execution state label');
 lcfa_assert_contains('Running inline execution...', $markup, 'editor bridge should expose a running async execution state label');
+lcfa_assert_contains('runs it inline on the current page', $markup, 'editor bridge should explain that the request executes immediately on the current page');
+lcfa_assert_contains('lcfa-editor-bridge__connection', $markup, 'editor bridge should render a connection status badge in the header');
 lcfa_assert_contains('lcfa-editor-thread-message is-tool_result', $markup, 'editor bridge should preserve tool_result styling for execution messages');
 lcfa_assert_contains('View page', $markup, 'editor bridge should render a frontend link for actionable tool_result messages');
 lcfa_assert_contains('Edit page', $markup, 'editor bridge should render an edit link for actionable tool_result messages');
+
+$composer_position = strpos($markup, 'data-lcfa-editor-composer');
+$thread_log_position = strpos($markup, 'data-lcfa-editor-thread-log');
+if ($composer_position === false || $thread_log_position === false || $composer_position >= $thread_log_position) {
+    fwrite(STDERR, "editor bridge should render the prompt composer before the thread log so the primary action stays at the top\n");
+    exit(1);
+}
 
 $render_editor_thread = $admin_reflection->getMethod('render_editor_bridge_thread_message');
 ob_start();
@@ -418,7 +459,7 @@ $render_editor_thread->invoke($admin, [
     'actions' => [
         [
             'kind' => 'apply',
-            'label' => 'Preview inline',
+            'label' => 'Preview',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -429,7 +470,7 @@ $render_editor_thread->invoke($admin, [
         ],
         [
             'kind' => 'apply',
-            'label' => 'Apply inline',
+            'label' => 'Apply',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -445,11 +486,7 @@ $render_editor_thread->invoke($admin, [
     ],
 ]);
 $suggestion_thread_markup = (string) ob_get_clean();
-lcfa_assert_contains('lcfa-editor-thread-message is-suggestion_result', $suggestion_thread_markup, 'editor thread renderer should keep suggestion_result messages visually distinct');
-lcfa_assert_contains('Preview inline', $suggestion_thread_markup, 'editor thread renderer should output a persisted preview-inline action for suggestion_result messages');
-lcfa_assert_contains('Apply inline', $suggestion_thread_markup, 'editor thread renderer should output a persisted apply-inline action for suggestion_result messages');
-lcfa_assert_contains('data-lcfa-editor-thread-apply', $suggestion_thread_markup, 'editor thread renderer should mark apply-inline thread actions for JS handling');
-lcfa_assert_contains('Open suggested payload in Command Deck', $suggestion_thread_markup, 'editor thread renderer should keep persisted command-deck links for suggestion_result messages');
+lcfa_assert_same('', trim($suggestion_thread_markup), 'editor thread renderer should suppress suggestion_result messages entirely in the frontend drawer');
 
 ob_start();
 $render_editor_thread->invoke($admin, [
@@ -464,7 +501,7 @@ $render_editor_thread->invoke($admin, [
     'actions' => [
         [
             'kind' => 'apply',
-            'label' => 'Retry inline',
+            'label' => 'Retry',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -477,7 +514,7 @@ $editor_thread_markup = (string) ob_get_clean();
 lcfa_assert_contains('lcfa-editor-thread-message is-tool_result', $editor_thread_markup, 'editor thread renderer should keep tool_result messages distinct');
 lcfa_assert_contains('View page', $editor_thread_markup, 'editor thread renderer should output a frontend action link for tool_result messages');
 lcfa_assert_contains('Edit page', $editor_thread_markup, 'editor thread renderer should output an edit action link for tool_result messages');
-lcfa_assert_contains('Retry inline', $editor_thread_markup, 'editor thread renderer should output persisted recovery actions for failed or retryable tool_result messages');
+lcfa_assert_contains('Retry', $editor_thread_markup, 'editor thread renderer should output persisted recovery actions for failed or retryable tool_result messages');
 lcfa_assert_contains('data-lcfa-editor-thread-apply', $editor_thread_markup, 'editor thread renderer should expose tool_result apply actions for JS handling');
 
 $render_command_thread = $admin_reflection->getMethod('render_command_thread_message');
@@ -503,7 +540,7 @@ $render_command_thread->invoke($admin, [
     'actions' => [
         [
             'kind' => 'apply',
-            'label' => 'Retry inline',
+            'label' => 'Retry',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -516,7 +553,7 @@ $command_thread_markup = (string) ob_get_clean();
 lcfa_assert_contains('lcfa-thread-message is-tool_result', $command_thread_markup, 'command thread renderer should keep tool_result messages distinct');
 lcfa_assert_contains('View page', $command_thread_markup, 'command thread renderer should output a frontend action link for tool_result messages');
 lcfa_assert_contains('Open template', $command_thread_markup, 'command thread renderer should output a template action link for dynamic template results');
-lcfa_assert_contains('Retry inline', $command_thread_markup, 'command thread renderer should output persisted recovery actions for tool_result messages');
+lcfa_assert_contains('Retry', $command_thread_markup, 'command thread renderer should output persisted recovery actions for tool_result messages');
 lcfa_assert_contains('Target: dynamic_template', $command_thread_markup, 'command thread renderer should expose the target type semantically');
 lcfa_assert_contains('Label: Pricing Hero', $command_thread_markup, 'command thread renderer should expose the target label semantically');
 lcfa_assert_contains('ID: 42', $command_thread_markup, 'command thread renderer should expose the target id semantically');
@@ -589,7 +626,7 @@ $render_command_thread->invoke($admin, [
     'actions' => [
         [
             'kind' => 'apply',
-            'label' => 'Preview inline',
+            'label' => 'Preview',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -600,7 +637,7 @@ $render_command_thread->invoke($admin, [
         ],
         [
             'kind' => 'apply',
-            'label' => 'Apply inline',
+            'label' => 'Apply',
             'payload' => [
                 'action' => 'page_upsert',
                 'execution_target' => 'local',
@@ -617,8 +654,8 @@ $render_command_thread->invoke($admin, [
 ]);
 $command_suggestion_markup = (string) ob_get_clean();
 lcfa_assert_contains('lcfa-thread-message is-suggestion_result', $command_suggestion_markup, 'command thread renderer should keep suggestion_result messages visually distinct');
-lcfa_assert_contains('Preview inline', $command_suggestion_markup, 'command thread renderer should expose a preview-inline control for persisted suggestion_result messages');
-lcfa_assert_contains('Apply inline', $command_suggestion_markup, 'command thread renderer should expose an apply-inline control for persisted suggestion_result messages');
+lcfa_assert_contains('Preview', $command_suggestion_markup, 'command thread renderer should expose a preview control for persisted suggestion_result messages');
+lcfa_assert_contains('Apply', $command_suggestion_markup, 'command thread renderer should expose an apply control for persisted suggestion_result messages');
 lcfa_assert_contains('command_payload_json', $command_suggestion_markup, 'command thread renderer should serialize persisted suggestion payloads for apply-inline submissions');
 lcfa_assert_contains('Open suggested payload in Command Deck', $command_suggestion_markup, 'command thread renderer should keep the command-deck deeplink for persisted suggestion_result messages');
 lcfa_assert_contains('Action: page_upsert', $command_suggestion_markup, 'command thread renderer should expose a semantic action chip');
@@ -698,14 +735,14 @@ $render_command_suggestion->invoke($admin, [
     ],
     'reasons' => ['Framework matches current page'],
     'warnings' => ['Review copy before apply'],
-    'workflow' => ['Preview inline', 'Apply inline'],
+    'workflow' => ['Preview', 'Apply'],
 ]);
 $command_suggestion_panel_markup = (string) ob_get_clean();
 lcfa_assert_contains('Support details', $command_suggestion_panel_markup, 'command suggestion panel should present itself as a support surface');
 lcfa_assert_contains('Why this was suggested', $command_suggestion_panel_markup, 'command suggestion panel should keep reasoning details');
 lcfa_assert_contains('Warnings', $command_suggestion_panel_markup, 'command suggestion panel should keep warnings');
 lcfa_assert_contains('Recommended workflow', $command_suggestion_panel_markup, 'command suggestion panel should keep workflow guidance');
-lcfa_assert_contains('Preview inline', $command_suggestion_panel_markup, 'command suggestion panel should keep actionable suggestion controls');
+lcfa_assert_contains('Preview', $command_suggestion_panel_markup, 'command suggestion panel should keep actionable suggestion controls');
 lcfa_assert_contains('data-lcfa-command-details="reasons"', $command_suggestion_panel_markup, 'command suggestion panel should collapse reasoning into a dedicated details block');
 lcfa_assert_contains('data-lcfa-command-details="workflow"', $command_suggestion_panel_markup, 'command suggestion panel should collapse workflow into a dedicated details block');
 lcfa_assert_contains('name="context_post_id" value="42"', $command_suggestion_panel_markup, 'command suggestion panel apply controls should preserve the current post context');

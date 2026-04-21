@@ -1070,12 +1070,19 @@ final class LCFA_Command_Deck {
     }
 
     private function normalize_section_operation(string $operation): string {
-        return in_array($operation, ['prepend', 'append'], true) ? $operation : 'append';
+        return in_array($operation, ['prepend', 'append', 'replace_hero', 'before_footer'], true) ? $operation : 'append';
     }
 
     private function build_section_starter_html(string $section_intent, string $framework, array $payload): string {
         $is_picowind = $framework === 'picowind';
-        $eyebrow = __('Forge AI starter', 'livecanvas-forge-ai');
+        $brief = LCFA_Settings::get_project_brief();
+        $brand_name = sanitize_text_field((string) ($brief['brand_name'] ?? ''));
+        $brand_name = $brand_name !== '' ? $brand_name : __('Your brand', 'livecanvas-forge-ai');
+        $sector = sanitize_text_field((string) ($brief['sector'] ?? ''));
+        $sector_phrase = $sector !== '' ? strtolower($sector) . ' teams' : __('modern teams', 'livecanvas-forge-ai');
+        $tone = sanitize_text_field((string) ($brief['tone'] ?? ''));
+        $tone_phrase = $tone !== '' ? strtolower($tone) : __('clear', 'livecanvas-forge-ai');
+        $eyebrow = sprintf(__('Forge AI starter · %s', 'livecanvas-forge-ai'), $brand_name);
 
         switch ($section_intent) {
             case 'hero':
@@ -1086,8 +1093,8 @@ final class LCFA_Command_Deck {
     <div class="space-y-5">
       <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
       <div class="space-y-3">
-        <h1 class="text-4xl font-semibold tracking-tight text-base-content sm:text-5xl">A clearer headline for the next test pass.</h1>
-        <p class="max-w-2xl text-base leading-7 text-base-content/75">Use this hero starter to validate the full loop: prompt, preview, apply, and follow-up refinement inside the current page context.</p>
+        <h1 class="text-4xl font-semibold tracking-tight text-base-content sm:text-5xl">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression.</h1>
+        <p class="max-w-2xl text-base leading-7 text-base-content/75">Use this hero starter to validate the full loop on the current page while keeping the copy grounded in the project brief and the active {$framework} stack.</p>
       </div>
       <div class="flex flex-wrap gap-3">
         <a class="inline-flex items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-content no-underline" href="#pricing">See pricing</a>
@@ -1113,8 +1120,8 @@ HTML;
     <div class="row align-items-center g-5">
       <div class="col-lg-7">
         <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-        <h1 class="display-4 fw-bold mb-3">A clearer headline for the next test pass.</h1>
-        <p class="lead text-body-secondary mb-4">Use this hero starter to validate the full loop: prompt, preview, apply, and follow-up refinement inside the current page context.</p>
+        <h1 class="display-4 fw-bold mb-3">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression.</h1>
+        <p class="lead text-body-secondary mb-4">Use this hero starter to validate the full loop on the current page while keeping the copy grounded in the project brief and the active {$framework} stack.</p>
         <div class="d-flex flex-wrap gap-3">
           <a class="btn btn-primary btn-lg" href="#pricing">See pricing</a>
           <a class="btn btn-outline-secondary btn-lg" href="#contact">Talk to sales</a>
@@ -1143,8 +1150,8 @@ HTML;
 <section id="pricing" class="lcfa-section-starter lcfa-section--pricing mx-auto max-w-6xl px-4 py-16">
   <div class="mx-auto max-w-3xl text-center">
     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
-    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content sm:text-4xl">Pricing ready for an editor test.</h2>
-    <p class="mt-4 text-base leading-7 text-base-content/75">Three plans are enough to validate section insertion, visual hierarchy, and inline follow-up prompts.</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content sm:text-4xl">Pricing for {$brand_name}, shaped for {$sector_phrase}.</h2>
+    <p class="mt-4 text-base leading-7 text-base-content/75">Three plans are enough to validate section insertion, visual hierarchy, and {$tone_phrase} conversion messaging.</p>
   </div>
   <div class="mt-10 grid gap-6 md:grid-cols-3">
     <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-sm font-semibold uppercase tracking-[0.2em] text-base-content/55">Starter</p><h3 class="mt-4 text-2xl font-semibold text-base-content">€29</h3><p class="mt-2 text-sm text-base-content/70">For lightweight launches.</p></article>
@@ -1160,8 +1167,8 @@ HTML;
   <div class="container">
     <div class="text-center mx-auto mb-5" style="max-width:48rem;">
       <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-      <h2 class="display-6 fw-bold mb-3">Pricing ready for an editor test.</h2>
-      <p class="lead text-body-secondary mb-0">Three plans are enough to validate section insertion, visual hierarchy, and inline follow-up prompts.</p>
+      <h2 class="display-6 fw-bold mb-3">Pricing for {$brand_name}, shaped for {$sector_phrase}.</h2>
+      <p class="lead text-body-secondary mb-0">Three plans are enough to validate section insertion, visual hierarchy, and {$tone_phrase} conversion messaging.</p>
     </div>
     <div class="row g-4 row-cols-1 row-cols-md-3">
       <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="text-uppercase fw-semibold small text-body-secondary mb-3">Starter</p><h3 class="display-6 fw-bold mb-2">€29</h3><p class="text-body-secondary mb-0">For lightweight launches.</p></div></div></div>
@@ -1178,7 +1185,7 @@ HTML;
 <section class="lcfa-section-starter lcfa-section--features mx-auto max-w-6xl px-4 py-16">
   <div class="max-w-3xl">
     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
-    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Feature highlights you can refine from the next prompt.</h2>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Feature highlights for {$brand_name} and {$sector_phrase}.</h2>
   </div>
   <div class="mt-10 grid gap-6 md:grid-cols-3">
     <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Context-aware edits</h3><p class="mt-3 text-sm leading-6 text-base-content/75">The page context stays attached while you iterate.</p></article>
@@ -1194,7 +1201,7 @@ HTML;
   <div class="container">
     <div class="mx-auto mb-5" style="max-width:48rem;">
       <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-      <h2 class="display-6 fw-bold mb-0">Feature highlights you can refine from the next prompt.</h2>
+      <h2 class="display-6 fw-bold mb-0">Feature highlights for {$brand_name} and {$sector_phrase}.</h2>
     </div>
     <div class="row g-4 row-cols-1 row-cols-md-3">
       <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Context-aware edits</h3><p class="text-body-secondary mb-0">The page context stays attached while you iterate.</p></div></div></div>
@@ -1211,7 +1218,7 @@ HTML;
 <section class="lcfa-section-starter lcfa-section--testimonials mx-auto max-w-6xl px-4 py-16">
   <div class="max-w-3xl">
     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
-    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Proof points ready for a second pass.</h2>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Proof points that make {$brand_name} feel credible for {$sector_phrase}.</h2>
   </div>
   <div class="mt-10 grid gap-6 md:grid-cols-3">
     <blockquote class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><p class="text-base leading-7 text-base-content/80">“The first draft already gave us a solid structure to refine.”</p><footer class="mt-4 text-sm font-semibold text-base-content">Product Lead</footer></blockquote>
@@ -1227,7 +1234,7 @@ HTML;
   <div class="container">
     <div class="mx-auto mb-5" style="max-width:48rem;">
       <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-      <h2 class="display-6 fw-bold mb-0">Proof points ready for a second pass.</h2>
+      <h2 class="display-6 fw-bold mb-0">Proof points that make {$brand_name} feel credible for {$sector_phrase}.</h2>
     </div>
     <div class="row g-4 row-cols-1 row-cols-md-3">
       <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><p class="mb-4 text-body-secondary">“The first draft already gave us a solid structure to refine.”</p><strong>Product Lead</strong></div></div></div>
@@ -1244,8 +1251,8 @@ HTML;
 <section id="contact" class="lcfa-section-starter lcfa-section--cta mx-auto max-w-6xl px-4 py-16">
   <div class="rounded-[2rem] border border-primary/30 bg-primary/10 px-6 py-10 text-center shadow-xl sm:px-10">
     <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
-    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-base-content">Ready for the next revision?</h2>
-    <p class="mt-4 text-base leading-7 text-base-content/75">Use this CTA block to validate insertion, tone, and next-step prompts from the same page context.</p>
+    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-base-content">Ready to move {$brand_name} forward?</h2>
+    <p class="mt-4 text-base leading-7 text-base-content/75">Use this CTA block to validate insertion, tone, and next-step prompts while keeping the message {$tone_phrase} for {$sector_phrase}.</p>
     <div class="mt-6">
       <a class="inline-flex items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-content no-underline" href="#contact">Start the conversation</a>
     </div>
@@ -1259,9 +1266,144 @@ HTML;
   <div class="container">
     <div class="rounded-4 bg-primary-subtle p-4 p-lg-5 text-center">
       <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-      <h2 class="display-6 fw-bold mb-3">Ready for the next revision?</h2>
-      <p class="lead text-body-secondary mb-4">Use this CTA block to validate insertion, tone, and next-step prompts from the same page context.</p>
+      <h2 class="display-6 fw-bold mb-3">Ready to move {$brand_name} forward?</h2>
+      <p class="lead text-body-secondary mb-4">Use this CTA block to validate insertion, tone, and next-step prompts while keeping the message {$tone_phrase} for {$sector_phrase}.</p>
       <a class="btn btn-primary btn-lg" href="#contact">Start the conversation</a>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'faq':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--faq mx-auto max-w-6xl px-4 py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Questions {$brand_name} should answer for {$sector_phrase}.</h2>
+  </div>
+  <div class="mt-10 space-y-4">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-lg font-semibold text-base-content">How quickly can we start?</h3><p class="mt-3 text-sm leading-6 text-base-content/75">The first pass is designed to feel {$tone_phrase} and actionable from the first conversation.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-lg font-semibold text-base-content">What is included in the initial scope?</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Enough structure to validate positioning, hierarchy, and next-step conversion.</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--faq py-5 py-lg-6 bg-light">
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">Questions {$brand_name} should answer for {$sector_phrase}.</h2>
+    </div>
+    <div class="vstack gap-3">
+      <div class="card border-0 shadow-sm"><div class="card-body p-4"><h3 class="h5 mb-2">How quickly can we start?</h3><p class="text-body-secondary mb-0">The first pass is designed to feel {$tone_phrase} and actionable from the first conversation.</p></div></div>
+      <div class="card border-0 shadow-sm"><div class="card-body p-4"><h3 class="h5 mb-2">What is included in the initial scope?</h3><p class="text-body-secondary mb-0">Enough structure to validate positioning, hierarchy, and next-step conversion.</p></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'metrics':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--metrics mx-auto max-w-6xl px-4 py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Fast proof points for {$brand_name}.</h2>
+  </div>
+  <div class="mt-10 grid gap-6 md:grid-cols-3">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 text-center shadow-xl"><strong class="text-3xl font-semibold text-base-content">3x</strong><p class="mt-3 text-sm text-base-content/75">Sharper qualification for {$sector_phrase}</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 text-center shadow-xl"><strong class="text-3xl font-semibold text-base-content">48h</strong><p class="mt-3 text-sm text-base-content/75">Faster validation cycle with {$tone_phrase} decisions</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 text-center shadow-xl"><strong class="text-3xl font-semibold text-base-content">1 flow</strong><p class="mt-3 text-sm text-base-content/75">Prompt, preview, apply in the same page context</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--metrics py-5 py-lg-6">
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">Fast proof points for {$brand_name}.</h2>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm text-center"><div class="card-body p-4"><strong class="display-6 d-block">3x</strong><p class="text-body-secondary mb-0">Sharper qualification for {$sector_phrase}</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm text-center"><div class="card-body p-4"><strong class="display-6 d-block">48h</strong><p class="text-body-secondary mb-0">Faster validation cycle with {$tone_phrase} decisions</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm text-center"><div class="card-body p-4"><strong class="display-6 d-block">1 flow</strong><p class="text-body-secondary mb-0">Prompt, preview, apply in the same page context</p></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'team':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--team mx-auto max-w-6xl px-4 py-16">
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">The team behind {$brand_name}.</h2>
+  </div>
+  <div class="mt-10 grid gap-6 md:grid-cols-3">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Strategy lead</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Keeps the {$sector_phrase} narrative {$tone_phrase} and focused.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Delivery lead</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Turns decisions into a clear build path.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Client partner</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Keeps the feedback loop tight from preview to apply.</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--team py-5 py-lg-6">
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">The team behind {$brand_name}.</h2>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Strategy lead</h3><p class="text-body-secondary mb-0">Keeps the {$sector_phrase} narrative {$tone_phrase} and focused.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Delivery lead</h3><p class="text-body-secondary mb-0">Turns decisions into a clear build path.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Client partner</h3><p class="text-body-secondary mb-0">Keeps the feedback loop tight from preview to apply.</p></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'contact':
+                if ($is_picowind) {
+                    return <<<HTML
+<section id="contact" class="lcfa-section-starter lcfa-section--contact mx-auto max-w-6xl px-4 py-16">
+  <div class="grid gap-8 rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-xl lg:grid-cols-[1fr_.9fr]">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Start a {$tone_phrase} conversation with {$brand_name}.</h2>
+      <p class="mt-4 text-base leading-7 text-base-content/75">Use this contact block to validate lower-page conversion for {$sector_phrase}.</p>
+    </div>
+    <form class="grid gap-3">
+      <input class="input input-bordered w-full" type="text" placeholder="Name">
+      <input class="input input-bordered w-full" type="email" placeholder="Email">
+      <textarea class="textarea textarea-bordered min-h-32 w-full" placeholder="What are you trying to solve?"></textarea>
+      <button class="btn btn-primary" type="button">Request a call</button>
+    </form>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section id="contact" class="lcfa-section-starter lcfa-section--contact py-5 py-lg-6 bg-light">
+  <div class="container">
+    <div class="row g-4 align-items-start">
+      <div class="col-lg-5">
+        <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+        <h2 class="display-6 fw-bold mb-3">Start a {$tone_phrase} conversation with {$brand_name}.</h2>
+        <p class="lead text-body-secondary mb-0">Use this contact block to validate lower-page conversion for {$sector_phrase}.</p>
+      </div>
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm"><div class="card-body p-4 p-lg-5"><div class="row g-3"><div class="col-md-6"><input class="form-control" type="text" placeholder="Name"></div><div class="col-md-6"><input class="form-control" type="email" placeholder="Email"></div><div class="col-12"><textarea class="form-control" rows="5" placeholder="What are you trying to solve?"></textarea></div><div class="col-12"><button class="btn btn-primary" type="button">Request a call</button></div></div></div></div>
+      </div>
     </div>
   </div>
 </section>
@@ -1280,7 +1422,27 @@ HTML;
         }
 
         if ($existing_html === '') {
-            return "<main>\n" . $section_html . "\n</main>";
+            return $section_html;
+        }
+
+        if ($operation === 'replace_hero') {
+            $replaced_html = $this->replace_detected_hero_section($existing_html, $section_html);
+
+            if ($replaced_html !== '') {
+                return $replaced_html;
+            }
+
+            $operation = 'prepend';
+        }
+
+        if ($operation === 'before_footer') {
+            $footer_insert_html = $this->insert_section_before_footer($existing_html, $section_html);
+
+            if ($footer_insert_html !== '') {
+                return $footer_insert_html;
+            }
+
+            $operation = 'append';
         }
 
         if ($operation === 'prepend') {
@@ -1301,6 +1463,31 @@ HTML;
         }
 
         return $existing_html . "\n\n" . $section_html;
+    }
+
+    private function replace_detected_hero_section(string $existing_html, string $section_html): string {
+        $patterns = [
+            '/<section\b[^>]*class=(["\'])[^"\']*lcfa-section--hero[^"\']*\1[^>]*>.*?<\/section>/is',
+            '/<section\b[^>]*id=(["\'])hero\1[^>]*>.*?<\/section>/is',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $existing_html) === 1) {
+                return (string) preg_replace($pattern, $section_html, $existing_html, 1);
+            }
+        }
+
+        return '';
+    }
+
+    private function insert_section_before_footer(string $existing_html, string $section_html): string {
+        if (preg_match('/<footer\b[^>]*>/i', $existing_html, $matches, PREG_OFFSET_CAPTURE)) {
+            $insert_at = (int) $matches[0][1];
+
+            return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+        }
+
+        return '';
     }
 
     private function coerce_multiline_payload(array $payload, string $string_key, string $lines_key): string {

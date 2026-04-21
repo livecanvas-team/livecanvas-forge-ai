@@ -20,7 +20,7 @@ final class LCFA_Admin_Hero_Presenter {
         $map = [
             'setup' => [
                 'title' => __('Forge Setup', 'livecanvas-forge-ai'),
-                'subtitle' => __('Prepare the site and connection flow.', 'livecanvas-forge-ai'),
+                'subtitle' => __('LiveCanvas Forge AI prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', 'livecanvas-forge-ai'),
             ],
             'connections' => [
                 'title' => __('Connections', 'livecanvas-forge-ai'),
@@ -41,15 +41,7 @@ final class LCFA_Admin_Hero_Presenter {
 
     private function build_marks(array $snapshot): array {
         $framework = (string) ($snapshot['detected_framework'] ?? 'unknown');
-        $marks = [
-            [
-                'key' => 'livecanvas',
-                'label' => __('LiveCanvas', 'livecanvas-forge-ai'),
-                'type' => 'partner',
-                'asset' => 'livecanvas-micro',
-                'active' => !empty($snapshot['livecanvas_active']),
-            ],
-        ];
+        $marks = [];
 
         if ($framework === 'picowind') {
             $marks[] = [

@@ -121,8 +121,15 @@ final class LCFA_Connection_Onboarding {
             ];
         }
 
-        if ($this->is_claude($preferred_client)) {
-            return self::STEP_ORDER;
+        if (!$this->is_claude($preferred_client)) {
+            return [
+                'choose_client',
+                'choose_mode',
+                'confirm_details',
+                'generate_bundle',
+                'smoke_test',
+                'ready',
+            ];
         }
 
         return self::STEP_ORDER;

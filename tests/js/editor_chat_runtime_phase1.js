@@ -126,6 +126,10 @@ class MockElement {
     this.listeners[type] = handler;
   }
 
+  click() {
+    this.clicked = (this.clicked || 0) + 1;
+  }
+
   querySelector(selector) {
     return this._queryMap[selector] || null;
   }
@@ -157,10 +161,13 @@ class MockElement {
 
 function createButton(label) {
   const button = new MockElement('button');
+  const icon = new MockElement('span');
+  icon.textContent = '';
   const span = new MockElement('span');
   span.textContent = label;
+  button.appendChild(icon);
   button.appendChild(span);
-  button._queryMap.span = span;
+  button._queryMap.span = icon;
 
   return button;
 }
@@ -188,24 +195,24 @@ function createShell(config) {
   const targetSelect = new MockElement('select');
   targetSelect.value = 'local';
   const promptInput = new MockElement('textarea');
-  const analyzeButton = createButton('Analyze request');
+  const analyzeButton = createButton('Send');
+  analyzeButton.disabled = true;
   const createThreadButton = createButton('New thread');
   const duplicateThreadButton = createButton('Duplicate current');
   const renameThreadButton = createButton('Rename current');
   const clearThreadButton = createButton('Clear current');
   const deleteThreadButton = createButton('Delete current');
-  const previewButton = createButton('Preview inline');
-  previewButton.hidden = true;
-  const applyButton = createButton('Apply inline');
-  applyButton.hidden = true;
   const openDeckLink = createLink('Open Command Deck');
   const attachmentInput = new MockElement('input');
-  const attachmentClearButton = createButton('Clear screenshot');
+  const attachmentTriggerButton = createButton('Upload image');
+  const attachmentClearButton = createButton('Remove image');
   attachmentClearButton.hidden = true;
-  const attachmentPreview = new MockElement('div');
-  attachmentPreview.hidden = true;
+  const attachmentPreviewCard = new MockElement('div');
+  attachmentPreviewCard.hidden = true;
   const attachmentPreviewImage = new MockElement('img');
   const attachmentPreviewMeta = new MockElement('div');
+  const sessionDetails = new MockElement('details');
+  const supportDetails = new MockElement('details');
   const resultBox = new MockElement('div');
   const resultSummary = new MockElement('div');
   const resultMeta = new MockElement('div');
@@ -242,14 +249,15 @@ function createShell(config) {
     renameThreadButton,
     clearThreadButton,
     deleteThreadButton,
-    previewButton,
-    applyButton,
     openDeckLink,
     attachmentInput,
+    attachmentTriggerButton,
     attachmentClearButton,
-    attachmentPreview,
+    attachmentPreviewCard,
     attachmentPreviewImage,
     attachmentPreviewMeta,
+    sessionDetails,
+    supportDetails,
     resultBox,
     resultSummary,
     resultMeta,
@@ -286,14 +294,15 @@ function createShell(config) {
     '[data-lcfa-editor-thread-rename]': renameThreadButton,
     '[data-lcfa-editor-thread-clear]': clearThreadButton,
     '[data-lcfa-editor-thread-delete]': deleteThreadButton,
-    '[data-lcfa-editor-preview]': previewButton,
-    '[data-lcfa-editor-apply]': applyButton,
     '[data-lcfa-editor-open-deck]': openDeckLink,
     '[data-lcfa-editor-attachment]': attachmentInput,
+    '[data-lcfa-editor-attachment-trigger]': attachmentTriggerButton,
     '[data-lcfa-editor-attachment-clear]': attachmentClearButton,
-    '[data-lcfa-editor-attachment-preview]': attachmentPreview,
+    '[data-lcfa-editor-attachment-preview]': attachmentPreviewCard,
     '[data-lcfa-editor-attachment-preview-image]': attachmentPreviewImage,
     '[data-lcfa-editor-attachment-preview-meta]': attachmentPreviewMeta,
+    '[data-lcfa-editor-session-details]': sessionDetails,
+    '[data-lcfa-editor-support-details]': supportDetails,
     '[data-lcfa-editor-result]': resultBox,
     '[data-lcfa-editor-result-summary]': resultSummary,
     '[data-lcfa-editor-result-meta]': resultMeta,
@@ -321,15 +330,15 @@ function createShell(config) {
     openButton,
     promptInput,
     analyzeButton,
-    previewButton,
-    applyButton,
     openDeckLink,
     attachmentInput,
+    attachmentTriggerButton,
     attachmentClearButton,
-    attachmentPreview,
+    attachmentPreview: attachmentPreviewCard,
     attachmentPreviewImage,
     attachmentPreviewMeta,
     statusNode,
+    threadLog,
     diffNode,
     existingNode,
     proposedNode,
@@ -353,6 +362,7 @@ async function flush() {
   const analyzeBodies = [];
   const executionBodies = [];
   const executionPolls = [];
+  const liveCanvasRefreshCalls = [];
   const localStorageState = {};
   const documentListeners = {};
 
@@ -379,18 +389,18 @@ async function flush() {
     restNonce: 'nonce',
     labels: {
       idleState: 'Ready for a new request.',
-      thinkingState: 'Analyzing request...',
-      suggestedState: 'Suggestion ready. Review it or run it inline.',
+      thinkingState: 'Sending request...',
+      suggestedState: 'Request prepared.',
       previewedState: 'Preview ready. Review the support details below.',
-      appliedState: 'Inline action completed.',
+      appliedState: 'Change applied inline.',
       failedState: 'The current request failed. Review the support details below.',
       queuedState: 'Queued for inline execution.',
       runningState: 'Running inline execution...',
-      previewSuggestion: 'Preview inline',
-      applySuggestion: 'Apply inline',
+      previewSuggestion: 'Preview',
+      applySuggestion: 'Apply',
       previewing: 'Preparing preview...',
       applying: 'Applying...',
-      analyzing: 'Analyzing request...',
+      analyzing: 'Sending...',
       analysisFailed: 'The request analysis failed.',
       applyFailed: 'The inline execution failed.',
     },
@@ -431,7 +441,7 @@ async function flush() {
               actions: [
                 {
                   kind: 'apply',
-                  label: 'Preview inline',
+                  label: 'Preview',
                   payload: {
                     action: 'page_upsert',
                     execution_target: body.execution_target,
@@ -442,7 +452,7 @@ async function flush() {
                 },
                 {
                   kind: 'apply',
-                  label: 'Apply inline',
+                  label: 'Apply',
                   payload: {
                     action: 'page_upsert',
                     execution_target: body.execution_target,
@@ -548,6 +558,10 @@ async function flush() {
     window: {
       fetch,
       location: { origin: 'http://example.test' },
+      lc_editor_url_to_load: 'http://example.test/?page_id=42&lc_page_editing_mode=1',
+      loadURLintoEditor(url) {
+        liveCanvasRefreshCalls.push(url);
+      },
       localStorage: {
         getItem(key) {
           return Object.prototype.hasOwnProperty.call(localStorageState, key) ? localStorageState[key] : null;
@@ -583,9 +597,20 @@ async function flush() {
 
   assert.strictEqual(shellNodes.shell.dataset.bound, '1', 'editor chat runtime should bind to the shell once');
   assert.strictEqual(localStorageState['lcfa-editor-thread:42'], 'default', 'editor chat runtime should persist the selected thread key for the current post');
+  assert.strictEqual(shellNodes.attachmentPreview.hidden, true, 'editor chat runtime should keep the screenshot preview hidden until an image is attached');
+  assert.strictEqual(shellNodes.analyzeButton.disabled, true, 'editor chat runtime should keep the primary action disabled until the request has content');
+  assert.strictEqual(typeof shellNodes.attachmentTriggerButton.listeners.click, 'function', 'editor chat runtime should wire the upload button to the hidden image input');
+  assert.strictEqual(shellNodes.attachmentClearButton.hidden, true, 'editor chat runtime should hide the remove-image control until an image exists');
 
   shellNodes.openButton.listeners.click({ target: shellNodes.openButton });
   assert.strictEqual(shellNodes.shell.classList.contains('is-open'), true, 'open button should toggle the drawer open');
+
+  shellNodes.promptInput.value = 'Refresh the pricing hero';
+  shellNodes.promptInput.listeners.input({
+    target: shellNodes.promptInput,
+    preventDefault() {},
+  });
+  assert.strictEqual(shellNodes.analyzeButton.disabled, false, 'editor chat runtime should enable the primary action as soon as the prompt has content');
 
   shellNodes.attachmentInput.files = [
     {
@@ -595,17 +620,46 @@ async function flush() {
       dataURL: 'data:image/png;base64,AAAA',
     },
   ];
+  shellNodes.attachmentTriggerButton.listeners.click({
+    target: shellNodes.attachmentTriggerButton,
+    preventDefault() {},
+  });
+  assert.strictEqual(shellNodes.attachmentInput.clicked, 1, 'attachment trigger should proxy clicks to the hidden image input');
   shellNodes.attachmentInput.listeners.change({
     target: shellNodes.attachmentInput,
     preventDefault() {},
   });
   await flush();
 
-  assert.strictEqual(shellNodes.attachmentPreview.hidden, false, 'attachment flow should reveal the screenshot preview');
-  assert.strictEqual(shellNodes.attachmentPreviewImage.src, 'data:image/png;base64,AAAA', 'attachment flow should render the screenshot preview image');
+  assert.strictEqual(shellNodes.attachmentPreview.hidden, false, 'attachment flow should reveal the screenshot preview after an image is attached');
+  assert.strictEqual(shellNodes.attachmentPreviewImage.src, 'data:image/png;base64,AAAA', 'attachment flow should render the selected screenshot preview image');
   assert.ok(shellNodes.attachmentPreviewMeta.textContent.includes('pricing-reference.png'), 'attachment flow should render the screenshot metadata');
+  assert.strictEqual(shellNodes.attachmentClearButton.hidden, false, 'attachment flow should reveal the clear-screenshot control once an image is attached');
 
-  shellNodes.promptInput.value = 'Refresh the pricing hero';
+  shellNodes.attachmentPreviewImage.listeners.error({
+    target: shellNodes.attachmentPreviewImage,
+  });
+  assert.strictEqual(shellNodes.attachmentPreview.hidden, true, 'broken screenshot previews should be hidden instead of leaving a broken image frame');
+  assert.strictEqual(shellNodes.attachmentPreviewMeta.textContent, '', 'broken screenshot previews should clear the metadata copy');
+  assert.strictEqual(shellNodes.attachmentClearButton.hidden, true, 'broken screenshot previews should also hide the remove-image control');
+  assert.strictEqual(shellNodes.attachmentPreviewImage.src, '', 'broken screenshot previews should clear the image src');
+
+  shellNodes.attachmentInput.files = [
+    {
+      name: 'pricing-reference.png',
+      type: 'image/png',
+      size: 128,
+      dataURL: 'data:image/png;base64,BBBB',
+    },
+  ];
+  shellNodes.attachmentInput.listeners.change({
+    target: shellNodes.attachmentInput,
+    preventDefault() {},
+  });
+  await flush();
+
+  assert.strictEqual(shellNodes.attachmentPreview.hidden, false, 'attachment flow should recover after a second valid image upload');
+
   shellNodes.analyzeButton.listeners.click({
     target: shellNodes.analyzeButton,
     preventDefault() {},
@@ -616,41 +670,23 @@ async function flush() {
   assert.strictEqual(analyzeBodies[0].thread_id, 'default', 'analyze flow should preserve the selected thread id');
   assert.strictEqual(analyzeBodies[0].context_post_id, 42, 'analyze flow should send the current post as context');
   assert.strictEqual(analyzeBodies[0].attachments.length, 1, 'analyze flow should include the selected screenshot attachment');
-  assert.strictEqual(shellNodes.previewButton.hidden, false, 'analyze flow should reveal the preview button');
-  assert.strictEqual(shellNodes.applyButton.hidden, false, 'analyze flow should reveal the apply button');
-  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'suggested', 'analyze flow should move the conversation to suggested state');
+  assert.strictEqual(executionBodies.length, 1, 'send flow should enqueue an inline execution immediately after a suggestion is prepared');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(executionBodies[0], 'dry_run'), false, 'send flow should execute the inline apply payload directly');
+  assert.strictEqual(executionBodies[0].context_post_id, 42, 'send flow should restore the current post context');
+  assert.strictEqual(executionBodies[0].post_id, 42, 'send flow should preserve the current post id');
+  assert.strictEqual(executionBodies[0].target_id, 42, 'send flow should preserve the current target id');
+  assert.strictEqual(executionBodies[0].variant, '1', 'send flow should preserve the current variant');
+  assert.strictEqual(executionPolls.length, 1, 'send flow should poll the queued inline execution until completion');
+  assert.strictEqual(shellNodes.analyzeButton.children[shellNodes.analyzeButton.children.length - 1].textContent, 'Send', 'editor chat runtime should restore the primary action label after inline execution completes');
+  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'applied', 'send flow should move the conversation directly to applied state');
   assert.ok(shellNodes.openDeckLink.href.includes('suggest_action=page_upsert'), 'analyze flow should update the Command Deck deeplink with the suggested action');
-
-  shellNodes.previewButton.listeners.click({
-    target: shellNodes.previewButton,
-    preventDefault() {},
-  });
-  await flush();
-
-  assert.strictEqual(executionBodies.length, 1, 'preview flow should enqueue a command execution');
-  assert.strictEqual(executionBodies[0].dry_run, true, 'preview flow should force dry_run');
-  assert.strictEqual(executionBodies[0].context_post_id, 42, 'preview flow should restore the current post context');
-  assert.strictEqual(executionBodies[0].post_id, 42, 'preview flow should keep the current post id');
-  assert.strictEqual(executionBodies[0].target_id, 42, 'preview flow should preserve the current target id');
-  assert.strictEqual(executionBodies[0].variant, '1', 'preview flow should preserve the current variant');
-  assert.strictEqual(executionPolls.length, 1, 'preview flow should poll the queued execution until completion');
-  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'previewed', 'preview flow should move the conversation to previewed state');
-  assert.ok(shellNodes.diffNode.innerHTML.includes('changed'), 'preview flow should render diff support details');
-  assert.strictEqual(shellNodes.existingNode.textContent, '<section>old</section>', 'preview flow should render the current markup support pane');
-  assert.strictEqual(shellNodes.proposedNode.textContent, '<section>preview</section>', 'preview flow should render the proposed markup support pane');
-
-  shellNodes.applyButton.listeners.click({
-    target: shellNodes.applyButton,
-    preventDefault() {},
-  });
-  await flush();
-
-  assert.strictEqual(executionBodies.length, 2, 'apply flow should enqueue a second command execution');
-  assert.strictEqual(Object.prototype.hasOwnProperty.call(executionBodies[1], 'dry_run'), false, 'apply flow should remove dry_run from the final payload');
-  assert.strictEqual(executionBodies[1].thread_id, 'default', 'apply flow should preserve the selected thread id');
-  assert.strictEqual(executionPolls.length, 2, 'apply flow should poll the queued execution until completion');
-  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'applied', 'apply flow should move the conversation to applied state');
-  assert.strictEqual(shellNodes.proposedNode.textContent, '<section>applied</section>', 'apply flow should refresh support details with the final applied markup');
+  assert.ok(shellNodes.diffNode.innerHTML.includes('changed'), 'send flow should render diff support details from the inline execution');
+  assert.strictEqual(shellNodes.existingNode.textContent, '<section>old</section>', 'send flow should render the current markup support pane');
+  assert.strictEqual(shellNodes.proposedNode.textContent, '<section>applied</section>', 'send flow should render the final applied markup support pane');
+  assert.strictEqual(shellNodes.threadLog.children.length, 1, 'editor chat runtime should suppress suggestion-only messages in the frontend drawer thread');
+  assert.strictEqual(shellNodes.threadLog.children[0].className, 'lcfa-editor-thread-message is-tool_result', 'editor chat runtime should keep only the execution result message in the frontend drawer thread');
+  assert.strictEqual(liveCanvasRefreshCalls.length, 1, 'send flow should resync the LiveCanvas editor after a successful inline apply');
+  assert.ok(liveCanvasRefreshCalls[0].includes('lcfa_refresh='), 'send flow should cache-bust the LiveCanvas editor refresh URL');
 
   documentListeners.keydown({ key: 'Escape' });
   assert.strictEqual(shellNodes.shell.classList.contains('is-open'), false, 'Escape should close the drawer');

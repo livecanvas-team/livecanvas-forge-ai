@@ -23,6 +23,10 @@ final class LCFA_Connection_Tester {
         } elseif ($mode === 'local') {
             $checks['local_rest'] = $this->test_local_rest($connections);
             $checks['local_mcp']  = $this->test_local_mcp();
+            $client_registration = $this->test_local_client_registration($connections);
+            if (is_array($client_registration)) {
+                $checks['client_registration'] = $client_registration;
+            }
         } else {
             $checks = [
                 'local_rest' => $this->test_local_rest($connections),
@@ -139,6 +143,97 @@ final class LCFA_Connection_Tester {
                 'filesystem_mode'  => (string) ($status['mcp']['filesystem_mode'] ?? ''),
             ],
         ];
+    }
+
+    private function test_local_client_registration(array $connections): ?array {
+        $preferred_client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        $claude_target = sanitize_key((string) ($connections['claude_connection_target'] ?? ''));
+
+        if ($preferred_client !== 'claude' || $claude_target !== 'desktop_app') {
+            return null;
+        }
+
+        $config_path = $this->resolve_claude_desktop_config_path();
+
+        if ($config_path === '') {
+            return [
+                'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Claude Desktop config path could not be resolved from this PHP environment. Update the config manually, reopen Claude Desktop, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [],
+            ];
+        }
+
+        if (!is_file($config_path)) {
+            return [
+                'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => sprintf(__('Claude Desktop config was not found at %s. Merge the generated livecanvas-forge snippet there, reopen Claude Desktop, then rerun the smoke test.', 'livecanvas-forge-ai'), $config_path),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        $contents = file_get_contents($config_path);
+        if (!is_string($contents) || trim($contents) === '') {
+            return [
+                'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Claude Desktop config is empty. Merge the generated livecanvas-forge snippet, reopen Claude Desktop, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        $payload = json_decode($contents, true);
+        if (!is_array($payload)) {
+            return [
+                'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Claude Desktop config is not valid JSON. Fix the file, make sure livecanvas-forge is registered under mcpServers, reopen Claude Desktop, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        $servers = $payload['mcpServers'] ?? null;
+        if (!is_array($servers) || !array_key_exists('livecanvas-forge', $servers)) {
+            return [
+                'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Claude Desktop config does not contain mcpServers.livecanvas-forge yet. Merge the generated snippet, reopen Claude Desktop, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        return [
+            'label'   => __('Claude Desktop registration', 'livecanvas-forge-ai'),
+            'ok'      => true,
+            'skipped' => false,
+            'message' => __('Claude Desktop config includes the livecanvas-forge registration.', 'livecanvas-forge-ai'),
+            'details' => [
+                'config_path' => $config_path,
+            ],
+        ];
+    }
+
+    private function resolve_claude_desktop_config_path(): string {
+        $home = (string) getenv('HOME');
+        if ($home === '') {
+            return '';
+        }
+
+        return rtrim($home, '/\\') . '/Library/Application Support/Claude/claude_desktop_config.json';
     }
 
     private function normalize_http_test(string $label, string $endpoint, $response, callable $payload_mapper): array {

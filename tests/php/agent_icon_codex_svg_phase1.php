@@ -73,14 +73,14 @@ $method = new ReflectionMethod('LCFA_Admin', 'get_agent_icon_url');
 
 $expectations = [
     'codex' => 'assets/agent-icons/codex-color.svg',
-    'opencode' => 'assets/agent-icons/opencode.png',
-    'cursor' => 'assets/agent-icons/cursor.png',
+    'opencode' => 'assets/agent-icons/opencode.svg',
+    'cursor' => 'assets/agent-icons/cursor.svg',
     'claude-code' => 'assets/agent-icons/claude-color.svg',
 ];
 
 foreach ($expectations as $client => $expected_path) {
     $url = (string) $method->invoke($admin, $client);
-    lcfa_assert_contains($expected_path, $url, sprintf('%s should resolve to the LobeHub SVG icon asset', $client));
+    lcfa_assert_contains($expected_path, $url, sprintf('%s should resolve to the SVG icon asset', $client));
 }
 
 echo "PASS\n";

@@ -160,12 +160,12 @@ final class LCFA_Thread_Message_Actions {
         return self::sanitize_actions([
             [
                 'kind'    => 'apply',
-                'label'   => __('Preview inline', 'livecanvas-forge-ai'),
+                'label'   => __('Preview', 'livecanvas-forge-ai'),
                 'payload' => $preview_payload,
             ],
             [
                 'kind'    => 'apply',
-                'label'   => __('Apply inline', 'livecanvas-forge-ai'),
+                'label'   => __('Apply', 'livecanvas-forge-ai'),
                 'payload' => $apply_payload,
             ],
             [
@@ -194,12 +194,12 @@ final class LCFA_Thread_Message_Actions {
 
             $actions[] = [
                 'kind'    => 'apply',
-                'label'   => __('Preview inline', 'livecanvas-forge-ai'),
+                'label'   => __('Preview', 'livecanvas-forge-ai'),
                 'payload' => $preview_payload,
             ];
             $actions[] = [
                 'kind'    => 'apply',
-                'label'   => __('Retry inline', 'livecanvas-forge-ai'),
+                'label'   => __('Retry', 'livecanvas-forge-ai'),
                 'payload' => $retry_payload,
             ];
             $actions[] = [

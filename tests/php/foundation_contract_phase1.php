@@ -929,10 +929,10 @@ $failed_actions = is_array($failed_result_message['actions'] ?? null) ? $failed_
 
 lcfa_assert_same(3, count($failed_actions), 'failed tool_result messages should expose recovery actions');
 lcfa_assert_same('apply', (string) ($failed_actions[0]['kind'] ?? ''), 'failed tool_result messages should offer a preview retry first');
-lcfa_assert_same('Preview inline', (string) ($failed_actions[0]['label'] ?? ''), 'failed tool_result messages should label the first recovery action as Preview inline');
+lcfa_assert_same('Preview', (string) ($failed_actions[0]['label'] ?? ''), 'failed tool_result messages should label the first recovery action as Preview');
 lcfa_assert_true(!empty($failed_actions[0]['payload']['dry_run']), 'failed tool_result preview recovery should force dry_run');
 lcfa_assert_same('apply', (string) ($failed_actions[1]['kind'] ?? ''), 'failed tool_result messages should offer a retry apply action second');
-lcfa_assert_same('Retry inline', (string) ($failed_actions[1]['label'] ?? ''), 'failed tool_result messages should label the second recovery action as Retry inline');
+lcfa_assert_same('Retry', (string) ($failed_actions[1]['label'] ?? ''), 'failed tool_result messages should label the second recovery action as Retry');
 lcfa_assert_true(empty($failed_actions[1]['payload']['dry_run']), 'failed tool_result retry should stay in apply mode');
 lcfa_assert_same('url', (string) ($failed_actions[2]['kind'] ?? ''), 'failed tool_result messages should keep a Command Deck recovery deeplink');
 lcfa_assert_contains('suggest_action=page_upsert', (string) ($failed_actions[2]['url'] ?? ''), 'failed tool_result recovery deeplink should preserve the action');
@@ -1180,6 +1180,36 @@ $cta_section_suggestion = $prompt_suggester->suggest([
     'post_id'         => $audit_page_id,
     'context_post_id' => $audit_page_id,
 ]);
+$faq_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una sezione FAQ essenziale per questa pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$metrics_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Inserisci delle metriche chiave sopra la pricing.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$team_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una sezione team con tre profili.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$contact_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Metti una contact section semplice in fondo alla pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$replace_hero_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Sostituisci la hero di questa pagina con una versione piu pulita.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$before_footer_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una CTA prima del footer di questa pagina.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
 
 lcfa_assert_same('page_upsert', (string) ($hero_section_suggestion['suggested_payload']['action'] ?? ''), 'natural hero prompts should stay on page_upsert in the page editor');
 lcfa_assert_same('hero', (string) ($hero_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'natural hero prompts should expose the detected hero section intent');
@@ -1191,6 +1221,12 @@ lcfa_assert_same('append', (string) ($pricing_section_suggestion['suggested_payl
 lcfa_assert_same('features', (string) ($features_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'features prompts should expose the detected features section intent');
 lcfa_assert_same('testimonials', (string) ($testimonials_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'testimonials prompts should expose the detected testimonials section intent');
 lcfa_assert_same('cta', (string) ($cta_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'CTA prompts should expose the detected CTA section intent');
+lcfa_assert_same('faq', (string) ($faq_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'FAQ prompts should expose the detected faq section intent');
+lcfa_assert_same('metrics', (string) ($metrics_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'metric prompts should expose the detected metrics section intent');
+lcfa_assert_same('team', (string) ($team_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'team prompts should expose the detected team section intent');
+lcfa_assert_same('contact', (string) ($contact_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'contact prompts should expose the detected contact section intent');
+lcfa_assert_same('replace_hero', (string) ($replace_hero_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'hero replacement prompts should request replace_hero instead of a generic prepend');
+lcfa_assert_same('before_footer', (string) ($before_footer_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'before-footer prompts should request before_footer instead of a generic append');
 
 LCFA_Settings::update_project_brief([
     'project_mode'   => 'from_scratch',
@@ -1308,6 +1344,21 @@ lcfa_assert_contains('<section class="pricing-grid">', $GLOBALS['lcfa_test_posts
 lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should wrap footer_script_lines in a script tag');
 lcfa_assert_contains('structured pricing', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should preserve footer_script_lines contents');
 
+$starter_create_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'title'             => 'Starter Without Main',
+    'slug'              => 'starter-without-main',
+    'status'            => 'draft',
+    'section_intent'    => 'hero',
+    'section_operation' => 'append',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Create a starter hero section without adding a main wrapper.',
+]);
+
+lcfa_assert_true($starter_create_result['ok'] === true, 'page_upsert should allow creating a starter page without explicit content');
+lcfa_assert_contains('lcfa-section--hero', $GLOBALS['lcfa_test_posts'][103]->post_content, 'starter page creation should persist the generated hero section');
+lcfa_assert_true(stripos((string) $GLOBALS['lcfa_test_posts'][103]->post_content, '<main') === false, 'starter page creation should never add a synthetic main wrapper');
+
 $section_preview_result = $command_deck->execute([
     'action'            => 'page_upsert',
     'post_id'           => $audit_page_id,
@@ -1322,6 +1373,8 @@ lcfa_assert_true($section_preview_result['ok'] === true, 'page_upsert should gen
 lcfa_assert_contains('Existing page', $section_preview_result['existing_html'] ?? '', 'section starter previews should keep the current page HTML as the diff baseline');
 lcfa_assert_contains('Forge AI starter', $section_preview_result['proposed_html'] ?? '', 'section starter previews should synthesize starter HTML when the payload only carries section intent');
 lcfa_assert_contains('lcfa-section--hero', $section_preview_result['proposed_html'] ?? '', 'section starter previews should mark the generated hero section');
+lcfa_assert_contains('Consultala', $section_preview_result['proposed_html'] ?? '', 'section starter previews should use the project brief brand name in generated section copy');
+lcfa_assert_contains('consulting', strtolower((string) ($section_preview_result['proposed_html'] ?? '')), 'section starter previews should use the project brief sector in generated section copy');
 lcfa_assert_true($section_preview_result['diff_html'] !== '', 'section starter previews should generate a diff against the current page content');
 
 $section_apply_result = $command_deck->execute([
@@ -1337,6 +1390,65 @@ lcfa_assert_true($section_apply_result['ok'] === true, 'page_upsert should apply
 lcfa_assert_contains('Existing page', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should preserve the existing page markup');
 lcfa_assert_contains('lcfa-section--pricing', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should append the generated pricing section markup');
 lcfa_assert_contains('Forge AI starter', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should persist the generated starter copy');
+
+$faq_apply_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $audit_page_id,
+    'section_intent'    => 'faq',
+    'section_operation' => 'append',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Aggiungi una sezione FAQ essenziale per questa pagina.',
+]);
+
+lcfa_assert_true($faq_apply_result['ok'] === true, 'page_upsert should support FAQ section starters');
+lcfa_assert_contains('lcfa-section--faq', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'FAQ section starters should persist faq-specific section markup');
+
+$replace_hero_page_id = 46;
+$GLOBALS['lcfa_test_posts'][$replace_hero_page_id] = new WP_Post([
+    'ID'           => $replace_hero_page_id,
+    'post_type'    => 'page',
+    'post_status'  => 'publish',
+    'post_title'   => 'Replace Hero Test',
+    'post_name'    => 'replace-hero-test',
+    'post_content' => '<main><section class="lcfa-section-starter lcfa-section--hero"><h1>Old hero</h1></section><section><p>Body copy</p></section></main>',
+]);
+$GLOBALS['lcfa_test_post_meta'][$replace_hero_page_id]['_lc_livecanvas_enabled'] = '1';
+
+$replace_hero_apply_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $replace_hero_page_id,
+    'section_intent'    => 'hero',
+    'section_operation' => 'replace_hero',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Sostituisci la hero di questa pagina con una versione piu pulita.',
+]);
+
+lcfa_assert_true($replace_hero_apply_result['ok'] === true, 'page_upsert should support replace_hero section operations');
+lcfa_assert_true(substr_count($GLOBALS['lcfa_test_posts'][$replace_hero_page_id]->post_content, 'lcfa-section--hero') === 1, 'replace_hero should keep a single hero section instead of duplicating it');
+lcfa_assert_true(strpos($GLOBALS['lcfa_test_posts'][$replace_hero_page_id]->post_content, 'Old hero') === false, 'replace_hero should replace the previous hero markup');
+
+$before_footer_page_id = 47;
+$GLOBALS['lcfa_test_posts'][$before_footer_page_id] = new WP_Post([
+    'ID'           => $before_footer_page_id,
+    'post_type'    => 'page',
+    'post_status'  => 'publish',
+    'post_title'   => 'Before Footer Test',
+    'post_name'    => 'before-footer-test',
+    'post_content' => '<main><section><p>Body copy</p></section><footer><p>Footer copy</p></footer></main>',
+]);
+$GLOBALS['lcfa_test_post_meta'][$before_footer_page_id]['_lc_livecanvas_enabled'] = '1';
+
+$before_footer_apply_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $before_footer_page_id,
+    'section_intent'    => 'cta',
+    'section_operation' => 'before_footer',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Aggiungi una CTA prima del footer di questa pagina.',
+]);
+
+lcfa_assert_true($before_footer_apply_result['ok'] === true, 'page_upsert should support before_footer section operations');
+lcfa_assert_true(preg_match('/lcfa-section--cta.*<footer>/s', $GLOBALS['lcfa_test_posts'][$before_footer_page_id]->post_content) === 1, 'before_footer should insert the generated section immediately before the footer');
 
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
@@ -1362,7 +1474,11 @@ $fallback_edit_result = $command_deck->execute([
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 
 lcfa_assert_true($fallback_edit_result['ok'] === true, 'page_upsert should still succeed when get_edit_post_link returns empty');
-lcfa_assert_same('https://example.test/wp-admin/post.php?post=103&action=edit', $fallback_edit_result['edit_url'] ?? '', 'page_upsert should fall back to admin_url when get_edit_post_link is unavailable');
+lcfa_assert_same(
+    'https://example.test/wp-admin/post.php?post=' . (int) ($fallback_edit_result['target_id'] ?? 0) . '&action=edit',
+    $fallback_edit_result['edit_url'] ?? '',
+    'page_upsert should fall back to admin_url when get_edit_post_link is unavailable'
+);
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind-child/page-templates', 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/picowind/page-templates', 0777, true);
@@ -1440,6 +1556,67 @@ $missing_script_checks = $connection_tester->run_checks([
 
 lcfa_assert_true($missing_script_checks['ok'] === false, 'missing MCP CLI entrypoint should remain a blocking issue');
 lcfa_assert_true(empty($missing_script_checks['checks']['local_mcp']['skipped']), 'missing MCP CLI entrypoint should not be downgraded to skipped');
+
+$status_cache_property->setValue($local_mcp_bridge, [
+    'available'        => false,
+    'build_available'  => false,
+    'local_site'       => true,
+    'windpress_active' => true,
+    'node_available'   => false,
+    'node_version'     => '',
+    'rest_reachable'   => true,
+    'script_exists'    => true,
+    'message'          => 'Node.js is not available to the current PHP process.',
+]);
+
+$previous_home = getenv('HOME');
+$claude_home = sys_get_temp_dir() . '/lcfa-claude-home';
+$claude_config_dir = $claude_home . '/Library/Application Support/Claude';
+$claude_config_path = $claude_config_dir . '/claude_desktop_config.json';
+
+@mkdir($claude_config_dir, 0777, true);
+@unlink($claude_config_path);
+putenv('HOME=' . $claude_home);
+
+LCFA_Settings::update_connections(array_merge(LCFA_Settings::connection_defaults(), [
+    'preferred_client'          => 'claude',
+    'claude_connection_target'  => 'desktop_app',
+    'local_bridge_url'          => 'https://example.test/wp-json/lcfa/v1/',
+    'mcp_token'                 => 'test-token',
+    'connection_mode'           => 'local',
+]));
+
+$claude_desktop_missing_config = $connection_tester->run_checks([
+    'mode' => 'local',
+]);
+
+lcfa_assert_true($claude_desktop_missing_config['ok'] === false, 'Claude Desktop local smoke should fail until the host config contains the livecanvas-forge entry');
+lcfa_assert_same('Claude Desktop registration', $claude_desktop_missing_config['checks']['client_registration']['label'] ?? '', 'Claude Desktop smoke test should expose a dedicated registration check');
+lcfa_assert_true(strpos((string) ($claude_desktop_missing_config['checks']['client_registration']['message'] ?? ''), 'claude_desktop_config.json') !== false, 'missing Claude Desktop config should explain which file still needs to be updated');
+
+file_put_contents($claude_config_path, wp_json_encode([
+    'mcpServers' => [
+        'livecanvas-forge' => [
+            'type'    => 'stdio',
+            'command' => 'node',
+            'args'    => ['wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', '--transport=stdio'],
+        ],
+    ],
+], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+$claude_desktop_registered = $connection_tester->run_checks([
+    'mode' => 'local',
+]);
+
+lcfa_assert_true($claude_desktop_registered['ok'] === true, 'Claude Desktop local smoke should pass once the host config contains the livecanvas-forge registration');
+lcfa_assert_true(!empty($claude_desktop_registered['checks']['client_registration']['ok']), 'Claude Desktop registration check should report success when the entry exists');
+
+if ($previous_home === false) {
+    putenv('HOME');
+} else {
+    putenv('HOME=' . $previous_home);
+}
+
 lcfa_assert_same('https://example.test/landing-page-1-updated/', $updated_page_result['frontend_url'] ?? '', 'page_upsert update should refresh frontend_url after slug changes');
 lcfa_assert_same('<main>Updated Hero</main>', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert update should persist new content');
 

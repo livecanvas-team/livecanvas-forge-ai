@@ -20,6 +20,7 @@ final class LCFA_Environment {
         $this->snapshot_cache = [
             'livecanvas_installed'    => $this->is_plugin_installed('livecanvas'),
             'livecanvas_active'       => $this->is_livecanvas_active(),
+            'livecanvas_license_active' => $this->is_livecanvas_license_active(),
             'livecanvas_plugin_file'  => $this->find_plugin_file_by_slug('livecanvas'),
             'livecanvas_menu_slug'    => $this->get_livecanvas_menu_slug(),
             'current_theme_name'      => $current_theme->get('Name'),
@@ -48,6 +49,22 @@ final class LCFA_Environment {
         $plugin_file = $this->find_plugin_file_by_slug('livecanvas');
 
         return $plugin_file ? $this->is_plugin_active($plugin_file) : false;
+    }
+
+    public function is_livecanvas_license_active(): bool {
+        if (function_exists('lc_get_apikey')) {
+            $api_key = lc_get_apikey();
+
+            return is_scalar($api_key) && trim((string) $api_key) !== '';
+        }
+
+        if (function_exists('get_site_option')) {
+            $api_key = get_site_option('lc_apikey');
+
+            return is_scalar($api_key) && trim((string) $api_key) !== '';
+        }
+
+        return false;
     }
 
     public function is_windpress_active(): bool {

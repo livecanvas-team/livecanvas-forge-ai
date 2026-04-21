@@ -44,6 +44,7 @@ final class LCFA_Admin {
 
     public function hooks(): void {
         add_action('admin_menu', [$this, 'register_menus'], 20);
+        add_action('current_screen', [$this, 'suppress_external_admin_notices'], 0);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_init', [$this, 'maybe_redirect_after_activation']);
         add_action('wp_ajax_lcfa_connections_secondary', [$this, 'handle_connections_secondary_ajax']);
@@ -61,6 +62,32 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_command', [$this, 'handle_command_post']);
         add_action('lc_editor_header', [$this, 'render_editor_bridge_styles']);
         add_action('lc_editor_before_body_closing', [$this, 'render_editor_bridge']);
+    }
+
+    public function suppress_external_admin_notices($screen = null): void {
+        if (!$this->is_forge_dashboard_request()) {
+            return;
+        }
+
+        $hooks = [
+            'network_admin_notices',
+            'user_admin_notices',
+            'admin_notices',
+            'all_admin_notices',
+        ];
+
+        $screen_id = '';
+        if (is_object($screen) && isset($screen->id) && is_scalar($screen->id)) {
+            $screen_id = sanitize_key((string) $screen->id);
+        }
+
+        if ($screen_id !== '') {
+            $hooks[] = $screen_id . '_admin_notices';
+        }
+
+        foreach ($hooks as $hook) {
+            remove_all_actions($hook);
+        }
     }
 
     public function register_menus(): void {
@@ -323,9 +350,13 @@ final class LCFA_Admin {
 
         $initial_conversation_state = $this->get_editor_initial_conversation_state($current_thread_messages);
         $initial_conversation_label = $this->get_editor_conversation_state_label($initial_conversation_state);
-        $remote_status = $this->remote_client->get_status();
-        $default_action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
-        $command_base_url = $this->get_command_url([
+        $remote_status              = $this->remote_client->get_status();
+        $connections                = LCFA_Settings::get_connections();
+        $connected_client           = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        $connection_state           = (($connections['connection_status'] ?? '') === 'ready') ? 'connected' : 'disconnected';
+        $connection_icon_client     = $connected_client !== '' ? $connected_client : 'generic';
+        $default_action             = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
+        $command_base_url           = $this->get_command_url([
             'post_id'   => $post->ID,
             'thread_id' => $current_thread_id,
         ]);
@@ -351,16 +382,16 @@ final class LCFA_Admin {
                 'recommendedWorkflow' => __('Recommended workflow', 'livecanvas-forge-ai'),
                 'recommendedPreflight' => __('Recommended preflight payload', 'livecanvas-forge-ai'),
                 'openDeck'        => __('Open suggested payload in Command Deck', 'livecanvas-forge-ai'),
-                'previewSuggestion' => __('Preview inline', 'livecanvas-forge-ai'),
+                'previewSuggestion' => __('Preview', 'livecanvas-forge-ai'),
                 'previewing'      => __('Preparing preview...', 'livecanvas-forge-ai'),
-                'applySuggestion' => __('Apply inline', 'livecanvas-forge-ai'),
-                'applying'        => __('Applying...', 'livecanvas-forge-ai'),
+                'applySuggestion' => __('Apply', 'livecanvas-forge-ai'),
+                'applying'        => __('Applying change...', 'livecanvas-forge-ai'),
                 'applyFailed'     => __('The inline execution failed.', 'livecanvas-forge-ai'),
                 'idleState'       => __('Ready for a new request.', 'livecanvas-forge-ai'),
-                'thinkingState'   => __('Analyzing request...', 'livecanvas-forge-ai'),
-                'suggestedState'  => __('Suggestion ready. Review it or run it inline.', 'livecanvas-forge-ai'),
+                'thinkingState'   => __('Sending request...', 'livecanvas-forge-ai'),
+                'suggestedState'  => __('Request prepared.', 'livecanvas-forge-ai'),
                 'previewedState'  => __('Preview ready. Review the support details below.', 'livecanvas-forge-ai'),
-                'appliedState'    => __('Inline action completed.', 'livecanvas-forge-ai'),
+                'appliedState'    => __('Change applied inline.', 'livecanvas-forge-ai'),
                 'failedState'     => __('The current request failed. Review the support details below.', 'livecanvas-forge-ai'),
                 'queuedState'     => __('Queued for inline execution.', 'livecanvas-forge-ai'),
                 'runningState'    => __('Running inline execution...', 'livecanvas-forge-ai'),
@@ -383,10 +414,13 @@ final class LCFA_Admin {
                 'openThemeFile'   => __('Open theme file', 'livecanvas-forge-ai'),
                 'openThemeTemplate' => __('Open theme template', 'livecanvas-forge-ai'),
                 'openBackup'      => __('Open backup', 'livecanvas-forge-ai'),
-                'analyzing'       => __('Analyzing request...', 'livecanvas-forge-ai'),
-                'attachScreenshot' => __('Attach screenshot', 'livecanvas-forge-ai'),
-                'clearScreenshot' => __('Clear screenshot', 'livecanvas-forge-ai'),
-                'screenshotReady' => __('Screenshot ready for this request.', 'livecanvas-forge-ai'),
+                'analyzeSuggestion' => __('Send', 'livecanvas-forge-ai'),
+                'analyzing'       => __('Sending...', 'livecanvas-forge-ai'),
+                'attachScreenshot' => __('Upload image', 'livecanvas-forge-ai'),
+                'clearScreenshot' => __('Remove image', 'livecanvas-forge-ai'),
+                'screenshotReady' => __('Image ready for this request.', 'livecanvas-forge-ai'),
+                'dropScreenshotTitle' => __('Upload image', 'livecanvas-forge-ai'),
+                'dropScreenshotHint' => __('Add a reference screenshot if needed.', 'livecanvas-forge-ai'),
                 'diffPreview'     => __('Diff preview', 'livecanvas-forge-ai'),
                 'currentMarkup'   => __('Current markup', 'livecanvas-forge-ai'),
                 'proposedMarkup'  => __('Proposed markup', 'livecanvas-forge-ai'),
@@ -402,21 +436,53 @@ final class LCFA_Admin {
         echo '<div class="lcfa-editor-bridge__head">';
         echo '<div>';
         echo '<span class="lcfa-editor-bridge__eyebrow">' . esc_html__('Forge AI bridge', 'livecanvas-forge-ai') . '</span>';
-        echo '<p class="lcfa-editor-bridge__title">' . esc_html(get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai')) . '</p>';
+        echo '<p class="lcfa-editor-bridge__title">' . esc_html(sprintf(__('You are in: %s', 'livecanvas-forge-ai'), get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai'))) . '</p>';
         echo '<p class="lcfa-editor-bridge__target-line" data-lcfa-editor-target-summary>' . esc_html($this->get_editor_target_summary($post, $context)) . '</p>';
+        echo '<div class="lcfa-editor-bridge__connection" data-state="' . esc_attr($connection_state) . '">';
+        echo '<span class="lcfa-editor-bridge__connection-media">' . $this->get_agent_icon_markup($connection_icon_client, $this->get_client_fallback_icon($connection_icon_client), 'lcfa-agent-icon lcfa-agent-icon--editor-status') . '</span>';
+        echo '<span class="lcfa-editor-bridge__connection-copy">' . esc_html($this->get_editor_connection_status_label($connected_client, $connection_state)) . '</span>';
+        echo '</div>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__head-actions">';
-        echo '<a class="lcfa-editor-bridge__head-link" href="' . esc_url($command_base_url) . '" target="_blank" rel="noreferrer noopener" data-lcfa-editor-open-deck>' . esc_html__('Command Deck', 'livecanvas-forge-ai') . '</a>';
-        echo '<button type="button" class="lcfa-editor-bridge__close" data-lcfa-editor-close aria-label="' . esc_attr__('Close Forge AI panel', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('x-circle') . '</button>';
+        echo '<a class="lcfa-editor-bridge__head-link is-icon-only" href="' . esc_url($command_base_url) . '" target="_blank" rel="noreferrer noopener" aria-label="' . esc_attr__('Open Command Deck', 'livecanvas-forge-ai') . '" title="' . esc_attr__('Open Command Deck', 'livecanvas-forge-ai') . '" data-lcfa-editor-open-deck>';
+        echo $this->get_icon_svg('command');
+        echo '</a>';
+        echo '<button type="button" class="lcfa-editor-bridge__close" data-lcfa-editor-close aria-label="' . esc_attr__('Close Forge AI panel', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('power') . '</button>';
         echo '</div>';
-        echo '</div>';
-        echo '<div class="lcfa-editor-bridge__stack">';
-        echo '<span class="lcfa-editor-bridge__pill">' . esc_html(strtoupper((string) ($snapshot['detected_framework'] ?: 'unknown'))) . '</span>';
-        echo '<span class="lcfa-editor-bridge__pill">' . esc_html(strtoupper((string) ($snapshot['site_mode'] ?: 'local'))) . '</span>';
-        echo '<span class="lcfa-editor-bridge__pill' . (!empty($snapshot['windpress_active']) ? '' : ' is-secondary') . '">' . esc_html(!empty($snapshot['windpress_active']) ? __('WindPress active', 'livecanvas-forge-ai') : __('WindPress inactive', 'livecanvas-forge-ai')) . '</span>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Thread log', 'livecanvas-forge-ai') . '</div>';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Request', 'livecanvas-forge-ai') . '</div>';
+        echo '<p class="lcfa-editor-bridge__helper">' . esc_html__('Describe the change you want on this page. Forge AI sends it and runs it inline on the current page.', 'livecanvas-forge-ai') . '</p>';
+        echo '<div class="lcfa-editor-bridge__controls" data-lcfa-editor-composer>';
+        echo '<textarea data-lcfa-editor-prompt placeholder="' . esc_attr__('Example: refresh this header with a simpler navigation and keep the current logo.', 'livecanvas-forge-ai') . '"></textarea>';
+        echo '<div class="lcfa-editor-bridge__attachment-row">';
+        echo '<input type="file" accept="image/*" hidden data-lcfa-editor-attachment>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral is-upload" data-lcfa-editor-attachment-trigger>';
+        echo $this->get_icon_svg('image');
+        echo '<span data-lcfa-editor-button-label>' . esc_html__('Upload image', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" hidden data-lcfa-editor-attachment-clear>';
+        echo $this->get_icon_svg('x-circle');
+        echo '<span data-lcfa-editor-button-label>' . esc_html__('Remove image', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__attachment-preview-card" hidden data-lcfa-editor-attachment-preview>';
+        echo '<img class="lcfa-editor-bridge__attachment-preview-image" data-lcfa-editor-attachment-preview-image alt="" hidden>';
+        echo '<div class="lcfa-editor-bridge__attachment-preview-copy">';
+        echo '<span class="lcfa-editor-bridge__attachment-meta" data-lcfa-editor-attachment-preview-meta></span>';
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__actions">';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-primary is-step-primary" data-lcfa-editor-analyze disabled>';
+        echo $this->get_icon_svg('stars');
+        echo '<span data-lcfa-editor-button-label>' . esc_html__('Send', 'livecanvas-forge-ai') . '</span>';
+        echo '</button>';
+        echo '</div>';
+        echo '<p class="lcfa-editor-bridge__action-note">' . esc_html__('Send analyzes the request and executes the change immediately on this page.', 'livecanvas-forge-ai') . '</p>';
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__section">';
+        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Conversation', 'livecanvas-forge-ai') . '</div>';
         echo '<div class="lcfa-editor-bridge__thread-bar">';
         echo '<span class="lcfa-editor-bridge__thread-status" data-lcfa-editor-status data-state="' . esc_attr($initial_conversation_state) . '">' . esc_html($initial_conversation_label) . '</span>';
         echo '</div>';
@@ -426,14 +492,18 @@ final class LCFA_Admin {
                 continue;
             }
 
+            if (($message['role'] ?? '') === 'suggestion_result') {
+                continue;
+            }
+
             $this->render_editor_bridge_thread_message($message);
         }
         echo '</div>';
         echo '<p class="lcfa-editor-thread-empty"' . ($current_thread_messages ? ' hidden' : '') . ' data-lcfa-editor-thread-empty>' . esc_html__('No messages yet. Send a request to start this thread.', 'livecanvas-forge-ai') . '</p>';
         echo '</div>';
-        echo '<div class="lcfa-editor-bridge__section">';
-        echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Request', 'livecanvas-forge-ai') . '</div>';
-        echo '<div class="lcfa-editor-bridge__controls" data-lcfa-editor-composer>';
+        echo '<details class="lcfa-editor-bridge__details" data-lcfa-editor-session-details>';
+        echo '<summary>' . esc_html__('Session settings', 'livecanvas-forge-ai') . '</summary>';
+        echo '<div class="lcfa-editor-bridge__details-body">';
         echo '<div class="lcfa-editor-bridge__row">';
         echo '<label class="lcfa-editor-bridge__field">';
         echo '<span>' . esc_html__('Thread', 'livecanvas-forge-ai') . '</span>';
@@ -478,38 +548,8 @@ final class LCFA_Admin {
         echo '<span>' . esc_html__('Delete current', 'livecanvas-forge-ai') . '</span>';
         echo '</button>';
         echo '</div>';
-        echo '<textarea data-lcfa-editor-prompt placeholder="' . esc_attr__('Example: refresh this header with a simpler navigation and keep the current logo.', 'livecanvas-forge-ai') . '"></textarea>';
-        echo '<div class="lcfa-editor-bridge__attachment-row">';
-        echo '<label class="lcfa-editor-bridge__button is-neutral is-upload">';
-        echo '<input type="file" accept="image/*" hidden data-lcfa-editor-attachment>';
-        echo $this->get_icon_svg('file-earmark');
-        echo '<span>' . esc_html__('Attach screenshot', 'livecanvas-forge-ai') . '</span>';
-        echo '</label>';
-        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral" hidden data-lcfa-editor-attachment-clear>';
-        echo $this->get_icon_svg('x-circle');
-        echo '<span>' . esc_html__('Clear screenshot', 'livecanvas-forge-ai') . '</span>';
-        echo '</button>';
         echo '</div>';
-        echo '<div class="lcfa-editor-bridge__attachment-preview" data-lcfa-editor-attachment-preview hidden>';
-        echo '<img class="lcfa-editor-bridge__attachment-image" src="" alt="" data-lcfa-editor-attachment-preview-image>';
-        echo '<div class="lcfa-editor-bridge__attachment-meta" data-lcfa-editor-attachment-preview-meta></div>';
-        echo '</div>';
-        echo '<div class="lcfa-editor-bridge__actions">';
-        echo '<button type="button" class="lcfa-editor-bridge__button is-primary" data-lcfa-editor-analyze>';
-        echo $this->get_icon_svg('stars');
-        echo '<span>' . esc_html__('Analyze request', 'livecanvas-forge-ai') . '</span>';
-        echo '</button>';
-        echo '<button type="button" class="lcfa-editor-bridge__button is-secondary" hidden data-lcfa-editor-preview>';
-        echo $this->get_icon_svg('eye');
-        echo '<span>' . esc_html__('Preview inline', 'livecanvas-forge-ai') . '</span>';
-        echo '</button>';
-        echo '<button type="button" class="lcfa-editor-bridge__button is-secondary" hidden data-lcfa-editor-apply>';
-        echo $this->get_icon_svg('rocket');
-        echo '<span>' . esc_html__('Apply inline', 'livecanvas-forge-ai') . '</span>';
-        echo '</button>';
-        echo '</div>';
-        echo '</div>';
-        echo '</div>';
+        echo '</details>';
         echo '<details class="lcfa-editor-bridge__details" data-lcfa-editor-quick-actions>';
         echo '<summary>' . esc_html__('Quick actions', 'livecanvas-forge-ai') . '</summary>';
         echo '<div class="lcfa-editor-bridge__details-body">';
@@ -546,6 +586,10 @@ final class LCFA_Admin {
         echo '<script type="application/json" data-lcfa-editor-config>' . wp_json_encode($editor_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>';
     }
 
+    private function is_forge_dashboard_request(): bool {
+        return sanitize_key((string) ($_GET['page'] ?? '')) === 'lcfa-dashboard';
+    }
+
     public function handle_setup_post(): void {
         if (!current_user_can('manage_options')) {
             wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
@@ -568,9 +612,16 @@ final class LCFA_Admin {
                     }
                 }
 
-                $settings['last_completed_step'] = $this->environment->is_livecanvas_active() ? max(1, (int) $settings['last_completed_step']) : 0;
+                $snapshot = $this->environment->get_snapshot();
+                $preflight_ready = $this->is_preflight_ready($snapshot);
+
+                if (!$preflight_ready && empty($_POST['activate_livecanvas'])) {
+                    LCFA_Settings::set_notice($this->get_preflight_blocking_message($snapshot), 'error');
+                }
+
+                $settings['last_completed_step'] = $preflight_ready ? max(1, (int) $settings['last_completed_step']) : 0;
                 LCFA_Settings::update($settings);
-                $this->redirect_to_step($this->environment->is_livecanvas_active() ? 2 : 1);
+                $this->redirect_to_step($preflight_ready ? 2 : 1);
                 break;
 
             case 2:
@@ -1997,24 +2048,19 @@ final class LCFA_Admin {
     }
 
     private function render_connection_onboarding_hero(array $bundle, array $state, array $mcp_status, array $snapshot, string $selected_mode): void {
-        $local_bridge = is_array($mcp_status['local_bridge'] ?? null) ? $mcp_status['local_bridge'] : [];
-        $local_bridge_deferred = !empty($local_bridge['deferred']);
-        $local_bridge_ready = !$local_bridge_deferred && !empty($local_bridge['available']);
-        $local_bridge_label = $local_bridge_deferred
-            ? __('Local MCP bridge status loading', 'livecanvas-forge-ai')
-            : ($local_bridge_ready ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai'));
+        $status = (string) ($state['status'] ?? 'not_connected');
+        $status_label = ucfirst(str_replace('_', ' ', $status));
+        $status_class = $status === 'ready' ? ' is-positive' : (($status === 'needs_attention' || $status === 'not_connected') ? ' is-negative' : '');
+        $client_label = ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex')));
 
         echo '<section class="lcfa-card lcfa-onboarding-hero">';
         echo '<div class="lcfa-card-head">';
-        echo $this->get_icon_svg('stars');
-        echo '<div><h2>' . esc_html__('Connect your coding agent', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Set up Codex, OpenCode, Cursor, Claude Code, or any generic MCP client from this page. The goal is to generate a working client bundle, verify it, and get to Ready without touching low-level transport settings unless you want to.', 'livecanvas-forge-ai') . '</p></div>';
+        echo $this->get_icon_svg('plug');
+        echo '<div><h2>' . esc_html__('Connection status', 'livecanvas-forge-ai') . '</h2></div>';
         echo '</div>';
         echo '<div class="lcfa-chip-row">';
-        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(sprintf(__('Client: %s', 'livecanvas-forge-ai'), ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex'))))) . '</span></span>';
-        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), $selected_mode)) . '</span>';
-        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Framework: %s', 'livecanvas-forge-ai'), (string) ($snapshot['detected_framework'] ?? 'unknown'))) . '</span>';
-        echo '<span class="lcfa-chip' . ($local_bridge_ready ? ' is-positive' : ($local_bridge_deferred ? '' : '')) . '">' . esc_html($local_bridge_label) . '</span>';
-        echo '<span class="lcfa-chip' . (($state['status'] ?? '') === 'ready' ? ' is-positive' : (($state['status'] ?? '') === 'needs_attention' ? ' is-negative' : '')) . '">' . esc_html(ucfirst(str_replace('_', ' ', (string) ($state['status'] ?? 'not_connected')))) . '</span>';
+        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(sprintf(__('AI agent: %s', 'livecanvas-forge-ai'), $client_label)) . '</span></span>';
+        echo '<span class="lcfa-chip' . $status_class . '">' . esc_html($status_label) . '</span>';
         echo '</div>';
         if (!empty($state['message'])) {
             echo '<p class="lcfa-guide-copy">' . esc_html((string) $state['message']) . '</p>';
@@ -2024,7 +2070,6 @@ final class LCFA_Admin {
 
     private function render_connection_wizard(array $wizard_view, array $bundle, array $connections, string $preferred_client, string $selected_mode, array $mcp_bootstrap, array $settings, array $snapshot, array $mcp_status, array $onboarding_state, array $workspace_write_state): void {
         $panel = is_array($wizard_view['active_panel'] ?? null) ? $wizard_view['active_panel'] : [];
-        $banner = is_array($wizard_view['banner'] ?? null) ? $wizard_view['banner'] : [];
         $current_step = (string) ($onboarding_state['current_step'] ?? 'choose_client');
 
         echo '<section class="lcfa-card">';
@@ -2034,7 +2079,6 @@ final class LCFA_Admin {
         echo '</div>';
 
         echo '<div class="lcfa-wizard__intro">';
-        $this->render_connection_now_alert($banner);
         $this->render_connection_stepper((array) ($wizard_view['steps'] ?? []));
         echo '</div>';
         $this->render_connection_active_step_panel($panel, $current_step, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $workspace_write_state);
@@ -2136,25 +2180,6 @@ final class LCFA_Admin {
         echo '</section>';
     }
 
-    private function render_connection_now_alert(array $banner): void {
-        if (empty($banner)) {
-            return;
-        }
-
-        echo '<div class="lcfa-wizard__alert">';
-        echo '<span class="lcfa-wizard__alert-eyebrow">' . esc_html((string) ($banner['eyebrow'] ?? __('What to do now', 'livecanvas-forge-ai'))) . '</span>';
-        if (!empty($banner['title'])) {
-            echo '<h3>' . esc_html((string) $banner['title']) . '</h3>';
-        }
-        if (!empty($banner['body'])) {
-            echo '<p>' . esc_html((string) $banner['body']) . '</p>';
-        }
-        if (!empty($banner['next'])) {
-            echo '<p class="lcfa-wizard__next">' . esc_html((string) $banner['next']) . '</p>';
-        }
-        echo '</div>';
-    }
-
     private function render_connection_stepper(array $steps): void {
         echo '<ol class="lcfa-wizard__steps">';
         foreach ($steps as $step) {
@@ -2162,7 +2187,6 @@ final class LCFA_Admin {
             echo '<li class="is-' . esc_attr($state) . '">';
             echo '<span class="lcfa-wizard__step-number">' . esc_html((string) ($step['number'] ?? '')) . '</span>';
             echo '<strong>' . esc_html((string) ($step['title'] ?? '')) . '</strong>';
-            echo '<span class="lcfa-wizard__step-state">' . esc_html(ucfirst($state === 'done' ? __('Done', 'livecanvas-forge-ai') : ($state === 'active' ? __('Current', 'livecanvas-forge-ai') : __('Locked', 'livecanvas-forge-ai')))) . '</span>';
             echo '</li>';
         }
         echo '</ol>';
@@ -2170,8 +2194,12 @@ final class LCFA_Admin {
 
     private function render_connection_active_step_panel(array $panel, string $current_step, array $bundle, array $connections, string $preferred_client, string $selected_mode, array $mcp_bootstrap, array $settings, array $snapshot, array $mcp_status, array $workspace_write_state): void {
         $claude_connection_target = $this->normalize_claude_connection_target((string) ($connections['claude_connection_target'] ?? ''));
+        $panel_class = 'lcfa-wizard__panel';
+        if ($current_step === 'smoke_test') {
+            $panel_class .= ' lcfa-wizard__panel--blocking';
+        }
 
-        echo '<section class="lcfa-wizard__panel">';
+        echo '<section class="' . esc_attr($panel_class) . '">';
         echo '<div class="lcfa-wizard__panel-head">';
         echo '<h3>' . esc_html((string) ($panel['title'] ?? __('Connection step', 'livecanvas-forge-ai'))) . '</h3>';
         if (!empty($panel['description'])) {
@@ -2204,6 +2232,16 @@ final class LCFA_Admin {
             default:
                 $this->render_connection_choose_client_form($preferred_client, $selected_mode, (string) ($bundle['workspace_root'] ?? ''), (string) ($panel['primary_cta']['label'] ?? __('Continue', 'livecanvas-forge-ai')));
                 break;
+        }
+
+        if ($current_step !== 'choose_client') {
+            echo '<div class="lcfa-cta-row">';
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            wp_nonce_field('lcfa_reconfigure_connection');
+            echo '<input type="hidden" name="action" value="lcfa_reconfigure_connection">';
+            echo '<button class="button" type="submit">' . esc_html__('Change coding agent', 'livecanvas-forge-ai') . '</button>';
+            echo '</form>';
+            echo '</div>';
         }
 
         echo '</section>';
@@ -2286,10 +2324,7 @@ final class LCFA_Admin {
             echo '<input type="hidden" name="workspace_root" value="">';
         }
         echo '</div>';
-
-        echo '<details class="lcfa-command-details" data-lcfa-command-thread-tools>';
-        echo '<summary>' . esc_html__('Thread tools', 'livecanvas-forge-ai') . '</summary>';
-        echo '<div class="lcfa-command-details__body">';
+        echo '<p class="lcfa-guide-copy">' . esc_html__('If these values look correct, confirm them to generate the client bundle for the selected coding agent.', 'livecanvas-forge-ai') . '</p>';
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
         echo '<button class="button" type="submit" name="rotate_mcp_token" value="1">' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</button>';
@@ -3448,9 +3483,28 @@ final class LCFA_Admin {
         echo '</div>';
 
         echo '<div class="lcfa-status-list">';
-        $this->render_status_row(__('LiveCanvas plugin installed', 'livecanvas-forge-ai'), $snapshot['livecanvas_installed']);
-        $this->render_status_row(__('LiveCanvas plugin active', 'livecanvas-forge-ai'), $snapshot['livecanvas_active']);
-        $this->render_status_row(__('LiveCanvas admin menu detected', 'livecanvas-forge-ai'), !empty($snapshot['livecanvas_menu_slug']));
+        $this->render_status_row(
+            __('LiveCanvas plugin and license active', 'livecanvas-forge-ai'),
+            !empty($snapshot['livecanvas_installed']) && !empty($snapshot['livecanvas_active']) && !empty($snapshot['livecanvas_license_active']),
+            !empty($snapshot['livecanvas_license_active'])
+                ? __('Plugin active with license/API key detected.', 'livecanvas-forge-ai')
+                : __('Plugin or license/API key missing.', 'livecanvas-forge-ai')
+        );
+        $this->render_status_row(
+            __('Detected LiveCanvas themes', 'livecanvas-forge-ai'),
+            $this->has_livecanvas_theme_stack($snapshot),
+            $this->get_preflight_theme_summary($snapshot)
+        );
+
+        if ($this->has_picowind_stack($snapshot)) {
+            $this->render_status_row(
+                __('WindPress active for Picowind', 'livecanvas-forge-ai'),
+                !empty($snapshot['windpress_installed']) && !empty($snapshot['windpress_active']),
+                !empty($snapshot['windpress_installed'])
+                    ? __('WindPress plugin detected. It must stay active for Picowind.', 'livecanvas-forge-ai')
+                    : __('WindPress plugin not detected.', 'livecanvas-forge-ai')
+            );
+        }
         echo '</div>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
@@ -3463,8 +3517,10 @@ final class LCFA_Admin {
         } elseif (!$snapshot['livecanvas_active']) {
             echo '<p>' . esc_html__('LiveCanvas is installed but inactive. You can activate it directly from this screen.', 'livecanvas-forge-ai') . '</p>';
             echo '<button class="button button-primary" name="activate_livecanvas" value="1">' . esc_html__('Activate LiveCanvas', 'livecanvas-forge-ai') . '</button>';
+        } elseif (!$this->is_preflight_ready($snapshot)) {
+            echo '<div class="notice notice-error inline"><p>' . esc_html($this->get_preflight_blocking_message($snapshot)) . '</p></div>';
         } else {
-            echo '<p>' . esc_html__('LiveCanvas is ready. Move to the framework confirmation step.', 'livecanvas-forge-ai') . '</p>';
+            echo '<p>' . esc_html__('LiveCanvas stack is ready. Move to the framework confirmation step.', 'livecanvas-forge-ai') . '</p>';
             echo '<button class="button button-primary">' . esc_html__('Continue', 'livecanvas-forge-ai') . '</button>';
         }
 
@@ -3743,11 +3799,116 @@ final class LCFA_Admin {
         echo '</label>';
     }
 
-    private function render_status_row(string $label, bool $status): void {
+    private function render_status_row(string $label, bool $status, string $detail = ''): void {
         echo '<div class="lcfa-status-row">';
+        echo '<span class="lcfa-status-copy">';
         echo '<span class="lcfa-status-label">' . esc_html($label) . '</span>';
+        if ($detail !== '') {
+            echo '<small>' . esc_html($detail) . '</small>';
+        }
+        echo '</span>';
         echo '<strong class="' . esc_attr($status ? 'ok' : 'ko') . '">' . $this->get_icon_svg($status ? 'check-circle' : 'x-circle') . '<span>' . esc_html($status ? 'OK' : 'KO') . '</span></strong>';
         echo '</div>';
+    }
+
+    private function is_preflight_ready(array $snapshot): bool {
+        if (empty($snapshot['livecanvas_installed']) || empty($snapshot['livecanvas_active']) || empty($snapshot['livecanvas_license_active'])) {
+            return false;
+        }
+
+        if (!$this->has_livecanvas_theme_stack($snapshot)) {
+            return false;
+        }
+
+        if ($this->has_picowind_stack($snapshot)) {
+            return !empty($snapshot['windpress_installed']) && !empty($snapshot['windpress_active']);
+        }
+
+        return true;
+    }
+
+    private function get_preflight_blocking_message(array $snapshot): string {
+        if (empty($snapshot['livecanvas_installed'])) {
+            return __('LiveCanvas is not installed. The wizard stops here until the primary plugin is installed.', 'livecanvas-forge-ai');
+        }
+
+        if (empty($snapshot['livecanvas_active'])) {
+            return __('LiveCanvas is installed but inactive. Activate it before continuing.', 'livecanvas-forge-ai');
+        }
+
+        if (empty($snapshot['livecanvas_license_active'])) {
+            return __('LiveCanvas is active, but its license/API key is not active. Activate LiveCanvas before continuing.', 'livecanvas-forge-ai');
+        }
+
+        if (!$this->has_livecanvas_theme_stack($snapshot)) {
+            return __('No Picostrap or Picowind theme was detected. Install or activate a supported LiveCanvas theme before continuing.', 'livecanvas-forge-ai');
+        }
+
+        if ($this->has_picowind_stack($snapshot) && (empty($snapshot['windpress_installed']) || empty($snapshot['windpress_active']))) {
+            return __('Picowind is installed, so WindPress must be installed and active before continuing.', 'livecanvas-forge-ai');
+        }
+
+        return __('Complete the LiveCanvas preflight before continuing.', 'livecanvas-forge-ai');
+    }
+
+    private function has_livecanvas_theme_stack(array $snapshot): bool {
+        if (!empty($snapshot['picostrap_candidates']) || !empty($snapshot['picowind_candidates'])) {
+            return true;
+        }
+
+        return in_array((string) ($snapshot['detected_framework'] ?? ''), ['picostrap', 'picowind'], true);
+    }
+
+    private function has_picowind_stack(array $snapshot): bool {
+        return !empty($snapshot['picowind_candidates']) || (string) ($snapshot['detected_framework'] ?? '') === 'picowind';
+    }
+
+    private function get_preflight_theme_summary(array $snapshot): string {
+        $groups = [];
+        $picostrap = $this->format_theme_candidate_names((array) ($snapshot['picostrap_candidates'] ?? []));
+        $picowind = $this->format_theme_candidate_names((array) ($snapshot['picowind_candidates'] ?? []));
+
+        if ($picostrap !== '') {
+            $groups[] = sprintf(__('Picostrap: %s', 'livecanvas-forge-ai'), $picostrap);
+        }
+
+        if ($picowind !== '') {
+            $groups[] = sprintf(__('Picowind: %s', 'livecanvas-forge-ai'), $picowind);
+        }
+
+        if ($groups) {
+            return implode(' · ', $groups);
+        }
+
+        $detected = (string) ($snapshot['detected_framework'] ?? '');
+        if (in_array($detected, ['picostrap', 'picowind'], true)) {
+            return sprintf(__('Active stack detected as %s, but no installed theme candidate list was returned.', 'livecanvas-forge-ai'), $detected);
+        }
+
+        return __('No Picostrap or Picowind themes detected.', 'livecanvas-forge-ai');
+    }
+
+    private function format_theme_candidate_names(array $candidates): string {
+        $names = [];
+
+        foreach ($candidates as $candidate) {
+            if (!is_array($candidate)) {
+                continue;
+            }
+
+            $name = trim((string) ($candidate['stylesheet'] ?? ''));
+            if ($name === '') {
+                $name = trim((string) ($candidate['name'] ?? ''));
+            }
+
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        $names = array_values(array_unique($names));
+
+        return implode(', ', $names);
     }
 
     private function render_radio(string $name, string $value, string $label, string $selected, string $icon): void {
@@ -3774,7 +3935,8 @@ final class LCFA_Admin {
         echo '<div class="lcfa-hero-main">';
         echo '<div class="lcfa-hero-copy">';
         echo '<div class="lcfa-kicker">';
-        echo '<span>' . esc_html__('LiveCanvas Forge AI', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-kicker-brand" aria-hidden="true">' . $this->get_partner_logo('livecanvas') . '</span>';
+        echo '<span>' . esc_html__('Forge AI', 'livecanvas-forge-ai') . '</span>';
         echo '</div>';
         echo '<h1>' . esc_html((string) ($hero['title'] ?? '')) . '</h1>';
         echo '<p class="lcfa-lead">' . esc_html((string) ($hero['subtitle'] ?? '')) . '</p>';
@@ -3799,7 +3961,7 @@ final class LCFA_Admin {
         }
         echo '</div>';
         echo '<details class="lcfa-hero-details-panel">';
-        echo '<summary class="lcfa-hero-details-toggle">' . esc_html__('Details', 'livecanvas-forge-ai') . '</summary>';
+        echo '<summary class="lcfa-hero-details-toggle" aria-label="' . esc_attr__('Details', 'livecanvas-forge-ai') . '"><span class="lcfa-hero-details-toggle__icon" aria-hidden="true">i</span><span class="screen-reader-text">' . esc_html__('Details', 'livecanvas-forge-ai') . '</span></summary>';
         echo '<div class="lcfa-hero-details">';
         foreach ((array) ($hero['details'] ?? []) as $detail) {
             if (!is_array($detail)) {
@@ -3826,9 +3988,8 @@ final class LCFA_Admin {
             ? $this->get_icon_svg($asset ?: 'stars')
             : $this->get_partner_logo($asset ?: 'livecanvas-micro');
 
-        echo '<span class="lcfa-hero-mark' . ($active ? ' is-active' : '') . '">';
+        echo '<span class="lcfa-hero-mark' . ($active ? ' is-active' : '') . '" aria-label="' . esc_attr($label) . '" title="' . esc_attr($label) . '">';
         echo '<span class="lcfa-hero-mark-media">' . $media . '</span>';
-        echo '<span class="lcfa-hero-mark-label">' . esc_html($label) . '</span>';
         echo '</span>';
     }
 
@@ -4147,7 +4308,7 @@ final class LCFA_Admin {
         if ($user_prompt !== '') {
             echo '<input type="hidden" name="user_prompt" value="' . esc_attr($user_prompt) . '">';
         }
-        echo '<button class="button button-small" type="submit">' . esc_html((string) ($action['label'] ?? __('Apply inline', 'livecanvas-forge-ai'))) . '</button>';
+        echo '<button class="button button-small" type="submit">' . esc_html((string) ($action['label'] ?? __('Apply', 'livecanvas-forge-ai'))) . '</button>';
         echo '</form>';
     }
 
@@ -5521,26 +5682,64 @@ final class LCFA_Admin {
     }
 
     private function get_editor_target_summary(WP_Post $post, array $context): string {
-        $action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
         $variant = !empty($context['variant']) ? (string) $context['variant'] : '1';
-        $label = $this->get_action_label($action);
+        $label   = $this->get_editor_target_type_label($post, $context);
 
-        if ($action === 'update_header' || $action === 'update_footer') {
-            return sprintf(
-                __('Post #%1$d · %2$s · %3$s · variant %4$s', 'livecanvas-forge-ai'),
-                (int) $post->ID,
-                $post->post_type,
-                $label,
-                $variant
-            );
+        if (($label === __('Header partial', 'livecanvas-forge-ai') || $label === __('Footer partial', 'livecanvas-forge-ai')) && $variant !== '1') {
+            return sprintf(__('Target: %1$s · variant %2$s', 'livecanvas-forge-ai'), $label, $variant);
         }
 
-        return sprintf(
-            __('Post #%1$d · %2$s · %3$s', 'livecanvas-forge-ai'),
-            (int) $post->ID,
-            $post->post_type,
-            $label
-        );
+        return sprintf(__('Target: %s', 'livecanvas-forge-ai'), $label);
+    }
+
+    private function get_editor_connection_status_label(string $client, string $state): string {
+        $client = sanitize_key($client);
+
+        if ($client === '') {
+            return __('No agent connected', 'livecanvas-forge-ai');
+        }
+
+        $label = ucfirst(str_replace(['-', '_'], ' ', $client));
+
+        if ($state === 'connected') {
+            return sprintf(__('%s connected', 'livecanvas-forge-ai'), $label);
+        }
+
+        return sprintf(__('%s not connected', 'livecanvas-forge-ai'), $label);
+    }
+
+    private function get_editor_target_type_label(WP_Post $post, array $context): string {
+        $action = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
+
+        if ($action === 'update_header') {
+            return __('Header partial', 'livecanvas-forge-ai');
+        }
+
+        if ($action === 'update_footer') {
+            return __('Footer partial', 'livecanvas-forge-ai');
+        }
+
+        if ($post->post_type === 'lc_partial') {
+            if ((string) get_post_meta($post->ID, 'is_header', true) === '1') {
+                return __('Header partial', 'livecanvas-forge-ai');
+            }
+
+            if ((string) get_post_meta($post->ID, 'is_footer', true) === '1') {
+                return __('Footer partial', 'livecanvas-forge-ai');
+            }
+
+            return __('Partial', 'livecanvas-forge-ai');
+        }
+
+        if ($post->post_type === 'lc_dynamic_template') {
+            return __('Dynamic template', 'livecanvas-forge-ai');
+        }
+
+        if ($post->post_type === 'page') {
+            return __('Page', 'livecanvas-forge-ai');
+        }
+
+        return ucwords(str_replace(['-', '_'], ' ', (string) $post->post_type));
     }
 
     private function get_editor_initial_conversation_state(array $messages): string {
@@ -5584,17 +5783,17 @@ final class LCFA_Admin {
     private function get_editor_conversation_state_label(string $state): string {
         switch ($state) {
             case 'thinking':
-                return __('Analyzing request...', 'livecanvas-forge-ai');
+                return __('Sending request...', 'livecanvas-forge-ai');
             case 'queueing':
                 return __('Queued for inline execution.', 'livecanvas-forge-ai');
             case 'running':
                 return __('Running inline execution...', 'livecanvas-forge-ai');
             case 'suggested':
-                return __('Suggestion ready. Review it or run it inline.', 'livecanvas-forge-ai');
+                return __('Request prepared.', 'livecanvas-forge-ai');
             case 'previewed':
                 return __('Preview ready. Review the support details below.', 'livecanvas-forge-ai');
             case 'applied':
-                return __('Inline action completed.', 'livecanvas-forge-ai');
+                return __('Change applied inline.', 'livecanvas-forge-ai');
             case 'failed':
                 return __('The current request failed. Review the support details below.', 'livecanvas-forge-ai');
             case 'idle':
@@ -5611,6 +5810,10 @@ final class LCFA_Admin {
         $role = in_array((string) ($message['role'] ?? ''), ['user', 'assistant', 'suggestion_result', 'system', 'tool_result'], true)
             ? (string) $message['role']
             : 'assistant';
+
+        if ($role === 'suggestion_result') {
+            return;
+        }
 
         echo '<article class="lcfa-editor-thread-message is-' . esc_attr($role) . '">';
         echo '<div class="lcfa-editor-thread-message__head">';
@@ -5648,7 +5851,7 @@ final class LCFA_Admin {
             echo '</div>';
         }
         $actions = LCFA_Thread_Message_Actions::sanitize_actions((array) ($message['actions'] ?? []));
-        if ($actions) {
+        if ($actions && $role !== 'suggestion_result') {
             echo '<div class="lcfa-editor-thread-message__actions">';
             foreach ($actions as $action) {
                 if (($action['kind'] ?? 'url') === 'apply' && !empty($action['payload'])) {
@@ -5732,8 +5935,8 @@ final class LCFA_Admin {
     private function get_agent_icon_url(string $client): string {
         $map = [
             'codex'    => 'assets/agent-icons/codex-color.svg',
-            'opencode' => 'assets/agent-icons/opencode.png',
-            'cursor'   => 'assets/agent-icons/cursor.png',
+            'opencode' => 'assets/agent-icons/opencode.svg',
+            'cursor'   => 'assets/agent-icons/cursor.svg',
             'claude'   => 'assets/agent-icons/claude-color.svg',
         ];
 
@@ -5803,6 +6006,7 @@ final class LCFA_Admin {
             'layers' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8.235 1.559a.5.5 0 0 0-.47 0l-6.5 3.25a.5.5 0 0 0 0 .894l6.5 3.25a.5.5 0 0 0 .47 0l6.5-3.25a.5.5 0 0 0 0-.894l-6.5-3.25ZM2.33 5.5 8 2.665 13.67 5.5 8 8.335 2.33 5.5Zm-1.565 2.54a.5.5 0 0 1 .67-.224L8 10.835l6.565-3.019a.5.5 0 0 1 .447.894l-6.8 3.125a.5.5 0 0 1-.424 0l-6.8-3.125a.5.5 0 0 1-.224-.67Zm0 3a.5.5 0 0 1 .67-.224L8 13.835l6.565-3.019a.5.5 0 0 1 .447.894l-6.8 3.125a.5.5 0 0 1-.424 0l-6.8-3.125a.5.5 0 0 1-.224-.67Z"/></svg>',
             'moon-stars' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 0a.5.5 0 0 1 .5.5V2H8a.5.5 0 0 1 0 1H6.5v1.5a.5.5 0 0 1-1 0V3H4a.5.5 0 0 1 0-1h1.5V.5A.5.5 0 0 1 6 0Zm7 3a.5.5 0 0 1 .5.5V4H14a.5.5 0 0 1 0 1h-.5v.5a.5.5 0 0 1-1 0V5H12a.5.5 0 0 1 0-1h.5v-.5A.5.5 0 0 1 13 3Zm-4.36 1.5a.5.5 0 0 1 .363.648A5.5 5.5 0 1 0 12.852 12a.5.5 0 0 1 .648.363.5.5 0 0 1-.32.61A6.5 6.5 0 1 1 8.03 4.18a.5.5 0 0 1 .61.32Z"/></svg>',
             'plug' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 0a.5.5 0 0 1 .5.5V3H8V.5a.5.5 0 0 1 1 0V3h1.5V.5a.5.5 0 0 1 1 0V3h.5A1.5 1.5 0 0 1 13.5 4.5v2A1.5 1.5 0 0 1 12 8h-.5v1A3.5 3.5 0 0 1 8 12.5V15a1 1 0 0 1-2 0v-2.5A3.5 3.5 0 0 1 2.5 9V8H2A1.5 1.5 0 0 1 .5 6.5v-2A1.5 1.5 0 0 1 2 3h.5V.5A.5.5 0 0 1 3 0h3Z"/></svg>',
+            'power' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.25 1.5a.75.75 0 0 1 1.5 0v5.25a.75.75 0 0 1-1.5 0V1.5Z"/><path fill="currentColor" d="M4.11 2.89a.75.75 0 0 1 1.06 1.06A5.25 5.25 0 1 0 12.83 4a.75.75 0 1 1 1.06-1.06 6.75 6.75 0 1 1-9.78-.05Z"/></svg>',
             'rocket' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C5.613 2.016 4.5 4.515 4.5 7c0 1.377.268 2.486.67 3.311L2 13.48V16h2.52l3.17-3.17A6.37 6.37 0 0 0 9 13.5c2.485 0 4.984-1.113 7-3.5C16 5.582 14.418 0 8 0ZM5.5 6.5A1.5 1.5 0 1 1 8 5a1.5 1.5 0 0 1-2.5 1.5ZM3 9.5 0 13l3 3v-2.5l2.5-2.5L3 9.5Z"/></svg>',
             'shield-check' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.072.21a17.598 17.598 0 0 1 5.856 0A1 1 0 0 1 11.81 1l.39 2.924a16.99 16.99 0 0 1-.23 5.082A7.962 7.962 0 0 1 8 14.548a7.962 7.962 0 0 1-3.97-5.542 16.99 16.99 0 0 1-.23-5.082L4.19 1a1 1 0 0 1 .882-.79ZM10.854 5.146a.5.5 0 0 0-.708 0L7.5 7.793 6.354 6.646a.5.5 0 1 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0 0-.708Z"/></svg>',
             'shield-lock' => '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.072.21a17.598 17.598 0 0 1 5.856 0A1 1 0 0 1 11.81 1l.39 2.924a16.99 16.99 0 0 1-.23 5.082A7.962 7.962 0 0 1 8 14.548a7.962 7.962 0 0 1-3.97-5.542 16.99 16.99 0 0 1-.23-5.082L4.19 1a1 1 0 0 1 .882-.79ZM8 8a1 1 0 0 0-1 1v1h2V9a1 1 0 0 0-1-1Zm2 2V9a2 2 0 1 0-4 0v1a1 1 0 0 0-1 1v1.5A1.5 1.5 0 0 0 6.5 14h3A1.5 1.5 0 0 0 11 12.5V11a1 1 0 0 0-1-1Z"/></svg>',

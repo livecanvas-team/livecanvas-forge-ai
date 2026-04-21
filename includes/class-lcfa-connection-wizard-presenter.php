@@ -308,6 +308,16 @@ final class LCFA_Connection_Wizard_Presenter {
             ];
         }
 
+        if (($bundle['client'] ?? '') !== 'claude') {
+            return [
+                'choose_client' => self::STEP_DEFINITIONS['choose_client'],
+                'choose_mode' => self::STEP_DEFINITIONS['choose_mode'],
+                'confirm_details' => self::STEP_DEFINITIONS['confirm_details'],
+                'generate_bundle' => self::STEP_DEFINITIONS['generate_bundle'],
+                'smoke_test' => self::STEP_DEFINITIONS['smoke_test'],
+            ];
+        }
+
         return self::STEP_DEFINITIONS;
     }
 

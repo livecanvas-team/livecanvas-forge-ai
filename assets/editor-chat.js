@@ -16,10 +16,9 @@
   var renameThreadButton=shell.querySelector("[data-lcfa-editor-thread-rename]");
   var clearThreadButton=shell.querySelector("[data-lcfa-editor-thread-clear]");
   var deleteThreadButton=shell.querySelector("[data-lcfa-editor-thread-delete]");
-  var previewButton=shell.querySelector("[data-lcfa-editor-preview]");
-  var applyButton=shell.querySelector("[data-lcfa-editor-apply]");
   var openDeckLink=shell.querySelector("[data-lcfa-editor-open-deck]");
   var attachmentInput=shell.querySelector("[data-lcfa-editor-attachment]");
+  var attachmentTriggerButton=shell.querySelector("[data-lcfa-editor-attachment-trigger]");
   var attachmentClearButton=shell.querySelector("[data-lcfa-editor-attachment-clear]");
   var attachmentPreview=shell.querySelector("[data-lcfa-editor-attachment-preview]");
   var attachmentPreviewImage=shell.querySelector("[data-lcfa-editor-attachment-preview-image]");
@@ -50,11 +49,19 @@
   try{config=configNode?JSON.parse(configNode.textContent||"{}"):{};}catch(error){config={};}
 
   var suggestionPayload=null;
+  var previewedSuggestionKey="";
   var selectedThreadId=(config.threadId||"default");
   var attachmentState=null;
+  var analyzeBusy=false;
+  var actionBusyMode="";
 
   var escapeHtml=function(value){
     return String(value||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;");
+  };
+
+  var getButtonLabelNode=function(button){
+    if(!button||!button.children||!button.children.length){return null;}
+    return button.children[button.children.length-1]||null;
   };
 
   var getStorageKey=function(){
@@ -201,19 +208,30 @@
     renderMarkupPane(proposedNode,proposedWrap,"",false);
   };
 
+  var getSuggestionKey=function(payload){
+    var applyPayload=buildApplyPayload(payload);
+    if(!applyPayload||typeof applyPayload!=="object"||!applyPayload.action){return "";}
+    return JSON.stringify(applyPayload);
+  };
+
+  var syncComposerButtons=function(){
+    var hasPrompt=!!(promptInput&&promptInput.value&&promptInput.value.trim()!=="");
+    var hasActionBusy=actionBusyMode==="preview"||actionBusyMode==="apply";
+
+    if(analyzeButton){analyzeButton.disabled=analyzeBusy||hasActionBusy||!hasPrompt;}
+  };
+
   var setSuggestionState=function(payload,isBusy,mode){
+    var previousKey=getSuggestionKey(suggestionPayload);
     suggestionPayload=payload&&typeof payload==="object"?payload:null;
-    var hasSuggestion=!!(suggestionPayload&&suggestionPayload.action);
-    if(previewButton){previewButton.hidden=!hasSuggestion;previewButton.disabled=isBusy||!hasSuggestion;}
-    if(applyButton){applyButton.hidden=!hasSuggestion;applyButton.disabled=isBusy||!hasSuggestion;}
-    if(previewButton){
-      var previewLabel=previewButton.querySelector("span");
-      if(previewLabel){previewLabel.textContent=(isBusy&&mode==="preview")?((config.labels&&config.labels.previewing)||"Preparing preview..."):((config.labels&&config.labels.previewSuggestion)||"Preview inline");}
+    var nextKey=getSuggestionKey(suggestionPayload);
+    if(!suggestionPayload){
+      previewedSuggestionKey="";
+    }else if(previousKey!==nextKey){
+      previewedSuggestionKey="";
     }
-    if(applyButton){
-      var applyLabel=applyButton.querySelector("span");
-      if(applyLabel){applyLabel.textContent=(isBusy&&mode==="apply")?((config.labels&&config.labels.applying)||"Applying..."):((config.labels&&config.labels.applySuggestion)||"Apply inline");}
-    }
+    actionBusyMode=isBusy?String(mode||""):"";
+    syncComposerButtons();
   };
 
   var updateDeckLink=function(payload){
@@ -233,18 +251,37 @@
   };
 
   var renderAttachmentPreview=function(){
-    if(!attachmentPreview||!attachmentPreviewImage||!attachmentPreviewMeta||!attachmentClearButton){return;}
+    if(!attachmentPreview||!attachmentPreviewMeta||!attachmentClearButton){return;}
     if(!attachmentState||!attachmentState.data_url){
       attachmentPreview.hidden=true;
-      attachmentPreviewImage.src="";
       attachmentPreviewMeta.textContent="";
+      if(attachmentPreviewImage){
+        attachmentPreviewImage.hidden=true;
+        attachmentPreviewImage.src="";
+        attachmentPreviewImage.alt="";
+      }
       attachmentClearButton.hidden=true;
       return;
     }
     attachmentPreview.hidden=false;
-    attachmentPreviewImage.src=attachmentState.data_url;
-    attachmentPreviewMeta.textContent=[attachmentState.name||"",attachmentState.caption||((config.labels&&config.labels.screenshotReady)||"Screenshot ready for this request.")].filter(Boolean).join(" • ");
+    if(attachmentPreviewImage){
+      attachmentPreviewImage.hidden=false;
+      attachmentPreviewImage.src=attachmentState.data_url;
+      attachmentPreviewImage.alt=attachmentState.name||"";
+    }
+    attachmentPreviewMeta.textContent=[attachmentState.name||"",attachmentState.caption||((config.labels&&config.labels.screenshotReady)||"Image attached to this request.")].filter(Boolean).join(" • ");
     attachmentClearButton.hidden=false;
+  };
+
+  var loadAttachmentFile=function(file){
+    if(!file){attachmentState=null;renderAttachmentPreview();return Promise.resolve();}
+    return readAttachmentFile(file).then(function(attachment){
+      attachmentState=attachment;
+      renderAttachmentPreview();
+    }).catch(function(){
+      attachmentState=null;
+      renderAttachmentPreview();
+    });
   };
 
   var readAttachmentFile=function(file){
@@ -269,6 +306,7 @@
   var renderThreadMessage=function(message){
     var article=document.createElement("article");
     var role=String(message&&message.role||"assistant");
+    if(role==="suggestion_result"){return null;}
     article.className="lcfa-editor-thread-message is-"+role;
 
     var head=document.createElement("div");
@@ -306,7 +344,7 @@
       if(attachmentsWrap.children.length){article.appendChild(attachmentsWrap);}
     }
 
-    if(Array.isArray(message&&message.actions)&&message.actions.length){
+    if(role!=="suggestion_result"&&Array.isArray(message&&message.actions)&&message.actions.length){
       var actions=document.createElement("div");
       actions.className="lcfa-editor-thread-message__actions";
       message.actions.forEach(function(action){
@@ -340,10 +378,14 @@
     if(!threadLog||!threadEmpty){return;}
     threadLog.innerHTML="";
     var messages=Array.isArray(thread&&thread.messages)?thread.messages:[];
+    var renderedCount=0;
     messages.forEach(function(message){
-      threadLog.appendChild(renderThreadMessage(message));
+      var node=renderThreadMessage(message);
+      if(!node){return;}
+      threadLog.appendChild(node);
+      renderedCount+=1;
     });
-    threadEmpty.hidden=messages.length>0;
+    threadEmpty.hidden=renderedCount>0;
     cacheThread(thread);
     setConversationState(getLatestConversationState(thread));
   };
@@ -418,6 +460,34 @@
     renderMarkupPane(proposedNode,proposedWrap,result&&result.proposed_html?result.proposed_html:"",false);
   };
 
+  var getLiveCanvasRefreshUrl=function(){
+    var baseUrl=typeof window.lc_editor_url_to_load==="string"?window.lc_editor_url_to_load:"";
+    baseUrl=String(baseUrl||"");
+    if(baseUrl===""){return "";}
+    return baseUrl+(baseUrl.indexOf("?")===-1?"?":"&")+"lcfa_refresh="+String(Date.now());
+  };
+
+  var shouldRefreshLiveCanvas=function(result,payload){
+    if(!payload||typeof payload!=="object"||payload.dry_run){return false;}
+    if(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok){return false;}
+    var mode=String(result&&result.mode?result.mode:"apply");
+    if(mode!==""&&mode!=="apply"){return false;}
+    var action=String((payload&&payload.action)||(result&&result.action)||"");
+    if(action===""||action==="site_audit"){return false;}
+    if(typeof window.loadURLintoEditor!=="function"){return false;}
+    return getLiveCanvasRefreshUrl()!=="";
+  };
+
+  var refreshLiveCanvas=function(result,payload){
+    if(!shouldRefreshLiveCanvas(result,payload)){return false;}
+    try{
+      window.loadURLintoEditor(getLiveCanvasRefreshUrl());
+      return true;
+    }catch(error){
+      return false;
+    }
+  };
+
   var buildPreviewPayload=function(payload){
     if(!payload||typeof payload!=="object"||!payload.action){return null;}
     var nextPayload=Object.assign({},payload);
@@ -466,7 +536,13 @@
         });
       }
       if(execution.thread){cacheThread(execution.thread);renderThread(execution.thread);}
+      if(execution.status!=="failed"&&payload&&payload.dry_run){
+        previewedSuggestionKey=getSuggestionKey(payload);
+      }
       renderExecutionResult(execution.result||{message:(config.labels&&config.labels.applyFailed)||"The inline execution failed."},execution.status==="failed");
+      if(execution.status!=="failed"){
+        refreshLiveCanvas(execution.result||{},payload);
+      }
       setSuggestionState(suggestionSource||payload,false,"");
       setConversationState(execution.status==="failed"?"failed":(payload&&payload.dry_run?"previewed":"applied"));
       return execution;
@@ -491,7 +567,11 @@
       });
     }).then(function(data){
       if(data&&data.thread){cacheThread(data.thread);renderThread(data.thread);}
+      if(payload&&payload.dry_run){
+        previewedSuggestionKey=getSuggestionKey(payload);
+      }
       renderExecutionResult(data&&data.result?data.result:{message:(config.labels&&config.labels.applyFailed)||"The inline execution failed."},false);
+      refreshLiveCanvas(data&&data.result?data.result:{},payload);
       setSuggestionState(suggestionSource||payload,false,"");
       setConversationState(payload.dry_run?"previewed":"applied");
     });
@@ -540,10 +620,11 @@
   };
 
   var setBusy=function(next){
+    analyzeBusy=!!next;
     if(!analyzeButton){return;}
-    analyzeButton.disabled=next;
-    var label=analyzeButton.querySelector("span");
-    if(label){label.textContent=next?((config.labels&&config.labels.analyzing)||"Analyzing request..."):"Analyze request";}
+    var label=getButtonLabelNode(analyzeButton);
+    if(label){label.textContent=next?((config.labels&&config.labels.analyzing)||"Sending..."):((config.labels&&config.labels.analyzeSuggestion)||"Send");}
+    syncComposerButtons();
   };
 
   var analyzeRequest=function(){
@@ -585,6 +666,12 @@
       });
     }).then(function(data){
       if(data&&data.thread){cacheThread(data.thread);renderThread(data.thread);}
+      if(data&&data.suggestion&&data.suggestion.suggested_payload&&data.suggestion.suggested_payload.action){
+        setSuggestionState(data.suggestion.suggested_payload,false,"");
+        updateDeckLink(data.suggestion.suggested_payload);
+        runInlinePayload(buildApplyPayload(data.suggestion.suggested_payload));
+        return;
+      }
       renderSuggestion(data&&data.suggestion?data.suggestion:{message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed."},false);
     }).catch(function(error){
       setSuggestionState(null,false,"");
@@ -652,19 +739,16 @@
   if(renameThreadButton){renameThreadButton.addEventListener("click",function(){manageThread("rename");});}
   if(clearThreadButton){clearThreadButton.addEventListener("click",function(){manageThread("clear");});}
   if(deleteThreadButton){deleteThreadButton.addEventListener("click",function(){manageThread("delete");});}
-  if(previewButton){previewButton.addEventListener("click",previewSuggestion);}
-  if(applyButton){applyButton.addEventListener("click",applySuggestion);}
+  if(attachmentTriggerButton&&attachmentInput){
+    attachmentTriggerButton.addEventListener("click",function(){
+      attachmentInput.click();
+    });
+  }
   if(attachmentInput){
     attachmentInput.addEventListener("change",function(event){
       var file=event&&event.target&&event.target.files&&event.target.files[0]?event.target.files[0]:null;
       if(!file){attachmentState=null;renderAttachmentPreview();return;}
-      readAttachmentFile(file).then(function(attachment){
-        attachmentState=attachment;
-        renderAttachmentPreview();
-      }).catch(function(){
-        attachmentState=null;
-        renderAttachmentPreview();
-      });
+      loadAttachmentFile(file);
     });
   }
   if(attachmentClearButton){
@@ -674,9 +758,23 @@
       renderAttachmentPreview();
     });
   }
+  if(attachmentPreviewImage){
+    attachmentPreviewImage.addEventListener("error",function(){
+      attachmentState=null;
+      if(attachmentInput){attachmentInput.value="";attachmentInput.files=[];}
+      attachmentPreviewImage.hidden=true;
+      attachmentPreviewImage.src="";
+      attachmentPreview.hidden=true;
+      attachmentPreviewMeta.textContent="";
+      if(attachmentClearButton){attachmentClearButton.hidden=true;}
+    });
+  }
   if(promptInput){
     promptInput.addEventListener("keydown",function(event){
       if((event.metaKey||event.ctrlKey)&&event.key==="Enter"){event.preventDefault();analyzeRequest();}
+    });
+    promptInput.addEventListener("input",function(){
+      syncComposerButtons();
     });
   }
   if(threadSelect){
@@ -708,6 +806,7 @@
   if(persistedThreadId!==""&&getThreadById(persistedThreadId)){setSelectedThreadId(persistedThreadId);}
   else if(config.threadId){setSelectedThreadId(config.threadId);}
   renderAttachmentPreview();
+  syncComposerButtons();
   updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
   if(config.threads&&typeof config.threads==="object"){hydrateSelectedThread();}
   else{setConversationState(statusNode?statusNode.getAttribute("data-state")||"idle":"idle",statusNode?statusNode.textContent||"":"");}
