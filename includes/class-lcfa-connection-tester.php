@@ -149,6 +149,10 @@ final class LCFA_Connection_Tester {
         $preferred_client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
         $claude_target = sanitize_key((string) ($connections['claude_connection_target'] ?? ''));
 
+        if ($preferred_client === 'codex') {
+            return $this->test_codex_registration($connections);
+        }
+
         if ($preferred_client !== 'claude' || $claude_target !== 'desktop_app') {
             return null;
         }
@@ -225,6 +229,107 @@ final class LCFA_Connection_Tester {
                 'config_path' => $config_path,
             ],
         ];
+    }
+
+    private function test_codex_registration(array $connections): array {
+        $config_path = $this->resolve_codex_config_path();
+        $workspace_root = trim((string) ($connections['workspace_root'] ?? ''));
+        $rest_base = trim((string) ($connections['local_bridge_url'] ?? ''));
+        if ($rest_base === '') {
+            $rest_base = rest_url('lcfa/v1/');
+        }
+        $rest_base = trailingslashit($rest_base);
+        $mcp_token = trim((string) ($connections['mcp_token'] ?? ''));
+
+        if ($config_path === '') {
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Codex config path could not be resolved. Run livecanvas-forge.codex.sh from the project root, reopen Codex, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [],
+            ];
+        }
+
+        if (!is_file($config_path)) {
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => sprintf(__('Codex config was not found at %s. Run livecanvas-forge.codex.sh from the project root, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'), $config_path),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        $contents = file_get_contents($config_path);
+        if (!is_string($contents) || trim($contents) === '') {
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Codex config is empty. Run livecanvas-forge.codex.sh from the project root, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        if (!$this->codex_config_contains_livecanvas_server($contents)) {
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Codex does not contain the livecanvas-forge MCP server yet. Run livecanvas-forge.codex.sh, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => $config_path,
+                ],
+            ];
+        }
+
+        $rest_matches = $rest_base === '' || strpos($contents, $rest_base) !== false;
+        $workspace_matches = $workspace_root === '' || strpos($contents, $workspace_root) !== false;
+        $token_matches = $mcp_token === '' || strpos($contents, $mcp_token) !== false;
+
+        if (!$rest_matches || !$workspace_matches || !$token_matches) {
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Codex has a stale livecanvas-forge registration. Run the new livecanvas-forge.codex.sh helper, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path'       => $config_path,
+                    'rest_base_matches' => $rest_matches,
+                    'workspace_matches' => $workspace_matches,
+                    'token_matches'     => $token_matches,
+                ],
+            ];
+        }
+
+        return [
+            'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+            'ok'      => true,
+            'skipped' => false,
+            'message' => __('Codex config includes the matching livecanvas-forge MCP server.', 'livecanvas-forge-ai'),
+            'details' => [
+                'config_path' => $config_path,
+            ],
+        ];
+    }
+
+    private function codex_config_contains_livecanvas_server(string $contents): bool {
+        return preg_match('/^\s*\[mcp_servers\.livecanvas-forge\]\s*$/m', $contents) === 1
+            || strpos($contents, 'livecanvas-forge') !== false;
+    }
+
+    private function resolve_codex_config_path(): string {
+        $home = (string) getenv('HOME');
+        if ($home === '') {
+            return '';
+        }
+
+        return rtrim($home, '/\\') . '/.codex/config.toml';
     }
 
     private function resolve_claude_desktop_config_path(): string {

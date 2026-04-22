@@ -355,6 +355,7 @@ final class LCFA_Admin {
         $connected_client           = sanitize_key((string) ($connections['preferred_client'] ?? ''));
         $connection_state           = (($connections['connection_status'] ?? '') === 'ready') ? 'connected' : 'disconnected';
         $connection_icon_client     = $connected_client !== '' ? $connected_client : 'generic';
+        $agent_processor            = $connected_client === 'generic' ? 'generic_mcp' : ($connected_client !== '' ? $connected_client . '_mcp' : 'forge_local_rules');
         $default_action             = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
         $command_base_url           = $this->get_command_url([
             'post_id'   => $post->ID,
@@ -363,10 +364,18 @@ final class LCFA_Admin {
         $editor_config = [
             'restEndpoint' => rest_url('lcfa/v1/chat/send'),
             'threadEndpoint' => rest_url('lcfa/v1/chat/thread'),
+            'agentRequestEndpoint' => rest_url('lcfa/v1/agent/request'),
             'commandEndpoint' => rest_url('lcfa/v1/command'),
             'commandExecutionEndpoint' => rest_url('lcfa/v1/command/execution'),
             'restNonce'    => wp_create_nonce('wp_rest'),
             'commandBaseUrl' => $command_base_url,
+            'agent'        => [
+                'client'       => $connected_client,
+                'state'        => $connection_state,
+                'enabled'      => $connection_state === 'connected' && $connected_client !== '',
+                'processor'    => $agent_processor,
+                'displayLabel' => $connected_client !== '' ? ucfirst(str_replace(['-', '_'], ' ', $connected_client)) : __('Forge', 'livecanvas-forge-ai'),
+            ],
             'postId'       => (int) $post->ID,
             'targetId'     => (int) ($context['target_id'] ?? 0),
             'variant'      => (string) ($context['variant'] ?? '1'),
@@ -395,6 +404,9 @@ final class LCFA_Admin {
                 'failedState'     => __('The current request failed. Review the support details below.', 'livecanvas-forge-ai'),
                 'queuedState'     => __('Queued for inline execution.', 'livecanvas-forge-ai'),
                 'runningState'    => __('Running inline execution...', 'livecanvas-forge-ai'),
+                'agentQueuedState' => __('Waiting for the connected coding agent...', 'livecanvas-forge-ai'),
+                'agentRunningState' => __('The coding agent is processing this request...', 'livecanvas-forge-ai'),
+                'agentTimeoutState' => __('Request queued. Keep the coding agent open, process the Forge frontend queue, then this panel will update.', 'livecanvas-forge-ai'),
                 'creatingThread'  => __('Creating thread...', 'livecanvas-forge-ai'),
                 'duplicatingThread' => __('Duplicating thread...', 'livecanvas-forge-ai'),
                 'renamingThread'  => __('Renaming thread...', 'livecanvas-forge-ai'),
@@ -442,6 +454,10 @@ final class LCFA_Admin {
         echo '<span class="lcfa-editor-bridge__connection-media">' . $this->get_agent_icon_markup($connection_icon_client, $this->get_client_fallback_icon($connection_icon_client), 'lcfa-agent-icon lcfa-agent-icon--editor-status') . '</span>';
         echo '<span class="lcfa-editor-bridge__connection-copy">' . esc_html($this->get_editor_connection_status_label($connected_client, $connection_state)) . '</span>';
         echo '</div>';
+        echo '<div class="lcfa-editor-bridge__connection" data-state="' . esc_attr($connection_state === 'connected' ? 'connected' : 'local') . '">';
+        echo '<span class="lcfa-editor-bridge__connection-media">' . $this->get_icon_svg('stars') . '</span>';
+        echo '<span class="lcfa-editor-bridge__connection-copy">' . esc_html($connection_state === 'connected' ? sprintf(__('Frontend prompts: %s MCP', 'livecanvas-forge-ai'), ucfirst(str_replace(['-', '_'], ' ', $connected_client))) : __('Frontend prompts: Forge local fallback', 'livecanvas-forge-ai')) . '</span>';
+        echo '</div>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__head-actions">';
         echo '<a class="lcfa-editor-bridge__head-link is-icon-only" href="' . esc_url($command_base_url) . '" target="_blank" rel="noreferrer noopener" aria-label="' . esc_attr__('Open Command Deck', 'livecanvas-forge-ai') . '" title="' . esc_attr__('Open Command Deck', 'livecanvas-forge-ai') . '" data-lcfa-editor-open-deck>';
@@ -452,7 +468,7 @@ final class LCFA_Admin {
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
         echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Request', 'livecanvas-forge-ai') . '</div>';
-        echo '<p class="lcfa-editor-bridge__helper">' . esc_html__('Describe the change you want on this page. Forge AI sends it and runs it inline on the current page.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p class="lcfa-editor-bridge__helper">' . esc_html($connection_state === 'connected' ? sprintf(__('Describe the change you want on this page. Forge AI sends it to %s through MCP and updates this LiveCanvas page when the agent completes it.', 'livecanvas-forge-ai'), ucfirst(str_replace(['-', '_'], ' ', $connected_client))) : __('Describe the change you want on this page. Forge AI sends it and runs it inline on the current page.', 'livecanvas-forge-ai')) . '</p>';
         echo '<div class="lcfa-editor-bridge__controls" data-lcfa-editor-composer>';
         echo '<textarea data-lcfa-editor-prompt placeholder="' . esc_attr__('Example: refresh this header with a simpler navigation and keep the current logo.', 'livecanvas-forge-ai') . '"></textarea>';
         echo '<div class="lcfa-editor-bridge__attachment-row">';
@@ -478,7 +494,7 @@ final class LCFA_Admin {
         echo '<span data-lcfa-editor-button-label>' . esc_html__('Send', 'livecanvas-forge-ai') . '</span>';
         echo '</button>';
         echo '</div>';
-        echo '<p class="lcfa-editor-bridge__action-note">' . esc_html__('Send analyzes the request and executes the change immediately on this page.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p class="lcfa-editor-bridge__action-note">' . esc_html($connection_state === 'connected' ? __('Send queues the prompt for the connected coding agent. The drawer waits for the MCP result, then refreshes the LiveCanvas editor.', 'livecanvas-forge-ai') : __('Send analyzes the request and executes the change immediately on this page.', 'livecanvas-forge-ai')) . '</p>';
         echo '</div>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
@@ -1274,6 +1290,7 @@ final class LCFA_Admin {
         check_admin_referer('lcfa_command');
 
         $request_payload = $this->get_command_request_payload($_POST);
+        $request_payload = $this->add_payload_provenance($request_payload, $this->get_payload_provenance($request_payload, 'admin_command_deck', 'forge_local_rules'));
         $thread_id       = LCFA_Settings::normalize_thread_id((string) ($request_payload['thread_id'] ?? 'default'));
         $thread_operation = sanitize_key((string) ($request_payload['thread_operation'] ?? ''));
         $thread_title    = sanitize_text_field((string) ($request_payload['thread_title'] ?? ''));
@@ -1348,6 +1365,7 @@ final class LCFA_Admin {
             }
 
             $suggestion = $this->prompt_suggester->suggest($request_payload);
+            $suggestion['provenance'] = $this->get_payload_provenance($request_payload, 'admin_command_deck', 'forge_local_rules');
             LCFA_Settings::set_command_suggestion($suggestion);
             LCFA_Settings::append_thread_message($thread_id, $this->build_thread_suggestion_message($suggestion, $request_payload, $thread_id));
 
@@ -1449,7 +1467,52 @@ final class LCFA_Admin {
         return $payload;
     }
 
+    private function get_payload_provenance(array $payload, string $default_origin = 'admin_command_deck', string $default_processed_by = 'forge_local_rules'): array {
+        $origin = sanitize_key((string) ($payload['_lcfa_origin'] ?? $payload['origin'] ?? $default_origin));
+        $transport = sanitize_key((string) ($payload['_lcfa_transport'] ?? $payload['transport'] ?? ($origin === 'mcp_agent' ? 'mcp_stdio' : 'browser_rest')));
+        $agent = sanitize_key((string) ($payload['_lcfa_agent'] ?? $payload['agent'] ?? ($origin === 'mcp_agent' ? 'codex' : 'forge')));
+        $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
+
+        $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'api'];
+        $allowed_transports = ['browser_rest', 'mcp_stdio', 'mcp_bridge', 'remote_rest', 'api'];
+        $allowed_agents = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
+        $allowed_processors = ['forge_local_rules', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+
+        if (!in_array($origin, $allowed_origins, true)) {
+            $origin = $default_origin;
+        }
+
+        if (!in_array($transport, $allowed_transports, true)) {
+            $transport = $origin === 'mcp_agent' ? 'mcp_stdio' : 'browser_rest';
+        }
+
+        if (!in_array($agent, $allowed_agents, true)) {
+            $agent = $origin === 'mcp_agent' ? 'codex' : 'forge';
+        }
+
+        if (!in_array($processed_by, $allowed_processors, true)) {
+            $processed_by = $default_processed_by;
+        }
+
+        return [
+            'origin'       => $origin,
+            'transport'    => $transport,
+            'agent'        => $agent,
+            'processed_by' => $processed_by,
+        ];
+    }
+
+    private function add_payload_provenance(array $payload, array $provenance): array {
+        foreach ($provenance as $key => $value) {
+            $payload['_lcfa_' . $key] = $value;
+        }
+
+        return $payload;
+    }
+
     private function build_thread_request_message(string $user_prompt, array $payload, string $genesis_task_id = ''): array {
+        $provenance = $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules');
+
         return [
             'role'    => 'user',
             'label'   => __('Request', 'livecanvas-forge-ai'),
@@ -1459,13 +1522,14 @@ final class LCFA_Admin {
                 'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
                 'dry_run'          => !empty($payload['dry_run']),
                 'genesis_task_id'  => $genesis_task_id,
-            ],
+            ] + $provenance,
         ];
     }
 
     private function build_thread_suggestion_message(array $suggestion, array $request_payload, string $thread_id): array {
         $suggested_payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
         $summary           = (string) ($suggestion['summary'] ?? $suggestion['message'] ?? '');
+        $provenance        = $this->get_payload_provenance(is_array($suggestion['provenance'] ?? null) ? (array) $suggestion['provenance'] : $request_payload, 'admin_command_deck', 'forge_local_rules');
 
         return [
             'role'    => 'suggestion_result',
@@ -1478,7 +1542,7 @@ final class LCFA_Admin {
                 'confidence'       => sanitize_text_field((string) ($suggestion['confidence'] ?? '')),
                 'warnings'         => array_map('sanitize_text_field', (array) ($suggestion['warnings'] ?? [])),
                 'reasons'          => array_map('sanitize_text_field', (array) ($suggestion['reasons'] ?? [])),
-            ],
+            ] + $provenance,
             'actions' => LCFA_Thread_Message_Actions::build_suggestion_actions($suggested_payload, $request_payload, [
                 'thread_id'          => LCFA_Settings::normalize_thread_id($thread_id),
                 'command_url_builder' => [$this, 'get_command_url'],
@@ -2180,6 +2244,32 @@ final class LCFA_Admin {
         echo '</section>';
     }
 
+    private function render_connection_now_alert(array $alert): void {
+        $title = trim((string) ($alert['title'] ?? ''));
+        $body = trim((string) ($alert['body'] ?? ''));
+        $next = trim((string) ($alert['next'] ?? ''));
+        $eyebrow = trim((string) ($alert['eyebrow'] ?? ''));
+
+        if ($title === '' && $body === '' && $next === '') {
+            return;
+        }
+
+        echo '<div class="lcfa-connection-now-alert">';
+        if ($eyebrow !== '') {
+            echo '<span class="lcfa-connection-now-alert__eyebrow">' . esc_html($eyebrow) . '</span>';
+        }
+        if ($title !== '') {
+            echo '<strong>' . esc_html($title) . '</strong>';
+        }
+        if ($body !== '') {
+            echo '<p>' . esc_html($body) . '</p>';
+        }
+        if ($next !== '') {
+            echo '<small>' . esc_html($next) . '</small>';
+        }
+        echo '</div>';
+    }
+
     private function render_connection_stepper(array $steps): void {
         echo '<ol class="lcfa-wizard__steps">';
         foreach ($steps as $step) {
@@ -2225,7 +2315,7 @@ final class LCFA_Admin {
                 break;
 
             case 'smoke_test':
-                $this->render_connection_smoke_test_form($selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Run smoke test', 'livecanvas-forge-ai')));
+                $this->render_connection_smoke_test_form($selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Run smoke test', 'livecanvas-forge-ai')), $bundle);
                 break;
 
             case 'choose_client':
@@ -2483,13 +2573,64 @@ final class LCFA_Admin {
         ];
     }
 
-    private function render_connection_smoke_test_form(string $selected_mode, string $button_label): void {
+    private function render_connection_smoke_test_form(string $selected_mode, string $button_label, array $bundle = []): void {
+        if ($this->normalize_connection_client((string) ($bundle['client'] ?? '')) === 'codex' && (string) ($bundle['mode'] ?? 'local') === 'local') {
+            $workspace_root = trim((string) ($bundle['workspace_root'] ?? ''));
+            $helper_path = '';
+            $workspace_files = is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : [];
+            if (isset($workspace_files[0]) && is_array($workspace_files[0])) {
+                $helper_path = trim((string) ($workspace_files[0]['path'] ?? ''));
+            }
+            if ($helper_path === '' && $workspace_root !== '') {
+                $helper_path = rtrim($workspace_root, '/\\') . '/livecanvas-forge.codex.sh';
+            }
+
+            echo '<div class="lcfa-codex-smoke-guide">';
+            echo '<strong>' . esc_html__('To connect Codex, complete these steps in order:', 'livecanvas-forge-ai') . '</strong>';
+            echo '<ol>';
+            if ($workspace_root !== '') {
+                echo '<li>' . esc_html__('Open Terminal in this project root:', 'livecanvas-forge-ai') . ' <code>' . esc_html($workspace_root) . '</code></li>';
+            } else {
+                echo '<li>' . esc_html__('Open Terminal in the WordPress project root selected in this wizard.', 'livecanvas-forge-ai') . '</li>';
+            }
+            if ($helper_path !== '') {
+                echo '<li>' . esc_html__('Run the generated helper:', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('sh "' . $helper_path . '"') . '</li>';
+            } else {
+                echo '<li>' . esc_html__('Run the generated livecanvas-forge.codex.sh helper from that project root.', 'livecanvas-forge-ai') . '</li>';
+            }
+            echo '<li>' . esc_html__('Verify that Codex can see the MCP server:', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('codex mcp list') . ' ' . esc_html__('or', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('/Applications/Codex.app/Contents/Resources/codex mcp list') . '</li>';
+            echo '<li>' . esc_html__('The command output must show:', 'livecanvas-forge-ai') . ' <code>livecanvas-forge</code>. ' . esc_html__('If the output does not show livecanvas-forge, the connection is not ready yet.', 'livecanvas-forge-ai') . '</li>';
+            echo '</ol>';
+            echo '<div class="lcfa-codex-smoke-alert">';
+            echo '<strong>' . esc_html__('Important', 'livecanvas-forge-ai') . '</strong>';
+            echo '<span>' . esc_html__('Reopen Codex if the registration was added while Codex was already open, then return here and run the smoke test below.', 'livecanvas-forge-ai') . '</span>';
+            echo '</div>';
+            echo '</div>';
+        }
+
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
         wp_nonce_field('lcfa_test_connections');
         echo '<input type="hidden" name="action" value="lcfa_test_connections">';
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
         echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
         echo '</form>';
+    }
+
+    private function render_inline_copy_command(string $command, string $label = ''): string {
+        $copy_label = $label !== '' ? $label : __('Copy', 'livecanvas-forge-ai');
+
+        return '<span class="lcfa-inline-copy-code"><code>' . esc_html($command) . '</code><button class="lcfa-inline-copy-code__button" type="button" data-lcfa-copy-text="' . esc_attr($command) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html($copy_label) . '</button></span>';
+    }
+
+    private function render_code_block_explanation(string $description): void {
+        if (trim($description) === '') {
+            return;
+        }
+
+        echo '<div class="lcfa-code-explanation" data-lcfa-read-more>';
+        echo '<p data-lcfa-read-more-body>' . esc_html($description) . '</p>';
+        echo '<button class="lcfa-code-explanation__toggle" type="button" data-lcfa-read-more-toggle data-lcfa-expanded-label="' . esc_attr(__('Show less', 'livecanvas-forge-ai')) . '" hidden>' . esc_html__('Read more', 'livecanvas-forge-ai') . '</button>';
+        echo '</div>';
     }
 
     private function render_connection_visual_help_strip(array $wizard_view): void {
@@ -2594,6 +2735,11 @@ final class LCFA_Admin {
             echo '<h3>' . esc_html((string) ($bundle['shortcut_title'] ?? __('Shortcut', 'livecanvas-forge-ai'))) . '</h3>';
             if ($is_claude_desktop) {
                 $this->render_claude_desktop_merge_guide();
+                $this->render_code_block_explanation(__('Shows the JSON snippet that must be merged into Claude Desktop config. It does not replace the whole file; it only adds the livecanvas-forge MCP server under mcpServers.', 'livecanvas-forge-ai'));
+            } elseif ((string) ($bundle['client'] ?? '') === 'codex') {
+                $this->render_code_block_explanation(__('Registers livecanvas-forge inside Codex, so Codex can call the Forge MCP server for this WordPress site. Run it once from the project root after generating the bundle; if Codex was already open, reopen it before the smoke test.', 'livecanvas-forge-ai'));
+            } else {
+                $this->render_code_block_explanation(__('Creates or runs the setup shortcut for the selected coding agent. Use it to register livecanvas-forge with the agent without manually rebuilding the raw MCP command.', 'livecanvas-forge-ai'));
             }
             $this->render_code_block((string) $bundle['shortcut_command'], [
                 'language'   => $is_claude_desktop ? 'json' : 'bash',
@@ -2605,6 +2751,7 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Server command', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block_explanation(__('Shows the raw MCP server command the coding agent runs behind the scenes. Use it for manual MCP setup or diagnostics when the shortcut or generated config is not enough.', 'livecanvas-forge-ai'));
         $this->render_code_block((string) ($bundle['command_string'] ?? ''), [
             'language'   => 'bash',
             'label'      => __('Shell', 'livecanvas-forge-ai'),
@@ -2614,6 +2761,7 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block_explanation(__('Defines the REST endpoint, token, site URL, and local project root passed to the MCP server. These values must match this WordPress install, otherwise the agent can connect to the wrong site or fail authorization.', 'livecanvas-forge-ai'));
         $this->render_code_block($this->build_environment_block((array) ($bundle['environment'] ?? [])), [
             'language'   => 'bash',
             'label'      => __('Environment', 'livecanvas-forge-ai'),
@@ -2623,6 +2771,7 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Smoke test', 'livecanvas-forge-ai') . '</h3>';
+        $this->render_code_block_explanation(__('Runs get_snapshot and confirms the MCP bridge can reach WordPress before page edits. If this command fails, Forge can show setup data but the coding agent is not ready to execute changes.', 'livecanvas-forge-ai'));
         $this->render_code_block((string) ($bundle['smoke_test_command'] ?? ''), [
             'language'   => 'bash',
             'label'      => __('Shell', 'livecanvas-forge-ai'),
@@ -2632,7 +2781,6 @@ final class LCFA_Admin {
 
         echo '</div>';
         echo '</div>';
-        echo '</details>';
         echo '</div>';
     }
 
@@ -4236,6 +4384,22 @@ final class LCFA_Admin {
     private function get_thread_message_meta_badges(array $meta): array {
         $badges = [];
 
+        if (!empty($meta['processed_by'])) {
+            $badges[] = sprintf(__('Processed by: %s', 'livecanvas-forge-ai'), $this->get_provenance_label('processed_by', (string) $meta['processed_by']));
+        }
+
+        if (!empty($meta['origin'])) {
+            $badges[] = sprintf(__('Origin: %s', 'livecanvas-forge-ai'), $this->get_provenance_label('origin', (string) $meta['origin']));
+        }
+
+        if (!empty($meta['agent'])) {
+            $badges[] = sprintf(__('Agent: %s', 'livecanvas-forge-ai'), $this->get_provenance_label('agent', (string) $meta['agent']));
+        }
+
+        if (!empty($meta['transport'])) {
+            $badges[] = sprintf(__('Transport: %s', 'livecanvas-forge-ai'), $this->get_provenance_label('transport', (string) $meta['transport']));
+        }
+
         if (!empty($meta['action'])) {
             $badges[] = sprintf(__('Action: %s', 'livecanvas-forge-ai'), sanitize_key((string) $meta['action']));
         }
@@ -4277,6 +4441,45 @@ final class LCFA_Admin {
         }
 
         return $badges;
+    }
+
+    private function get_provenance_label(string $type, string $value): string {
+        $value = sanitize_key($value);
+        $labels = [
+            'processed_by' => [
+                'forge_local_rules' => __('Forge local rules', 'livecanvas-forge-ai'),
+                'codex_mcp'         => __('Codex via MCP', 'livecanvas-forge-ai'),
+                'opencode_mcp'      => __('OpenCode via MCP', 'livecanvas-forge-ai'),
+                'claude_mcp'        => __('Claude via MCP', 'livecanvas-forge-ai'),
+                'cursor_mcp'        => __('Cursor via MCP', 'livecanvas-forge-ai'),
+                'generic_mcp'       => __('Generic MCP client', 'livecanvas-forge-ai'),
+                'remote_companion'  => __('Remote companion', 'livecanvas-forge-ai'),
+            ],
+            'origin' => [
+                'frontend_bridge'    => __('Frontend bridge', 'livecanvas-forge-ai'),
+                'admin_command_deck' => __('Command Deck', 'livecanvas-forge-ai'),
+                'mcp_agent'          => __('MCP agent', 'livecanvas-forge-ai'),
+                'remote_companion'   => __('Remote companion', 'livecanvas-forge-ai'),
+                'api'                => __('API', 'livecanvas-forge-ai'),
+            ],
+            'agent' => [
+                'forge'    => __('Forge', 'livecanvas-forge-ai'),
+                'codex'    => __('Codex', 'livecanvas-forge-ai'),
+                'opencode' => __('OpenCode', 'livecanvas-forge-ai'),
+                'claude'   => __('Claude', 'livecanvas-forge-ai'),
+                'cursor'   => __('Cursor', 'livecanvas-forge-ai'),
+                'generic'  => __('Generic', 'livecanvas-forge-ai'),
+            ],
+            'transport' => [
+                'browser_rest' => __('Browser REST', 'livecanvas-forge-ai'),
+                'mcp_stdio'    => __('MCP stdio', 'livecanvas-forge-ai'),
+                'mcp_bridge'   => __('MCP bridge', 'livecanvas-forge-ai'),
+                'remote_rest'  => __('Remote REST', 'livecanvas-forge-ai'),
+                'api'          => __('API', 'livecanvas-forge-ai'),
+            ],
+        ];
+
+        return (string) ($labels[$type][$value] ?? $value);
     }
 
     private function render_command_thread_apply_form(array $action, string $thread_id): void {
@@ -4335,6 +4538,7 @@ final class LCFA_Admin {
         $message = trim((string) ($result['message'] ?? ''));
         $execution_target = sanitize_key((string) ($payload['execution_target'] ?? 'local'));
         $target_type = (string) ($result['target_type'] ?? '');
+        $provenance = $this->get_payload_provenance(is_array($result['provenance'] ?? null) ? (array) $result['provenance'] : $payload, 'admin_command_deck', 'forge_local_rules');
 
         if ($summary !== '') {
             $lines[] = $summary;
@@ -4371,7 +4575,7 @@ final class LCFA_Admin {
                 'target_type'      => $target_type,
                 'target_id'        => (int) ($result['target_id'] ?? 0),
                 'target_title'     => (string) ($result['target_title'] ?? ''),
-            ],
+            ] + $provenance,
             'actions' => LCFA_Thread_Message_Actions::build_result_actions($result, $payload, [
                 'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
                 'command_url_builder' => [$this, 'get_command_url'],

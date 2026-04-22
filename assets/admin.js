@@ -87,6 +87,54 @@
         });
     }
 
+    function bootstrapReadMore(root) {
+        var panels;
+
+        if (!root || typeof root.querySelectorAll !== 'function') {
+            return;
+        }
+
+        panels = root.querySelectorAll('[data-lcfa-read-more]');
+        panels.forEach(function (panel) {
+            var body = panel.querySelector('[data-lcfa-read-more-body]');
+            var toggle = panel.querySelector('[data-lcfa-read-more-toggle]');
+            var styles = body && typeof window.getComputedStyle === 'function' ? window.getComputedStyle(body) : null;
+            var lineHeight = styles ? parseFloat(styles.lineHeight || '0') : 0;
+            var maxHeight = lineHeight > 0 ? lineHeight * 3 : 64;
+            var bodyHeight = body && typeof body.scrollHeight === 'number' ? body.scrollHeight : 0;
+
+            if (!body || !toggle) {
+                return;
+            }
+
+            if (bodyHeight <= maxHeight + 1) {
+                panel.classList.remove('is-overflowing', 'is-collapsed');
+                toggle.hidden = true;
+                return;
+            }
+
+            panel.classList.add('is-overflowing', 'is-collapsed');
+            toggle.hidden = false;
+            toggle.textContent = toggle.getAttribute('data-lcfa-collapsed-label') || 'Read more';
+        });
+    }
+
+    function toggleReadMore(button) {
+        var panel = button.closest('[data-lcfa-read-more]');
+        var collapsedLabel = button.getAttribute('data-lcfa-collapsed-label') || 'Read more';
+        var expandedLabel = button.getAttribute('data-lcfa-expanded-label') || 'Show less';
+
+        if (!panel) {
+            return;
+        }
+
+        if (panel.classList.toggle('is-collapsed')) {
+            button.textContent = collapsedLabel;
+        } else {
+            button.textContent = expandedLabel;
+        }
+    }
+
     function buildAjaxBody(config) {
         var params = new URLSearchParams();
         params.set('action', config.connectionsSecondaryAction || 'lcfa_connections_secondary');
@@ -191,6 +239,7 @@
 
                 panel = replaceSecondaryPanel(panel, String(panels[key] || ''));
                 highlightBlocks(panel);
+                bootstrapReadMore(panel);
             });
         }).catch(function (error) {
             renderSecondaryError(
@@ -212,21 +261,29 @@
 
     document.addEventListener('click', function (event) {
         var button = event.target instanceof Element ? event.target.closest('[data-lcfa-copy-text]') : null;
-        if (!button) {
+        var readMoreButton = event.target instanceof Element ? event.target.closest('[data-lcfa-read-more-toggle]') : null;
+
+        if (button) {
+            event.preventDefault();
+            copyText(button);
             return;
         }
 
-        event.preventDefault();
-        copyText(button);
+        if (readMoreButton) {
+            event.preventDefault();
+            toggleReadMore(readMoreButton);
+        }
     });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             highlightBlocks(document);
+            bootstrapReadMore(document);
             bootstrapConnectionsSecondaryPanels();
         });
     } else {
         highlightBlocks(document);
+        bootstrapReadMore(document);
         bootstrapConnectionsSecondaryPanels();
     }
 })();

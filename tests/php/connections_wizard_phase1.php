@@ -46,7 +46,7 @@ function esc_html(string $value): string {
 }
 
 function esc_attr(string $value): string {
-    return $value;
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
 function esc_attr__(string $value, string $domain = 'default'): string {
@@ -530,6 +530,7 @@ $stepper_method = new ReflectionMethod('LCFA_Admin', 'render_connection_stepper'
 $connection_wizard_method = new ReflectionMethod('LCFA_Admin', 'render_connection_wizard');
 $active_step_panel_method = new ReflectionMethod('LCFA_Admin', 'render_connection_active_step_panel');
 $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_onboarding_hero');
+$connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -671,6 +672,48 @@ lcfa_assert_same('ready', $ready_view['mode'] ?? '', 'presenter should switch to
 lcfa_assert_same('Run checks', $ready_view['ready_panel']['primary_cta']['label'] ?? '', 'ready state should expose Run checks as primary action');
 lcfa_assert_same('Change coding agent', $ready_view['ready_panel']['secondary_ctas'][1]['label'] ?? '', 'ready state should expose an explicit coding-agent reset action');
 
+ob_start();
+$connection_ready_card_method->invoke(
+    $admin_instance,
+    $ready_view,
+    [
+        'client'         => 'codex',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+        'shortcut_title' => 'Codex shortcut',
+        'shortcut_command' => 'codex mcp add livecanvas-forge -- node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
+        'command_string' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
+        'smoke_test_command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --tool get_snapshot --output pretty',
+        'environment'    => [
+            'LCFA_REST_BASE' => 'http://localhost:8887/wp-json/lcfa/v1/',
+            'LCFA_MCP_TOKEN' => 'test-token',
+        ],
+    ],
+    [
+        'connection_last_verified_at' => '2026-04-13 21:00:00',
+    ],
+    [
+        'available' => false,
+        'reason'    => 'unreachable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$ready_card_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($ready_card_markup, 'Connection ready') !== false, 'ready card should render its guidance alert without fatals');
+lcfa_assert_true(strpos($ready_card_markup, 'The smoke test has already passed.') !== false, 'ready card alert should explain that verification is already complete');
+lcfa_assert_false(strpos($ready_card_markup, 'Uncaught') !== false, 'ready card should not leak PHP fatal output into the admin page');
+lcfa_assert_true(strpos($ready_card_markup, 'lcfa-code-explanation') !== false, 'ready card generated bundle should explain each technical command block');
+lcfa_assert_true(strpos($ready_card_markup, 'data-lcfa-read-more') !== false, 'long generated bundle explanations should expose a read-more control');
+lcfa_assert_true(strpos($ready_card_markup, 'Registers livecanvas-forge inside Codex') !== false, 'Codex shortcut explanation should describe why the command is needed');
+lcfa_assert_true(strpos($ready_card_markup, 'raw MCP server command') !== false, 'server command explanation should describe its diagnostic purpose');
+lcfa_assert_true(strpos($ready_card_markup, 'REST endpoint, token, site URL, and local project root') !== false, 'environment variables explanation should describe the values passed to the MCP server');
+lcfa_assert_true(strpos($ready_card_markup, 'get_snapshot') !== false && strpos($ready_card_markup, 'confirms the MCP bridge') !== false, 'smoke test explanation should describe the snapshot verification command');
+
+$admin_css = (string) file_get_contents(LCFA_DIR . 'assets/admin.css');
+lcfa_assert_true(strpos($admin_css, '.lcfa-admin .lcfa-chip.is-positive') !== false, 'admin CSS should define positive chip states');
+lcfa_assert_true(strpos($admin_css, 'rgba(34, 197, 94') !== false || strpos($admin_css, '#22c55e') !== false, 'positive ready chips should use green styling, not the default cyan state');
+
 $reconfigured_connections = $reconfigure_connections_method->invoke($admin_instance, [
     'preferred_client'            => 'opencode',
     'connection_mode'             => 'local',
@@ -802,5 +845,53 @@ $active_step_panel_method->invoke(
 $smoke_step_markup = (string) ob_get_clean();
 
 lcfa_assert_true(strpos($smoke_step_markup, 'lcfa-wizard__panel--blocking') !== false, 'smoke-test panel should render a dedicated blocking style hook');
+
+ob_start();
+$active_step_panel_method->invoke(
+    $admin_instance,
+    [
+        'title'       => 'Ready to verify Codex?',
+        'description' => 'Run the smoke test after you have executed the Codex shortcut and verified that Codex can see livecanvas-forge.',
+    ],
+    'smoke_test',
+    [
+        'client'          => 'codex',
+        'mode'            => 'local',
+        'workspace_root'  => '/Users/commander/Studio/consultala',
+        'workspace_files' => [
+            [
+                'path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh',
+            ],
+        ],
+    ],
+    [
+        'preferred_client'         => 'codex',
+        'claude_connection_target' => '',
+        'connection_mode'          => 'local',
+        'workspace_root'           => '/Users/commander/Studio/consultala',
+    ],
+    'codex',
+    'local',
+    [],
+    [],
+    [],
+    [],
+    [
+        'available' => true,
+        'reason'    => 'ready',
+        'path'      => '/Users/commander/Studio/consultala',
+    ]
+);
+$codex_smoke_step_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'livecanvas-forge.codex.sh') !== false, 'Codex smoke panel should tell the user exactly which helper script to run');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'codex mcp list') !== false, 'Codex smoke panel should tell the user how to verify the MCP registration');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'livecanvas-forge') !== false, 'Codex smoke panel should tell the user which MCP server name must appear');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="sh &quot;/Users/commander/Studio/consultala/livecanvas-forge.codex.sh&quot;"') !== false, 'Codex helper command should expose a copy button');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="codex mcp list"') !== false, 'Codex mcp list command should expose a copy button');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="/Applications/Codex.app/Contents/Resources/codex mcp list"') !== false, 'Codex desktop mcp list command should expose a copy button');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'lcfa-codex-smoke-alert') !== false, 'Codex reopen warning should render as a prominent alert');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'If the output does not show livecanvas-forge, the connection is not ready yet.') !== false, 'Codex MCP output requirement should combine the expected and failure state in one step');
+lcfa_assert_false(strpos($codex_smoke_step_markup, 'If it does not show livecanvas-forge, the connection is not ready yet.') !== false, 'Codex MCP output warning should not be a separate repeated step');
 
 echo "PASS\n";

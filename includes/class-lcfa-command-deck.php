@@ -136,6 +136,7 @@ final class LCFA_Command_Deck {
     public function execute(array $payload): array {
         $action    = sanitize_key($payload['action'] ?? '');
         $dry_run   = !empty($payload['dry_run']);
+        $provenance = $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules');
         $framework = $this->resolve_framework($payload);
         $title     = sanitize_text_field($payload['title'] ?? '');
         $slug      = sanitize_title($payload['slug'] ?? '');
@@ -261,6 +262,10 @@ final class LCFA_Command_Deck {
             case 'page_upsert':
             case 'create_page':
             case 'update_page':
+                if (trim($content) === '') {
+                    return $this->error_result(__('Forge AI did not generate page HTML for this request, so the current page was left unchanged.', 'livecanvas-forge-ai'));
+                }
+
                 $framework_error = $this->validate_page_markup_for_framework($framework, $content);
 
                 if ($framework_error !== '') {
@@ -855,6 +860,8 @@ final class LCFA_Command_Deck {
             'force_preview'       => !empty($policy['force_preview']),
             'notice'              => (string) ($policy['notice'] ?? ''),
         ];
+        $result['provenance'] = $provenance;
+        $result['data']['provenance'] = $provenance;
 
         LCFA_Settings::append_history([
             'time'         => current_time('mysql', true),
@@ -867,12 +874,13 @@ final class LCFA_Command_Deck {
             'target_id'    => $result['target_id'],
             'target_title' => $result['target_title'],
             'execution_target' => 'local',
-        ]);
+        ] + $provenance);
 
         return $result;
     }
 
     private function execute_remote(array $payload, bool $dry_run, array $policy): array {
+        $provenance = $this->get_payload_provenance($payload, 'admin_command_deck', 'remote_companion');
         $status = $this->remote_client->get_status();
 
         if (empty($status['available'])) {
@@ -931,6 +939,8 @@ final class LCFA_Command_Deck {
             'theme'     => (string) ($status['snapshot']['theme'] ?? ''),
             'framework' => (string) ($status['snapshot']['framework'] ?? ''),
         ];
+        $result['provenance'] = $provenance;
+        $result['data']['provenance'] = $provenance;
 
         LCFA_Settings::append_history([
             'time'             => current_time('mysql', true),
@@ -943,7 +953,7 @@ final class LCFA_Command_Deck {
             'target_id'        => (int) ($result['target_id'] ?? 0),
             'target_title'     => (string) ($result['target_title'] ?? ''),
             'execution_target' => 'remote',
-        ]);
+        ] + $provenance);
 
         return $result;
     }
@@ -1006,16 +1016,56 @@ final class LCFA_Command_Deck {
         ];
     }
 
+    private function get_payload_provenance(array $payload, string $default_origin = 'admin_command_deck', string $default_processed_by = 'forge_local_rules'): array {
+        $origin = sanitize_key((string) ($payload['_lcfa_origin'] ?? $payload['origin'] ?? $default_origin));
+        $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'api'];
+        if (!in_array($origin, $allowed_origins, true)) {
+            $origin = $default_origin;
+        }
+
+        $default_transport = $origin === 'mcp_agent' ? 'mcp_stdio' : ($origin === 'remote_companion' ? 'remote_rest' : 'browser_rest');
+        $transport = sanitize_key((string) ($payload['_lcfa_transport'] ?? $payload['transport'] ?? $default_transport));
+        $allowed_transports = ['browser_rest', 'mcp_stdio', 'mcp_bridge', 'remote_rest', 'api'];
+        if (!in_array($transport, $allowed_transports, true)) {
+            $transport = $default_transport;
+        }
+
+        $default_client = $origin === 'mcp_agent' ? 'codex' : 'forge';
+        $client = sanitize_key((string) ($payload['_lcfa_agent'] ?? $payload['agent'] ?? $default_client));
+        $allowed_clients = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
+        if (!in_array($client, $allowed_clients, true)) {
+            $client = $default_client;
+        }
+
+        $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
+        $allowed_processors = ['forge_local_rules', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+        if (!in_array($processed_by, $allowed_processors, true)) {
+            $processed_by = $default_processed_by;
+        }
+
+        return [
+            'origin'       => $origin,
+            'transport'    => $transport,
+            'agent'        => $client,
+            'processed_by' => $processed_by,
+        ];
+    }
+
     private function resolve_command_content(string $action, array $payload): string {
         $content = wp_unslash((string) ($payload['content'] ?? ''));
 
-        if (!$this->supports_structured_page_content($action) || trim($content) !== '') {
+        if (!$this->supports_structured_page_content($action)) {
             return $content;
+        }
+
+        if (trim($content) !== '') {
+            return $this->strip_outer_livecanvas_main_wrapper($content);
         }
 
         $body_html     = $this->coerce_multiline_payload($payload, 'body_html', 'body_html_lines');
         $footer_html   = $this->coerce_multiline_payload($payload, 'footer_html', 'footer_html_lines');
         $footer_script = $this->coerce_multiline_payload($payload, 'footer_script', 'footer_script_lines');
+        $body_html     = $this->strip_outer_livecanvas_main_wrapper($body_html);
 
         if (trim($body_html) === '' && trim($footer_html) === '' && trim($footer_script) === '') {
             if (in_array($action, ['page_upsert', 'create_page', 'update_page'], true)) {
@@ -1040,6 +1090,24 @@ final class LCFA_Command_Deck {
         }
 
         return implode("\n\n", $parts);
+    }
+
+    private function strip_outer_livecanvas_main_wrapper(string $content): string {
+        $trimmed = trim($content);
+
+        if ($trimmed === '' || !preg_match('/^<main\b[^>]*>/i', $trimmed, $open_match)) {
+            return $content;
+        }
+
+        if (!preg_match('/<\/main>\s*$/i', $trimmed, $close_match, PREG_OFFSET_CAPTURE)) {
+            return $content;
+        }
+
+        $start = strlen($open_match[0]);
+        $end   = (int) $close_match[0][1];
+        $inner = substr($trimmed, $start, max(0, $end - $start));
+
+        return trim($inner);
     }
 
     private function build_page_starter_content(array $payload): string {

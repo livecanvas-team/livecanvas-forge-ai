@@ -126,6 +126,16 @@ async function run() {
   )
   assert.match(
     runLcCommand.description,
+    /Never wrap generated LiveCanvas page content in <main>/i,
+    'run_lc_command should explicitly tell agents not to generate an outer main wrapper'
+  )
+  assert.match(
+    validateMarkup.description,
+    /Never wrap generated LiveCanvas page content in <main>/i,
+    'validate_markup_for_framework should explicitly tell agents not to generate an outer main wrapper'
+  )
+  assert.match(
+    runLcCommand.description,
     /JavaScript is allowed when necessary/i,
     'run_lc_command should explain that JavaScript is allowed when necessary on Picowind'
   )

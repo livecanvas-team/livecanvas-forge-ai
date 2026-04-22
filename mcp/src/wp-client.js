@@ -80,12 +80,86 @@ class WPClient {
     return this.request('GET', 'command/actions')
   }
 
+  withProvenance(payload = {}, processedBy = 'codex_mcp') {
+    const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
+    const agent = ['codex', 'opencode', 'claude', 'cursor', 'generic'].includes(configuredAgent)
+      ? configuredAgent
+      : 'generic'
+    const configuredTransport = this.config && this.config.transport ? String(this.config.transport) : 'stdio'
+    const transport = configuredTransport === 'bridge' ? 'mcp_bridge' : 'mcp_stdio'
+
+    return {
+      ...payload,
+      _lcfa_origin: 'mcp_agent',
+      _lcfa_transport: transport,
+      _lcfa_agent: agent,
+      _lcfa_processed_by: processedBy
+    }
+  }
+
   async suggestCommand(payload = {}) {
-    return this.request('POST', 'command/suggest', { body: payload })
+    return this.request('POST', 'command/suggest', { body: this.withProvenance(payload, 'forge_local_rules') })
   }
 
   async runCommand(payload) {
-    return this.request('POST', 'command', { body: payload })
+    const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
+    const agent = ['codex', 'opencode', 'claude', 'cursor', 'generic'].includes(configuredAgent)
+      ? configuredAgent
+      : 'generic'
+    const processedBy = agent === 'generic' ? 'generic_mcp' : `${agent}_mcp`
+
+    return this.request('POST', 'command', { body: this.withProvenance(payload, processedBy) })
+  }
+
+  async getNextAgentRequest(agent = null, requestId = '') {
+    const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
+    const targetAgent = agent || configuredAgent
+    const query = {
+      agent: targetAgent
+    }
+
+    if (requestId) {
+      query.request_id = requestId
+      query.claim = '1'
+    }
+
+    return this.request('GET', 'agent/request', {
+      query
+    })
+  }
+
+  async getAgentRequest(requestId) {
+    return this.request('GET', 'agent/request', {
+      query: {
+        request_id: requestId
+      }
+    })
+  }
+
+  async completeAgentRequest(requestId, result = {}, thread = null) {
+    const body = {
+      request_id: requestId,
+      result
+    }
+
+    if (thread && typeof thread === 'object') {
+      body.thread = thread
+    }
+
+    return this.request('POST', 'agent/request/complete', { body })
+  }
+
+  async failAgentRequest(requestId, message, thread = null) {
+    const body = {
+      request_id: requestId,
+      message: String(message || 'Agent request failed.')
+    }
+
+    if (thread && typeof thread === 'object') {
+      body.thread = thread
+    }
+
+    return this.request('POST', 'agent/request/fail', { body })
   }
 
   async getPicostrapCompileManifest() {

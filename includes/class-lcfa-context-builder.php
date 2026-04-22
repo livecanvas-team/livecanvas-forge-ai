@@ -524,6 +524,7 @@ final class LCFA_Context_Builder {
                     __('JavaScript is allowed when it is necessary for the interaction. Keep page-level scripts small, place them at the end of the page, and move reusable logic into theme files when it grows.', 'livecanvas-forge-ai'),
                     __('External JavaScript libraries are allowed only when they solve a real need. Prefer stable, popular libraries and load them in a non-blocking way.', 'livecanvas-forge-ai'),
                     __('Prefer LiveCanvas HTML and Picowind-compatible templates before falling back to PHP.', 'livecanvas-forge-ai'),
+                    __('Do not wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>. LiveCanvas already owns the page shell; return only the sections and containers that belong inside it.', 'livecanvas-forge-ai'),
                 ],
             ];
         }
@@ -538,6 +539,7 @@ final class LCFA_Context_Builder {
                 'notes'                => [
                     __('Use Bootstrap 5 classes and LiveCanvas-friendly markup.', 'livecanvas-forge-ai'),
                     __('Prefer clean HTML blocks and partials before introducing custom PHP templates.', 'livecanvas-forge-ai'),
+                    __('Do not wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>. LiveCanvas already owns the page shell; return only the sections and containers that belong inside it.', 'livecanvas-forge-ai'),
                 ],
             ];
         }
@@ -550,6 +552,7 @@ final class LCFA_Context_Builder {
             'prefer_template_type' => 'php-html',
             'notes'                => [
                 __('Stack not recognized. Keep changes conservative and target post content first.', 'livecanvas-forge-ai'),
+                __('Do not wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>. LiveCanvas already owns the page shell; return only the sections and containers that belong inside it.', 'livecanvas-forge-ai'),
             ],
         ];
     }

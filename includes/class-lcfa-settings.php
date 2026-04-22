@@ -10,6 +10,7 @@ final class LCFA_Settings {
     public const CONNECTIONS_OPTION_KEY = 'lcfa_connections';
     public const HISTORY_OPTION_KEY = 'lcfa_command_history';
     public const THREADS_OPTION_KEY = 'lcfa_command_threads';
+    public const AGENT_REQUESTS_OPTION_KEY = 'lcfa_agent_requests';
     public const REDIRECT_OPTION_KEY = 'lcfa_do_activation_redirect';
     private const DEFAULT_THREAD_ID = 'default';
     private const NOTICE_PREFIX = 'lcfa_notice_';
@@ -594,6 +595,216 @@ final class LCFA_Settings {
         return self::get_thread($normalized_id);
     }
 
+    public static function get_agent_requests(): array {
+        $requests = get_option(self::AGENT_REQUESTS_OPTION_KEY, []);
+
+        if (!is_array($requests)) {
+            $requests = [];
+        }
+
+        $normalized = [];
+
+        foreach ($requests as $request_id => $request) {
+            if (!is_array($request)) {
+                continue;
+            }
+
+            $normalized_request = self::normalize_agent_request($request, (string) $request_id);
+
+            if (($normalized_request['id'] ?? '') === '') {
+                continue;
+            }
+
+            $normalized[$normalized_request['id']] = $normalized_request;
+        }
+
+        $normalized = self::trim_agent_requests($normalized);
+        update_option(self::AGENT_REQUESTS_OPTION_KEY, $normalized);
+
+        return $normalized;
+    }
+
+    public static function get_agent_request(string $request_id): ?array {
+        $request_id = sanitize_key($request_id);
+
+        if ($request_id === '') {
+            return null;
+        }
+
+        $requests = self::get_agent_requests();
+
+        return isset($requests[$request_id]) && is_array($requests[$request_id]) ? $requests[$request_id] : null;
+    }
+
+    public static function enqueue_agent_request(array $payload): array {
+        $requests    = self::get_agent_requests();
+        $connections = self::get_connections();
+        $agent       = self::normalize_agent_client((string) ($payload['agent'] ?? $connections['preferred_client'] ?? 'codex'));
+        $timestamp   = current_time('mysql', true);
+        $request_id  = self::generate_agent_request_id($requests);
+        $thread_id   = self::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
+        $user_prompt = sanitize_textarea_field((string) ($payload['user_prompt'] ?? $payload['message'] ?? ''));
+        $attachments = self::sanitize_thread_attachments((array) ($payload['attachments'] ?? []));
+
+        $request = [
+            'id'               => $request_id,
+            'status'           => 'queued',
+            'agent'            => $agent,
+            'queued_for'       => self::agent_processor_for($agent),
+            'thread_id'        => $thread_id,
+            'user_prompt'      => $user_prompt,
+            'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
+            'post_id'          => absint($payload['post_id'] ?? 0),
+            'context_post_id'  => absint($payload['context_post_id'] ?? 0),
+            'target_id'        => absint($payload['target_id'] ?? 0),
+            'variant'          => sanitize_text_field((string) ($payload['variant'] ?? '1')),
+            'action'           => sanitize_key((string) ($payload['action'] ?? 'page_upsert')),
+            'payload'          => self::sanitize_agent_payload($payload),
+            'attachments'      => $attachments,
+            'provenance'       => [
+                'origin'       => 'frontend_bridge',
+                'transport'    => 'browser_rest',
+                'agent'        => $agent,
+                'processed_by' => 'agent_queue',
+            ],
+            'created_at'       => $timestamp,
+            'updated_at'       => $timestamp,
+            'claimed_at'       => '',
+            'completed_at'     => '',
+            'result'           => null,
+            'thread'           => null,
+            'error'            => '',
+        ];
+
+        $requests[$request_id] = $request;
+        update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+
+        if ($user_prompt !== '') {
+            self::append_thread_message($thread_id, [
+                'role'        => 'user',
+                'label'       => __('Request', 'livecanvas-forge-ai'),
+                'content'     => $user_prompt,
+                'meta'        => [
+                    'agent'            => $agent,
+                    'processed_by'     => 'agent_queue',
+                    'queued_for'       => self::agent_processor_for($agent),
+                    'execution_target' => $request['execution_target'],
+                    'post_id'          => $request['post_id'],
+                    'context_post_id'  => $request['context_post_id'],
+                    'target_id'        => $request['target_id'],
+                    'variant'          => $request['variant'],
+                    'request_id'       => $request_id,
+                ],
+                'attachments' => $attachments,
+            ]);
+        }
+
+        return self::get_agent_request($request_id) ?: $request;
+    }
+
+    public static function claim_next_agent_request(string $agent = ''): ?array {
+        $requests = self::get_agent_requests();
+        $agent = self::normalize_agent_client($agent);
+        $timestamp = current_time('mysql', true);
+
+        foreach ($requests as $request_id => $request) {
+            if (!is_array($request) || ($request['status'] ?? '') !== 'queued') {
+                continue;
+            }
+
+            if ($agent !== '' && ($request['agent'] ?? '') !== $agent) {
+                continue;
+            }
+
+            $request['status'] = 'running';
+            $request['claimed_at'] = $timestamp;
+            $request['updated_at'] = $timestamp;
+            $request['claimed_by'] = $agent !== '' ? $agent : sanitize_key((string) ($request['agent'] ?? ''));
+
+            $requests[$request_id] = $request;
+            update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+
+            return self::get_agent_request($request_id);
+        }
+
+        return null;
+    }
+
+    public static function claim_agent_request(string $request_id, string $agent = ''): ?array {
+        $request_id = sanitize_key($request_id);
+        $agent = self::normalize_agent_client($agent);
+
+        if ($request_id === '') {
+            return null;
+        }
+
+        $requests = self::get_agent_requests();
+
+        if (!isset($requests[$request_id]) || !is_array($requests[$request_id])) {
+            return null;
+        }
+
+        $request = $requests[$request_id];
+
+        if (($request['status'] ?? '') !== 'queued') {
+            return null;
+        }
+
+        if ($agent !== '' && ($request['agent'] ?? '') !== $agent) {
+            return null;
+        }
+
+        $timestamp = current_time('mysql', true);
+        $request['status'] = 'running';
+        $request['claimed_at'] = $timestamp;
+        $request['updated_at'] = $timestamp;
+        $request['claimed_by'] = $agent !== '' ? $agent : sanitize_key((string) ($request['agent'] ?? ''));
+
+        $requests[$request_id] = $request;
+        update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+
+        return self::get_agent_request($request_id);
+    }
+
+    public static function update_agent_request_runner(string $request_id, array $runner): ?array {
+        $request_id = sanitize_key($request_id);
+
+        if ($request_id === '') {
+            return null;
+        }
+
+        $requests = self::get_agent_requests();
+
+        if (!isset($requests[$request_id]) || !is_array($requests[$request_id])) {
+            return null;
+        }
+
+        $requests[$request_id]['runner'] = self::sanitize_agent_payload($runner);
+        $requests[$request_id]['updated_at'] = current_time('mysql', true);
+        update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+
+        return self::get_agent_request($request_id);
+    }
+
+    public static function complete_agent_request(string $request_id, array $result, array $thread = []): ?array {
+        return self::update_agent_request_terminal_state($request_id, 'completed', [
+            'result' => self::sanitize_agent_payload($result),
+            'thread' => is_array($thread) && $thread !== [] ? self::sanitize_agent_payload($thread) : null,
+            'error' => '',
+        ]);
+    }
+
+    public static function fail_agent_request(string $request_id, string $message, array $thread = []): ?array {
+        return self::update_agent_request_terminal_state($request_id, 'failed', [
+            'result' => [
+                'ok' => false,
+                'message' => sanitize_textarea_field($message),
+            ],
+            'thread' => is_array($thread) && $thread !== [] ? self::sanitize_agent_payload($thread) : null,
+            'error' => sanitize_textarea_field($message),
+        ]);
+    }
+
     public static function normalize_thread_id(string $thread_id): string {
         $normalized = sanitize_key($thread_id);
 
@@ -876,6 +1087,110 @@ final class LCFA_Settings {
         return sanitize_text_field((string) $value);
     }
 
+    private static function normalize_agent_request(array $request, string $fallback_id): array {
+        $status = sanitize_key((string) ($request['status'] ?? 'queued'));
+        $agent = self::normalize_agent_client((string) ($request['agent'] ?? 'codex'));
+
+        if (!in_array($status, ['queued', 'running', 'completed', 'failed'], true)) {
+            $status = 'queued';
+        }
+
+        $result = is_array($request['result'] ?? null) ? self::sanitize_agent_payload($request['result']) : null;
+        $thread = is_array($request['thread'] ?? null) ? self::sanitize_agent_payload($request['thread']) : null;
+
+        return [
+            'id'               => sanitize_key((string) ($request['id'] ?? $fallback_id)),
+            'status'           => $status,
+            'agent'            => $agent,
+            'queued_for'       => self::agent_processor_for($agent),
+            'thread_id'        => self::normalize_thread_id((string) ($request['thread_id'] ?? 'default')),
+            'user_prompt'      => sanitize_textarea_field((string) ($request['user_prompt'] ?? '')),
+            'execution_target' => sanitize_key((string) ($request['execution_target'] ?? 'local')),
+            'post_id'          => absint($request['post_id'] ?? 0),
+            'context_post_id'  => absint($request['context_post_id'] ?? 0),
+            'target_id'        => absint($request['target_id'] ?? 0),
+            'variant'          => sanitize_text_field((string) ($request['variant'] ?? '1')),
+            'action'           => sanitize_key((string) ($request['action'] ?? 'page_upsert')),
+            'payload'          => self::sanitize_agent_payload((array) ($request['payload'] ?? [])),
+            'attachments'      => self::sanitize_thread_attachments((array) ($request['attachments'] ?? [])),
+            'provenance'       => self::sanitize_agent_payload((array) ($request['provenance'] ?? [])),
+            'runner'           => self::sanitize_agent_payload((array) ($request['runner'] ?? [])),
+            'created_at'       => sanitize_text_field((string) ($request['created_at'] ?? '')),
+            'updated_at'       => sanitize_text_field((string) ($request['updated_at'] ?? '')),
+            'claimed_at'       => sanitize_text_field((string) ($request['claimed_at'] ?? '')),
+            'completed_at'     => sanitize_text_field((string) ($request['completed_at'] ?? '')),
+            'claimed_by'       => sanitize_key((string) ($request['claimed_by'] ?? '')),
+            'result'           => $result,
+            'thread'           => $thread,
+            'error'            => sanitize_textarea_field((string) ($request['error'] ?? '')),
+        ];
+    }
+
+    private static function update_agent_request_terminal_state(string $request_id, string $status, array $patch): ?array {
+        $request_id = sanitize_key($request_id);
+
+        if ($request_id === '') {
+            return null;
+        }
+
+        $requests = self::get_agent_requests();
+
+        if (!isset($requests[$request_id]) || !is_array($requests[$request_id])) {
+            return null;
+        }
+
+        $request = $requests[$request_id];
+        $timestamp = current_time('mysql', true);
+        $request['status'] = $status;
+        $request['updated_at'] = $timestamp;
+        $request['completed_at'] = $timestamp;
+
+        foreach ($patch as $key => $value) {
+            $request[$key] = $value;
+        }
+
+        $requests[$request_id] = $request;
+        update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+
+        return self::get_agent_request($request_id);
+    }
+
+    private static function sanitize_agent_payload($value) {
+        if (is_bool($value) || is_int($value) || is_float($value) || $value === null) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+
+            foreach ($value as $key => $item) {
+                $sanitized_key = is_string($key) ? sanitize_key($key) : $key;
+
+                if ($sanitized_key === '') {
+                    continue;
+                }
+
+                $sanitized[$sanitized_key] = self::sanitize_agent_payload($item);
+            }
+
+            return $sanitized;
+        }
+
+        return is_string($value) ? $value : (string) $value;
+    }
+
+    private static function normalize_agent_client(string $agent): string {
+        $agent = sanitize_key($agent);
+
+        return in_array($agent, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $agent : 'codex';
+    }
+
+    private static function agent_processor_for(string $agent): string {
+        $agent = self::normalize_agent_client($agent);
+
+        return $agent === 'generic' ? 'generic_mcp' : $agent . '_mcp';
+    }
+
     private static function sort_threads_by_updated_at(array $threads): array {
         uasort($threads, static function (array $left, array $right): int {
             return strtotime((string) ($right['updated_at'] ?? '')) <=> strtotime((string) ($left['updated_at'] ?? ''));
@@ -906,5 +1221,26 @@ final class LCFA_Settings {
         }
 
         return $candidate !== '' ? $candidate : 'thread-' . (string) time();
+    }
+
+    private static function trim_agent_requests(array $requests): array {
+        uasort($requests, static function (array $left, array $right): int {
+            return strtotime((string) ($right['updated_at'] ?: $right['created_at'] ?? '')) <=> strtotime((string) ($left['updated_at'] ?: $left['created_at'] ?? ''));
+        });
+
+        return array_slice($requests, 0, 50, true);
+    }
+
+    private static function generate_agent_request_id(array $requests): string {
+        $base = 'agent-' . strtolower(wp_generate_password(10, false, false));
+        $candidate = sanitize_key($base);
+        $suffix = 2;
+
+        while ($candidate === '' || isset($requests[$candidate])) {
+            $candidate = sanitize_key($base . '-' . $suffix);
+            $suffix++;
+        }
+
+        return $candidate !== '' ? $candidate : 'agent-' . (string) time();
     }
 }

@@ -695,6 +695,10 @@ LCFA_Settings::update([
 $editor_thread = LCFA_Settings::create_thread('Editor chat');
 lcfa_assert_true(method_exists($rest_api, 'send_chat_message'), 'REST API should expose send_chat_message for the editor chat flow');
 lcfa_assert_true(method_exists($rest_api, 'manage_chat_thread'), 'REST API should expose manage_chat_thread for editor thread operations');
+lcfa_assert_true(method_exists($rest_api, 'enqueue_agent_request'), 'REST API should expose enqueue_agent_request for frontend prompts handled by MCP agents');
+lcfa_assert_true(method_exists($rest_api, 'get_agent_request_status'), 'REST API should expose get_agent_request_status for browser polling and MCP claiming');
+lcfa_assert_true(method_exists($rest_api, 'complete_agent_request'), 'REST API should expose complete_agent_request for MCP agent results');
+lcfa_assert_true(method_exists($rest_api, 'fail_agent_request'), 'REST API should expose fail_agent_request for MCP agent errors');
 lcfa_assert_true(method_exists($rest_api, 'enqueue_command_execution'), 'REST API should expose enqueue_command_execution for async inline execution');
 lcfa_assert_true(method_exists($rest_api, 'get_command_execution_status'), 'REST API should expose get_command_execution_status for async inline execution polling');
 lcfa_assert_true(method_exists($rest_api, 'get_genesis_execution_plan'), 'REST API should expose get_genesis_execution_plan for Genesis execution state');
@@ -750,6 +754,70 @@ if (method_exists($rest_api, 'send_chat_message')) {
     lcfa_assert_contains('thread_id=' . (string) ($editor_thread['id'] ?? 'default'), (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the active thread id');
     lcfa_assert_contains('genesis_task_id=task-42', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the current Genesis task context');
     lcfa_assert_contains('user_prompt=Refresh+the+hero+with+a+simpler+CTA+and+keep+the+current+logo.', (string) ($last_suggestion_message['actions'][2]['url'] ?? ''), 'suggestion_result deeplink should preserve the current prompt');
+}
+
+if (method_exists($rest_api, 'enqueue_agent_request')) {
+    LCFA_Settings::update_connections([
+        'preferred_client'  => 'codex',
+        'connection_status' => 'ready',
+    ]);
+
+    $agent_thread = LCFA_Settings::create_thread('Codex frontend queue');
+    $agent_enqueue_response = $rest_api->enqueue_agent_request(new WP_REST_Request([
+        'thread_id'        => (string) ($agent_thread['id'] ?? 'default'),
+        'agent'            => 'codex',
+        'user_prompt'      => 'Change the first price to 19.',
+        'execution_target' => 'local',
+        'post_id'          => 42,
+        'context_post_id'  => 42,
+        'target_id'        => 42,
+        'variant'          => '1',
+        'action'           => 'page_upsert',
+    ]));
+    $agent_enqueue_payload = $agent_enqueue_response->get_data();
+    $queued_agent_request = is_array($agent_enqueue_payload['request'] ?? null) ? $agent_enqueue_payload['request'] : [];
+    $agent_request_id = sanitize_key((string) ($queued_agent_request['id'] ?? ''));
+
+    lcfa_assert_same(202, $agent_enqueue_response->get_status(), 'enqueue_agent_request should queue verified agent prompts');
+    lcfa_assert_true($agent_request_id !== '', 'enqueue_agent_request should return a request id');
+    lcfa_assert_same('queued', (string) ($queued_agent_request['status'] ?? ''), 'enqueue_agent_request should start in queued status');
+    lcfa_assert_same('codex', (string) ($queued_agent_request['agent'] ?? ''), 'enqueue_agent_request should preserve the selected Codex agent');
+    lcfa_assert_same('agent_queue', (string) ($queued_agent_request['provenance']['processed_by'] ?? ''), 'enqueue_agent_request should mark browser submissions as agent_queue, not local Forge');
+
+    $agent_claim_response = $rest_api->get_agent_request_status(new WP_REST_Request([
+        'agent' => 'codex',
+    ]));
+    $agent_claim_payload = $agent_claim_response->get_data();
+    $running_agent_request = is_array($agent_claim_payload['request'] ?? null) ? $agent_claim_payload['request'] : [];
+
+    lcfa_assert_same(200, $agent_claim_response->get_status(), 'get_agent_request_status should let MCP agents claim queued prompts');
+    lcfa_assert_same($agent_request_id, (string) ($running_agent_request['id'] ?? ''), 'get_agent_request_status should claim the queued frontend request');
+    lcfa_assert_same('running', (string) ($running_agent_request['status'] ?? ''), 'get_agent_request_status should move the claimed request to running');
+
+    $agent_complete_response = $rest_api->complete_agent_request(new WP_REST_Request([
+        'request_id' => $agent_request_id,
+        'result'     => [
+            'result' => [
+                'ok'        => true,
+                'action'    => 'page_upsert',
+                'mode'      => 'apply',
+                'target_id' => 42,
+                'summary'   => 'Updated the first price.',
+                'message'   => 'Page updated by Codex.',
+            ],
+        ],
+    ]));
+    $agent_complete_payload = $agent_complete_response->get_data();
+    $completed_agent_request = is_array($agent_complete_payload['request'] ?? null) ? $agent_complete_payload['request'] : [];
+    $completed_thread = is_array($agent_complete_payload['thread'] ?? null) ? $agent_complete_payload['thread'] : [];
+    $completed_messages = is_array($completed_thread['messages'] ?? null) ? $completed_thread['messages'] : [];
+    $completed_last_message = $completed_messages[count($completed_messages) - 1] ?? [];
+
+    lcfa_assert_same(200, $agent_complete_response->get_status(), 'complete_agent_request should accept MCP agent results');
+    lcfa_assert_same('completed', (string) ($completed_agent_request['status'] ?? ''), 'complete_agent_request should mark the request as completed');
+    lcfa_assert_same('codex_mcp', (string) ($completed_agent_request['result']['provenance']['processed_by'] ?? ''), 'complete_agent_request should stamp results with Codex MCP provenance');
+    lcfa_assert_same('tool_result', (string) ($completed_last_message['role'] ?? ''), 'complete_agent_request should append a tool_result thread message');
+    lcfa_assert_same('codex_mcp', (string) ($completed_last_message['meta']['processed_by'] ?? ''), 'complete_agent_request thread message should show Codex MCP as processor');
 }
 
 if (method_exists($rest_api, 'manage_chat_thread')) {
@@ -968,6 +1036,10 @@ $picowind_rules = $picowind_rules_method->invoke($context_builder, 'picowind');
 
 lcfa_assert_true(($picowind_rules['html_only'] ?? null) === false, 'Picowind output rules should not force HTML-only output');
 lcfa_assert_true(($picowind_rules['allow_javascript'] ?? null) === true, 'Picowind output rules should allow JavaScript when needed');
+lcfa_assert_contains('Do not wrap generated LiveCanvas page content in <main>', implode("\n", (array) ($picowind_rules['notes'] ?? [])), 'Picowind output rules should tell agents not to add a duplicate main wrapper');
+
+$picostrap_rules = $picowind_rules_method->invoke($context_builder, 'picostrap');
+lcfa_assert_contains('Do not wrap generated LiveCanvas page content in <main>', implode("\n", (array) ($picostrap_rules['notes'] ?? [])), 'Picostrap output rules should tell agents not to add a duplicate main wrapper');
 
 $audit_page_id = 42;
 $GLOBALS['lcfa_test_posts'][$audit_page_id] = new WP_Post([
@@ -1309,6 +1381,7 @@ lcfa_assert_same(100, $page_result['target_id'], 'page_upsert should create the 
 lcfa_assert_same('https://example.test/landing-page-1/', $page_result['frontend_url'] ?? '', 'page_upsert should return frontend_url');
 lcfa_assert_contains('post.php?post=100&action=edit', $page_result['edit_url'] ?? '', 'page_upsert should return edit_url');
 lcfa_assert_same('page-templates/empty.php', $GLOBALS['lcfa_test_post_meta'][100]['_wp_page_template'] ?? '', 'page_upsert should assign the Empty Page template when it is available');
+lcfa_assert_same('Hero', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert should strip a generated outer main wrapper because LiveCanvas already owns the page shell');
 
 $interactive_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
@@ -1319,6 +1392,7 @@ $interactive_page_result = $command_deck->execute([
 ]);
 
 lcfa_assert_true($interactive_page_result['ok'] === true, 'page_upsert should allow trusted interactive page markup');
+lcfa_assert_true(stripos((string) $GLOBALS['lcfa_test_posts'][101]->post_content, '<main') === false, 'page_upsert should strip outer main wrappers while preserving interactive content');
 lcfa_assert_contains('<input type="radio"', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve form inputs instead of letting KSES strip them');
 lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][101]->post_content, 'page_upsert should preserve page-level scripts instead of saving raw JavaScript text');
 
@@ -1340,6 +1414,7 @@ $structured_page_result = $command_deck->execute([
 ]);
 
 lcfa_assert_true($structured_page_result['ok'] === true, 'page_upsert should accept structured page payloads without a raw content blob');
+lcfa_assert_true(stripos((string) $GLOBALS['lcfa_test_posts'][102]->post_content, '<main') === false, 'structured page payloads should strip generated outer main wrappers');
 lcfa_assert_contains('<section class="pricing-grid">', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should persist body_html_lines into post_content');
 lcfa_assert_contains('<script>', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should wrap footer_script_lines in a script tag');
 lcfa_assert_contains('structured pricing', $GLOBALS['lcfa_test_posts'][102]->post_content, 'structured page payloads should preserve footer_script_lines contents');
@@ -1462,6 +1537,18 @@ $updated_page_result = $command_deck->execute([
 lcfa_assert_true($updated_page_result['ok'] === true, 'page_upsert should update an existing page when post_id is provided');
 lcfa_assert_same(100, $updated_page_result['target_id'], 'page_upsert update should keep the same post id');
 lcfa_assert_same('page-templates/empty.php', $GLOBALS['lcfa_test_post_meta'][100]['_wp_page_template'] ?? '', 'page_upsert update should keep the Empty Page template assigned');
+
+$page_content_before_empty_upsert = (string) $GLOBALS['lcfa_test_posts'][100]->post_content;
+$empty_upsert_result = $command_deck->execute([
+    'action'      => 'page_upsert',
+    'post_id'     => 100,
+    'target_id'   => 100,
+    'status'      => 'publish',
+    'user_prompt' => 'Change the font family of this page.',
+]);
+
+lcfa_assert_true($empty_upsert_result['ok'] === false, 'page_upsert should reject empty generated HTML for an existing page');
+lcfa_assert_same($page_content_before_empty_upsert, (string) $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert should not erase existing page HTML when no content was generated');
 
 $GLOBALS['lcfa_test_force_empty_edit_link'] = true;
 $fallback_edit_result = $command_deck->execute([
@@ -1618,7 +1705,7 @@ if ($previous_home === false) {
 }
 
 lcfa_assert_same('https://example.test/landing-page-1-updated/', $updated_page_result['frontend_url'] ?? '', 'page_upsert update should refresh frontend_url after slug changes');
-lcfa_assert_same('<main>Updated Hero</main>', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert update should persist new content');
+lcfa_assert_same('Updated Hero', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert update should persist new content without a generated outer main wrapper');
 
 LCFA_Settings::update([
     'permission_profile'  => 'draft_preview',

@@ -8,6 +8,9 @@ if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) 
 if (!class_exists('LCFA_Genesis_Executor', false) && defined('LCFA_DIR')) {
     require_once LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 }
+if (!class_exists('LCFA_Codex_Autorunner', false) && defined('LCFA_DIR')) {
+    require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';
+}
 
 final class LCFA_Rest_Api {
     private const COMMAND_EXECUTION_TRANSIENT_PREFIX = 'lcfa_command_execution_';
@@ -209,6 +212,31 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/chat/thread', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'manage_chat_thread'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/agent/request', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'enqueue_agent_request'],
+                'permission_callback' => [$this, 'can_write'],
+            ],
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_agent_request_status'],
+                'permission_callback' => [$this, 'can_read'],
+            ],
+        ]);
+
+        register_rest_route('lcfa/v1', '/agent/request/complete', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'complete_agent_request'],
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/agent/request/fail', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'fail_agent_request'],
             'permission_callback' => [$this, 'can_write'],
         ]);
 
@@ -672,17 +700,11 @@ final class LCFA_Rest_Api {
     }
 
     public function suggest_command(WP_REST_Request $request): WP_REST_Response {
-        $payload = $request->get_json_params();
-
-        if (!is_array($payload)) {
-            $payload = $request->get_params();
-        }
-
-        if (!is_array($payload)) {
-            $payload = [];
-        }
+        $payload = $this->get_request_payload($request);
+        $payload = $this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules'));
 
         $suggestion = $this->prompt_suggester->suggest($payload);
+        $suggestion['provenance'] = $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules');
         $status     = !empty($suggestion['ok']) ? 200 : 400;
 
         return new WP_REST_Response([
@@ -692,6 +714,8 @@ final class LCFA_Rest_Api {
 
     public function send_chat_message(WP_REST_Request $request): WP_REST_Response {
         $payload = $this->get_request_payload($request);
+        $provenance = $this->get_payload_provenance($payload, 'frontend_bridge', 'forge_local_rules');
+        $payload = $this->add_payload_provenance($payload, $provenance);
 
         $thread_id = LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
         $user_prompt = sanitize_textarea_field((string) ($payload['user_prompt'] ?? $payload['message'] ?? ''));
@@ -718,13 +742,14 @@ final class LCFA_Rest_Api {
                 'context_post_id'  => absint($payload['context_post_id'] ?? 0),
                 'target_id'        => absint($payload['target_id'] ?? 0),
                 'variant'          => sanitize_text_field((string) ($payload['variant'] ?? '1')),
-            ],
+            ] + $provenance,
             'attachments' => $attachments,
         ]);
 
         $payload['attachments'] = $attachments;
         $payload['attachment_count'] = count($attachments);
         $suggestion = $this->prompt_suggester->suggest($payload);
+        $suggestion['provenance'] = $provenance;
         $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_chat_suggestion_message($suggestion, $payload, $thread_id));
         $thread = $this->decorate_thread($thread, $thread_id);
         $status = !empty($suggestion['ok']) ? 200 : 400;
@@ -802,6 +827,132 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function enqueue_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $connections = LCFA_Settings::get_connections();
+        $agent = sanitize_key((string) ($payload['agent'] ?? $connections['preferred_client'] ?? ''));
+
+        if (($connections['connection_status'] ?? '') !== 'ready' || $agent === '') {
+            return new WP_REST_Response([
+                'error' => __('No verified coding agent is connected yet. Finish the Connections smoke test or use the local Forge fallback.', 'livecanvas-forge-ai'),
+            ], 409);
+        }
+
+        $payload['agent'] = $agent;
+        $payload['_lcfa_origin'] = 'frontend_bridge';
+        $payload['_lcfa_transport'] = 'browser_rest';
+        $payload['_lcfa_processed_by'] = 'agent_queue';
+        $payload['attachments'] = $this->sanitize_chat_attachments((array) ($payload['attachments'] ?? []));
+
+        $agent_request = LCFA_Settings::enqueue_agent_request($payload);
+        LCFA_Codex_Autorunner::maybe_spawn($agent_request);
+        $agent_request = LCFA_Settings::get_agent_request((string) ($agent_request['id'] ?? '')) ?: $agent_request;
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? $payload['thread_id'] ?? 'default'));
+
+        return new WP_REST_Response([
+            'request' => $this->build_agent_request_response($agent_request),
+            'thread'  => $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id),
+        ], 202);
+    }
+
+    public function get_agent_request_status(WP_REST_Request $request): WP_REST_Response {
+        $request_id = sanitize_key((string) ($request->get_param('request_id') ?: $request->get_param('id') ?: ''));
+        $claim = in_array((string) $request->get_param('claim'), ['1', 'true', 'yes'], true);
+        $agent = sanitize_key((string) ($request->get_param('agent') ?: ''));
+
+        if ($request_id !== '') {
+            $agent_request = null;
+
+            if ($claim) {
+                $agent_request = LCFA_Settings::claim_agent_request($request_id, $agent);
+            }
+
+            if (!is_array($agent_request)) {
+                $agent_request = LCFA_Settings::get_agent_request($request_id);
+            }
+
+            if (!is_array($agent_request)) {
+                return new WP_REST_Response([
+                    'error' => __('Agent request not found.', 'livecanvas-forge-ai'),
+                ], 404);
+            }
+
+            $agent_request = $this->maybe_fail_stale_agent_request($agent_request);
+            $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
+
+            return new WP_REST_Response([
+                'request' => $this->build_agent_request_response($agent_request),
+                'thread'  => $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id),
+                'status'  => $claim && (($agent_request['status'] ?? '') === 'running') ? 'claimed' : sanitize_key((string) ($agent_request['status'] ?? 'queued')),
+            ], 200);
+        }
+
+        $agent_request = LCFA_Settings::claim_next_agent_request($agent);
+
+        if (!is_array($agent_request)) {
+            return new WP_REST_Response([
+                'request' => null,
+                'status'  => 'empty',
+            ], 200);
+        }
+
+        return new WP_REST_Response([
+            'request' => $this->build_agent_request_response($agent_request),
+            'status'  => 'claimed',
+        ], 200);
+    }
+
+    public function complete_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $request_id = sanitize_key((string) ($payload['request_id'] ?? $payload['id'] ?? ''));
+        $agent_request = LCFA_Settings::get_agent_request($request_id);
+
+        if (!is_array($agent_request)) {
+            return new WP_REST_Response([
+                'error' => __('Agent request not found.', 'livecanvas-forge-ai'),
+            ], 404);
+        }
+
+        $result = $this->normalize_agent_result_payload((array) ($payload['result'] ?? []), $agent_request);
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
+        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_agent_result_message($result, $agent_request));
+        $thread = $this->decorate_thread($thread, $thread_id);
+        $agent_request = LCFA_Settings::complete_agent_request($request_id, $result, $thread);
+
+        return new WP_REST_Response([
+            'request' => $this->build_agent_request_response(is_array($agent_request) ? $agent_request : []),
+            'thread'  => $thread,
+        ], 200);
+    }
+
+    public function fail_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $request_id = sanitize_key((string) ($payload['request_id'] ?? $payload['id'] ?? ''));
+        $agent_request = LCFA_Settings::get_agent_request($request_id);
+
+        if (!is_array($agent_request)) {
+            return new WP_REST_Response([
+                'error' => __('Agent request not found.', 'livecanvas-forge-ai'),
+            ], 404);
+        }
+
+        $message = sanitize_textarea_field((string) ($payload['message'] ?? __('Agent request failed.', 'livecanvas-forge-ai')));
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
+        $result = $this->normalize_agent_result_payload([
+            'ok'      => false,
+            'message' => $message,
+            'summary' => $message,
+        ], $agent_request);
+        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_agent_result_message($result, $agent_request));
+        $thread = $this->decorate_thread($thread, $thread_id);
+        $agent_request = LCFA_Settings::fail_agent_request($request_id, $message, $thread);
+
+        return new WP_REST_Response([
+            'request' => $this->build_agent_request_response(is_array($agent_request) ? $agent_request : []),
+            'thread'  => $thread,
+        ], 200);
+    }
+
     public function get_mcp_status(): WP_REST_Response {
         return new WP_REST_Response([
             'mcp' => $this->context_builder->get_mcp_status(),
@@ -874,6 +1025,7 @@ final class LCFA_Rest_Api {
 
     public function run_command(WP_REST_Request $request): WP_REST_Response {
         $payload = $this->get_request_payload($request);
+        $payload = $this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules'));
 
         $append_thread = array_key_exists('thread_id', $payload);
         $thread_id = $append_thread
@@ -902,6 +1054,7 @@ final class LCFA_Rest_Api {
 
     public function enqueue_command_execution(WP_REST_Request $request): WP_REST_Response {
         $payload = $this->get_request_payload($request);
+        $payload = $this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'frontend_bridge', 'forge_local_rules'));
         $record = $this->create_command_execution_record($payload);
         $this->store_command_execution_record($record);
 
@@ -935,6 +1088,7 @@ final class LCFA_Rest_Api {
     private function build_chat_suggestion_message(array $suggestion, array $request_payload = [], string $thread_id = 'default'): array {
         $suggested_payload = is_array($suggestion['suggested_payload'] ?? null) ? $suggestion['suggested_payload'] : [];
         $summary = (string) ($suggestion['summary'] ?? $suggestion['message'] ?? '');
+        $provenance = $this->get_payload_provenance($request_payload, 'frontend_bridge', 'forge_local_rules');
 
         return [
             'role'    => 'suggestion_result',
@@ -948,7 +1102,7 @@ final class LCFA_Rest_Api {
                 'attachment_count' => absint($request_payload['attachment_count'] ?? 0),
                 'warnings'         => array_map('sanitize_text_field', (array) ($suggestion['warnings'] ?? [])),
                 'reasons'          => array_map('sanitize_text_field', (array) ($suggestion['reasons'] ?? [])),
-            ],
+            ] + $provenance,
             'actions' => LCFA_Thread_Message_Actions::build_suggestion_actions($suggested_payload, $request_payload, [
                 'thread_id' => LCFA_Settings::normalize_thread_id($thread_id),
             ]),
@@ -961,6 +1115,7 @@ final class LCFA_Rest_Api {
         $message = trim((string) ($result['message'] ?? ''));
         $execution_target = sanitize_key((string) ($payload['execution_target'] ?? 'local'));
         $target_type = (string) ($result['target_type'] ?? '');
+        $provenance = $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules');
 
         if ($summary !== '') {
             $lines[] = $summary;
@@ -997,7 +1152,7 @@ final class LCFA_Rest_Api {
                 'target_type'      => $target_type,
                 'target_id'        => (int) ($result['target_id'] ?? 0),
                 'target_title'     => (string) ($result['target_title'] ?? ''),
-            ],
+            ] + $provenance,
             'actions' => LCFA_Thread_Message_Actions::build_result_actions($result, $payload, [
                 'thread_id' => LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? '')),
             ]),
@@ -1008,6 +1163,145 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    private function build_agent_request_response(array $agent_request): array {
+        if ($agent_request === []) {
+            return [];
+        }
+
+        return [
+            'id'               => sanitize_key((string) ($agent_request['id'] ?? '')),
+            'status'           => sanitize_key((string) ($agent_request['status'] ?? 'queued')),
+            'agent'            => sanitize_key((string) ($agent_request['agent'] ?? '')),
+            'queued_for'       => sanitize_key((string) ($agent_request['queued_for'] ?? '')),
+            'thread_id'        => LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default')),
+            'user_prompt'      => (string) ($agent_request['user_prompt'] ?? ''),
+            'action'           => sanitize_key((string) ($agent_request['action'] ?? '')),
+            'execution_target' => sanitize_key((string) ($agent_request['execution_target'] ?? 'local')),
+            'post_id'          => absint($agent_request['post_id'] ?? 0),
+            'context_post_id'  => absint($agent_request['context_post_id'] ?? 0),
+            'target_id'        => absint($agent_request['target_id'] ?? 0),
+            'variant'          => sanitize_text_field((string) ($agent_request['variant'] ?? '1')),
+            'payload'          => is_array($agent_request['payload'] ?? null) ? $agent_request['payload'] : [],
+            'attachments'      => is_array($agent_request['attachments'] ?? null) ? $agent_request['attachments'] : [],
+            'provenance'       => is_array($agent_request['provenance'] ?? null) ? $agent_request['provenance'] : [],
+            'runner'           => is_array($agent_request['runner'] ?? null) ? $agent_request['runner'] : [],
+            'created_at'       => sanitize_text_field((string) ($agent_request['created_at'] ?? '')),
+            'updated_at'       => sanitize_text_field((string) ($agent_request['updated_at'] ?? '')),
+            'claimed_at'       => sanitize_text_field((string) ($agent_request['claimed_at'] ?? '')),
+            'completed_at'     => sanitize_text_field((string) ($agent_request['completed_at'] ?? '')),
+            'claimed_by'       => sanitize_key((string) ($agent_request['claimed_by'] ?? '')),
+            'result'           => is_array($agent_request['result'] ?? null) ? $agent_request['result'] : null,
+            'thread'           => is_array($agent_request['thread'] ?? null) ? $agent_request['thread'] : null,
+            'error'            => sanitize_textarea_field((string) ($agent_request['error'] ?? '')),
+        ];
+    }
+
+    private function normalize_agent_result_payload(array $result, array $agent_request): array {
+        if (isset($result['result']) && is_array($result['result'])) {
+            $result = $result['result'];
+        }
+
+        if (!array_key_exists('ok', $result)) {
+            $result['ok'] = true;
+        }
+
+        $agent = sanitize_key((string) ($agent_request['agent'] ?? 'generic'));
+        $processed_by = $agent === 'generic' ? 'generic_mcp' : $agent . '_mcp';
+
+        $result['provenance'] = [
+            'origin'       => 'mcp_agent',
+            'transport'    => 'mcp_stdio',
+            'agent'        => $agent,
+            'processed_by' => $processed_by,
+            'request_id'   => sanitize_key((string) ($agent_request['id'] ?? '')),
+        ];
+
+        return $result;
+    }
+
+    private function build_agent_result_message(array $result, array $agent_request): array {
+        $payload = is_array($agent_request['payload'] ?? null) ? $agent_request['payload'] : [];
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
+        $summary = trim((string) ($result['summary'] ?? ''));
+        $message = trim((string) ($result['message'] ?? ''));
+        $lines = [];
+
+        if ($summary !== '') {
+            $lines[] = $summary;
+        }
+
+        if ($message !== '' && $message !== $summary) {
+            $lines[] = $message;
+        }
+
+        if ($lines === []) {
+            $lines[] = !empty($result['ok'])
+                ? __('Agent completed the frontend request.', 'livecanvas-forge-ai')
+                : __('Agent could not complete the frontend request.', 'livecanvas-forge-ai');
+        }
+
+        $provenance = is_array($result['provenance'] ?? null) ? $result['provenance'] : [];
+
+        $message_payload = [
+            'role'    => 'tool_result',
+            'label'   => !empty($result['ok']) ? __('Execution result', 'livecanvas-forge-ai') : __('Execution error', 'livecanvas-forge-ai'),
+            'content' => implode("\n", array_filter($lines)),
+            'meta'    => [
+                'request_id'       => sanitize_key((string) ($agent_request['id'] ?? '')),
+                'action'           => sanitize_key((string) ($result['action'] ?? $agent_request['action'] ?? '')),
+                'mode'             => sanitize_key((string) ($result['mode'] ?? 'apply')),
+                'execution_target' => sanitize_key((string) ($result['execution_target'] ?? $agent_request['execution_target'] ?? 'local')),
+                'ok'               => !empty($result['ok']),
+                'target_type'      => sanitize_key((string) ($result['target_type'] ?? '')),
+                'target_id'        => absint($result['target_id'] ?? $agent_request['target_id'] ?? 0),
+                'target_title'     => sanitize_text_field((string) ($result['target_title'] ?? '')),
+                'origin'           => sanitize_key((string) ($provenance['origin'] ?? 'mcp_agent')),
+                'transport'        => sanitize_key((string) ($provenance['transport'] ?? 'mcp_stdio')),
+                'agent'            => sanitize_key((string) ($provenance['agent'] ?? $agent_request['agent'] ?? 'generic')),
+                'processed_by'     => sanitize_key((string) ($provenance['processed_by'] ?? $agent_request['queued_for'] ?? 'generic_mcp')),
+            ],
+            'actions' => LCFA_Thread_Message_Actions::build_result_actions($result, $payload, [
+                'thread_id' => $thread_id,
+            ]),
+        ];
+
+        return LCFA_Thread_Message_Actions::decorate_message($message_payload, [
+            'thread_id' => $thread_id,
+        ]);
+    }
+
+    private function maybe_fail_stale_agent_request(array $agent_request): array {
+        if (!LCFA_Codex_Autorunner::is_stale_queued_request($agent_request, time(), LCFA_Codex_Autorunner::get_stale_timeout())) {
+            return $agent_request;
+        }
+
+        $request_id = sanitize_key((string) ($agent_request['id'] ?? ''));
+        if ($request_id === '') {
+            return $agent_request;
+        }
+
+        $runner = is_array($agent_request['runner'] ?? null) ? $agent_request['runner'] : [];
+        $runner['state'] = 'timed_out';
+        $runner['reason'] = 'codex_exec_did_not_claim_request';
+        $runner['message'] = __('Codex was started, but it did not claim the frontend request before the timeout.', 'livecanvas-forge-ai');
+        $runner['updated_at'] = current_time('mysql', true);
+        LCFA_Settings::update_agent_request_runner($request_id, $runner);
+
+        $agent_request = LCFA_Settings::get_agent_request($request_id) ?: $agent_request;
+        $message = __('Codex was started, but it did not claim the frontend request before the timeout. Re-send the prompt; Forge will launch Codex with local MCP network access.', 'livecanvas-forge-ai');
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
+        $result = $this->normalize_agent_result_payload([
+            'ok'      => false,
+            'message' => $message,
+            'summary' => $message,
+        ], $agent_request);
+        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_agent_result_message($result, $agent_request));
+        $thread = $this->decorate_thread($thread, $thread_id);
+        $failed_request = LCFA_Settings::fail_agent_request($request_id, $message, $thread);
+
+        return is_array($failed_request) ? $failed_request : $agent_request;
+    }
+
     private function get_request_payload(WP_REST_Request $request): array {
         $payload = $request->get_json_params();
 
@@ -1016,6 +1310,52 @@ final class LCFA_Rest_Api {
         }
 
         return is_array($payload) ? $payload : [];
+    }
+
+    private function get_payload_provenance(array $payload, string $default_origin = 'admin_command_deck', string $default_processed_by = 'forge_local_rules'): array {
+        $origin = sanitize_key((string) ($payload['_lcfa_origin'] ?? $payload['origin'] ?? $default_origin));
+        $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'api'];
+        if (!in_array($origin, $allowed_origins, true)) {
+            $origin = $default_origin;
+        }
+
+        $default_transport = $origin === 'mcp_agent' ? 'mcp_stdio' : ($origin === 'remote_companion' ? 'remote_rest' : 'browser_rest');
+        $transport = sanitize_key((string) ($payload['_lcfa_transport'] ?? $payload['transport'] ?? $default_transport));
+        $allowed_transports = ['browser_rest', 'mcp_stdio', 'mcp_bridge', 'remote_rest', 'api'];
+        if (!in_array($transport, $allowed_transports, true)) {
+            $transport = $default_transport;
+        }
+
+        $connections = LCFA_Settings::get_connections();
+        $default_client = $origin === 'mcp_agent'
+            ? sanitize_key((string) ($connections['preferred_client'] ?? 'codex'))
+            : 'forge';
+        $client = sanitize_key((string) ($payload['_lcfa_agent'] ?? $payload['agent'] ?? $default_client));
+        $allowed_clients = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
+        if (!in_array($client, $allowed_clients, true)) {
+            $client = $default_client !== '' ? $default_client : 'forge';
+        }
+
+        $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
+        $allowed_processors = ['forge_local_rules', 'agent_queue', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+        if (!in_array($processed_by, $allowed_processors, true)) {
+            $processed_by = $default_processed_by;
+        }
+
+        return [
+            'origin'       => $origin,
+            'transport'    => $transport,
+            'agent'        => $client,
+            'processed_by' => $processed_by,
+        ];
+    }
+
+    private function add_payload_provenance(array $payload, array $provenance): array {
+        foreach ($provenance as $key => $value) {
+            $payload['_lcfa_' . $key] = $value;
+        }
+
+        return $payload;
     }
 
     private function sanitize_chat_attachments(array $attachments): array {
@@ -1054,6 +1394,7 @@ final class LCFA_Rest_Api {
     private function create_command_execution_record(array $payload): array {
         $execution_id = sanitize_key('exec-' . strtolower(wp_generate_password(10, false, false)));
         $payload['thread_id'] = LCFA_Settings::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
+        $provenance = $this->get_payload_provenance($payload, 'frontend_bridge', 'forge_local_rules');
 
         return [
             'id'               => $execution_id,
@@ -1063,6 +1404,7 @@ final class LCFA_Rest_Api {
             'execution_target' => sanitize_key((string) ($payload['execution_target'] ?? 'local')),
             'thread_id'        => (string) ($payload['thread_id'] ?? 'default'),
             'created_at'       => current_time('mysql', true),
+            'provenance'       => $provenance,
             'payload'          => $payload,
         ];
     }
@@ -1118,6 +1460,7 @@ final class LCFA_Rest_Api {
             'mode'             => sanitize_key((string) ($record['mode'] ?? 'apply')),
             'execution_target' => sanitize_key((string) ($record['execution_target'] ?? 'local')),
             'thread_id'        => LCFA_Settings::normalize_thread_id((string) ($record['thread_id'] ?? 'default')),
+            'provenance'       => is_array($record['provenance'] ?? null) ? $record['provenance'] : [],
             'created_at'       => sanitize_text_field((string) ($record['created_at'] ?? '')),
             'started_at'       => sanitize_text_field((string) ($record['started_at'] ?? '')),
             'completed_at'     => sanitize_text_field((string) ($record['completed_at'] ?? '')),

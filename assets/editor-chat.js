@@ -55,6 +55,42 @@
   var analyzeBusy=false;
   var actionBusyMode="";
 
+  var getAgentConfig=function(){
+    return config.agent&&typeof config.agent==="object"?config.agent:{};
+  };
+
+  var getAgentLabel=function(){
+    var agent=getAgentConfig();
+    return String(agent.displayLabel||agent.client||"Coding agent");
+  };
+
+  var isAgentQueueEnabled=function(){
+    var agent=getAgentConfig();
+    return !!(config.agentRequestEndpoint&&agent.enabled&&agent.client);
+  };
+
+  var getFrontendProvenance=function(){
+    var agent=getAgentConfig();
+    if(isAgentQueueEnabled()){
+      return {
+        _lcfa_origin:"frontend_bridge",
+        _lcfa_transport:"browser_rest",
+        _lcfa_agent:String(agent.client||""),
+        _lcfa_processed_by:"agent_queue"
+      };
+    }
+    return {
+      _lcfa_origin:"frontend_bridge",
+      _lcfa_transport:"browser_rest",
+      _lcfa_agent:"forge",
+      _lcfa_processed_by:"forge_local_rules"
+    };
+  };
+
+  var withFrontendProvenance=function(payload){
+    return Object.assign({},payload||{},getFrontendProvenance());
+  };
+
   var escapeHtml=function(value){
     return String(value||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;");
   };
@@ -439,11 +475,16 @@
     resultBox.classList.toggle("is-error",Boolean(isError));
     if(supportDetails){supportDetails.open=true;}
     resultMeta.innerHTML="";
+    var provenance=result&&result.provenance&&typeof result.provenance==="object"?result.provenance:{};
     resultSummary.textContent=(result&&result.summary?result.summary:(result&&result.message?result.message:""));
     [
       {label:"Action",value:result&&result.action?result.action:""},
       {label:"Mode",value:result&&result.mode?result.mode:""},
-      {label:"Execution",value:result&&result.execution_target?result.execution_target:""}
+      {label:"Execution",value:result&&result.execution_target?result.execution_target:""},
+      {label:"Origin",value:provenance&&provenance.origin?provenance.origin:""},
+      {label:"Transport",value:provenance&&provenance.transport?provenance.transport:""},
+      {label:"Agent",value:provenance&&provenance.agent?provenance.agent:""},
+      {label:"Processor",value:provenance&&provenance.processed_by?provenance.processed_by:""}
     ].forEach(function(entry){
       if(!entry.value){return;}
       var chip=document.createElement("span");
@@ -472,7 +513,7 @@
     if(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok){return false;}
     var mode=String(result&&result.mode?result.mode:"apply");
     if(mode!==""&&mode!=="apply"){return false;}
-    var action=String((payload&&payload.action)||(result&&result.action)||"");
+    var action=String((result&&result.action)||(payload&&payload.action)||"");
     if(action===""||action==="site_audit"){return false;}
     if(typeof window.loadURLintoEditor!=="function"){return false;}
     return getLiveCanvasRefreshUrl()!=="";
@@ -503,7 +544,7 @@
   };
 
   var buildExecutionPayload=function(payload){
-    return Object.assign({},payload,{
+    return Object.assign({},withFrontendProvenance(payload),{
       thread_id:threadSelect&&threadSelect.value?threadSelect.value:(config.threadId||"default"),
       context_post_id:payload.context_post_id||config.postId||0,
       post_id:payload.post_id||config.postId||0,
@@ -627,6 +668,123 @@
     syncComposerButtons();
   };
 
+  var parseRestJson=function(response,fallbackMessage){
+    return response.text().then(function(text){
+      var data={};
+      try{data=text?JSON.parse(text):{};}catch(error){data={};}
+      if(!response.ok){
+        var errorMessage=(data&&data.error)||(data&&data.message)||fallbackMessage;
+        throw {message:String(errorMessage||fallbackMessage||"Request failed."),data:data};
+      }
+      return data;
+    });
+  };
+
+  var buildAgentStatusUrl=function(requestId){
+    var separator=config.agentRequestEndpoint&&config.agentRequestEndpoint.indexOf("?")===-1?"?":"&";
+    return String(config.agentRequestEndpoint||"")+separator+"request_id="+encodeURIComponent(requestId);
+  };
+
+  var getAgentPollDelay=function(){
+    var delay=Number(config.agentPollDelayMs||1000);
+    return delay>0?delay:1000;
+  };
+
+  var getAgentPollMaxAttempts=function(){
+    var attempts=Number(config.agentPollMaxAttempts||120);
+    return attempts>0?attempts:120;
+  };
+
+  var getAgentBackgroundPollDelay=function(){
+    var delay=Number(config.agentBackgroundPollDelayMs||5000);
+    return delay>0?delay:5000;
+  };
+
+  var getAgentRequestResult=function(request){
+    var result=request&&request.result&&typeof request.result==="object"?request.result:{};
+    if(result&&result.result&&typeof result.result==="object"){return result.result;}
+    if(!result||Object.keys(result).length===0){
+      return {ok:false,message:(request&&request.error)||((config.labels&&config.labels.applyFailed)||"The inline execution failed.")};
+    }
+    return result;
+  };
+
+  var renderAgentRequestThread=function(data,request){
+    if(data&&data.thread){cacheThread(data.thread);renderThread(data.thread);return;}
+    if(request&&request.thread){cacheThread(request.thread);renderThread(request.thread);}
+  };
+
+  var finalizeAgentRequest=function(request,payload,data){
+    var status=String(request&&request.status||"");
+    if(status!=="completed"&&status!=="failed"){return false;}
+    renderAgentRequestThread(data,request);
+    var result=getAgentRequestResult(request);
+    var failed=status==="failed"||(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok);
+    renderExecutionResult(result,failed);
+    if(!failed){refreshLiveCanvas(result,payload);}
+    setSuggestionState(null,false,"");
+    setConversationState(failed?"failed":"applied");
+    return true;
+  };
+
+  var scheduleAgentBackgroundPoll=function(requestId,payload){
+    setTimeout(function(){
+      pollAgentRequest(requestId,payload,0,true).catch(function(){});
+    },getAgentBackgroundPollDelay());
+  };
+
+  var pollAgentRequest=function(requestId,payload,attempt,isBackground){
+    var nextAttempt=Number(attempt||0);
+    return fetch(buildAgentStatusUrl(requestId),{
+      method:"GET",
+      credentials:"same-origin",
+      headers:{"X-WP-Nonce":config.restNonce||""}
+    }).then(function(response){
+      return parseRestJson(response,(config.labels&&config.labels.applyFailed)||"The inline execution failed.");
+    }).then(function(data){
+      var request=data&&data.request&&typeof data.request==="object"?data.request:{};
+      if(request&&request.status==="running"){
+        renderAgentRequestThread(data,request);
+        setConversationState("running",(config.labels&&config.labels.agentRunningState)||("The coding agent is processing this request..."));
+      }else{
+        setConversationState("queueing",(config.labels&&config.labels.agentQueuedState)||("Waiting for "+getAgentLabel()+"..."));
+      }
+      if(finalizeAgentRequest(request,payload,data)){return request;}
+      var maxAttempts=isBackground?0:getAgentPollMaxAttempts();
+      if(nextAttempt>=maxAttempts){
+        setConversationState("queueing",(config.labels&&config.labels.agentTimeoutState)||"Request queued. Keep the coding agent open, then this panel will update.");
+        scheduleAgentBackgroundPoll(requestId,payload);
+        return request;
+      }
+      return new Promise(function(resolve){
+        setTimeout(function(){resolve(pollAgentRequest(requestId,payload,nextAttempt+1,!!isBackground));},getAgentPollDelay());
+      });
+    });
+  };
+
+  var enqueueAgentRequest=function(requestPayload){
+    setConversationState("queueing",(config.labels&&config.labels.agentQueuedState)||("Waiting for "+getAgentLabel()+"..."));
+    fetch(config.agentRequestEndpoint,{
+      method:"POST",
+      credentials:"same-origin",
+      headers:{"Content-Type":"application/json","X-WP-Nonce":config.restNonce||""},
+      body:JSON.stringify(requestPayload)
+    }).then(function(response){
+      return parseRestJson(response,(config.labels&&config.labels.analysisFailed)||"The request analysis failed.");
+    }).then(function(data){
+      var request=data&&data.request&&typeof data.request==="object"?data.request:{};
+      renderAgentRequestThread(data,request);
+      if(finalizeAgentRequest(request,requestPayload,data)){return request;}
+      if(!request.id){throw {message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed.",data:data};}
+      return pollAgentRequest(request.id,requestPayload,0);
+    }).catch(function(error){
+      setSuggestionState(null,false,"");
+      if(error&&error.data&&error.data.thread){cacheThread(error.data.thread);renderThread(error.data.thread);}
+      renderExecutionResult(error&&error.data&&error.data.result?error.data.result:{ok:false,message:error&&error.message?error.message:((config.labels&&config.labels.analysisFailed)||"The request analysis failed.")},true);
+      setConversationState("failed");
+    }).finally(function(){setBusy(false);});
+  };
+
   var analyzeRequest=function(){
     if(!promptInput){return;}
     var prompt=promptInput.value.trim();
@@ -646,8 +804,13 @@
       variant:config.variant||"1",
       action:config.defaultAction||"site_audit"
     };
+    requestPayload=withFrontendProvenance(requestPayload);
     if(attachmentState&&attachmentState.data_url){
       requestPayload.attachments=[attachmentState];
+    }
+    if(isAgentQueueEnabled()){
+      enqueueAgentRequest(requestPayload);
+      return;
     }
     fetch(config.restEndpoint,{
       method:"POST",
