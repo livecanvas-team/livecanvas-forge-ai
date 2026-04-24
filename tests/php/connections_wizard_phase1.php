@@ -531,6 +531,7 @@ $connection_wizard_method = new ReflectionMethod('LCFA_Admin', 'render_connectio
 $active_step_panel_method = new ReflectionMethod('LCFA_Admin', 'render_connection_active_step_panel');
 $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_onboarding_hero');
 $connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
+$framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -709,6 +710,27 @@ lcfa_assert_true(strpos($ready_card_markup, 'Registers livecanvas-forge inside C
 lcfa_assert_true(strpos($ready_card_markup, 'raw MCP server command') !== false, 'server command explanation should describe its diagnostic purpose');
 lcfa_assert_true(strpos($ready_card_markup, 'REST endpoint, token, site URL, and local project root') !== false, 'environment variables explanation should describe the values passed to the MCP server');
 lcfa_assert_true(strpos($ready_card_markup, 'get_snapshot') !== false && strpos($ready_card_markup, 'confirms the MCP bridge') !== false, 'smoke test explanation should describe the snapshot verification command');
+
+ob_start();
+$framework_change_decision_method->invoke(
+    $admin_instance,
+    [
+        'preferred_client'            => 'codex',
+        'connection_mode'             => 'local',
+        'workspace_root'              => '/Users/commander/Studio/consultala',
+        'connection_status'           => 'ready',
+        'connection_last_verified_at' => '2026-04-13 21:00:00',
+    ],
+    'picostrap',
+    'picowind'
+);
+$framework_change_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($framework_change_markup, 'Reuse the existing Codex connection?') !== false, 'framework-change card should explain that a verified connection already exists');
+lcfa_assert_true(strpos($framework_change_markup, 'Picostrap / Bootstrap') !== false, 'framework-change card should name the previous framework');
+lcfa_assert_true(strpos($framework_change_markup, 'Picowind / Tailwind + WindPress') !== false, 'framework-change card should name the new framework');
+lcfa_assert_true(strpos($framework_change_markup, 'Keep existing connection') !== false, 'framework-change card should offer to keep the current verified connection');
+lcfa_assert_true(strpos($framework_change_markup, 'Generate new connection') !== false, 'framework-change card should offer to regenerate the connection for the new stack');
 
 $admin_css = (string) file_get_contents(LCFA_DIR . 'assets/admin.css');
 lcfa_assert_true(strpos($admin_css, '.lcfa-admin .lcfa-chip.is-positive') !== false, 'admin CSS should define positive chip states');

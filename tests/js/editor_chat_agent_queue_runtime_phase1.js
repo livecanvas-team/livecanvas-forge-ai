@@ -83,6 +83,30 @@ class MockElement {
     return child;
   }
 
+  cloneNode(deep = false) {
+    const clone = new MockElement(this.tagName.toLowerCase());
+    clone.attributes = { ...this.attributes };
+    clone.dataset = { ...this.dataset };
+    clone.hidden = this.hidden;
+    clone.disabled = this.disabled;
+    clone.value = this.value;
+    clone.href = this.href;
+    clone.rel = this.rel;
+    clone.target = this.target;
+    clone.src = this.src;
+    clone.className = this.className;
+    clone.textContent = this.textContent;
+    clone.innerHTML = this.innerHTML;
+
+    if (deep) {
+      this.children.forEach((child) => {
+        clone.appendChild(child.cloneNode(true));
+      });
+    }
+
+    return clone;
+  }
+
   setAttribute(name, value) {
     this.attributes[name] = String(value);
   }
@@ -165,6 +189,7 @@ function createShell(config) {
     attachmentPreview: new MockElement('div'),
     attachmentPreviewImage: new MockElement('img'),
     attachmentPreviewMeta: new MockElement('div'),
+    connectionMedia: new MockElement('span'),
     sessionDetails: new MockElement('details'),
     supportDetails: new MockElement('details'),
     resultBox: new MockElement('div'),
@@ -194,6 +219,11 @@ function createShell(config) {
   nodes.analyzeButton.disabled = true;
   nodes.attachmentClearButton.hidden = true;
   nodes.attachmentPreview.hidden = true;
+  nodes.connectionMedia.className = 'lcfa-editor-bridge__connection-media';
+  const connectionIcon = new MockElement('img');
+  connectionIcon.className = 'lcfa-agent-icon lcfa-agent-icon--editor-status';
+  connectionIcon.src = '/assets/agent-icons/codex-color.svg';
+  nodes.connectionMedia.appendChild(connectionIcon);
   nodes.statusNode.textContent = config.labels.idleState;
 
   Object.values(nodes).forEach((node) => {
@@ -223,6 +253,7 @@ function createShell(config) {
     '[data-lcfa-editor-attachment-preview]': nodes.attachmentPreview,
     '[data-lcfa-editor-attachment-preview-image]': nodes.attachmentPreviewImage,
     '[data-lcfa-editor-attachment-preview-meta]': nodes.attachmentPreviewMeta,
+    '.lcfa-editor-bridge__connection-media': nodes.connectionMedia,
     '[data-lcfa-editor-session-details]': nodes.sessionDetails,
     '[data-lcfa-editor-support-details]': nodes.supportDetails,
     '[data-lcfa-editor-result]': nodes.resultBox,
@@ -280,7 +311,27 @@ async function flush() {
         id: 'default',
         title: 'Default',
         state: 'idle',
-        messages: [],
+        messages: [
+          {
+            role: 'user',
+            label: 'Older request',
+            time: '2026-04-22 10:00:00',
+            content: 'Create a hero section',
+          },
+          {
+            role: 'tool_result',
+            label: 'Older result',
+            time: '2026-04-22 10:01:00',
+            content: 'Hero section created.',
+            meta: { ok: true },
+          },
+          {
+            role: 'user',
+            label: 'Newest request',
+            time: '2026-04-22 11:00:00',
+            content: 'Add a pricing section',
+          },
+        ],
       },
     },
     defaultAction: 'site_audit',
@@ -442,6 +493,12 @@ async function flush() {
   vm.createContext(context);
   vm.runInContext(script, context);
 
+  assert.strictEqual(
+    shellNodes.threadLog.children[0].children[1].textContent,
+    'Add a pricing section',
+    'frontend thread log should render newest visible message first'
+  );
+
   shellNodes.promptInput.value = 'Add a new pricing section';
   shellNodes.promptInput.listeners.input({
     target: shellNodes.promptInput,
@@ -451,6 +508,16 @@ async function flush() {
     target: shellNodes.analyzeButton,
     preventDefault() {},
   });
+
+  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'queueing', 'connected agent flow should enter the queueing state immediately after send');
+  assert.ok(
+    shellNodes.statusNode.children.some((child) => child.className === 'lcfa-editor-bridge__agent-loader'),
+    'active connected agent states should render the LiveCanvas/Codex loader'
+  );
+  assert.ok(
+    shellNodes.statusNode.children.some((child) => child.className === 'lcfa-editor-bridge__thread-status-label' && child.textContent === 'Waiting for the connected coding agent...'),
+    'active connected agent states should keep the human-readable processing label'
+  );
 
   await flush();
 

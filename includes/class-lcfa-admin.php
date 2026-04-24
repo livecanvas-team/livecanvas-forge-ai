@@ -55,6 +55,7 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_install_client_bundle', [$this, 'handle_install_client_bundle_post']);
         add_action('admin_post_lcfa_download_client_bundle', [$this, 'handle_download_client_bundle_post']);
         add_action('admin_post_lcfa_reconfigure_connection', [$this, 'handle_reconfigure_connection_post']);
+        add_action('admin_post_lcfa_resolve_framework_change_connection', [$this, 'handle_framework_change_connection_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
         add_action('admin_post_lcfa_generate_plan', [$this, 'handle_generate_plan_post']);
         add_action('admin_post_lcfa_genesis_execute', [$this, 'handle_genesis_execute_post']);
@@ -275,7 +276,11 @@ final class LCFA_Admin {
             return;
         }
 
-        $asset_version = rawurlencode((string) LCFA_VERSION);
+        $asset_root    = defined('LCFA_DIR') ? LCFA_DIR : dirname(__DIR__) . '/';
+        $asset_version = rawurlencode((string) LCFA_VERSION . '-' . (string) max(
+            file_exists($asset_root . 'assets/editor-chat.css') ? (int) filemtime($asset_root . 'assets/editor-chat.css') : 0,
+            file_exists($asset_root . 'assets/editor-chat.js') ? (int) filemtime($asset_root . 'assets/editor-chat.js') : 0
+        ));
         $css_url       = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.css');
         $js_url        = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.js');
 
@@ -642,6 +647,9 @@ final class LCFA_Admin {
 
             case 2:
                 $framework = sanitize_key($_POST['framework'] ?? '');
+                $snapshot = $this->environment->get_snapshot();
+                $connections = LCFA_Settings::get_connections();
+                $previous_framework = $this->normalize_supported_framework((string) ($settings['framework'] ?: ($snapshot['detected_framework'] ?? '')));
 
                 if (!$this->environment->is_livecanvas_active()) {
                     LCFA_Settings::set_notice(__('Complete the LiveCanvas preflight first.', 'livecanvas-forge-ai'), 'error');
@@ -660,13 +668,31 @@ final class LCFA_Admin {
                     'last_completed_step' => max(2, (int) $settings['last_completed_step']),
                 ]);
 
-                LCFA_Settings::set_notice(
-                    sprintf(
-                        __('Framework confirmed: %1$s. Active theme: %2$s.', 'livecanvas-forge-ai'),
-                        $framework,
-                        $result['theme_stylesheet']
-                    )
-                );
+                if ($previous_framework !== '' && $previous_framework !== $framework && $this->has_verified_connection($connections)) {
+                    LCFA_Settings::update_connections(array_merge($connections, [
+                        'framework_change_pending'  => true,
+                        'framework_change_previous' => $previous_framework,
+                        'framework_change_next'     => $framework,
+                    ]));
+
+                    LCFA_Settings::set_notice(
+                        sprintf(
+                            __('Framework confirmed: %1$s. Active theme: %2$s. A verified %3$s connection already exists, so choose in Connections whether to keep it or regenerate it for the new stack.', 'livecanvas-forge-ai'),
+                            $this->get_framework_display_name($framework),
+                            $result['theme_stylesheet'],
+                            ucfirst(str_replace('-', ' ', $this->normalize_connection_client((string) ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex')))))
+                        )
+                    );
+                } else {
+                    LCFA_Settings::update_connections($this->clear_framework_change_connection_decision($connections));
+                    LCFA_Settings::set_notice(
+                        sprintf(
+                            __('Framework confirmed: %1$s. Active theme: %2$s.', 'livecanvas-forge-ai'),
+                            $this->get_framework_display_name($framework),
+                            $result['theme_stylesheet']
+                        )
+                    );
+                }
 
                 $this->redirect_to_step(3);
                 break;
@@ -894,6 +920,51 @@ final class LCFA_Admin {
         LCFA_Settings::update_connections($connections);
 
         LCFA_Settings::set_notice(__('Choose a coding agent to generate a fresh client bundle.', 'livecanvas-forge-ai'));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+        exit;
+    }
+
+    public function handle_framework_change_connection_post(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_framework_change_connection');
+
+        $decision = sanitize_key((string) ($_POST['framework_connection_decision'] ?? ''));
+        $connections = LCFA_Settings::get_connections();
+
+        if (!$this->has_framework_change_connection_decision($connections)) {
+            LCFA_Settings::set_notice(__('There is no framework change decision waiting right now.', 'livecanvas-forge-ai'), 'error');
+            wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+            exit;
+        }
+
+        $client_label = ucfirst(str_replace('-', ' ', $this->normalize_connection_client((string) ($connections['preferred_client'] ?: 'codex'))));
+        $next_framework_label = $this->get_framework_display_name((string) ($connections['framework_change_next'] ?? ''));
+
+        if ($decision === 'keep') {
+            LCFA_Settings::update_connections($this->clear_framework_change_connection_decision($connections));
+            LCFA_Settings::set_notice(
+                sprintf(
+                    __('Kept the verified %1$s connection. You can keep working on the %2$s stack without regenerating the client bundle.', 'livecanvas-forge-ai'),
+                    $client_label,
+                    $next_framework_label
+                )
+            );
+        } elseif ($decision === 'regenerate') {
+            LCFA_Settings::update_connections($this->get_framework_regenerated_connections($connections));
+            LCFA_Settings::set_notice(
+                sprintf(
+                    __('Generate a fresh %1$s client bundle for the %2$s stack, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                    $client_label,
+                    $next_framework_label
+                )
+            );
+        } else {
+            LCFA_Settings::set_notice(__('Choose whether to keep the current connection or generate a new one.', 'livecanvas-forge-ai'), 'error');
+        }
+
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
         exit;
     }
@@ -1564,6 +1635,7 @@ final class LCFA_Admin {
     }
 
     private function get_reconfigured_connections(array $connections): array {
+        $connections = $this->clear_framework_change_connection_decision($connections);
         $connections['preferred_client'] = '';
         $connections['connection_status'] = '';
         $connections['connection_last_verified_at'] = '';
@@ -1571,6 +1643,59 @@ final class LCFA_Admin {
         $connections['connection_current_step'] = 'choose_client';
 
         return $connections;
+    }
+
+    private function get_framework_regenerated_connections(array $connections): array {
+        $connections = $this->clear_framework_change_connection_decision($connections);
+        $connections['connection_status'] = '';
+        $connections['connection_last_verified_at'] = '';
+        $connections['connection_last_error'] = '';
+        $connections['connection_last_bundle_hash'] = '';
+        $connections['connection_current_step'] = $this->get_framework_regeneration_step($connections);
+
+        return $connections;
+    }
+
+    private function clear_framework_change_connection_decision(array $connections): array {
+        $connections['framework_change_pending'] = false;
+        $connections['framework_change_previous'] = '';
+        $connections['framework_change_next'] = '';
+
+        return $connections;
+    }
+
+    private function has_verified_connection(array $connections): bool {
+        return (string) ($connections['connection_status'] ?? '') === 'ready'
+            && trim((string) ($connections['connection_last_verified_at'] ?? '')) !== ''
+            && trim((string) ($connections['preferred_client'] ?? '')) !== '';
+    }
+
+    private function has_framework_change_connection_decision(array $connections): bool {
+        return !empty($connections['framework_change_pending'])
+            && $this->has_verified_connection($connections)
+            && $this->normalize_supported_framework((string) ($connections['framework_change_previous'] ?? '')) !== ''
+            && $this->normalize_supported_framework((string) ($connections['framework_change_next'] ?? '')) !== '';
+    }
+
+    private function get_framework_regeneration_step(array $connections): string {
+        $raw_preferred_client = $this->sanitize_key_compat((string) ($connections['preferred_client'] ?? ''));
+        $preferred_client = $raw_preferred_client === 'other' ? 'generic' : $this->normalize_connection_client($raw_preferred_client);
+        $claude_connection_target = $this->normalize_claude_connection_target((string) ($connections['claude_connection_target'] ?? ''));
+        $raw_connection_mode = $this->sanitize_key_compat((string) ($connections['connection_mode'] ?? ''));
+
+        if ($raw_preferred_client === '') {
+            return 'choose_client';
+        }
+
+        if ($preferred_client === 'claude' && $claude_connection_target === '') {
+            return 'choose_claude_target';
+        }
+
+        if (!in_array($raw_connection_mode, ['local', 'remote'], true)) {
+            return 'choose_mode';
+        }
+
+        return 'confirm_details';
     }
 
     private function get_dashboard_hero_content(string $tab): array {
@@ -2100,7 +2225,13 @@ final class LCFA_Admin {
         $this->render_connection_test_result($connection_test);
         $this->render_connection_onboarding_hero($bundle, $onboarding_state, $mcp_status, $snapshot, $selected_mode);
 
-        if (($onboarding_state['status'] ?? 'not_connected') === 'ready') {
+        if ($this->has_framework_change_connection_decision($connections)) {
+            $this->render_connection_framework_change_decision_card(
+                $connections,
+                (string) ($connections['framework_change_previous'] ?? ''),
+                (string) ($connections['framework_change_next'] ?? '')
+            );
+        } elseif (($onboarding_state['status'] ?? 'not_connected') === 'ready') {
             $this->render_connection_ready_card($wizard_view, $bundle, $connections, $workspace_write_state);
         } else {
             $this->render_connection_wizard($wizard_view, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $onboarding_state, $workspace_write_state);
@@ -2129,6 +2260,65 @@ final class LCFA_Admin {
         if (!empty($state['message'])) {
             echo '<p class="lcfa-guide-copy">' . esc_html((string) $state['message']) . '</p>';
         }
+        echo '</section>';
+    }
+
+    private function render_connection_framework_change_decision_card(array $connections, string $previous_framework, string $next_framework): void {
+        $client = $this->normalize_connection_client((string) ($connections['preferred_client'] ?? 'codex'));
+        $client_label = ucfirst(str_replace('-', ' ', $client));
+        $previous_framework_label = $this->get_framework_display_name($previous_framework);
+        $next_framework_label = $this->get_framework_display_name($next_framework);
+
+        echo '<section class="lcfa-card lcfa-ready-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('command');
+        echo '<div><h2>' . esc_html(sprintf(__('Reuse the existing %s connection?', 'livecanvas-forge-ai'), $client_label)) . '</h2><p>' . esc_html__('The site framework changed, but this coding-agent connection was already verified. Decide whether to keep using the current connection or regenerate a fresh bundle for the new stack.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<div class="lcfa-chip-row">';
+        echo '<span class="lcfa-chip is-positive">' . esc_html__('Verified connection found', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup($client, 'stars') . '<span>' . esc_html(sprintf(__('Client: %s', 'livecanvas-forge-ai'), $client_label)) . '</span></span>';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('From: %s', 'livecanvas-forge-ai'), $previous_framework_label)) . '</span>';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('To: %s', 'livecanvas-forge-ai'), $next_framework_label)) . '</span>';
+        if (!empty($connections['connection_last_verified_at'])) {
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Verified: %s', 'livecanvas-forge-ai'), (string) $connections['connection_last_verified_at'])) . '</span>';
+        }
+        echo '</div>';
+        echo '<div class="lcfa-connection-now-alert">';
+        echo '<span class="lcfa-connection-now-alert__eyebrow">' . esc_html__('Decision required', 'livecanvas-forge-ai') . '</span>';
+        echo '<strong>' . esc_html__('Changing framework does not always require a brand-new coding-agent registration.', 'livecanvas-forge-ai') . '</strong>';
+        echo '<p>' . esc_html__('Keep the existing connection if the same machine, workspace, and coding agent are still valid. Generate a new connection if you want to re-run the bundle flow for the new frontend stack.', 'livecanvas-forge-ai') . '</p>';
+        echo '<small>' . esc_html__('Forge will not continue the connection flow until you choose one of these two paths.', 'livecanvas-forge-ai') . '</small>';
+        echo '</div>';
+
+        echo '<div class="lcfa-choice-grid lcfa-choice-grid--actions">';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--secondary">';
+        wp_nonce_field('lcfa_framework_change_connection');
+        echo '<input type="hidden" name="action" value="lcfa_resolve_framework_change_connection">';
+        echo '<input type="hidden" name="framework_connection_decision" value="keep">';
+        echo '<span class="lcfa-choice-eyebrow">' . esc_html__('Keep current setup', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-choice-copy">';
+        echo '<strong>' . esc_html__('Keep existing connection', 'livecanvas-forge-ai') . '</strong>';
+        echo '<span>' . esc_html__('Use the verified connection that is already attached to this site and continue without generating a new bundle.', 'livecanvas-forge-ai') . '</span>';
+        echo '<small>' . esc_html__('Best when the same coding agent, machine, and workspace are still in use.', 'livecanvas-forge-ai') . '</small>';
+        echo '</span>';
+        echo '<button class="button lcfa-button--wide" type="submit">' . esc_html__('Keep existing connection', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form lcfa-choice-card lcfa-choice-card--action lcfa-choice-card--primary">';
+        wp_nonce_field('lcfa_framework_change_connection');
+        echo '<input type="hidden" name="action" value="lcfa_resolve_framework_change_connection">';
+        echo '<input type="hidden" name="framework_connection_decision" value="regenerate">';
+        echo '<span class="lcfa-choice-eyebrow">' . esc_html__('New bundle flow', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-choice-copy">';
+        echo '<strong>' . esc_html__('Generate new connection', 'livecanvas-forge-ai') . '</strong>';
+        echo '<span>' . esc_html__('Keep the same coding agent, but reopen the bundle-generation flow so the new stack is confirmed step by step.', 'livecanvas-forge-ai') . '</span>';
+        echo '<small>' . esc_html__('Forge preserves the selected client and workspace root, then reopens the connection wizard from the details step.', 'livecanvas-forge-ai') . '</small>';
+        echo '</span>';
+        echo '<button class="button button-primary lcfa-button--wide" type="submit">' . esc_html__('Generate new connection', 'livecanvas-forge-ai') . '</button>';
+        echo '</form>';
+
+        echo '</div>';
         echo '</section>';
     }
 
@@ -3935,6 +4125,9 @@ final class LCFA_Admin {
         $logo_markup = $value === 'picowind'
             ? $this->get_partner_logo('windpress')
             : $this->get_partner_logo('bootstrap');
+        $candidate_summary = $candidates
+            ? sprintf(__('Detected theme candidates: %s', 'livecanvas-forge-ai'), implode(', ', wp_list_pluck($candidates, 'stylesheet')))
+            : __('No installed themes were detected for this family yet.', 'livecanvas-forge-ai');
 
         echo '<label class="lcfa-choice-card">';
         echo '<input type="radio" name="framework" value="' . esc_attr($value) . '"' . checked($selected, $value, false) . '>';
@@ -3942,7 +4135,12 @@ final class LCFA_Admin {
         echo '<span class="lcfa-choice-media">' . $logo_markup . '</span>';
         echo '<strong>' . esc_html($title) . '</strong>';
         echo '<span>' . esc_html($description) . '</span>';
-        echo '<small>' . esc_html($candidates ? sprintf(__('Detected theme candidates: %s', 'livecanvas-forge-ai'), implode(', ', wp_list_pluck($candidates, 'stylesheet'))) : __('No installed themes were detected for this family yet.', 'livecanvas-forge-ai')) . '</small>';
+        echo '<small>' . esc_html($candidate_summary) . '</small>';
+
+        if ($value === 'picowind' && !$candidates) {
+            echo '<small>' . esc_html__('Selecting Picowind installs the latest Picowind release from GitHub before the wizard switches the stack.', 'livecanvas-forge-ai') . ' <code>https://github.com/livecanvas-team/picowind/releases/latest</code></small>';
+        }
+
         echo '</span>';
         echo '</label>';
     }
@@ -4009,6 +4207,26 @@ final class LCFA_Admin {
 
     private function has_picowind_stack(array $snapshot): bool {
         return !empty($snapshot['picowind_candidates']) || (string) ($snapshot['detected_framework'] ?? '') === 'picowind';
+    }
+
+    private function normalize_supported_framework(string $framework): string {
+        $framework = sanitize_key($framework);
+
+        return in_array($framework, ['picostrap', 'picowind'], true) ? $framework : '';
+    }
+
+    private function get_framework_display_name(string $framework): string {
+        $framework = $this->normalize_supported_framework($framework);
+
+        if ($framework === 'picowind') {
+            return __('Picowind / Tailwind + WindPress', 'livecanvas-forge-ai');
+        }
+
+        if ($framework === 'picostrap') {
+            return __('Picostrap / Bootstrap', 'livecanvas-forge-ai');
+        }
+
+        return ucfirst(str_replace('-', ' ', $framework));
     }
 
     private function get_preflight_theme_summary(array $snapshot): string {

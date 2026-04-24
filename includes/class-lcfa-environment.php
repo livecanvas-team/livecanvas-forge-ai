@@ -255,6 +255,26 @@ final class LCFA_Environment {
         return $candidates[0]['stylesheet'] ?? null;
     }
 
+    public function refresh_theme_caches(): void {
+        if (function_exists('wp_clean_themes_cache')) {
+            wp_clean_themes_cache();
+        }
+
+        $this->snapshot_cache          = null;
+        $this->themes_cache            = null;
+        $this->theme_candidates_cache  = [];
+    }
+
+    public function refresh_plugin_caches(): void {
+        if (function_exists('wp_clean_plugins_cache')) {
+            wp_clean_plugins_cache(false);
+        }
+
+        $this->snapshot_cache      = null;
+        $this->plugins_cache       = null;
+        $this->plugin_file_cache   = [];
+    }
+
     public function is_plugin_active(string $plugin_file): bool {
         $this->load_plugin_api();
 

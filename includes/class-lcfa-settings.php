@@ -148,6 +148,9 @@ final class LCFA_Settings {
             'connection_last_error'       => '',
             'connection_last_bundle_hash' => '',
             'connection_current_step'     => '',
+            'framework_change_pending'    => false,
+            'framework_change_previous'   => '',
+            'framework_change_next'       => '',
         ];
     }
 
@@ -181,6 +184,8 @@ final class LCFA_Settings {
             $mcp_port = 7681;
         }
         $connection_current_step = (string) ($connections['connection_current_step'] ?? '');
+        $framework_change_previous = self::normalize_framework_key((string) ($connections['framework_change_previous'] ?? ''));
+        $framework_change_next = self::normalize_framework_key((string) ($connections['framework_change_next'] ?? ''));
 
         return [
             'transport'                   => in_array($connections['transport'] ?? '', ['rest', 'mcp', 'hybrid'], true) ? $connections['transport'] : 'rest',
@@ -204,7 +209,16 @@ final class LCFA_Settings {
             'connection_last_error'       => sanitize_text_field($connections['connection_last_error'] ?? ''),
             'connection_last_bundle_hash' => sanitize_text_field($connections['connection_last_bundle_hash'] ?? ''),
             'connection_current_step'     => in_array($connection_current_step, ['', 'choose_client', 'choose_claude_target', 'choose_mode', 'confirm_details', 'generate_bundle', 'smoke_test', 'ready'], true) ? $connection_current_step : '',
+            'framework_change_pending'    => !empty($connections['framework_change_pending']) && $framework_change_previous !== '' && $framework_change_next !== '' && $framework_change_previous !== $framework_change_next,
+            'framework_change_previous'   => $framework_change_previous,
+            'framework_change_next'       => $framework_change_next,
         ];
+    }
+
+    private static function normalize_framework_key(string $value): string {
+        $value = sanitize_key($value);
+
+        return in_array($value, ['picostrap', 'picowind'], true) ? $value : '';
     }
 
     private static function normalize_connections_snapshot(array $connections): array {

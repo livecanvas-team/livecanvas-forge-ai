@@ -64,6 +64,39 @@
     return String(agent.displayLabel||agent.client||"Coding agent");
   };
 
+  var isActiveConversationState=function(state){
+    return state==="thinking"||state==="queueing"||state==="running";
+  };
+
+  var getAgentLoaderIcon=function(){
+    var connectionMedia=shell.querySelector(".lcfa-editor-bridge__connection-media");
+    if(connectionMedia&&connectionMedia.children&&connectionMedia.children.length&&typeof connectionMedia.children[0].cloneNode==="function"){
+      return connectionMedia.children[0].cloneNode(true);
+    }
+    var fallback=document.createElement("span");
+    fallback.className="lcfa-editor-bridge__agent-loader-letter";
+    fallback.textContent=(getAgentLabel().charAt(0)||"A").toUpperCase();
+    return fallback;
+  };
+
+  var renderActiveConversationStatus=function(label){
+    var loader=document.createElement("span");
+    loader.className="lcfa-editor-bridge__agent-loader";
+    loader.setAttribute("aria-hidden","true");
+
+    var icon=document.createElement("span");
+    icon.className="lcfa-editor-bridge__agent-loader-icon";
+    icon.appendChild(getAgentLoaderIcon());
+    loader.appendChild(icon);
+
+    var labelNode=document.createElement("span");
+    labelNode.className="lcfa-editor-bridge__thread-status-label";
+    labelNode.textContent=label;
+
+    statusNode.appendChild(loader);
+    statusNode.appendChild(labelNode);
+  };
+
   var isAgentQueueEnabled=function(){
     var agent=getAgentConfig();
     return !!(config.agentRequestEndpoint&&agent.enabled&&agent.client);
@@ -167,7 +200,12 @@
       else{label=(config.labels&&config.labels.idleState)||"Ready for a new request.";}
     }
     statusNode.setAttribute("data-state",state||"idle");
-    statusNode.textContent=label;
+    statusNode.innerHTML="";
+    if(isActiveConversationState(state)){
+      renderActiveConversationStatus(label);
+    }else{
+      statusNode.textContent=label;
+    }
   };
 
   var getLatestConversationState=function(thread){
@@ -415,7 +453,7 @@
     threadLog.innerHTML="";
     var messages=Array.isArray(thread&&thread.messages)?thread.messages:[];
     var renderedCount=0;
-    messages.forEach(function(message){
+    messages.slice().reverse().forEach(function(message){
       var node=renderThreadMessage(message);
       if(!node){return;}
       threadLog.appendChild(node);
