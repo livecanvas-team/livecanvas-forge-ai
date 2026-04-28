@@ -120,120 +120,78 @@ Common `run_lc_command` actions:
 | `update_dynamic_template` | Update a LiveCanvas dynamic template. |
 | `site_foundation_run` | Orchestrate preflight, design system, shell, and starter pages. |
 
-## Coding Agent Test Prompts
+## Example User Prompts For Coding Agents
 
-Use these from Codex, OpenCode, Cursor, Claude Code, or another MCP-connected client. They are ordered from simplest to more complex.
+Use these from Codex, OpenCode, Cursor, Claude Code, or another MCP-connected client. They are natural-language prompts, ordered from simplest to more complex.
 
-### 1. Connection Smoke Test
+### 1. Check The Integration
 
 ```text
-Call the MCP tool livecanvas-forge_get_snapshot.
-Return only the raw JSON result.
+Check that LiveCanvas Forge AI is connected correctly. Inspect the site context and tell me which WordPress theme, LiveCanvas stack, framework, and Forge capabilities are available. Do not change anything.
 ```
 
-### 2. Site Audit Preview
+### 2. Audit Before Editing
 
 ```text
-Call livecanvas-forge_run_lc_command with this JSON:
-
-{
-  "action": "site_audit",
-  "dry_run": true
-}
-
-Return only the raw JSON result.
+Audit this WordPress + LiveCanvas site before we make changes. Summarize the existing pages, header/footer partials, dynamic templates, design-system status, and anything that could block automated edits.
 ```
 
-### 3. Create A Draft Smoke-Test Page
+### 3. Create A Test Page
 
 ```text
-Call livecanvas-forge_run_lc_command with this JSON:
-
-{
-  "action": "page_upsert",
-  "title": "Forge Smoke Test",
-  "slug": "forge-smoke-test",
-  "status": "draft",
-  "body_html": "<section class=\"py-5\"><div class=\"container\"><h1>Forge Smoke Test</h1><p>The MCP bridge is working.</p></div></section>"
-}
-
-Return the target_id, frontend_url, edit_url, and summary.
+Create a draft LiveCanvas page called "Forge Integration Test". Add a clean hero section, one short content section, and a final call-to-action. Keep it simple and return the frontend URL and editor URL.
 ```
 
-### 4. Preview A Header/Footer Update
+### 4. Create A Page From A Short Brief
 
 ```text
-Call livecanvas-forge_run_lc_command with this JSON:
-
-{
-  "action": "global_shell_apply",
-  "variant": "1",
-  "dry_run": true,
-  "header_html": "<header class=\"py-3\"><nav class=\"container d-flex justify-content-between\"><strong>Forge</strong><a href=\"/contact/\">Contact</a></nav></header>",
-  "footer_html": "<footer class=\"py-4\"><div class=\"container\"><p>Built with LiveCanvas Forge AI.</p></div></footer>"
-}
-
-Return the summary, warnings, and diff_html.
+Create a draft landing page for a consulting studio. The page should have a strong hero, three service cards, a short proof section, a FAQ, and a final contact CTA. Use the site's current framework and do not touch the global header or footer.
 ```
 
-### 5. Preview A Dynamic Template Assignment
+### 5. Generate A Design System From A Logo
 
 ```text
-Call livecanvas-forge_run_lc_command with this JSON:
-
-{
-  "action": "create_dynamic_template",
-  "title": "Single Service Template",
-  "slug": "single-service-template",
-  "status": "draft",
-  "dry_run": true,
-  "content": "<main><section class=\"py-5\"><div class=\"container\"><h1>[lc_the_title]</h1></div></section></main>",
-  "template_assignment": {
-    "target": "single",
-    "post_type": "service"
-  }
-}
-
-Return template_assignment and native_template_keys.
+I uploaded a logo for the brand. Build a first design system from it: extract a primary color direction, secondary/accent colors, button style, heading style, spacing feel, and radius scale. Preview the design-system changes first and explain what will be applied before writing anything.
 ```
 
-### 6. Preview A Foundation Run
+### 6. Apply A Brand Foundation
 
 ```text
-Call livecanvas-forge_run_lc_command with this JSON:
-
-{
-  "action": "site_foundation_run",
-  "dry_run": true,
-  "header_html": "<header><nav class=\"container py-3\">Forge Demo</nav></header>",
-  "footer_html": "<footer><div class=\"container py-4\">Footer demo</div></footer>",
-  "pages": [
-    {
-      "title": "Home",
-      "slug": "home",
-      "status": "draft",
-      "body_html": "<section class=\"py-5\"><div class=\"container\"><h1>Home</h1><p>Foundation run preview.</p></div></section>"
-    },
-    {
-      "title": "Contact",
-      "slug": "contact",
-      "status": "draft",
-      "body_html": "<section class=\"py-5\"><div class=\"container\"><h1>Contact</h1><p>Contact page draft.</p></div></section>"
-    }
-  ]
-}
-
-Return the step summary and any warnings.
+Using the uploaded logo and the current site stack, create a brand foundation for a premium local services business. Apply the design system, create a matching header and footer, and generate draft Home, Services, About, and Contact pages. Preview everything first.
 ```
 
-## LiveCanvas Editor Drawer Test Prompts
-
-Use these inside the Forge drawer in the LiveCanvas editor. They are ordered from simplest to more complex.
-
-### 1. Simple Page Edit
+### 7. Create A Single Post Dynamic Template
 
 ```text
-Add a short intro paragraph below the first heading. Keep the existing layout and classes.
+Create a LiveCanvas dynamic template for single blog posts. It should have a large hero with the post title, a wide featured image, author/date metadata, readable content spacing, related posts at the bottom, and a newsletter CTA. Assign it to single posts.
+```
+
+### 8. Create A Custom Post Type Template
+
+```text
+Create a dynamic template for the "service" custom post type. Each single service page should have a large title hero, optional featured image, key benefits, process steps, testimonial area, and a contact CTA. Assign it to single service posts and keep the markup compatible with the current framework.
+```
+
+### 9. Create A WooCommerce Product Template
+
+```text
+Create a first draft WooCommerce single product template. Use a large product image area, product title, price, add-to-cart area, short description, benefits section, product details, reviews anchor, and related products. Preview the template assignment before applying it.
+```
+
+### 10. Full Site Foundation From A Brief
+
+```text
+Build the first site foundation for a boutique architecture studio. Use the uploaded logo as brand reference. Create the design system, global header and footer, Home, Studio, Projects, Services, Journal, and Contact draft pages. Also create a single post template for Journal articles with a large featured image and editorial layout. Preview the full plan first, then apply only after I confirm.
+```
+
+## Example User Prompts In The LiveCanvas Editor
+
+Use these inside the Forge drawer while editing a page in LiveCanvas. They are scoped to the current page or selected section.
+
+### 1. Small Text Improvement
+
+```text
+Improve the copy in this section. Make it clearer and more direct, but keep the same layout, classes, and structure.
 ```
 
 ### 2. Add A Section
@@ -242,35 +200,49 @@ Add a short intro paragraph below the first heading. Keep the existing layout an
 Add a compact FAQ section with three questions at the end of this page.
 ```
 
-### 3. Replace The Hero
+### 3. Improve The Hero
 
 ```text
-Replace the current hero with a clearer headline, one supporting paragraph, and one primary call-to-action button. Keep it compatible with the current framework.
+Rework this hero section with a stronger headline, a short supporting paragraph, one primary CTA, one secondary CTA, and better spacing. Keep the current colors and framework classes.
 ```
 
-### 4. Insert After Selected Section
+### 4. Use The Selected Section As An Anchor
 
 Select a section in LiveCanvas, then send:
 
 ```text
-Add a three-step timeline immediately after the selected section. Keep the same visual style as the page.
+Add a three-step process section immediately after the selected section. It should feel like part of the same page and should not duplicate existing content.
 ```
 
 ### 5. Add Pricing
 
 ```text
-Add a pricing section with three plans: Starter, Pro, and Team. Include a highlighted middle plan and concise feature bullets.
+Add a pricing section with three plans: Starter, Pro, and Team. Make Pro the recommended plan, include concise feature bullets, and add a CTA button for each plan.
 ```
 
-### 6. Use A Screenshot Reference
+### 6. Match An Uploaded Screenshot
 
 Attach a screenshot in the Forge drawer, then send:
 
 ```text
-Use the attached screenshot as a visual reference. Rework this section to match its spacing, hierarchy, and CTA structure while keeping the site's existing colors and framework classes.
+Use the uploaded screenshot as a visual reference for this section. Match the hierarchy, spacing, and CTA structure, but keep this site's colors, typography, and framework classes.
 ```
 
-### 7. Page-Level Refresh
+### 7. Add A Logo-Informed Brand Section
+
+Upload the logo in the drawer, then send:
+
+```text
+Use this logo as brand reference and redesign the current section around it. Create a premium visual feel, choose supporting colors from the logo, and keep the section responsive in LiveCanvas.
+```
+
+### 8. Create A Rich Blog Hero
+
+```text
+Turn this top section into a blog-post hero with a large featured image area, category label, title, excerpt, author/date metadata, and a clean scroll path into the article content.
+```
+
+### 9. Page-Level Refresh
 
 ```text
 Refresh this page for a consulting business. Keep the current content intent, improve section order, add a stronger CTA before the footer, and avoid changing the global header or footer.
