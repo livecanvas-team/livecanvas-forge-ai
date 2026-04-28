@@ -246,6 +246,8 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           design_system: { type: 'object' },
           template_assignment: { type: 'object' },
           template_target: { type: 'string' },
+          native_key: { type: 'string' },
+          specialty: { type: 'string' },
           content: { type: 'string' },
           body_html: { type: 'string' },
           body_html_lines: {

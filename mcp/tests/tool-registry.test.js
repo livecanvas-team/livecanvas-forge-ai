@@ -125,6 +125,9 @@ async function run() {
   assert.ok(runLcCommand.inputSchema.properties.pages.items, 'run_lc_command should declare array items for site_foundation_run pages')
   assert.ok(runLcCommand.inputSchema.properties.design_system, 'run_lc_command should expose design_system for foundation orchestration')
   assert.ok(runLcCommand.inputSchema.properties.template_assignment, 'run_lc_command should expose template_assignment for dynamic template assignment')
+  assert.ok(runLcCommand.inputSchema.properties.template_target, 'run_lc_command should expose template_target for native LiveCanvas dynamic template assignment')
+  assert.ok(runLcCommand.inputSchema.properties.native_key, 'run_lc_command should expose native_key for direct LiveCanvas template meta assignment')
+  assert.ok(runLcCommand.inputSchema.properties.specialty, 'run_lc_command should expose specialty for WooCommerce and global template targets')
   assert.match(
     runLcCommand.description,
     /DaisyUI-first/i,

@@ -239,6 +239,22 @@ final class LCFA_Inventory {
             if (is_array($assignment)) {
                 $item['template_assignment'] = $assignment;
             }
+
+            $native_template_keys = [];
+            foreach ((array) get_post_meta($post->ID) as $meta_key => $meta_value) {
+                if (strpos((string) $meta_key, 'is_') !== 0) {
+                    continue;
+                }
+
+                $value = is_array($meta_value) ? reset($meta_value) : $meta_value;
+                if ((string) $value === '1' || $value === 1 || $value === true) {
+                    $native_template_keys[] = (string) $meta_key;
+                }
+            }
+
+            if ($native_template_keys) {
+                $item['native_template_keys'] = array_values(array_unique($native_template_keys));
+            }
         }
 
         return $item;

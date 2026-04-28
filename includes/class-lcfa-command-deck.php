@@ -456,11 +456,13 @@ final class LCFA_Command_Deck {
                 }
 
                 $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
+                $native_template_keys = $this->get_dynamic_template_native_meta_keys($template_assignment);
                 $result['target_type']  = 'dynamic_template';
                 $result['target_title'] = $title;
                 $result['summary']      = sprintf(__('Create dynamic template "%s".', 'livecanvas-forge-ai'), $title);
                 $result['diff_html']    = $this->build_diff('', $content);
                 $result['data']['template_assignment'] = $template_assignment;
+                $result['data']['native_template_keys'] = $native_template_keys;
 
                 if (!$dry_run) {
                     $post_id = wp_insert_post([
@@ -490,6 +492,7 @@ final class LCFA_Command_Deck {
 
                 $existing = $this->inventory->get_target_content('dynamic_template', $target_id);
                 $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
+                $native_template_keys = $this->get_dynamic_template_native_meta_keys($template_assignment);
 
                 if (!$existing['post']) {
                     return $this->error_result(__('The requested dynamic template was not found.', 'livecanvas-forge-ai'));
@@ -502,6 +505,7 @@ final class LCFA_Command_Deck {
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['summary']       = sprintf(__('Update dynamic template #%d.', 'livecanvas-forge-ai'), $target_id);
                 $result['data']['template_assignment'] = $template_assignment;
+                $result['data']['native_template_keys'] = $native_template_keys;
 
                 if (!$dry_run) {
                     $updated = wp_update_post([
@@ -1602,15 +1606,37 @@ HTML,
     private function sanitize_dynamic_template_assignment(array $payload): array {
         $assignment = is_array($payload['template_assignment'] ?? null) ? (array) $payload['template_assignment'] : [];
 
-        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source'] as $key) {
+        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source', 'native_key', 'specialty'] as $key) {
             if (array_key_exists($key, $payload) && !array_key_exists($key, $assignment)) {
                 $assignment[$key] = $payload[$key];
             }
         }
 
-        $target = sanitize_key((string) ($assignment['target'] ?? $assignment['template_target'] ?? ''));
+        if (is_array($payload['conditions'] ?? null) && !isset($assignment['conditions'])) {
+            $assignment['conditions'] = $payload['conditions'];
+        }
+
+        $template_target = sanitize_key((string) ($assignment['template_target'] ?? ''));
+        $native_key = $this->normalize_livecanvas_template_meta_key((string) ($assignment['native_key'] ?? ''));
+        if ($native_key === '' && $template_target !== '') {
+            $native_key = $this->normalize_livecanvas_template_meta_key($template_target);
+        }
+
+        $specialty = sanitize_key((string) ($assignment['specialty'] ?? ''));
+        if ($specialty === '' && $template_target !== '' && $native_key === '') {
+            $specialty = $template_target;
+        }
+
+        $target = sanitize_key((string) ($assignment['target'] ?? ''));
+        if ($target === '' && $template_target !== '' && $native_key === '') {
+            $target = $template_target;
+        }
+
         if (!in_array($target, ['single', 'archive', 'taxonomy', 'post_type', 'acf', 'global'], true)) {
-            if (!empty($assignment['single'])) {
+            if ($this->get_dynamic_template_specialty_meta_key($target) !== '') {
+                $specialty = $target;
+                $target = 'global';
+            } elseif (!empty($assignment['single'])) {
                 $target = 'single';
             } elseif (!empty($assignment['archive'])) {
                 $target = 'archive';
@@ -1618,6 +1644,8 @@ HTML,
                 $target = 'taxonomy';
             } elseif (!empty($assignment['acf_field_group'])) {
                 $target = 'acf';
+            } elseif ($native_key !== '') {
+                $target = $this->infer_dynamic_template_target_from_native_key($native_key);
             }
         }
 
@@ -1634,6 +1662,9 @@ HTML,
 
         return array_filter([
             'target'          => $target,
+            'template_target' => $template_target,
+            'native_key'      => $native_key,
+            'specialty'       => $specialty,
             'post_type'       => sanitize_key((string) ($assignment['post_type'] ?? '')),
             'taxonomy'        => sanitize_key((string) ($assignment['taxonomy'] ?? '')),
             'term'            => sanitize_text_field((string) ($assignment['term'] ?? '')),
@@ -1645,8 +1676,117 @@ HTML,
         });
     }
 
+    private function get_dynamic_template_native_meta_keys(array $assignment): array {
+        $keys = [];
+        $direct_key = $this->normalize_livecanvas_template_meta_key((string) ($assignment['native_key'] ?? ''));
+
+        if ($direct_key !== '') {
+            $keys[] = $direct_key;
+        }
+
+        $template_target_key = $this->normalize_livecanvas_template_meta_key((string) ($assignment['template_target'] ?? ''));
+        if ($template_target_key !== '') {
+            $keys[] = $template_target_key;
+        }
+
+        $specialty_key = $this->get_dynamic_template_specialty_meta_key((string) ($assignment['specialty'] ?? $assignment['template_target'] ?? ''));
+        if ($specialty_key !== '') {
+            $keys[] = $specialty_key;
+        }
+
+        $target = sanitize_key((string) ($assignment['target'] ?? ''));
+        $conditions = is_array($assignment['conditions'] ?? null) ? (array) $assignment['conditions'] : [];
+        $post_type = sanitize_key((string) ($assignment['post_type'] ?? $conditions['post_type'] ?? ''));
+        $taxonomy = sanitize_key((string) ($assignment['taxonomy'] ?? $conditions['taxonomy'] ?? ''));
+        $term = sanitize_key((string) ($assignment['term'] ?? $conditions['term'] ?? $conditions['term_slug'] ?? ''));
+
+        if ($target === 'single' && $post_type !== '') {
+            if ($taxonomy !== '' && $term !== '') {
+                $keys[] = 'is_single_' . $post_type . '__in_' . $taxonomy . '_' . $term;
+            } else {
+                $keys[] = 'is_single_' . $post_type;
+            }
+        }
+
+        if (in_array($target, ['archive', 'post_type'], true)) {
+            if ($taxonomy !== '') {
+                $keys[] = 'is_archive_for_tax_' . $taxonomy . ($term !== '' ? '__' . $term : '');
+            } elseif ($post_type !== '') {
+                $keys[] = 'is_archive_for_post_type_' . $post_type;
+            }
+        }
+
+        if ($target === 'taxonomy' && $taxonomy !== '') {
+            $keys[] = 'is_archive_for_tax_' . $taxonomy . ($term !== '' ? '__' . $term : '');
+        }
+
+        $keys = array_values(array_unique(array_filter(array_map([$this, 'normalize_livecanvas_template_meta_key'], $keys))));
+
+        return $keys;
+    }
+
+    private function normalize_livecanvas_template_meta_key(string $key): string {
+        $key = sanitize_key($key);
+
+        if (strpos($key, 'is_') !== 0) {
+            return '';
+        }
+
+        return preg_match('/^is_[a-z0-9_\-]+(?:__[a-z0-9_\-]+)?$/', $key) ? $key : '';
+    }
+
+    private function get_dynamic_template_specialty_meta_key(string $specialty): string {
+        $specialty = sanitize_key($specialty);
+
+        $map = [
+            'front'            => 'is_front_page',
+            'front_page'       => 'is_front_page',
+            'homepage'         => 'is_front_page',
+            'home'             => 'is_front_page',
+            'blog'             => 'is_blog_posts_index',
+            'blog_index'       => 'is_blog_posts_index',
+            'blog_posts_index' => 'is_blog_posts_index',
+            'posts_index'      => 'is_blog_posts_index',
+            'search'           => 'is_search',
+            '404'              => 'is_404',
+            'not_found'        => 'is_404',
+            'post_loop'        => 'is_post_loop',
+            'loop'             => 'is_post_loop',
+            'shop'             => 'is_shop_page',
+            'shop_page'        => 'is_shop_page',
+            'cart'             => 'is_cart_page',
+            'cart_page'        => 'is_cart_page',
+            'checkout'         => 'is_checkout_page',
+            'checkout_page'    => 'is_checkout_page',
+            'account'          => 'is_account_page',
+            'my_account'       => 'is_account_page',
+            'account_page'     => 'is_account_page',
+        ];
+
+        return $map[$specialty] ?? '';
+    }
+
+    private function infer_dynamic_template_target_from_native_key(string $native_key): string {
+        if (strpos($native_key, 'is_single_') === 0) {
+            return 'single';
+        }
+
+        if (strpos($native_key, 'is_archive_for_tax_') === 0) {
+            return 'taxonomy';
+        }
+
+        if (strpos($native_key, 'is_archive_for_post_type_') === 0) {
+            return 'post_type';
+        }
+
+        return 'global';
+    }
+
     private function persist_dynamic_template_assignment(int $post_id, array $assignment): void {
         update_post_meta($post_id, '_lcfa_template_assignment', $assignment);
+
+        $native_template_keys = $this->get_dynamic_template_native_meta_keys($assignment);
+        update_post_meta($post_id, '_lcfa_template_native_keys', $native_template_keys);
 
         foreach ([
             '_lcfa_template_target'      => 'target',
@@ -1657,7 +1797,21 @@ HTML,
         ] as $meta_key => $assignment_key) {
             if (!empty($assignment[$assignment_key])) {
                 update_post_meta($post_id, $meta_key, (string) $assignment[$assignment_key]);
+            } elseif (function_exists('delete_post_meta')) {
+                delete_post_meta($post_id, $meta_key);
             }
+        }
+
+        if (function_exists('delete_post_meta')) {
+            foreach ((array) get_post_meta($post_id) as $meta_key => $meta_value) {
+                if (strpos((string) $meta_key, 'is_') === 0) {
+                    delete_post_meta($post_id, (string) $meta_key);
+                }
+            }
+        }
+
+        foreach ($native_template_keys as $native_template_key) {
+            update_post_meta($post_id, $native_template_key, 1);
         }
     }
 

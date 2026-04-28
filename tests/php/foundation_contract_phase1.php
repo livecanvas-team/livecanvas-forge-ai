@@ -482,6 +482,11 @@ function update_post_meta(int $post_id, string $meta_key, $meta_value): bool {
     return true;
 }
 
+function delete_post_meta(int $post_id, string $meta_key): bool {
+    unset($GLOBALS['lcfa_test_post_meta'][$post_id][$meta_key]);
+    return true;
+}
+
 function get_post_meta(int $post_id, string $meta_key = '', bool $single = false) {
     $all = $GLOBALS['lcfa_test_post_meta'][$post_id] ?? [];
 
@@ -1324,6 +1329,38 @@ lcfa_assert_true($dynamic_assignment_result['ok'] === true, 'update_dynamic_temp
 lcfa_assert_same('single', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_target'] ?? ''), 'dynamic template assignments should persist the target');
 lcfa_assert_same('service', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type'] ?? ''), 'dynamic template assignments should persist the post type');
 lcfa_assert_same('single', (string) ($dynamic_assignment_result['data']['template_assignment']['target'] ?? ''), 'dynamic template results should expose sanitized assignment metadata');
+lcfa_assert_same('is_single_service', (string) ($dynamic_assignment_result['data']['native_template_keys'][0] ?? ''), 'dynamic template results should expose the native LiveCanvas single-template meta key');
+lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_single_service'] ?? null, 'dynamic template assignments should sync to native LiveCanvas single-template meta');
+lcfa_assert_same('is_single_service', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_native_keys'][0] ?? ''), 'dynamic template assignments should persist generated native template keys');
+
+$dynamic_taxonomy_assignment_result = $command_deck->execute([
+    'action'      => 'update_dynamic_template',
+    'target_id'   => 45,
+    'content'     => '<main>Assigned taxonomy archive template</main>',
+    'template_assignment' => [
+        'target'   => 'taxonomy',
+        'taxonomy' => 'category',
+        'term'     => 'news',
+        'source'   => 'contract_test',
+    ],
+]);
+
+lcfa_assert_true($dynamic_taxonomy_assignment_result['ok'] === true, 'update_dynamic_template should accept taxonomy assignment metadata');
+lcfa_assert_same('is_archive_for_tax_category__news', (string) ($dynamic_taxonomy_assignment_result['data']['native_template_keys'][0] ?? ''), 'taxonomy assignments should expose the native LiveCanvas taxonomy archive meta key');
+lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_archive_for_tax_category__news'] ?? null, 'taxonomy assignments should sync to native LiveCanvas archive meta');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['is_single_service']), 'changing dynamic template assignment should remove stale native LiveCanvas meta keys');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type']), 'changing dynamic template assignment should remove stale Forge scalar assignment metadata');
+
+$dynamic_shop_preview = $command_deck->execute([
+    'action'          => 'create_dynamic_template',
+    'title'           => 'Shop Template',
+    'content'         => '<main>Shop template</main>',
+    'template_target' => 'shop',
+    'dry_run'         => true,
+]);
+
+lcfa_assert_true($dynamic_shop_preview['ok'] === true, 'create_dynamic_template preview should accept specialty template targets');
+lcfa_assert_same('is_shop_page', (string) ($dynamic_shop_preview['data']['native_template_keys'][0] ?? ''), 'specialty template targets should map to native LiveCanvas WooCommerce meta keys');
 
 $metadata_inventory = (new LCFA_Inventory($environment))->get_inventory();
 $metadata_header = $metadata_inventory['header_partials'][0] ?? [];
@@ -1331,8 +1368,9 @@ $metadata_dynamic_template = $metadata_inventory['dynamic_templates'][0] ?? [];
 
 lcfa_assert_same('header', (string) ($metadata_header['partial_type'] ?? ''), 'inventory should classify header partials for variant-aware quick actions');
 lcfa_assert_same('1', (string) ($metadata_header['variant'] ?? ''), 'inventory should expose the stored header partial variant');
-lcfa_assert_same('single', (string) ($metadata_dynamic_template['template_assignment']['target'] ?? ''), 'inventory should expose stored dynamic template assignment metadata');
-lcfa_assert_same('service', (string) ($metadata_dynamic_template['template_assignment']['post_type'] ?? ''), 'inventory should expose stored dynamic template assignment post type metadata');
+lcfa_assert_same('taxonomy', (string) ($metadata_dynamic_template['template_assignment']['target'] ?? ''), 'inventory should expose stored dynamic template assignment metadata');
+lcfa_assert_same('category', (string) ($metadata_dynamic_template['template_assignment']['taxonomy'] ?? ''), 'inventory should expose stored dynamic template assignment taxonomy metadata');
+lcfa_assert_same('is_archive_for_tax_category__news', (string) ($metadata_dynamic_template['native_template_keys'][0] ?? ''), 'inventory should expose native LiveCanvas template assignment keys');
 
 $foundation_preview = $command_deck->execute([
     'action'        => 'site_foundation_run',

@@ -527,7 +527,7 @@ The long-term workflow is:
 ### Phase 5: Dynamic Templates And Data-Aware Builds
 
 - store assignment metadata for LiveCanvas dynamic templates
-- map assignment metadata to native LiveCanvas template behavior where available
+- sync assignment metadata to native LiveCanvas `is_*` template meta where available
 - WooCommerce single/archive support
 - custom post type support
 - ACF-aware template generation

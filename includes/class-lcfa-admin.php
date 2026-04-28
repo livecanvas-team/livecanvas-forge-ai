@@ -5824,6 +5824,9 @@ final class LCFA_Admin {
             'file_path',
             'backup_id',
             'status',
+            'template_target',
+            'native_key',
+            'specialty',
         ];
 
         foreach ($scalar_keys as $key) {
@@ -5875,6 +5878,9 @@ final class LCFA_Admin {
             'pages',
             'design_system',
             'template_assignment',
+            'template_target',
+            'native_key',
+            'specialty',
             'colors',
             'typography',
             'radius',
