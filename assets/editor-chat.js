@@ -52,6 +52,7 @@
   var previewedSuggestionKey="";
   var selectedThreadId=(config.threadId||"default");
   var attachmentState=null;
+  var selectedSectionAnchor=null;
   var analyzeBusy=false;
   var actionBusyMode="";
 
@@ -324,6 +325,78 @@
     openDeckLink.href=config.commandBaseUrl+(config.commandBaseUrl.indexOf("?")===-1?"?":"&")+serialized;
   };
 
+  var normalizeAnchorToken=function(value){
+    return String(value||"").replace(/[^a-zA-Z0-9_\-:.]/g,"").slice(0,96);
+  };
+
+  var getSectionIndex=function(element){
+    if(!element||!element.parentNode||!element.parentNode.children){return -1;}
+    var index=0;
+    for(var i=0;i<element.parentNode.children.length;i+=1){
+      var child=element.parentNode.children[i];
+      if(!child||!child.tagName){continue;}
+      if(String(child.tagName).toLowerCase()==="section"){
+        if(child===element){return index;}
+        index+=1;
+      }
+    }
+    return -1;
+  };
+
+  var findSectionElement=function(node){
+    var current=node;
+    while(current&&current!==document){
+      if(current.tagName){
+        var tagName=String(current.tagName).toLowerCase();
+        if(tagName==="section"||tagName==="header"||tagName==="footer"||tagName==="article"){
+          return current;
+        }
+      }
+      current=current.parentNode||null;
+    }
+    return null;
+  };
+
+  var describeSectionAnchor=function(node){
+    var element=findSectionElement(node);
+    if(!element){return null;}
+    var tagName=String(element.tagName||"section").toLowerCase();
+    var id=normalizeAnchorToken(element.id||(typeof element.getAttribute==="function"?element.getAttribute("id"):""));
+    var className=String(element.className||(typeof element.getAttribute==="function"?element.getAttribute("class"):"")||"");
+    var classTokens=className.split(/\s+/).map(normalizeAnchorToken).filter(Boolean);
+    var semanticClass="";
+    classTokens.some(function(token){
+      if(token.indexOf("lcfa-section--")===0){
+        semanticClass=token;
+        return true;
+      }
+      return false;
+    });
+    if(semanticClass===""){
+      classTokens.some(function(token){
+        if(token.indexOf("section-")===0||token.indexOf("lc-section")===0){
+          semanticClass=token;
+          return true;
+        }
+        return false;
+      });
+    }
+    var index=getSectionIndex(element);
+    var selector=id!==""?"#"+id:(semanticClass!==""?tagName+"."+semanticClass:"");
+    return {
+      tag_name:tagName,
+      id:id,
+      selector:selector,
+      class_token:semanticClass,
+      section_index:index,
+      source:"editor_click"
+    };
+  };
+
+  var getSelectedSectionAnchor=function(){
+    return selectedSectionAnchor&&typeof selectedSectionAnchor==="object"?Object.assign({},selectedSectionAnchor):null;
+  };
+
   var renderAttachmentPreview=function(){
     if(!attachmentPreview||!attachmentPreviewMeta||!attachmentClearButton){return;}
     if(!attachmentState||!attachmentState.data_url){
@@ -363,14 +436,32 @@
       if(!file||!(file.type||"").match(/^image\//)){reject(new Error("invalid-file"));return;}
       var reader=new FileReader();
       reader.onload=function(event){
-        resolve({
+        var attachment={
           kind:"image",
           name:file.name||"reference.png",
           mime:file.type||"image/png",
           size:file.size||0,
           caption:"",
           data_url:(event&&event.target&&event.target.result)||reader.result||"",
-        });
+        };
+        if(!window.Image||!attachment.data_url){
+          resolve(attachment);
+          return;
+        }
+        var image=new window.Image();
+        image.onload=function(){
+          var width=Number(image.naturalWidth||image.width||0);
+          var height=Number(image.naturalHeight||image.height||0);
+          if(width>0&&height>0){
+            attachment.width=width;
+            attachment.height=height;
+            attachment.aspect_ratio=Math.round((width/height)*1000)/1000;
+            attachment.orientation=width>height?"landscape":(height>width?"portrait":"square");
+          }
+          resolve(attachment);
+        };
+        image.onerror=function(){resolve(attachment);};
+        image.src=attachment.data_url;
       };
       reader.onerror=function(){reject(new Error("read-failed"));};
       reader.readAsDataURL(file);
@@ -582,13 +673,18 @@
   };
 
   var buildExecutionPayload=function(payload){
-    return Object.assign({},withFrontendProvenance(payload),{
+    var selectedAnchor=getSelectedSectionAnchor();
+    var executionPayload=Object.assign({},withFrontendProvenance(payload),{
       thread_id:threadSelect&&threadSelect.value?threadSelect.value:(config.threadId||"default"),
       context_post_id:payload.context_post_id||config.postId||0,
       post_id:payload.post_id||config.postId||0,
       target_id:payload.target_id||config.targetId||0,
       variant:payload.variant||config.variant||"1"
     });
+    if(selectedAnchor&&!executionPayload.selected_section_anchor){
+      executionPayload.selected_section_anchor=selectedAnchor;
+    }
+    return executionPayload;
   };
 
   var pollExecution=function(executionId,payload,suggestionSource){
@@ -842,6 +938,10 @@
       variant:config.variant||"1",
       action:config.defaultAction||"site_audit"
     };
+    var selectedAnchor=getSelectedSectionAnchor();
+    if(selectedAnchor){
+      requestPayload.selected_section_anchor=selectedAnchor;
+    }
     requestPayload=withFrontendProvenance(requestPayload);
     if(attachmentState&&attachmentState.data_url){
       requestPayload.attachments=[attachmentState];
@@ -1013,5 +1113,10 @@
   else{setConversationState(statusNode?statusNode.getAttribute("data-state")||"idle":"idle",statusNode?statusNode.textContent||"":"");}
 
   document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});
-  document.addEventListener("click",function(event){if(!shell.classList.contains("is-open")){return;}if(shell.contains(event.target)){return;}setOpen(false);});
+  document.addEventListener("click",function(event){
+    if(shell.contains(event.target)){return;}
+    var anchor=describeSectionAnchor(event.target);
+    if(anchor){selectedSectionAnchor=anchor;}
+    if(shell.classList.contains("is-open")){setOpen(false);}
+  });
 })();

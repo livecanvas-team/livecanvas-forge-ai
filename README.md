@@ -441,20 +441,30 @@ The intent is to keep agent setup plug-and-play and centered on the wizard inste
 
 The product is moving away from ambiguous prompt guessing and toward deterministic foundation operations.
 
-The target contract includes actions such as:
+The foundation contract now includes deterministic actions such as:
 
 - `site_audit`
 - `site_prepare`
 - `design_system_apply`
+- `design_system_compose`
 - `global_shell_apply`
 - `page_upsert`
+- `validate_markup_for_framework`
+- `create_dynamic_template`
+- `update_dynamic_template`
 - `site_foundation_run`
 
-The first foundation slice already started with:
+The current foundation slice includes:
 
 - stronger safety rules
 - better page create/update behavior
 - final URLs in page responses
+- stack preflight via `site_prepare`
+- Picostrap, Picowind, and fallback design-system execution paths
+- variant-aware header/footer creation and update via `global_shell_apply`
+- orchestrated setup via `site_foundation_run`
+- editor-side section starters and visual reference metadata
+- assignment metadata for dynamic templates
 
 ## Design-System Direction
 
@@ -487,33 +497,37 @@ The long-term workflow is:
 
 ### Phase 1: Foundation Contract
 
-- harden safety and policy behavior
-- finish normalized page creation/update flows
-- keep local and remote page execution behavior aligned
-- simplify coding-agent connection UX
+- continue hardening safety and policy behavior
+- keep normalized page creation/update flows aligned across local and remote execution
+- expand the foundation contract tests around failure and rollback paths
+- keep simplifying coding-agent connection UX
 
 ### Phase 2: Design-System Execution
 
-- implement `design_system_apply`
-- integrate `Picostrap` through `PicoSass`
-- integrate `Picowind` through `WindPress` and `DaisyUI`
-- expose preview/apply behavior for design changes
+- `design_system_apply` maps Picostrap tokens to theme mods
+- Picowind integrates through WindPress and DaisyUI cache paths
+- custom themes use portable fallback assets in the active stylesheet theme
+- preview/apply behavior stays explicit for design changes
+- expand fallback enqueue guidance for themes without a native compiler/runtime
 
 ### Phase 3: Global Shell
 
-- implement `global_shell_apply`
-- make header/footer creation and update first-class
-- improve partial inventory and variant handling
+- `global_shell_apply` creates or updates header/footer partials
+- header/footer operations support explicit variants
+- inventory exposes partial type and variant metadata
+- broaden partial variant discovery against real LiveCanvas installs
 
 ### Phase 4: Site Foundation Run
 
-- implement `site_foundation_run`
-- orchestrate site audit, design system, shell, and starter pages
-- make first-install workflows deterministic
+- `site_foundation_run` orchestrates preflight, design system, shell, and starter pages
+- Genesis task loading hydrates structured payloads into the Command Deck
+- enrich starter page plans from the project brief
+- make first-install workflows deterministic end to end
 
 ### Phase 5: Dynamic Templates And Data-Aware Builds
 
-- real LiveCanvas dynamic-template assignment
+- store assignment metadata for LiveCanvas dynamic templates
+- map assignment metadata to native LiveCanvas template behavior where available
 - WooCommerce single/archive support
 - custom post type support
 - ACF-aware template generation

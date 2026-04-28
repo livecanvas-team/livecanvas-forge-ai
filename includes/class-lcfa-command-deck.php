@@ -26,7 +26,8 @@ final class LCFA_Command_Deck {
                 $windpress_bridge,
                 $theme_files_bridge,
                 new LCFA_Design_System_Build_Gateway($local_mcp_bridge)
-            )
+            ),
+            new LCFA_Design_System_Fallback_Executor($environment, $theme_files_bridge)
         );
         $this->design_system_compose = $design_system_compose ?: new LCFA_Design_System_Compose(
             $environment,
@@ -42,9 +43,17 @@ final class LCFA_Command_Deck {
                 'label'       => __('Run site audit', 'livecanvas-forge-ai'),
                 'description' => __('Returns the current stack summary and LiveCanvas inventory without writing.', 'livecanvas-forge-ai'),
             ],
+            'site_prepare' => [
+                'label'       => __('Prepare site foundation', 'livecanvas-forge-ai'),
+                'description' => __('Preflights stack, inventory, theme roots, and foundation readiness without writing.', 'livecanvas-forge-ai'),
+            ],
             'validate_markup_for_framework' => [
                 'label'       => __('Validate markup for framework', 'livecanvas-forge-ai'),
                 'description' => __('Preflights page markup against the active framework rules without writing content.', 'livecanvas-forge-ai'),
+            ],
+            'site_foundation_run' => [
+                'label'       => __('Run foundation setup', 'livecanvas-forge-ai'),
+                'description' => __('Orchestrates prepare, design system, global shell, and starter pages from one payload.', 'livecanvas-forge-ai'),
             ],
             'page_upsert' => [
                 'label'       => __('Create or update page', 'livecanvas-forge-ai'),
@@ -73,6 +82,10 @@ final class LCFA_Command_Deck {
             'update_footer' => [
                 'label'       => __('Update footer partial', 'livecanvas-forge-ai'),
                 'description' => __('Writes content into the LiveCanvas footer partial.', 'livecanvas-forge-ai'),
+            ],
+            'global_shell_apply' => [
+                'label'       => __('Create or update global shell', 'livecanvas-forge-ai'),
+                'description' => __('Creates or updates the header and footer partials for the requested variant.', 'livecanvas-forge-ai'),
             ],
             'create_dynamic_template' => [
                 'label'       => __('Create dynamic template', 'livecanvas-forge-ai'),
@@ -223,6 +236,23 @@ final class LCFA_Command_Deck {
                 $result['inventory']   = $inventory;
                 break;
 
+            case 'site_prepare':
+                $prepared = $this->prepare_site_foundation();
+                $result['message']     = __('Site foundation preflight prepared.', 'livecanvas-forge-ai');
+                $result['summary']     = sprintf(
+                    __('Foundation readiness: %1$d pages, %2$d headers, %3$d footers, %4$d dynamic templates on %5$s.', 'livecanvas-forge-ai'),
+                    (int) ($prepared['inventory_summary']['pages'] ?? 0),
+                    (int) ($prepared['inventory_summary']['headers'] ?? 0),
+                    (int) ($prepared['inventory_summary']['footers'] ?? 0),
+                    (int) ($prepared['inventory_summary']['dynamic_templates'] ?? 0),
+                    (string) ($prepared['snapshot']['detected_framework'] ?? 'unknown')
+                );
+                $result['target_type'] = 'site_prepare';
+                $result['inventory']   = $prepared['inventory'];
+                $result['warnings']    = array_merge($result['warnings'], (array) ($prepared['warnings'] ?? []));
+                $result['data']        = $prepared;
+                break;
+
             case 'validate_markup_for_framework':
                 if (trim($content) === '') {
                     return $this->error_result(__('Markup content is required for framework validation.', 'livecanvas-forge-ai'));
@@ -257,6 +287,11 @@ final class LCFA_Command_Deck {
 
             case 'design_system_apply':
                 $result = array_merge($result, $this->design_system_apply->run($payload, $dry_run));
+                break;
+
+            case 'site_foundation_run':
+                $foundation = $this->run_site_foundation($payload, $dry_run);
+                $result = array_merge($result, $foundation);
                 break;
 
             case 'page_upsert':
@@ -305,6 +340,16 @@ final class LCFA_Command_Deck {
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['data']['framework'] = $framework;
+                if (sanitize_key((string) ($payload['content_strategy'] ?? '')) === 'section_starter') {
+                    $result['data']['section_intent'] = sanitize_key((string) ($payload['section_intent'] ?? ''));
+                    $result['data']['section_operation'] = $this->normalize_section_operation((string) ($payload['section_operation'] ?? ''));
+                    if (is_array($payload['selected_section_anchor'] ?? null)) {
+                        $result['data']['selected_section_anchor'] = $this->sanitize_selected_section_anchor((array) $payload['selected_section_anchor']);
+                    }
+                    if (is_array($payload['visual_reference'] ?? null)) {
+                        $result['data']['visual_reference'] = $this->get_visual_reference_context($payload);
+                    }
+                }
                 $result['summary']       = $is_update
                     ? sprintf(__('Update page #%d.', 'livecanvas-forge-ai'), $page_target_id)
                     : sprintf(__('Create LiveCanvas page "%s".', 'livecanvas-forge-ai'), $page_title);
@@ -361,6 +406,16 @@ final class LCFA_Command_Deck {
                 }
                 break;
 
+            case 'global_shell_apply':
+                $shell = $this->run_global_shell_apply($payload, $variant, $dry_run);
+
+                if (empty($shell['ok'])) {
+                    return $this->error_result((string) ($shell['message'] ?? __('Global shell apply failed.', 'livecanvas-forge-ai')));
+                }
+
+                $result = array_merge($result, $shell);
+                break;
+
             case 'update_header':
             case 'update_footer':
                 $flag      = $action === 'update_header' ? 'is_header' : 'is_footer';
@@ -400,10 +455,12 @@ final class LCFA_Command_Deck {
                     return $this->error_result(__('A dynamic template title is required.', 'livecanvas-forge-ai'));
                 }
 
+                $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
                 $result['target_type']  = 'dynamic_template';
                 $result['target_title'] = $title;
                 $result['summary']      = sprintf(__('Create dynamic template "%s".', 'livecanvas-forge-ai'), $title);
                 $result['diff_html']    = $this->build_diff('', $content);
+                $result['data']['template_assignment'] = $template_assignment;
 
                 if (!$dry_run) {
                     $post_id = wp_insert_post([
@@ -419,6 +476,9 @@ final class LCFA_Command_Deck {
                     }
 
                     $result['target_id'] = (int) $post_id;
+                    if ($template_assignment) {
+                        $this->persist_dynamic_template_assignment((int) $post_id, $template_assignment);
+                    }
                     $result['message']   = __('Dynamic template created.', 'livecanvas-forge-ai');
                 }
                 break;
@@ -429,6 +489,7 @@ final class LCFA_Command_Deck {
                 }
 
                 $existing = $this->inventory->get_target_content('dynamic_template', $target_id);
+                $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
 
                 if (!$existing['post']) {
                     return $this->error_result(__('The requested dynamic template was not found.', 'livecanvas-forge-ai'));
@@ -440,6 +501,7 @@ final class LCFA_Command_Deck {
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['summary']       = sprintf(__('Update dynamic template #%d.', 'livecanvas-forge-ai'), $target_id);
+                $result['data']['template_assignment'] = $template_assignment;
 
                 if (!$dry_run) {
                     $updated = wp_update_post([
@@ -451,6 +513,9 @@ final class LCFA_Command_Deck {
                         return $this->error_result($updated->get_error_message());
                     }
 
+                    if ($template_assignment) {
+                        $this->persist_dynamic_template_assignment($target_id, $template_assignment);
+                    }
                     $result['message'] = __('Dynamic template updated.', 'livecanvas-forge-ai');
                 }
                 break;
@@ -958,8 +1023,647 @@ final class LCFA_Command_Deck {
         return $result;
     }
 
+    private function prepare_site_foundation(): array {
+        $snapshot = $this->environment->get_snapshot();
+        $inventory = $this->inventory->get_inventory();
+        $summary = is_array($inventory['summary'] ?? null) ? $inventory['summary'] : $this->inventory->get_summary();
+        $settings = LCFA_Settings::get();
+        $warnings = [];
+        $theme = [
+            'ok' => false,
+            'roots' => [],
+            'templates' => [],
+        ];
+
+        try {
+            $theme_roots = $this->theme_files_bridge->get_theme_roots();
+            $theme_templates = $this->theme_files_bridge->list_templates([
+                'root_scope' => 'active',
+                'limit'      => 12,
+            ]);
+            $theme = [
+                'ok'       => true,
+                'roots'    => $theme_roots,
+                'templates'=> $theme_templates['files'] ?? [],
+            ];
+        } catch (Throwable $throwable) {
+            $warnings[] = $throwable->getMessage();
+            $theme['message'] = $throwable->getMessage();
+        }
+
+        if (empty($snapshot['livecanvas_active'])) {
+            $warnings[] = __('LiveCanvas is not active; write-intent foundation actions will be blocked.', 'livecanvas-forge-ai');
+        }
+
+        if ((string) ($snapshot['detected_framework'] ?? '') === 'unknown') {
+            $warnings[] = __('The active theme is not recognized as Picostrap or Picowind; design-system writes will use fallback theme assets.', 'livecanvas-forge-ai');
+        }
+
+        if ((int) ($summary['headers'] ?? 0) === 0) {
+            $warnings[] = __('No header partial is currently registered; global_shell_apply can create one.', 'livecanvas-forge-ai');
+        }
+
+        if ((int) ($summary['footers'] ?? 0) === 0) {
+            $warnings[] = __('No footer partial is currently registered; global_shell_apply can create one.', 'livecanvas-forge-ai');
+        }
+
+        return [
+            'snapshot'          => $snapshot,
+            'inventory_summary' => $summary,
+            'inventory'         => $inventory,
+            'theme'             => $theme,
+            'windpress'         => $this->windpress_bridge->get_status(),
+            'local_mcp'         => $this->local_mcp_bridge->get_status(),
+            'policy'            => [
+                'permission_profile'  => (string) ($settings['permission_profile'] ?? ''),
+                'allow_file_fallback' => !empty($settings['allow_file_fallback']),
+            ],
+            'warnings'          => array_values(array_unique(array_filter($warnings))),
+        ];
+    }
+
+    private function run_site_foundation(array $payload, bool $dry_run): array {
+        $steps = [];
+        $warnings = [];
+        $ok = true;
+
+        $steps['site_prepare'] = $this->execute($this->build_child_command_payload($payload, [
+            'action'  => 'site_prepare',
+            'dry_run' => true,
+        ]));
+
+        $ok = $ok && !empty($steps['site_prepare']['ok']);
+        $warnings = array_merge($warnings, (array) ($steps['site_prepare']['warnings'] ?? []));
+
+        $design_payload = $this->extract_foundation_design_payload($payload);
+        if ($design_payload) {
+            $steps['design_system_apply'] = $this->execute($this->build_child_command_payload($payload, array_merge($design_payload, [
+                'action'  => 'design_system_apply',
+                'dry_run' => $dry_run,
+            ])));
+            $ok = $ok && !empty($steps['design_system_apply']['ok']);
+            $warnings = array_merge($warnings, (array) ($steps['design_system_apply']['warnings'] ?? []));
+        }
+
+        if (empty($payload['skip_global_shell'])) {
+            $shell_payload = [
+                'action'  => 'global_shell_apply',
+                'dry_run' => $dry_run,
+                'variant' => sanitize_text_field((string) ($payload['variant'] ?? '1')),
+            ];
+
+            foreach (['header_html', 'header_html_lines', 'footer_html', 'footer_html_lines', 'content'] as $key) {
+                if (array_key_exists($key, $payload)) {
+                    $shell_payload[$key] = $payload[$key];
+                }
+            }
+
+            $steps['global_shell_apply'] = $this->execute($this->build_child_command_payload($payload, $shell_payload));
+            $ok = $ok && !empty($steps['global_shell_apply']['ok']);
+            $warnings = array_merge($warnings, (array) ($steps['global_shell_apply']['warnings'] ?? []));
+        }
+
+        if (empty($payload['skip_pages'])) {
+            $pages = $this->normalize_foundation_pages($payload);
+            $page_results = [];
+
+            foreach ($pages as $page) {
+                $page_payload = array_merge([
+                    'action'            => 'page_upsert',
+                    'dry_run'           => $dry_run,
+                    'status'            => 'draft',
+                    'content_strategy'  => 'section_starter',
+                    'section_intent'    => 'hero',
+                    'section_operation' => 'append',
+                    'user_prompt'       => sprintf(__('Create the starter structure for %s.', 'livecanvas-forge-ai'), (string) ($page['title'] ?? __('Untitled', 'livecanvas-forge-ai'))),
+                ], $page);
+
+                $page_results[] = $this->execute($this->build_child_command_payload($payload, $page_payload));
+                $last = $page_results[count($page_results) - 1] ?? [];
+                $ok = $ok && !empty($last['ok']);
+                $warnings = array_merge($warnings, (array) ($last['warnings'] ?? []));
+            }
+
+            if ($page_results) {
+                $steps['pages'] = $page_results;
+            }
+        }
+
+        return [
+            'ok'               => $ok,
+            'action'           => 'site_foundation_run',
+            'mode'             => $dry_run ? 'preview' : 'apply',
+            'execution_target' => 'local',
+            'message'          => $dry_run
+                ? __('Foundation setup preview prepared.', 'livecanvas-forge-ai')
+                : __('Foundation setup run completed.', 'livecanvas-forge-ai'),
+            'summary'          => sprintf(
+                __('Foundation run executed %d step groups.', 'livecanvas-forge-ai'),
+                count($steps)
+            ),
+            'target_type'      => 'site_foundation',
+            'target_id'        => 0,
+            'target_title'     => '',
+            'warnings'         => array_values(array_unique(array_filter($warnings))),
+            'data'             => [
+                'steps'      => $steps,
+                'step_count' => count($steps),
+            ],
+        ];
+    }
+
+    private function run_global_shell_apply(array $payload, string $variant, bool $dry_run): array {
+        $header_html = $this->coerce_multiline_payload($payload, 'header_html', 'header_html_lines');
+        $footer_html = $this->coerce_multiline_payload($payload, 'footer_html', 'footer_html_lines');
+
+        if (trim($header_html) === '' && trim($footer_html) === '' && trim((string) ($payload['content'] ?? '')) !== '') {
+            $shell_content = $this->extract_global_shell_content((string) wp_unslash((string) $payload['content']));
+            $header_html = (string) ($shell_content['header_html'] ?? '');
+            $footer_html = (string) ($shell_content['footer_html'] ?? '');
+        }
+
+        if (trim($header_html) === '' && trim($footer_html) === '') {
+            $starter = $this->build_global_shell_starter($payload);
+            $header_html = (string) ($starter['header_html'] ?? '');
+            $footer_html = (string) ($starter['footer_html'] ?? '');
+        }
+
+        $parts = [];
+        $proposed = [];
+
+        if (trim($header_html) !== '' && empty($payload['skip_header'])) {
+            $parts['header'] = $this->apply_global_shell_partial('header', 'is_header', $variant, $header_html, $dry_run);
+            $proposed[] = trim($header_html);
+        }
+
+        if (trim($footer_html) !== '' && empty($payload['skip_footer'])) {
+            $parts['footer'] = $this->apply_global_shell_partial('footer', 'is_footer', $variant, $footer_html, $dry_run);
+            $proposed[] = trim($footer_html);
+        }
+
+        if (!$parts) {
+            return [
+                'ok'      => false,
+                'message' => __('Header or footer HTML is required for global_shell_apply.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $failed = array_filter($parts, static function (array $part): bool {
+            return empty($part['ok']);
+        });
+
+        if ($failed) {
+            $first = reset($failed);
+
+            return [
+                'ok'      => false,
+                'message' => (string) ($first['message'] ?? __('Global shell partial write failed.', 'livecanvas-forge-ai')),
+            ];
+        }
+
+        $existing_html = implode("\n\n", array_map(static function (array $part): string {
+            return (string) ($part['existing_html'] ?? '');
+        }, $parts));
+        $proposed_html = implode("\n\n", $proposed);
+
+        return [
+            'ok'               => true,
+            'action'           => 'global_shell_apply',
+            'mode'             => $dry_run ? 'preview' : 'apply',
+            'execution_target' => 'local',
+            'message'          => $dry_run
+                ? __('Global shell preview prepared.', 'livecanvas-forge-ai')
+                : __('Global shell applied.', 'livecanvas-forge-ai'),
+            'summary'          => sprintf(__('Create or update global shell variant %s.', 'livecanvas-forge-ai'), $variant),
+            'target_type'      => 'global_shell',
+            'target_id'        => 0,
+            'target_title'     => sprintf(__('Variant %s', 'livecanvas-forge-ai'), $variant),
+            'existing_html'    => $existing_html,
+            'proposed_html'    => $proposed_html,
+            'diff_html'        => $this->build_diff($existing_html, $proposed_html),
+            'warnings'         => [],
+            'data'             => [
+                'variant' => $variant,
+                'parts'   => $parts,
+            ],
+        ];
+    }
+
+    private function extract_global_shell_content(string $content): array {
+        $content = trim($content);
+
+        if ($content === '') {
+            return [];
+        }
+
+        $header_html = '';
+        $footer_html = '';
+
+        if (preg_match('/<header\b[^>]*>.*?<\/header>/is', $content, $matches)) {
+            $header_html = trim((string) $matches[0]);
+        }
+
+        if (preg_match('/<footer\b[^>]*>.*?<\/footer>/is', $content, $matches)) {
+            $footer_html = trim((string) $matches[0]);
+        }
+
+        if ($header_html === '' && $footer_html === '') {
+            if (stripos($content, '<footer') !== false) {
+                $footer_html = $content;
+            } else {
+                $header_html = $content;
+            }
+        }
+
+        return [
+            'header_html' => $header_html,
+            'footer_html' => $footer_html,
+        ];
+    }
+
+    private function apply_global_shell_partial(string $type, string $flag, string $variant, string $html, bool $dry_run): array {
+        $variant = $variant !== '' ? $variant : '1';
+        $target_id = $this->resolve_partial_post_id_for_write($flag, $variant);
+        $operation = $target_id > 0 ? 'update' : 'create';
+        $existing = [
+            'post'    => null,
+            'content' => '',
+        ];
+
+        if ($target_id > 0) {
+            $existing = $this->inventory->get_target_content($type, $target_id, $variant);
+        }
+
+        $title = $target_id > 0
+            ? (string) ($existing['post']['title'] ?? ucfirst($type) . ' Partial')
+            : sprintf(__('%s Partial %s', 'livecanvas-forge-ai'), ucfirst($type), $variant);
+
+        $part = [
+            'ok'            => true,
+            'type'          => $type,
+            'operation'     => $operation,
+            'variant'       => $variant,
+            'target_id'     => $target_id,
+            'target_title'  => $title,
+            'existing_html' => (string) ($existing['content'] ?? ''),
+            'proposed_html' => $html,
+            'diff_html'     => $this->build_diff((string) ($existing['content'] ?? ''), $html),
+        ];
+
+        if ($dry_run) {
+            return $part;
+        }
+
+        $post_id = 0;
+
+        if ($target_id > 0) {
+            $updated = $this->with_unfiltered_post_content(static function () use ($target_id, $html) {
+                return wp_update_post([
+                    'ID'           => $target_id,
+                    'post_content' => $html,
+                ], true);
+            });
+
+            if (is_wp_error($updated)) {
+                $part['ok'] = false;
+                $part['message'] = $updated->get_error_message();
+
+                return $part;
+            }
+
+            $post_id = (int) $updated;
+        } else {
+            $inserted = $this->with_unfiltered_post_content(static function () use ($type, $variant, $html) {
+                return wp_insert_post([
+                    'post_type'    => 'lc_partial',
+                    'post_title'   => sprintf(__('%s Partial %s', 'livecanvas-forge-ai'), ucfirst($type), $variant),
+                    'post_name'    => sanitize_title($type . '-partial-' . $variant),
+                    'post_status'  => 'publish',
+                    'post_content' => $html,
+                ], true);
+            });
+
+            if (is_wp_error($inserted)) {
+                $part['ok'] = false;
+                $part['message'] = $inserted->get_error_message();
+
+                return $part;
+            }
+
+            $post_id = (int) $inserted;
+        }
+
+        update_post_meta($post_id, $flag, $variant);
+        $part['target_id'] = $post_id;
+        $part['target_title'] = html_entity_decode(get_the_title($post_id) ?: $title);
+        $part['frontend_url'] = (string) get_permalink($post_id);
+        $part['edit_url'] = $this->resolve_edit_post_url($post_id);
+        $part['message'] = $operation === 'create'
+            ? __('Partial created.', 'livecanvas-forge-ai')
+            : __('Partial updated.', 'livecanvas-forge-ai');
+
+        return $part;
+    }
+
+    private function resolve_partial_post_id_for_write(string $flag, string $variant): int {
+        if (function_exists('lc_get_partial_postid')) {
+            $resolved = lc_get_partial_postid($flag, $variant);
+
+            if ($resolved) {
+                return (int) $resolved;
+            }
+        }
+
+        $posts = get_posts([
+            'post_type'      => 'lc_partial',
+            'post_status'    => ['publish', 'draft', 'private'],
+            'posts_per_page' => 1,
+            'meta_key'       => $flag,
+            'meta_value'     => $variant,
+            'orderby'        => 'ID',
+            'order'          => 'DESC',
+        ]);
+
+        return isset($posts[0]) ? (int) $posts[0]->ID : 0;
+    }
+
+    private function build_global_shell_starter(array $payload): array {
+        $framework = $this->resolve_framework($payload);
+        $brief = LCFA_Settings::get_project_brief();
+        $brand_name = sanitize_text_field((string) ($brief['brand_name'] ?? ''));
+        $brand_name = $brand_name !== '' ? $brand_name : get_bloginfo('name');
+        $brand_name = $brand_name !== '' ? $brand_name : __('Your brand', 'livecanvas-forge-ai');
+        $brand_html = htmlspecialchars($brand_name, ENT_QUOTES, 'UTF-8');
+        $nav_items = $this->get_foundation_nav_items($brief);
+        $nav_html = '';
+        $footer_links = '';
+
+        foreach ($nav_items as $item) {
+            $label = htmlspecialchars(sanitize_text_field((string) ($item['label'] ?? '')), ENT_QUOTES, 'UTF-8');
+            $href = htmlspecialchars(esc_url_raw((string) ($item['href'] ?? '#')), ENT_QUOTES, 'UTF-8');
+
+            if ($framework === 'picowind') {
+                $nav_html .= '<a class="text-sm font-medium text-base-content/75 no-underline transition hover:text-primary" href="' . $href . '">' . $label . '</a>';
+                $footer_links .= '<a class="text-sm text-base-content/65 no-underline hover:text-primary" href="' . $href . '">' . $label . '</a>';
+            } elseif ($framework === 'unknown') {
+                $nav_html .= '<a class="lcfa-shell__link" href="' . $href . '">' . $label . '</a>';
+                $footer_links .= '<a class="lcfa-shell__footer-link" href="' . $href . '">' . $label . '</a>';
+            } else {
+                $nav_html .= '<a class="nav-link px-2" href="' . $href . '">' . $label . '</a>';
+                $footer_links .= '<a class="link-secondary text-decoration-none" href="' . $href . '">' . $label . '</a>';
+            }
+        }
+
+        if ($framework === 'picowind') {
+            return [
+                'header_html' => <<<HTML
+<header class="lcfa-global-shell lcfa-global-shell--header border-b border-base-300 bg-base-100">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-4">
+    <a class="text-lg font-semibold text-base-content no-underline" href="/">{$brand_html}</a>
+    <nav class="hidden items-center gap-5 md:flex">{$nav_html}</nav>
+    <a class="btn btn-primary btn-sm" href="#contact">Contact</a>
+  </div>
+</header>
+HTML,
+                'footer_html' => <<<HTML
+<footer class="lcfa-global-shell lcfa-global-shell--footer border-t border-base-300 bg-base-200">
+  <div class="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-[1fr_auto] md:items-center">
+    <div>
+      <p class="text-lg font-semibold text-base-content">{$brand_html}</p>
+      <p class="mt-2 max-w-xl text-sm leading-6 text-base-content/65">A clear global footer shell generated from the current Genesis brief.</p>
+    </div>
+    <nav class="flex flex-wrap gap-4">{$footer_links}</nav>
+  </div>
+</footer>
+HTML,
+            ];
+        }
+
+        if ($framework === 'unknown') {
+            return [
+                'header_html' => <<<HTML
+<header class="lcfa-global-shell lcfa-global-shell--header">
+  <div class="lcfa-shell__inner">
+    <a class="lcfa-shell__brand" href="/">{$brand_html}</a>
+    <nav class="lcfa-shell__nav">{$nav_html}</nav>
+    <a class="lcfa-shell__cta" href="#contact">Contact</a>
+  </div>
+</header>
+HTML,
+                'footer_html' => <<<HTML
+<footer class="lcfa-global-shell lcfa-global-shell--footer">
+  <div class="lcfa-shell__inner lcfa-shell__inner--footer">
+    <div>
+      <p class="lcfa-shell__brand">{$brand_html}</p>
+      <p class="lcfa-shell__copy">A clear global footer shell generated from the current Genesis brief.</p>
+    </div>
+    <nav class="lcfa-shell__nav lcfa-shell__nav--footer">{$footer_links}</nav>
+  </div>
+</footer>
+HTML,
+            ];
+        }
+
+        return [
+            'header_html' => <<<HTML
+<header class="lcfa-global-shell lcfa-global-shell--header border-bottom bg-white">
+  <div class="container d-flex align-items-center justify-content-between gap-4 py-3">
+    <a class="navbar-brand fw-bold text-decoration-none" href="/">{$brand_html}</a>
+    <nav class="d-none d-md-flex align-items-center gap-3">{$nav_html}</nav>
+    <a class="btn btn-primary btn-sm" href="#contact">Contact</a>
+  </div>
+</header>
+HTML,
+            'footer_html' => <<<HTML
+<footer class="lcfa-global-shell lcfa-global-shell--footer border-top bg-light">
+  <div class="container d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-4 py-5">
+    <div>
+      <p class="fw-bold mb-2">{$brand_html}</p>
+      <p class="text-body-secondary mb-0">A clear global footer shell generated from the current Genesis brief.</p>
+    </div>
+    <nav class="d-flex flex-wrap gap-3">{$footer_links}</nav>
+  </div>
+</footer>
+HTML,
+        ];
+    }
+
+    private function get_foundation_nav_items(array $brief): array {
+        $raw_pages = preg_split('/[\n,;]+/', (string) ($brief['required_pages'] ?? '')) ?: [];
+        $labels = [];
+
+        foreach ($raw_pages as $page) {
+            $page = sanitize_text_field(wp_strip_all_tags((string) $page));
+            if ($page !== '') {
+                $labels[] = $page;
+            }
+        }
+
+        if (!$labels) {
+            $labels = ['Home', 'About', 'Services', 'Contact'];
+        }
+
+        $labels = array_values(array_unique(array_slice($labels, 0, 6)));
+        $items = [];
+
+        foreach ($labels as $label) {
+            $slug = sanitize_title($label);
+            $items[] = [
+                'label' => $label,
+                'href'  => strtolower($label) === 'home' ? '/' : '/' . $slug . '/',
+            ];
+        }
+
+        return $items;
+    }
+
+    private function build_child_command_payload(array $parent_payload, array $child_payload): array {
+        foreach (['_lcfa_origin', '_lcfa_transport', '_lcfa_agent', '_lcfa_processed_by', 'origin', 'transport', 'agent', 'processed_by', 'execution_target', 'thread_id', 'genesis_task_id', 'context_post_id'] as $key) {
+            if (!array_key_exists($key, $child_payload) && array_key_exists($key, $parent_payload)) {
+                $child_payload[$key] = $parent_payload[$key];
+            }
+        }
+
+        return $child_payload;
+    }
+
+    private function extract_foundation_design_payload(array $payload): array {
+        $design_payload = is_array($payload['design_system'] ?? null) ? (array) $payload['design_system'] : [];
+
+        foreach (['framework', 'preset', 'colors', 'typography', 'radius', 'buttons', 'font_assets'] as $key) {
+            if (array_key_exists($key, $payload) && !array_key_exists($key, $design_payload)) {
+                $design_payload[$key] = $payload[$key];
+            }
+        }
+
+        foreach (['preset', 'colors', 'typography', 'radius', 'buttons', 'font_assets'] as $key) {
+            if (!empty($design_payload[$key])) {
+                return $design_payload;
+            }
+        }
+
+        return [];
+    }
+
+    private function normalize_foundation_pages(array $payload): array {
+        $raw_pages = [];
+
+        if (is_array($payload['pages'] ?? null)) {
+            $raw_pages = (array) $payload['pages'];
+        } elseif (is_array($payload['starter_pages'] ?? null)) {
+            $raw_pages = (array) $payload['starter_pages'];
+        }
+
+        if (!$raw_pages) {
+            foreach ($this->get_foundation_nav_items(LCFA_Settings::get_project_brief()) as $item) {
+                $raw_pages[] = [
+                    'title' => $item['label'],
+                    'slug'  => sanitize_title((string) $item['label']),
+                ];
+            }
+        }
+
+        $pages = [];
+
+        foreach ($raw_pages as $index => $page) {
+            if (is_scalar($page) || $page === null) {
+                $page = [
+                    'title' => sanitize_text_field((string) $page),
+                ];
+            }
+
+            if (!is_array($page)) {
+                continue;
+            }
+
+            $title = sanitize_text_field((string) ($page['title'] ?? ''));
+            if ($title === '') {
+                $title = sprintf(__('Page %d', 'livecanvas-forge-ai'), $index + 1);
+            }
+
+            $slug = sanitize_title((string) ($page['slug'] ?? $title));
+            $normalized = [
+                'title' => $title,
+                'slug'  => $slug !== '' ? $slug : 'page-' . ($index + 1),
+            ];
+
+            foreach (['status', 'content', 'body_html', 'body_html_lines', 'footer_html', 'footer_html_lines', 'footer_script', 'footer_script_lines', 'content_strategy', 'section_intent', 'section_operation', 'user_prompt'] as $key) {
+                if (array_key_exists($key, $page)) {
+                    $normalized[$key] = $page[$key];
+                }
+            }
+
+            $pages[] = $normalized;
+        }
+
+        return $pages;
+    }
+
+    private function sanitize_dynamic_template_assignment(array $payload): array {
+        $assignment = is_array($payload['template_assignment'] ?? null) ? (array) $payload['template_assignment'] : [];
+
+        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source'] as $key) {
+            if (array_key_exists($key, $payload) && !array_key_exists($key, $assignment)) {
+                $assignment[$key] = $payload[$key];
+            }
+        }
+
+        $target = sanitize_key((string) ($assignment['target'] ?? $assignment['template_target'] ?? ''));
+        if (!in_array($target, ['single', 'archive', 'taxonomy', 'post_type', 'acf', 'global'], true)) {
+            if (!empty($assignment['single'])) {
+                $target = 'single';
+            } elseif (!empty($assignment['archive'])) {
+                $target = 'archive';
+            } elseif (!empty($assignment['taxonomy'])) {
+                $target = 'taxonomy';
+            } elseif (!empty($assignment['acf_field_group'])) {
+                $target = 'acf';
+            }
+        }
+
+        $conditions = [];
+        if (is_array($assignment['conditions'] ?? null)) {
+            foreach ((array) $assignment['conditions'] as $condition_key => $condition_value) {
+                if (!is_scalar($condition_value) && $condition_value !== null) {
+                    continue;
+                }
+
+                $conditions[sanitize_key((string) $condition_key)] = sanitize_text_field((string) $condition_value);
+            }
+        }
+
+        return array_filter([
+            'target'          => $target,
+            'post_type'       => sanitize_key((string) ($assignment['post_type'] ?? '')),
+            'taxonomy'        => sanitize_key((string) ($assignment['taxonomy'] ?? '')),
+            'term'            => sanitize_text_field((string) ($assignment['term'] ?? '')),
+            'acf_field_group' => sanitize_text_field((string) ($assignment['acf_field_group'] ?? '')),
+            'source'          => sanitize_key((string) ($assignment['source'] ?? 'forge')),
+            'conditions'      => $conditions,
+        ], static function ($value): bool {
+            return $value !== '' && $value !== [] && $value !== null;
+        });
+    }
+
+    private function persist_dynamic_template_assignment(int $post_id, array $assignment): void {
+        update_post_meta($post_id, '_lcfa_template_assignment', $assignment);
+
+        foreach ([
+            '_lcfa_template_target'      => 'target',
+            '_lcfa_template_post_type'   => 'post_type',
+            '_lcfa_template_taxonomy'    => 'taxonomy',
+            '_lcfa_template_term'        => 'term',
+            '_lcfa_template_acf_group'   => 'acf_field_group',
+        ] as $meta_key => $assignment_key) {
+            if (!empty($assignment[$assignment_key])) {
+                update_post_meta($post_id, $meta_key, (string) $assignment[$assignment_key]);
+            }
+        }
+    }
+
     private function requires_livecanvas(string $action): bool {
         return !in_array($action, [
+            'site_prepare',
             'validate_markup_for_framework',
             'design_system_compose',
             'design_system_apply',
@@ -1126,6 +1830,8 @@ final class LCFA_Command_Deck {
         if ($target_id > 0) {
             $existing = $this->inventory->get_target_content('page', $target_id);
             $existing_html = (string) ($existing['content'] ?? '');
+            $payload['_lcfa_existing_html'] = $existing_html;
+            $payload['_lcfa_target_title'] = sanitize_text_field((string) ($existing['post']['title'] ?? ''));
         }
 
         $section_html = $this->build_section_starter_html($section_intent, $framework, $payload);
@@ -1134,11 +1840,11 @@ final class LCFA_Command_Deck {
             return '';
         }
 
-        return $this->merge_section_starter_into_page($existing_html, $section_html, $operation);
+        return $this->merge_section_starter_into_page($existing_html, $section_html, $operation, $payload);
     }
 
     private function normalize_section_operation(string $operation): string {
-        return in_array($operation, ['prepend', 'append', 'replace_hero', 'before_footer'], true) ? $operation : 'append';
+        return in_array($operation, ['prepend', 'append', 'replace_hero', 'before_footer', 'after_selected_section'], true) ? $operation : 'append';
     }
 
     private function build_section_starter_html(string $section_intent, string $framework, array $payload): string {
@@ -1151,18 +1857,31 @@ final class LCFA_Command_Deck {
         $tone = sanitize_text_field((string) ($brief['tone'] ?? ''));
         $tone_phrase = $tone !== '' ? strtolower($tone) : __('clear', 'livecanvas-forge-ai');
         $eyebrow = sprintf(__('Forge AI starter · %s', 'livecanvas-forge-ai'), $brand_name);
+        $layout_profile = $this->resolve_section_layout_profile($section_intent, $payload);
+        $layout_class = $layout_profile !== '' ? ' lcfa-layout--' . $layout_profile : '';
+        $visual_reference = $this->get_visual_reference_context($payload);
+        $visual_attr = !empty($visual_reference['enabled']) ? ' data-lcfa-visual-reference="' . sanitize_key((string) ($visual_reference['layout'] ?? 'reference-aware')) . '"' : '';
+        $page_title = sanitize_text_field((string) ($payload['_lcfa_target_title'] ?? $payload['title'] ?? ''));
+        $page_context_phrase = $page_title !== ''
+            ? sprintf(__('for the "%s" page', 'livecanvas-forge-ai'), $page_title)
+            : __('for this page', 'livecanvas-forge-ai');
+        $prompt_focus = $this->summarize_section_prompt((string) ($payload['user_prompt'] ?? $payload['prompt'] ?? ''), $section_intent);
+        $prompt_focus = $prompt_focus !== '' ? $prompt_focus : __('the current page goal', 'livecanvas-forge-ai');
+        $visual_note = !empty($visual_reference['enabled'])
+            ? __('The attached visual reference is shaping the spacing, hierarchy, and section density for this starter.', 'livecanvas-forge-ai')
+            : sprintf(__('This starter is tuned around %s and the active %s stack.', 'livecanvas-forge-ai'), $prompt_focus, $framework);
 
         switch ($section_intent) {
             case 'hero':
                 if ($is_picowind) {
                     return <<<HTML
-<section class="lcfa-section-starter lcfa-section--hero mx-auto max-w-6xl px-4 py-16">
+<section class="lcfa-section-starter lcfa-section--hero{$layout_class} mx-auto max-w-6xl px-4 py-16"{$visual_attr}>
   <div class="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
     <div class="space-y-5">
       <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
       <div class="space-y-3">
-        <h1 class="text-4xl font-semibold tracking-tight text-base-content sm:text-5xl">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression.</h1>
-        <p class="max-w-2xl text-base leading-7 text-base-content/75">Use this hero starter to validate the full loop on the current page while keeping the copy grounded in the project brief and the active {$framework} stack.</p>
+        <h1 class="text-4xl font-semibold tracking-tight text-base-content sm:text-5xl">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression {$page_context_phrase}.</h1>
+        <p class="max-w-2xl text-base leading-7 text-base-content/75">{$visual_note}</p>
       </div>
       <div class="flex flex-wrap gap-3">
         <a class="inline-flex items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-content no-underline" href="#pricing">See pricing</a>
@@ -1183,13 +1902,13 @@ HTML;
                 }
 
                 return <<<HTML
-<section class="lcfa-section-starter lcfa-section--hero py-5 py-lg-6">
+<section class="lcfa-section-starter lcfa-section--hero{$layout_class} py-5 py-lg-6"{$visual_attr}>
   <div class="container">
     <div class="row align-items-center g-5">
       <div class="col-lg-7">
         <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
-        <h1 class="display-4 fw-bold mb-3">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression.</h1>
-        <p class="lead text-body-secondary mb-4">Use this hero starter to validate the full loop on the current page while keeping the copy grounded in the project brief and the active {$framework} stack.</p>
+        <h1 class="display-4 fw-bold mb-3">{$brand_name} for {$sector_phrase}, with a {$tone_phrase} first impression {$page_context_phrase}.</h1>
+        <p class="lead text-body-secondary mb-4">{$visual_note}</p>
         <div class="d-flex flex-wrap gap-3">
           <a class="btn btn-primary btn-lg" href="#pricing">See pricing</a>
           <a class="btn btn-outline-secondary btn-lg" href="#contact">Talk to sales</a>
@@ -1476,12 +2195,121 @@ HTML;
   </div>
 </section>
 HTML;
+
+            case 'logo_cloud':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--logo-cloud{$layout_class} mx-auto max-w-6xl px-4 py-12"{$visual_attr}>
+  <div class="grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Trusted signals for {$brand_name} {$page_context_phrase}.</h2>
+      <p class="mt-4 text-base leading-7 text-base-content/75">Use this strip to turn {$prompt_focus} into quick credibility before the next conversion block.</p>
+    </div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="rounded-2xl border border-base-300 bg-base-100 px-4 py-5 text-center text-sm font-semibold text-base-content/70 shadow-sm">Northstar</div>
+      <div class="rounded-2xl border border-base-300 bg-base-100 px-4 py-5 text-center text-sm font-semibold text-base-content/70 shadow-sm">Signal Co.</div>
+      <div class="rounded-2xl border border-base-300 bg-base-100 px-4 py-5 text-center text-sm font-semibold text-base-content/70 shadow-sm">Atlas</div>
+      <div class="rounded-2xl border border-base-300 bg-base-100 px-4 py-5 text-center text-sm font-semibold text-base-content/70 shadow-sm">Brightline</div>
+    </div>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--logo-cloud{$layout_class} py-5"{$visual_attr}>
+  <div class="container">
+    <div class="row g-4 align-items-center">
+      <div class="col-lg-4">
+        <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+        <h2 class="h3 fw-bold mb-3">Trusted signals for {$brand_name} {$page_context_phrase}.</h2>
+        <p class="text-body-secondary mb-0">Use this strip to turn {$prompt_focus} into quick credibility before the next conversion block.</p>
+      </div>
+      <div class="col-lg-8">
+        <div class="row g-3 row-cols-2 row-cols-md-4 text-center">
+          <div class="col"><div class="border rounded-3 bg-white py-4 fw-semibold text-body-secondary">Northstar</div></div>
+          <div class="col"><div class="border rounded-3 bg-white py-4 fw-semibold text-body-secondary">Signal Co.</div></div>
+          <div class="col"><div class="border rounded-3 bg-white py-4 fw-semibold text-body-secondary">Atlas</div></div>
+          <div class="col"><div class="border rounded-3 bg-white py-4 fw-semibold text-body-secondary">Brightline</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'comparison':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--comparison{$layout_class} mx-auto max-w-6xl px-4 py-16"{$visual_attr}>
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">Why {$brand_name} is the clearer path for {$sector_phrase}.</h2>
+    <p class="mt-4 text-base leading-7 text-base-content/75">A comparison block helps visitors evaluate {$prompt_focus} without leaving the page.</p>
+  </div>
+  <div class="mt-10 grid gap-4 md:grid-cols-2">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">Typical path</h3><ul class="mt-4 space-y-3 text-sm leading-6 text-base-content/70"><li>Unclear next step</li><li>Generic page structure</li><li>Slow validation cycle</li></ul></article>
+    <article class="rounded-3xl border border-primary/30 bg-primary/10 p-6 shadow-xl"><h3 class="text-xl font-semibold text-base-content">{$brand_name} path</h3><ul class="mt-4 space-y-3 text-sm leading-6 text-base-content/80"><li>{$tone_phrase} decision points</li><li>Context-aware section flow</li><li>Preview before apply</li></ul></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--comparison{$layout_class} py-5 py-lg-6"{$visual_attr}>
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-3">Why {$brand_name} is the clearer path for {$sector_phrase}.</h2>
+      <p class="lead text-body-secondary mb-0">A comparison block helps visitors evaluate {$prompt_focus} without leaving the page.</p>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-2">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><h3 class="h4">Typical path</h3><ul class="text-body-secondary mb-0"><li>Unclear next step</li><li>Generic page structure</li><li>Slow validation cycle</li></ul></div></div></div>
+      <div class="col"><div class="card h-100 border-primary shadow-sm"><div class="card-body p-4"><h3 class="h4">{$brand_name} path</h3><ul class="text-body-secondary mb-0"><li>{$tone_phrase} decision points</li><li>Context-aware section flow</li><li>Preview before apply</li></ul></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
+
+            case 'timeline':
+                if ($is_picowind) {
+                    return <<<HTML
+<section class="lcfa-section-starter lcfa-section--timeline{$layout_class} mx-auto max-w-6xl px-4 py-16"{$visual_attr}>
+  <div class="max-w-3xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-primary">{$eyebrow}</p>
+    <h2 class="mt-3 text-3xl font-semibold tracking-tight text-base-content">A {$tone_phrase} path from interest to action {$page_context_phrase}.</h2>
+  </div>
+  <div class="mt-10 grid gap-4 md:grid-cols-3">
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><span class="text-sm font-semibold text-primary">01</span><h3 class="mt-3 text-xl font-semibold text-base-content">Frame</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Clarify the visitor problem and connect it to {$sector_phrase}.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><span class="text-sm font-semibold text-primary">02</span><h3 class="mt-3 text-xl font-semibold text-base-content">Compare</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Show the main proof points behind {$prompt_focus}.</p></article>
+    <article class="rounded-3xl border border-base-300 bg-base-100 p-6 shadow-xl"><span class="text-sm font-semibold text-primary">03</span><h3 class="mt-3 text-xl font-semibold text-base-content">Convert</h3><p class="mt-3 text-sm leading-6 text-base-content/75">Move the visitor toward a clear next step with less friction.</p></article>
+  </div>
+</section>
+HTML;
+                }
+
+                return <<<HTML
+<section class="lcfa-section-starter lcfa-section--timeline{$layout_class} py-5 py-lg-6"{$visual_attr}>
+  <div class="container">
+    <div class="mx-auto mb-5" style="max-width:48rem;">
+      <p class="text-uppercase fw-semibold small text-primary mb-3">{$eyebrow}</p>
+      <h2 class="display-6 fw-bold mb-0">A {$tone_phrase} path from interest to action {$page_context_phrase}.</h2>
+    </div>
+    <div class="row g-4 row-cols-1 row-cols-md-3">
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><span class="fw-bold text-primary">01</span><h3 class="h4 mt-3">Frame</h3><p class="text-body-secondary mb-0">Clarify the visitor problem and connect it to {$sector_phrase}.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><span class="fw-bold text-primary">02</span><h3 class="h4 mt-3">Compare</h3><p class="text-body-secondary mb-0">Show the main proof points behind {$prompt_focus}.</p></div></div></div>
+      <div class="col"><div class="card h-100 border-0 shadow-sm"><div class="card-body p-4"><span class="fw-bold text-primary">03</span><h3 class="h4 mt-3">Convert</h3><p class="text-body-secondary mb-0">Move the visitor toward a clear next step with less friction.</p></div></div></div>
+    </div>
+  </div>
+</section>
+HTML;
         }
 
         return '';
     }
 
-    private function merge_section_starter_into_page(string $existing_html, string $section_html, string $operation): string {
+    private function merge_section_starter_into_page(string $existing_html, string $section_html, string $operation, array $payload = []): string {
         $existing_html = trim($existing_html);
         $section_html = trim($section_html);
 
@@ -1508,6 +2336,16 @@ HTML;
 
             if ($footer_insert_html !== '') {
                 return $footer_insert_html;
+            }
+
+            $operation = 'append';
+        }
+
+        if ($operation === 'after_selected_section') {
+            $selected_insert_html = $this->insert_section_after_selected_anchor($existing_html, $section_html, is_array($payload['selected_section_anchor'] ?? null) ? (array) $payload['selected_section_anchor'] : []);
+
+            if ($selected_insert_html !== '') {
+                return $selected_insert_html;
             }
 
             $operation = 'append';
@@ -1556,6 +2394,193 @@ HTML;
         }
 
         return '';
+    }
+
+    private function insert_section_after_selected_anchor(string $existing_html, string $section_html, array $anchor): string {
+        $anchor = $this->sanitize_selected_section_anchor($anchor);
+
+        if (!$anchor) {
+            return '';
+        }
+
+        $tag_name = (string) ($anchor['tag_name'] ?? 'section');
+        $tag_pattern = preg_quote($tag_name, '/');
+
+        if (!empty($anchor['id'])) {
+            $id = preg_quote((string) $anchor['id'], '/');
+            $matched = $this->insert_after_first_element_match(
+                $existing_html,
+                $section_html,
+                '/<' . $tag_pattern . '\b(?=[^>]*\bid=(["\'])' . $id . '\1)[^>]*>.*?<\/' . $tag_pattern . '>/is'
+            );
+
+            if ($matched !== '') {
+                return $matched;
+            }
+        }
+
+        if (!empty($anchor['class_token'])) {
+            $matched = $this->insert_after_element_with_class($existing_html, $section_html, $tag_name, (string) $anchor['class_token']);
+
+            if ($matched !== '') {
+                return $matched;
+            }
+        }
+
+        if (isset($anchor['section_index'])) {
+            $section_index = (int) $anchor['section_index'];
+            if ($section_index >= 0 && preg_match_all('/<section\b[^>]*>.*?<\/section>/is', $existing_html, $matches, PREG_OFFSET_CAPTURE) && isset($matches[0][$section_index])) {
+                $match = $matches[0][$section_index];
+                $insert_at = (int) $match[1] + strlen((string) $match[0]);
+
+                return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+            }
+        }
+
+        return '';
+    }
+
+    private function insert_after_element_with_class(string $existing_html, string $section_html, string $tag_name, string $class_token): string {
+        $tag_pattern = preg_quote($tag_name, '/');
+        $class_token = $this->sanitize_anchor_token($class_token);
+
+        if ($class_token === '') {
+            return '';
+        }
+
+        if (preg_match_all('/<' . $tag_pattern . '\b[^>]*class=(["\'])([^"\']*)\1[^>]*>.*?<\/' . $tag_pattern . '>/is', $existing_html, $matches, PREG_OFFSET_CAPTURE) !== false) {
+            foreach ($matches[0] as $index => $match) {
+                $class_value = (string) ($matches[2][$index][0] ?? '');
+                $classes = preg_split('/\s+/', $class_value) ?: [];
+
+                if (!in_array($class_token, $classes, true)) {
+                    continue;
+                }
+
+                $insert_at = (int) $match[1] + strlen((string) $match[0]);
+
+                return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+            }
+        }
+
+        return '';
+    }
+
+    private function insert_after_first_element_match(string $existing_html, string $section_html, string $pattern): string {
+        if (preg_match($pattern, $existing_html, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+            return '';
+        }
+
+        $match = $matches[0];
+        $insert_at = (int) $match[1] + strlen((string) $match[0]);
+
+        return substr($existing_html, 0, $insert_at) . "\n" . $section_html . "\n" . substr($existing_html, $insert_at);
+    }
+
+    private function sanitize_selected_section_anchor(array $anchor): array {
+        if (!$anchor) {
+            return [];
+        }
+
+        $tag_name = sanitize_key((string) ($anchor['tag_name'] ?? 'section'));
+        if (!in_array($tag_name, ['section', 'header', 'footer', 'article'], true)) {
+            $tag_name = 'section';
+        }
+
+        $section_index = isset($anchor['section_index']) ? (int) $anchor['section_index'] : -1;
+
+        return array_filter([
+            'tag_name'      => $tag_name,
+            'id'            => $this->sanitize_anchor_token((string) ($anchor['id'] ?? '')),
+            'selector'      => sanitize_text_field((string) ($anchor['selector'] ?? '')),
+            'class_token'   => $this->sanitize_anchor_token((string) ($anchor['class_token'] ?? '')),
+            'section_index' => $section_index >= 0 ? $section_index : null,
+            'source'        => sanitize_key((string) ($anchor['source'] ?? '')),
+        ], static function ($value): bool {
+            return $value !== '' && $value !== null;
+        });
+    }
+
+    private function sanitize_anchor_token(string $value): string {
+        return substr((string) preg_replace('/[^A-Za-z0-9_\-:.]/', '', $value), 0, 96);
+    }
+
+    private function get_visual_reference_context(array $payload): array {
+        $visual_reference = is_array($payload['visual_reference'] ?? null) ? (array) $payload['visual_reference'] : [];
+        $attachments = is_array($payload['attachments'] ?? null) ? (array) $payload['attachments'] : [];
+
+        if (!$visual_reference && !$attachments) {
+            return [];
+        }
+
+        $orientation = sanitize_key((string) ($visual_reference['orientation'] ?? ''));
+        if ($orientation === '' && $attachments) {
+            foreach ($attachments as $attachment) {
+                if (!is_array($attachment)) {
+                    continue;
+                }
+                $width = absint($attachment['width'] ?? 0);
+                $height = absint($attachment['height'] ?? 0);
+                if ($width > 0 && $height > 0) {
+                    $orientation = $width > $height ? 'landscape' : ($height > $width ? 'portrait' : 'square');
+                    break;
+                }
+            }
+        }
+
+        if (!in_array($orientation, ['landscape', 'portrait', 'square', 'unknown'], true)) {
+            $orientation = 'unknown';
+        }
+
+        $layout = sanitize_key((string) ($visual_reference['layout'] ?? ''));
+        if ($layout === '') {
+            $layout = $orientation === 'portrait' ? 'stacked-reference' : ($orientation === 'landscape' ? 'split-reference' : 'reference-aware');
+        }
+
+        return [
+            'enabled'     => true,
+            'count'       => max(absint($visual_reference['count'] ?? 0), count($attachments)),
+            'orientation' => $orientation,
+            'layout'      => $layout,
+        ];
+    }
+
+    private function resolve_section_layout_profile(string $section_intent, array $payload): string {
+        $visual_reference = $this->get_visual_reference_context($payload);
+
+        if (!empty($visual_reference['enabled'])) {
+            return sanitize_key((string) ($visual_reference['layout'] ?? 'reference-aware'));
+        }
+
+        $prompt = strtolower((string) ($payload['user_prompt'] ?? $payload['prompt'] ?? ''));
+
+        if (strpos($prompt, 'compact') !== false || strpos($prompt, 'dense') !== false || strpos($prompt, 'denso') !== false) {
+            return 'compact';
+        }
+
+        if (in_array($section_intent, ['comparison', 'timeline', 'logo_cloud'], true)) {
+            return $section_intent;
+        }
+
+        return '';
+    }
+
+    private function summarize_section_prompt(string $prompt, string $section_intent): string {
+        $prompt = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($prompt)) ?: '');
+
+        if ($prompt === '') {
+            return $section_intent !== ''
+                ? sprintf(__('a %s section', 'livecanvas-forge-ai'), str_replace('_', ' ', $section_intent))
+                : '';
+        }
+
+        $prompt = preg_replace('/^(please|can you|could you|fammi|creami|aggiungi|inserisci|metti|sostituisci)\s+/i', '', $prompt) ?: $prompt;
+
+        if (strlen($prompt) > 90) {
+            $prompt = substr($prompt, 0, 87) . '...';
+        }
+
+        return sanitize_text_field($prompt);
     }
 
     private function coerce_multiline_payload(array $payload, string $string_key, string $lines_key): string {
@@ -1813,6 +2838,7 @@ HTML;
     private function is_read_action(string $action): bool {
         return in_array($action, [
             'site_audit',
+            'site_prepare',
             'windpress_audit',
             'windpress_scan_provider',
             'theme_files_audit',
@@ -1822,6 +2848,8 @@ HTML;
 
     private function is_advanced_action(string $action): bool {
         return in_array($action, [
+            'site_foundation_run',
+            'global_shell_apply',
             'update_header',
             'update_footer',
             'create_dynamic_template',

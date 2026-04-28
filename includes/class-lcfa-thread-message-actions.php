@@ -247,7 +247,7 @@ final class LCFA_Thread_Message_Actions {
             }
 
             if ($kind === 'apply') {
-                $payload = self::sanitize_action_payload($action['payload'] ?? []);
+                $payload = self::sanitize_action_payload($action['payload'] ?? [], '');
 
                 if (!is_array($payload) || empty($payload['action'])) {
                     continue;
@@ -396,7 +396,7 @@ final class LCFA_Thread_Message_Actions {
         return trim($url);
     }
 
-    private static function sanitize_action_payload($value) {
+    private static function sanitize_action_payload($value, string $context_key = '') {
         if (is_bool($value) || is_numeric($value) || $value === null) {
             return $value;
         }
@@ -411,12 +411,39 @@ final class LCFA_Thread_Message_Actions {
                     continue;
                 }
 
-                $sanitized[$sanitized_key] = self::sanitize_action_payload($item);
+                $child_context_key = is_string($key) ? (string) $sanitized_key : $context_key;
+                $sanitized[$sanitized_key] = self::sanitize_action_payload($item, $child_context_key);
             }
 
             return $sanitized;
         }
 
+        if (self::allows_markup_payload_key($context_key)) {
+            return self::preserve_payload_text((string) $value);
+        }
+
         return sanitize_text_field((string) $value);
+    }
+
+    private static function allows_markup_payload_key(string $key): bool {
+        return in_array($key, [
+            'content',
+            'body_html',
+            'body_html_lines',
+            'header_html',
+            'header_html_lines',
+            'footer_html',
+            'footer_html_lines',
+            'footer_script',
+            'footer_script_lines',
+        ], true);
+    }
+
+    private static function preserve_payload_text(string $value): string {
+        if (function_exists('wp_unslash')) {
+            $value = (string) wp_unslash($value);
+        }
+
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 }

@@ -24,6 +24,9 @@ final class LCFA_Prompt_Suggester {
         $prompt = strtolower($user_prompt);
         $section_intent = $this->detect_section_intent($prompt);
         $attachment_count = absint($payload['attachment_count'] ?? 0);
+        $attachments = is_array($payload['attachments'] ?? null) ? (array) $payload['attachments'] : [];
+        $visual_reference = $this->build_visual_reference_hint($attachments, $attachment_count);
+        $selected_section_anchor = $this->sanitize_selected_section_anchor(is_array($payload['selected_section_anchor'] ?? null) ? (array) $payload['selected_section_anchor'] : []);
         $suggested = [
             'action'           => 'site_audit',
             'execution_target' => $this->normalize_execution_target((string) ($payload['execution_target'] ?? 'local')),
@@ -41,6 +44,14 @@ final class LCFA_Prompt_Suggester {
             'section_operation'=> $this->detect_section_operation($prompt, $section_intent),
             'content_strategy' => $section_intent !== '' ? 'section_starter' : '',
         ];
+
+        if ($selected_section_anchor) {
+            $suggested['selected_section_anchor'] = $selected_section_anchor;
+        }
+
+        if ($visual_reference) {
+            $suggested['visual_reference'] = $visual_reference;
+        }
 
         $reasons  = [];
         $warnings = [];
@@ -61,6 +72,9 @@ final class LCFA_Prompt_Suggester {
                     : __('The request includes %d visual reference attachments.', 'livecanvas-forge-ai'),
                 $attachment_count
             );
+            if ($visual_reference) {
+                $reasons[] = __('The generated section should use the visual reference for layout density, hierarchy, and spacing.', 'livecanvas-forge-ai');
+            }
             $score += 1;
         }
 
@@ -142,6 +156,10 @@ final class LCFA_Prompt_Suggester {
 
         if (in_array($suggested['action'], ['write_theme_template', 'write_theme_file'], true) && $suggested['file_path'] === '') {
             $warnings[] = __('A theme fallback write needs a concrete file path.', 'livecanvas-forge-ai');
+        }
+
+        if (($suggested['section_operation'] ?? '') === 'after_selected_section' && empty($suggested['selected_section_anchor'])) {
+            $warnings[] = __('Insert-after-selected-section was requested, but the editor has not provided a selected-section anchor yet.', 'livecanvas-forge-ai');
         }
 
         if ($suggested['action'] === 'windpress_scan_provider' && $suggested['provider_id'] === '') {
@@ -266,6 +284,9 @@ final class LCFA_Prompt_Suggester {
             'faq' => ['faq', 'frequently asked questions', 'questions', 'domande frequenti'],
             'team' => ['team', 'members', 'staff', 'people', 'profili'],
             'contact' => ['contact section', 'contact form', 'contact block', 'contatti', 'contact'],
+            'logo_cloud' => ['logo cloud', 'client logos', 'partner logos', 'brand strip', 'loghi clienti', 'loghi partner'],
+            'comparison' => ['comparison', 'compare', 'versus', 'vs', 'confronto', 'comparazione'],
+            'timeline' => ['timeline', 'roadmap', 'process steps', 'milestones', 'cronologia', 'percorso', 'processo'],
         ];
 
         foreach ($map as $intent => $needles) {
@@ -295,6 +316,20 @@ final class LCFA_Prompt_Suggester {
         }
 
         if ($this->contains_any($prompt, [
+            'after selected section',
+            'after the selected section',
+            'after this section',
+            'below selected section',
+            'below the selected section',
+            'dopo la sezione selezionata',
+            'dopo questa sezione',
+            'sotto la sezione selezionata',
+            'sotto questa sezione',
+        ])) {
+            return 'after_selected_section';
+        }
+
+        if ($this->contains_any($prompt, [
             'before footer',
             'before the footer',
             'prima del footer',
@@ -314,6 +349,84 @@ final class LCFA_Prompt_Suggester {
         }
 
         return $this->default_section_operation($section_intent);
+    }
+
+    private function build_visual_reference_hint(array $attachments, int $attachment_count): array {
+        if ($attachment_count <= 0 && !$attachments) {
+            return [];
+        }
+
+        $names = [];
+        $orientation_counts = [
+            'landscape' => 0,
+            'portrait'  => 0,
+            'square'    => 0,
+        ];
+
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment)) {
+                continue;
+            }
+
+            $name = sanitize_text_field((string) ($attachment['name'] ?? ''));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+
+            $orientation = sanitize_key((string) ($attachment['orientation'] ?? ''));
+            $width = absint($attachment['width'] ?? 0);
+            $height = absint($attachment['height'] ?? 0);
+
+            if ($orientation === '' && $width > 0 && $height > 0) {
+                $orientation = $width > $height ? 'landscape' : ($height > $width ? 'portrait' : 'square');
+            }
+
+            if (isset($orientation_counts[$orientation])) {
+                $orientation_counts[$orientation]++;
+            }
+        }
+
+        arsort($orientation_counts);
+        $orientation = (string) array_key_first($orientation_counts);
+        if (($orientation_counts[$orientation] ?? 0) <= 0) {
+            $orientation = 'unknown';
+        }
+
+        return [
+            'enabled'     => true,
+            'count'       => max($attachment_count, count($attachments)),
+            'orientation' => $orientation,
+            'layout'      => $orientation === 'portrait' ? 'stacked-reference' : ($orientation === 'landscape' ? 'split-reference' : 'reference-aware'),
+            'names'       => array_slice(array_values(array_unique($names)), 0, 2),
+        ];
+    }
+
+    private function sanitize_selected_section_anchor(array $anchor): array {
+        if (!$anchor) {
+            return [];
+        }
+
+        $tag_name = sanitize_key((string) ($anchor['tag_name'] ?? 'section'));
+        if (!in_array($tag_name, ['section', 'header', 'footer', 'article'], true)) {
+            $tag_name = 'section';
+        }
+
+        $section_index = isset($anchor['section_index']) ? (int) $anchor['section_index'] : -1;
+
+        return array_filter([
+            'tag_name'      => $tag_name,
+            'id'            => $this->sanitize_anchor_token((string) ($anchor['id'] ?? '')),
+            'selector'      => sanitize_text_field((string) ($anchor['selector'] ?? '')),
+            'class_token'   => $this->sanitize_anchor_token((string) ($anchor['class_token'] ?? '')),
+            'section_index' => $section_index >= 0 ? $section_index : null,
+            'source'        => sanitize_key((string) ($anchor['source'] ?? '')),
+        ], static function ($value): bool {
+            return $value !== '' && $value !== null;
+        });
+    }
+
+    private function sanitize_anchor_token(string $value): string {
+        return substr((string) preg_replace('/[^A-Za-z0-9_\-:.]/', '', $value), 0, 96);
     }
 
     private function detect_context_target_type(WP_Post $post): string {

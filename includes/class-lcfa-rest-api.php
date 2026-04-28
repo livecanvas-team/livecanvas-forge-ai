@@ -1385,6 +1385,9 @@ final class LCFA_Rest_Api {
                 'caption'  => sanitize_text_field((string) ($attachment['caption'] ?? '')),
                 'data_url' => $data_url,
                 'size'     => absint($attachment['size'] ?? 0),
+                'width'    => absint($attachment['width'] ?? 0),
+                'height'   => absint($attachment['height'] ?? 0),
+                'orientation' => sanitize_key((string) ($attachment['orientation'] ?? '')),
             ];
         }
 

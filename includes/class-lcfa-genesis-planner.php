@@ -101,27 +101,26 @@ final class LCFA_Genesis_Planner {
         $framework = (string) ($snapshot['detected_framework'] ?? '');
 
         $tasks[] = $this->task(
-            'foundation-header',
+            'foundation-prepare',
             'foundation',
-            __('Create or refresh the global header shell', 'livecanvas-forge-ai'),
-            __('Start the site framework from a header partial that matches the selected stack and brand direction.', 'livecanvas-forge-ai'),
+            __('Prepare the site foundation', 'livecanvas-forge-ai'),
+            __('Preflight the stack, inventory, theme roots, and foundation readiness before writing structure.', 'livecanvas-forge-ai'),
             [
-                'action' => 'update_header',
-                'variant' => '1',
+                'action' => 'site_prepare',
             ],
-            __('Use the Genesis brief to define navigation, branding, and top-level CTA structure.', 'livecanvas-forge-ai')
+            __('Inspect the current site foundation and confirm the safe build path.', 'livecanvas-forge-ai')
         );
 
         $tasks[] = $this->task(
-            'foundation-footer',
+            'foundation-shell',
             'foundation',
-            __('Create or refresh the global footer shell', 'livecanvas-forge-ai'),
-            __('Define footer navigation, contact details, legal links, and utility sections early.', 'livecanvas-forge-ai'),
+            __('Create or refresh the global shell', 'livecanvas-forge-ai'),
+            __('Create or update the header and footer partials for the selected stack and brand direction.', 'livecanvas-forge-ai'),
             [
-                'action' => 'update_footer',
+                'action' => 'global_shell_apply',
                 'variant' => '1',
             ],
-            __('Use the Genesis brief to define footer columns, copyright, and supporting links.', 'livecanvas-forge-ai')
+            __('Use the Genesis brief to define navigation, branding, footer links, and top-level CTA structure.', 'livecanvas-forge-ai')
         );
 
         if (($brief['logo_status'] ?? '') === 'to_generate') {

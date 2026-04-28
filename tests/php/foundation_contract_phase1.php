@@ -500,9 +500,45 @@ function get_posts(array $args = []): array {
             return false;
         }
 
-        if (isset($args['meta_key'], $args['meta_value'])) {
-            $meta_value = $GLOBALS['lcfa_test_post_meta'][$post->ID][$args['meta_key']] ?? null;
-            if ((string) $meta_value !== (string) $args['meta_value']) {
+        if (isset($args['meta_key'])) {
+            $has_meta = array_key_exists($args['meta_key'], $GLOBALS['lcfa_test_post_meta'][$post->ID] ?? []);
+            if (!$has_meta) {
+                return false;
+            }
+
+            if (array_key_exists('meta_value', $args)) {
+                $meta_value = $GLOBALS['lcfa_test_post_meta'][$post->ID][$args['meta_key']] ?? null;
+                if ((string) $meta_value !== (string) $args['meta_value']) {
+                    return false;
+                }
+            }
+        }
+
+        if (isset($args['meta_query']) && is_array($args['meta_query'])) {
+            foreach ($args['meta_query'] as $meta_query) {
+                if (!is_array($meta_query) || empty($meta_query['key'])) {
+                    continue;
+                }
+
+                $meta_value = $GLOBALS['lcfa_test_post_meta'][$post->ID][$meta_query['key']] ?? null;
+                $compare = strtoupper((string) ($meta_query['compare'] ?? '='));
+
+                if ($compare === 'EXISTS' && $meta_value === null) {
+                    return false;
+                }
+
+                if ($compare === '!=' && (string) $meta_value === (string) ($meta_query['value'] ?? '')) {
+                    return false;
+                }
+
+                if ($compare === '=' && (string) $meta_value !== (string) ($meta_query['value'] ?? '')) {
+                    return false;
+                }
+            }
+        }
+
+        if (isset($args['post__not_in']) && is_array($args['post__not_in'])) {
+            if (in_array((int) $post->ID, array_map('intval', $args['post__not_in']), true)) {
                 return false;
             }
         }
@@ -663,6 +699,7 @@ require LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-fallback-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
@@ -1227,6 +1264,92 @@ lcfa_assert_same(44, (int) ($footer_context_suggestion['suggested_payload']['tar
 lcfa_assert_same('update_dynamic_template', (string) ($dynamic_template_suggestion['suggested_payload']['action'] ?? ''), 'prompt suggestion should prefer update_dynamic_template when the current context target is a dynamic template');
 lcfa_assert_same(45, (int) ($dynamic_template_suggestion['suggested_payload']['target_id'] ?? 0), 'prompt suggestion should preserve the current dynamic template target id');
 
+$site_prepare_result = $command_deck->execute([
+    'action'  => 'site_prepare',
+    'dry_run' => true,
+]);
+
+lcfa_assert_true($site_prepare_result['ok'] === true, 'site_prepare should return a successful preflight result');
+lcfa_assert_same('site_prepare', (string) ($site_prepare_result['target_type'] ?? ''), 'site_prepare should expose a dedicated target type');
+lcfa_assert_true(is_array($site_prepare_result['data']['snapshot'] ?? null), 'site_prepare should include the environment snapshot');
+lcfa_assert_true(is_array($site_prepare_result['data']['theme'] ?? null), 'site_prepare should include theme root diagnostics');
+
+$global_shell_preview = $command_deck->execute([
+    'action'      => 'global_shell_apply',
+    'variant'     => '1',
+    'header_html' => '<header><nav>Preview Header</nav></header>',
+    'footer_html' => '<footer>Preview Footer</footer>',
+    'dry_run'     => true,
+]);
+
+lcfa_assert_true($global_shell_preview['ok'] === true, 'global_shell_apply should preview header/footer updates');
+lcfa_assert_same('global_shell', (string) ($global_shell_preview['target_type'] ?? ''), 'global_shell_apply should expose a global shell target');
+lcfa_assert_same('update', (string) ($global_shell_preview['data']['parts']['header']['operation'] ?? ''), 'global_shell preview should target the existing header partial when present');
+lcfa_assert_same('<header>Header partial</header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell preview must not mutate the existing header partial');
+
+$global_shell_apply = $command_deck->execute([
+    'action'      => 'global_shell_apply',
+    'variant'     => '1',
+    'header_html' => '<header><nav>Applied Header</nav></header>',
+    'footer_html' => '<footer>Applied Footer</footer>',
+]);
+
+lcfa_assert_true($global_shell_apply['ok'] === true, 'global_shell_apply should apply header/footer updates');
+lcfa_assert_same('<header><nav>Applied Header</nav></header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell_apply should update the existing header partial');
+lcfa_assert_same('<footer>Applied Footer</footer>', (string) $GLOBALS['lcfa_test_posts'][44]->post_content, 'global_shell_apply should update the existing footer partial');
+
+$global_shell_content_preview = $command_deck->execute([
+    'action'  => 'global_shell_apply',
+    'variant' => '1',
+    'content' => '<header>Combined Header</header><footer>Combined Footer</footer>',
+    'dry_run' => true,
+]);
+
+lcfa_assert_true($global_shell_content_preview['ok'] === true, 'global_shell_apply should accept combined header/footer content from the generic Command Deck content field');
+lcfa_assert_contains('Combined Header', (string) ($global_shell_content_preview['proposed_html'] ?? ''), 'global_shell_apply should extract header markup from combined content');
+lcfa_assert_contains('Combined Footer', (string) ($global_shell_content_preview['proposed_html'] ?? ''), 'global_shell_apply should extract footer markup from combined content');
+
+$dynamic_assignment_result = $command_deck->execute([
+    'action'      => 'update_dynamic_template',
+    'target_id'   => 45,
+    'content'     => '<main>Assigned dynamic template</main>',
+    'template_assignment' => [
+        'target'    => 'single',
+        'post_type' => 'service',
+        'source'    => 'contract_test',
+    ],
+]);
+
+lcfa_assert_true($dynamic_assignment_result['ok'] === true, 'update_dynamic_template should accept assignment metadata');
+lcfa_assert_same('single', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_target'] ?? ''), 'dynamic template assignments should persist the target');
+lcfa_assert_same('service', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type'] ?? ''), 'dynamic template assignments should persist the post type');
+lcfa_assert_same('single', (string) ($dynamic_assignment_result['data']['template_assignment']['target'] ?? ''), 'dynamic template results should expose sanitized assignment metadata');
+
+$metadata_inventory = (new LCFA_Inventory($environment))->get_inventory();
+$metadata_header = $metadata_inventory['header_partials'][0] ?? [];
+$metadata_dynamic_template = $metadata_inventory['dynamic_templates'][0] ?? [];
+
+lcfa_assert_same('header', (string) ($metadata_header['partial_type'] ?? ''), 'inventory should classify header partials for variant-aware quick actions');
+lcfa_assert_same('1', (string) ($metadata_header['variant'] ?? ''), 'inventory should expose the stored header partial variant');
+lcfa_assert_same('single', (string) ($metadata_dynamic_template['template_assignment']['target'] ?? ''), 'inventory should expose stored dynamic template assignment metadata');
+lcfa_assert_same('service', (string) ($metadata_dynamic_template['template_assignment']['post_type'] ?? ''), 'inventory should expose stored dynamic template assignment post type metadata');
+
+$foundation_preview = $command_deck->execute([
+    'action'        => 'site_foundation_run',
+    'dry_run'       => true,
+    'skip_pages'    => true,
+    'header_html'   => '<header>Foundation Header</header>',
+    'footer_html'   => '<footer>Foundation Footer</footer>',
+    'framework'     => 'custom',
+    'colors'        => ['primary' => '#112233'],
+]);
+
+lcfa_assert_true($foundation_preview['ok'] === true, 'site_foundation_run should orchestrate a dry-run foundation setup');
+lcfa_assert_true(isset($foundation_preview['data']['steps']['site_prepare']), 'site_foundation_run should include a site_prepare step');
+lcfa_assert_true(isset($foundation_preview['data']['steps']['design_system_apply']), 'site_foundation_run should include design system apply when design tokens are provided');
+lcfa_assert_true(isset($foundation_preview['data']['steps']['global_shell_apply']), 'site_foundation_run should include global shell apply by default');
+lcfa_assert_same('<header><nav>Applied Header</nav></header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'site_foundation_run dry-run must not mutate the header partial');
+
 $hero_section_suggestion = $prompt_suggester->suggest([
     'user_prompt'     => 'Fammi una hero più chiara per questa pagina.',
     'post_id'         => $audit_page_id,
@@ -1272,6 +1395,21 @@ $contact_section_suggestion = $prompt_suggester->suggest([
     'post_id'         => $audit_page_id,
     'context_post_id' => $audit_page_id,
 ]);
+$logo_cloud_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi un logo cloud con loghi clienti.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$comparison_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Inserisci una sezione confronto tra opzione standard e Consultala.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
+$timeline_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Aggiungi una timeline del processo.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+]);
 $replace_hero_section_suggestion = $prompt_suggester->suggest([
     'user_prompt'     => 'Sostituisci la hero di questa pagina con una versione piu pulita.',
     'post_id'         => $audit_page_id,
@@ -1281,6 +1419,36 @@ $before_footer_section_suggestion = $prompt_suggester->suggest([
     'user_prompt'     => 'Aggiungi una CTA prima del footer di questa pagina.',
     'post_id'         => $audit_page_id,
     'context_post_id' => $audit_page_id,
+]);
+$after_selected_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'     => 'Inserisci una timeline dopo la sezione selezionata.',
+    'post_id'         => $audit_page_id,
+    'context_post_id' => $audit_page_id,
+    'selected_section_anchor' => [
+        'tag_name'      => 'section',
+        'id'            => 'pricing',
+        'class_token'   => 'lcfa-section--pricing',
+        'section_index' => 1,
+        'source'        => 'editor_click',
+    ],
+]);
+$visual_reference_section_suggestion = $prompt_suggester->suggest([
+    'user_prompt'      => 'Fammi una hero come nello screenshot.',
+    'post_id'          => $audit_page_id,
+    'context_post_id'  => $audit_page_id,
+    'attachment_count' => 1,
+    'attachments'      => [
+        [
+            'kind'        => 'image',
+            'name'        => 'hero-reference.png',
+            'mime'        => 'image/png',
+            'data_url'    => 'data:image/png;base64,AAAA',
+            'size'        => 128,
+            'width'       => 1440,
+            'height'      => 900,
+            'orientation' => 'landscape',
+        ],
+    ],
 ]);
 
 lcfa_assert_same('page_upsert', (string) ($hero_section_suggestion['suggested_payload']['action'] ?? ''), 'natural hero prompts should stay on page_upsert in the page editor');
@@ -1297,8 +1465,15 @@ lcfa_assert_same('faq', (string) ($faq_section_suggestion['suggested_payload']['
 lcfa_assert_same('metrics', (string) ($metrics_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'metric prompts should expose the detected metrics section intent');
 lcfa_assert_same('team', (string) ($team_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'team prompts should expose the detected team section intent');
 lcfa_assert_same('contact', (string) ($contact_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'contact prompts should expose the detected contact section intent');
+lcfa_assert_same('logo_cloud', (string) ($logo_cloud_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'logo-cloud prompts should expose the detected logo_cloud section intent');
+lcfa_assert_same('comparison', (string) ($comparison_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'comparison prompts should expose the detected comparison section intent');
+lcfa_assert_same('timeline', (string) ($timeline_section_suggestion['suggested_payload']['section_intent'] ?? ''), 'timeline prompts should expose the detected timeline section intent');
 lcfa_assert_same('replace_hero', (string) ($replace_hero_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'hero replacement prompts should request replace_hero instead of a generic prepend');
 lcfa_assert_same('before_footer', (string) ($before_footer_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'before-footer prompts should request before_footer instead of a generic append');
+lcfa_assert_same('after_selected_section', (string) ($after_selected_section_suggestion['suggested_payload']['section_operation'] ?? ''), 'selected-section prompts should request after_selected_section');
+lcfa_assert_same('pricing', (string) ($after_selected_section_suggestion['suggested_payload']['selected_section_anchor']['id'] ?? ''), 'selected-section suggestions should preserve the editor-provided section anchor');
+lcfa_assert_same('split-reference', (string) ($visual_reference_section_suggestion['suggested_payload']['visual_reference']['layout'] ?? ''), 'visual-reference suggestions should derive a layout profile from screenshot dimensions');
+lcfa_assert_contains('visual reference', strtolower(implode("\n", (array) ($visual_reference_section_suggestion['reasons'] ?? []))), 'visual-reference suggestions should explain that screenshots influence layout');
 
 LCFA_Settings::update_project_brief([
     'project_mode'   => 'from_scratch',
@@ -1525,6 +1700,56 @@ $before_footer_apply_result = $command_deck->execute([
 lcfa_assert_true($before_footer_apply_result['ok'] === true, 'page_upsert should support before_footer section operations');
 lcfa_assert_true(preg_match('/lcfa-section--cta.*<footer>/s', $GLOBALS['lcfa_test_posts'][$before_footer_page_id]->post_content) === 1, 'before_footer should insert the generated section immediately before the footer');
 
+$after_selected_page_id = 48;
+$GLOBALS['lcfa_test_posts'][$after_selected_page_id] = new WP_Post([
+    'ID'           => $after_selected_page_id,
+    'post_type'    => 'page',
+    'post_status'  => 'publish',
+    'post_title'   => 'After Selected Test',
+    'post_name'    => 'after-selected-test',
+    'post_content' => '<main><section id="intro"><p>Intro copy</p></section><section id="pricing"><p>Pricing copy</p></section><section id="faq"><p>FAQ copy</p></section></main>',
+]);
+$GLOBALS['lcfa_test_post_meta'][$after_selected_page_id]['_lc_livecanvas_enabled'] = '1';
+
+$after_selected_apply_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $after_selected_page_id,
+    'section_intent'    => 'timeline',
+    'section_operation' => 'after_selected_section',
+    'content_strategy'  => 'section_starter',
+    'selected_section_anchor' => [
+        'tag_name'      => 'section',
+        'id'            => 'pricing',
+        'class_token'   => '',
+        'section_index' => 1,
+    ],
+    'user_prompt'       => 'Inserisci una timeline dopo la sezione selezionata.',
+]);
+
+lcfa_assert_true($after_selected_apply_result['ok'] === true, 'page_upsert should support after_selected_section operations');
+lcfa_assert_true(preg_match('/id="pricing".*lcfa-section--timeline.*id="faq"/s', $GLOBALS['lcfa_test_posts'][$after_selected_page_id]->post_content) === 1, 'after_selected_section should insert the generated section after the selected anchor and before the next section');
+lcfa_assert_same('after_selected_section', (string) ($after_selected_apply_result['data']['section_operation'] ?? ''), 'after_selected_section results should expose the resolved section operation');
+
+$visual_reference_preview_result = $command_deck->execute([
+    'action'            => 'page_upsert',
+    'post_id'           => $audit_page_id,
+    'section_intent'    => 'hero',
+    'section_operation' => 'prepend',
+    'content_strategy'  => 'section_starter',
+    'user_prompt'       => 'Fammi una hero come nello screenshot.',
+    'visual_reference'  => [
+        'enabled'     => true,
+        'count'       => 1,
+        'orientation' => 'landscape',
+        'layout'      => 'split-reference',
+    ],
+    'dry_run'           => true,
+]);
+
+lcfa_assert_true($visual_reference_preview_result['ok'] === true, 'page_upsert should generate visual-reference-aware previews');
+lcfa_assert_contains('data-lcfa-visual-reference="split-reference"', $visual_reference_preview_result['proposed_html'] ?? '', 'visual-reference previews should mark the generated section with the reference layout');
+lcfa_assert_contains('attached visual reference', strtolower((string) ($visual_reference_preview_result['proposed_html'] ?? '')), 'visual-reference previews should explain that the screenshot is shaping the starter');
+
 $updated_page_result = $command_deck->execute([
     'action'  => 'page_upsert',
     'post_id' => 100,
@@ -1706,6 +1931,50 @@ if ($previous_home === false) {
 
 lcfa_assert_same('https://example.test/landing-page-1-updated/', $updated_page_result['frontend_url'] ?? '', 'page_upsert update should refresh frontend_url after slug changes');
 lcfa_assert_same('Updated Hero', $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert update should persist new content without a generated outer main wrapper');
+
+$global_shell_create = $command_deck->execute([
+    'action'      => 'global_shell_apply',
+    'variant'     => '2',
+    'header_html' => '<header>Variant Two Header</header>',
+    'footer_html' => '<footer>Variant Two Footer</footer>',
+]);
+
+lcfa_assert_true($global_shell_create['ok'] === true, 'global_shell_apply should create missing header/footer variants');
+lcfa_assert_same('create', (string) ($global_shell_create['data']['parts']['header']['operation'] ?? ''), 'global_shell_apply should report create for missing header variants');
+lcfa_assert_true((int) ($global_shell_create['data']['parts']['header']['target_id'] ?? 0) > 0, 'created global shell headers should return a target id');
+lcfa_assert_same('2', (string) ($GLOBALS['lcfa_test_post_meta'][(int) $global_shell_create['data']['parts']['header']['target_id']]['is_header'] ?? ''), 'created global shell headers should persist the requested variant');
+lcfa_assert_same('2', (string) ($GLOBALS['lcfa_test_post_meta'][(int) $global_shell_create['data']['parts']['footer']['target_id']]['is_footer'] ?? ''), 'created global shell footers should persist the requested variant');
+
+$variant_inventory = (new LCFA_Inventory($environment))->get_inventory();
+$variant_header_id = (int) ($global_shell_create['data']['parts']['header']['target_id'] ?? 0);
+$variant_footer_id = (int) ($global_shell_create['data']['parts']['footer']['target_id'] ?? 0);
+$variant_header = [];
+$variant_footer = [];
+
+foreach ((array) ($variant_inventory['header_partials'] ?? []) as $partial) {
+    if (is_array($partial) && (int) ($partial['id'] ?? 0) === $variant_header_id) {
+        $variant_header = $partial;
+        break;
+    }
+}
+
+foreach ((array) ($variant_inventory['footer_partials'] ?? []) as $partial) {
+    if (is_array($partial) && (int) ($partial['id'] ?? 0) === $variant_footer_id) {
+        $variant_footer = $partial;
+        break;
+    }
+}
+
+$other_partial_ids = array_map(static function (array $partial): int {
+    return (int) ($partial['id'] ?? 0);
+}, array_filter((array) ($variant_inventory['other_partials'] ?? []), 'is_array'));
+
+lcfa_assert_same('2', (string) ($variant_header['variant'] ?? ''), 'inventory should include created header variants beyond variant 1');
+lcfa_assert_same('header', (string) ($variant_header['partial_type'] ?? ''), 'inventory should classify created header variants as headers');
+lcfa_assert_same('2', (string) ($variant_footer['variant'] ?? ''), 'inventory should include created footer variants beyond variant 1');
+lcfa_assert_same('footer', (string) ($variant_footer['partial_type'] ?? ''), 'inventory should classify created footer variants as footers');
+lcfa_assert_true(!in_array($variant_header_id, $other_partial_ids, true), 'header variants beyond variant 1 should not leak into other partials');
+lcfa_assert_true(!in_array($variant_footer_id, $other_partial_ids, true), 'footer variants beyond variant 1 should not leak into other partials');
 
 LCFA_Settings::update([
     'permission_profile'  => 'draft_preview',

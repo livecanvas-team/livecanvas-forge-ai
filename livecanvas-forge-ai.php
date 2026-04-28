@@ -31,6 +31,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
+require_once LCFA_DIR . 'includes/class-lcfa-design-system-fallback-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';

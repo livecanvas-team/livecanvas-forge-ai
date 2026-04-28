@@ -216,6 +216,8 @@ final class LCFA_Command_Deck {
     public function get_actions(): array {
         return [
             'update_header' => ['label' => 'Update header'],
+            'global_shell_apply' => ['label' => 'Global shell apply'],
+            'site_foundation_run' => ['label' => 'Site foundation run'],
             'site_audit' => ['label' => 'Site audit'],
             'create_page' => ['label' => 'Create page'],
         ];
@@ -285,8 +287,10 @@ $plan = [
             'label' => 'Create or refresh the global header shell',
             'description' => 'Header foundation task.',
             'payload' => [
-                'action' => 'update_header',
-                'variant' => '1',
+                'action' => 'global_shell_apply',
+                'variant' => '2',
+                'header_html' => '<header>Genesis Header</header>',
+                'footer_html' => '<footer>Genesis Footer</footer>',
             ],
             'user_prompt' => 'Build the header shell.',
         ],
@@ -386,6 +390,18 @@ lcfa_assert_contains('name="execution_mode" value="acknowledge_task"', $markup, 
 lcfa_assert_contains('Next task: Create or refresh the global header shell', $markup, 'Genesis controls should expose the next task label');
 lcfa_assert_contains('Pending: 2', $markup, 'Genesis summary chips should include the pending count from execution state');
 lcfa_assert_contains('Failed: 1', $markup, 'Genesis summary chips should include failed execution count');
+
+$get_command_form_context = $admin_reflection->getMethod('get_command_form_context');
+$_GET = [
+    'genesis_task_id' => 'foundation-header',
+];
+$loaded_command_context = $get_command_form_context->invoke($admin, $command_deck->get_actions());
+$_GET = [];
+
+lcfa_assert_same('global_shell_apply', (string) ($loaded_command_context['action'] ?? ''), 'Command Deck should hydrate the action from the selected Genesis task payload');
+lcfa_assert_same('2', (string) ($loaded_command_context['variant'] ?? ''), 'Command Deck should hydrate the partial variant from the selected Genesis task payload');
+lcfa_assert_contains('Genesis Header', (string) ($loaded_command_context['content'] ?? ''), 'Command Deck should serialize structured Genesis header payloads into the content field');
+lcfa_assert_contains('Genesis Footer', (string) ($loaded_command_context['content'] ?? ''), 'Command Deck should serialize structured Genesis footer payloads into the content field');
 
 $_POST = [
     'execution_mode' => 'preview_next',

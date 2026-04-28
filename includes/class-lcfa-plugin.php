@@ -65,10 +65,12 @@ final class LCFA_Plugin {
             $this->theme_files_bridge,
             $design_system_build_gateway
         );
+        $fallback_design_system = new LCFA_Design_System_Fallback_Executor($this->environment, $this->theme_files_bridge);
         $design_system_apply = new LCFA_Design_System_Apply(
             $this->environment,
             $picostrap_design_system,
-            $picowind_design_system
+            $picowind_design_system,
+            $fallback_design_system
         );
         $design_system_compose = new LCFA_Design_System_Compose(
             $this->environment,

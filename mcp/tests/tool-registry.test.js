@@ -114,6 +114,17 @@ async function run() {
   assert.ok(runLcCommand.inputSchema.properties.footer_script, 'run_lc_command should expose footer_script for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.footer_script_lines, 'run_lc_command should expose footer_script_lines for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.footer_script_lines.items, 'run_lc_command should declare array items for footer_script_lines')
+  assert.ok(runLcCommand.inputSchema.properties.section_intent, 'run_lc_command should expose section_intent for editor section starters')
+  assert.ok(runLcCommand.inputSchema.properties.section_operation, 'run_lc_command should expose section_operation for precise section placement')
+  assert.ok(runLcCommand.inputSchema.properties.selected_section_anchor, 'run_lc_command should expose selected_section_anchor for editor-selected insertion')
+  assert.ok(runLcCommand.inputSchema.properties.visual_reference, 'run_lc_command should expose visual_reference for screenshot-informed generation')
+  assert.ok(runLcCommand.inputSchema.properties.header_html, 'run_lc_command should expose header_html for global shell writes')
+  assert.ok(runLcCommand.inputSchema.properties.header_html_lines.items, 'run_lc_command should declare array items for header_html_lines')
+  assert.ok(runLcCommand.inputSchema.properties.footer_html, 'run_lc_command should expose footer_html for global shell writes')
+  assert.ok(runLcCommand.inputSchema.properties.footer_html_lines.items, 'run_lc_command should declare array items for footer_html_lines')
+  assert.ok(runLcCommand.inputSchema.properties.pages.items, 'run_lc_command should declare array items for site_foundation_run pages')
+  assert.ok(runLcCommand.inputSchema.properties.design_system, 'run_lc_command should expose design_system for foundation orchestration')
+  assert.ok(runLcCommand.inputSchema.properties.template_assignment, 'run_lc_command should expose template_assignment for dynamic template assignment')
   assert.match(
     runLcCommand.description,
     /DaisyUI-first/i,
@@ -138,6 +149,11 @@ async function run() {
     runLcCommand.description,
     /JavaScript is allowed when necessary/i,
     'run_lc_command should explain that JavaScript is allowed when necessary on Picowind'
+  )
+  assert.match(
+    runLcCommand.description,
+    /site_foundation_run/i,
+    'run_lc_command should document the foundation orchestration action'
   )
 
   const frameworkClient = createFrameworkAwareClient('picowind')

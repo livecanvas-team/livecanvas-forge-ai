@@ -447,6 +447,7 @@ async function flush() {
                     execution_target: body.execution_target,
                     target_id: 42,
                     variant: '1',
+                    selected_section_anchor: body.selected_section_anchor,
                     dry_run: true,
                   },
                 },
@@ -458,6 +459,7 @@ async function flush() {
                     execution_target: body.execution_target,
                     target_id: 42,
                     variant: '1',
+                    selected_section_anchor: body.selected_section_anchor,
                   },
                 },
               ],
@@ -472,6 +474,7 @@ async function flush() {
             execution_target: body.execution_target,
             target_id: 42,
             variant: '1',
+            selected_section_anchor: body.selected_section_anchor,
           },
         },
       });
@@ -602,6 +605,11 @@ async function flush() {
   assert.strictEqual(typeof shellNodes.attachmentTriggerButton.listeners.click, 'function', 'editor chat runtime should wire the upload button to the hidden image input');
   assert.strictEqual(shellNodes.attachmentClearButton.hidden, true, 'editor chat runtime should hide the remove-image control until an image exists');
 
+  const selectedSection = new MockElement('section');
+  selectedSection.setAttribute('id', 'selected-pricing');
+  selectedSection.setAttribute('class', 'lc-section lcfa-section--pricing');
+  documentListeners.click({ target: selectedSection });
+
   shellNodes.openButton.listeners.click({ target: shellNodes.openButton });
   assert.strictEqual(shellNodes.shell.classList.contains('is-open'), true, 'open button should toggle the drawer open');
 
@@ -673,6 +681,8 @@ async function flush() {
   assert.strictEqual(analyzeBodies[0]._lcfa_agent, 'forge', 'frontend chat requests should declare Forge as the browser agent');
   assert.strictEqual(analyzeBodies[0]._lcfa_processed_by, 'forge_local_rules', 'frontend chat requests should declare the local Forge processor');
   assert.strictEqual(analyzeBodies[0].context_post_id, 42, 'analyze flow should send the current post as context');
+  assert.strictEqual(analyzeBodies[0].selected_section_anchor.id, 'selected-pricing', 'analyze flow should send the last clicked section anchor');
+  assert.strictEqual(analyzeBodies[0].selected_section_anchor.class_token, 'lcfa-section--pricing', 'selected section anchors should preserve semantic section classes');
   assert.strictEqual(analyzeBodies[0].attachments.length, 1, 'analyze flow should include the selected screenshot attachment');
   assert.strictEqual(executionBodies.length, 1, 'send flow should enqueue an inline execution immediately after a suggestion is prepared');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(executionBodies[0], 'dry_run'), false, 'send flow should execute the inline apply payload directly');
@@ -681,6 +691,7 @@ async function flush() {
   assert.strictEqual(executionBodies[0]._lcfa_agent, 'forge', 'inline execution requests should preserve Forge as the browser agent');
   assert.strictEqual(executionBodies[0]._lcfa_processed_by, 'forge_local_rules', 'inline execution requests should preserve the local Forge processor');
   assert.strictEqual(executionBodies[0].context_post_id, 42, 'send flow should restore the current post context');
+  assert.strictEqual(executionBodies[0].selected_section_anchor.id, 'selected-pricing', 'send flow should carry selected section anchors into inline execution');
   assert.strictEqual(executionBodies[0].post_id, 42, 'send flow should preserve the current post id');
   assert.strictEqual(executionBodies[0].target_id, 42, 'send flow should preserve the current target id');
   assert.strictEqual(executionBodies[0].variant, '1', 'send flow should preserve the current variant');

@@ -688,6 +688,26 @@ try {
 }
 $_POST = [];
 
+$get_command_request_payload = $admin_reflection->getMethod('get_command_request_payload');
+$structured_command_payload = $get_command_request_payload->invoke($admin, [
+    'action'  => 'site_foundation_run',
+    'content' => wp_json_encode([
+        'header_html' => '<header>JSON Header</header>',
+        'footer_html' => '<footer>JSON Footer</footer>',
+        'pages'       => [
+            [
+                'title' => 'Home',
+                'slug'  => 'home',
+            ],
+        ],
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+]);
+
+lcfa_assert_same('site_foundation_run', (string) ($structured_command_payload['action'] ?? ''), 'content JSON should not overwrite the selected Command Deck action when action is omitted from the JSON');
+lcfa_assert_same('<header>JSON Header</header>', (string) ($structured_command_payload['header_html'] ?? ''), 'Command Deck content JSON should hydrate header_html for structured actions');
+lcfa_assert_same('<footer>JSON Footer</footer>', (string) ($structured_command_payload['footer_html'] ?? ''), 'Command Deck content JSON should hydrate footer_html for structured actions');
+lcfa_assert_same('Home', (string) ($structured_command_payload['pages'][0]['title'] ?? ''), 'Command Deck content JSON should hydrate page arrays for foundation runs');
+
 $_GET['thread_id'] = 'ideas';
 $_GET['post_id'] = '42';
 $_GET['genesis_task_id'] = 'task-42';

@@ -1535,7 +1535,29 @@ final class LCFA_Admin {
             $payload = array_merge($payload, (array) $source['command_payload']);
         }
 
+        $payload = $this->merge_command_payload_from_content_json($payload);
+
         return $payload;
+    }
+
+    private function merge_command_payload_from_content_json(array $payload): array {
+        if (empty($payload['content']) || !is_string($payload['content'])) {
+            return $payload;
+        }
+
+        $content = trim((string) wp_unslash($payload['content']));
+
+        if ($content === '' || $content[0] !== '{' || substr($content, -1) !== '}') {
+            return $payload;
+        }
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
+            return $payload;
+        }
+
+        return array_merge($payload, $decoded);
     }
 
     private function get_payload_provenance(array $payload, string $default_origin = 'admin_command_deck', string $default_processed_by = 'forge_local_rules'): array {
@@ -5769,6 +5791,10 @@ final class LCFA_Admin {
                     $defaults['user_prompt'] = sanitize_textarea_field((string) $task['user_prompt']);
                 }
 
+                if (is_array($task['payload'] ?? null)) {
+                    $defaults = $this->apply_genesis_task_payload_to_command_context($defaults, (array) $task['payload']);
+                }
+
                 if ($defaults['context_label'] === '') {
                     $defaults['context_label'] = sprintf(
                         __('Genesis task loaded: %1$s. Suggested action: %2$s.', 'livecanvas-forge-ai'),
@@ -5782,6 +5808,89 @@ final class LCFA_Admin {
         }
 
         return $this->hydrate_command_form_context($defaults);
+    }
+
+    private function apply_genesis_task_payload_to_command_context(array $context, array $payload): array {
+        $scalar_keys = [
+            'action',
+            'execution_target',
+            'target_id',
+            'variant',
+            'title',
+            'slug',
+            'provider_id',
+            'relative_path',
+            'root_scope',
+            'file_path',
+            'backup_id',
+            'status',
+        ];
+
+        foreach ($scalar_keys as $key) {
+            if (!array_key_exists($key, $payload) || $payload[$key] === '' || $payload[$key] === null) {
+                continue;
+            }
+
+            switch ($key) {
+                case 'action':
+                case 'execution_target':
+                case 'root_scope':
+                case 'status':
+                    $context[$key] = sanitize_key((string) $payload[$key]);
+                    break;
+
+                case 'target_id':
+                    $context[$key] = absint($payload[$key]) ?: '';
+                    break;
+
+                case 'slug':
+                    $context[$key] = sanitize_title((string) $payload[$key]);
+                    break;
+
+                default:
+                    $context[$key] = sanitize_text_field((string) $payload[$key]);
+                    break;
+            }
+        }
+
+        if (!empty($payload['dry_run'])) {
+            $context['dry_run'] = true;
+        }
+
+        if (!empty($payload['content']) && is_string($payload['content']) && $context['content'] === '') {
+            $context['content'] = (string) $payload['content'];
+            return $context;
+        }
+
+        $structured_payload = [];
+        foreach ([
+            'header_html',
+            'header_html_lines',
+            'footer_html',
+            'footer_html_lines',
+            'body_html',
+            'body_html_lines',
+            'footer_script',
+            'footer_script_lines',
+            'pages',
+            'design_system',
+            'template_assignment',
+            'colors',
+            'typography',
+            'radius',
+            'buttons',
+            'font_assets',
+        ] as $key) {
+            if (array_key_exists($key, $payload)) {
+                $structured_payload[$key] = $payload[$key];
+            }
+        }
+
+        if ($structured_payload && $context['content'] === '') {
+            $context['content'] = (string) wp_json_encode($structured_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
+        return $context;
     }
 
     private function hydrate_command_form_context(array $context): array {
@@ -6023,26 +6132,54 @@ final class LCFA_Admin {
             ]),
         ];
 
-        if ($this->inventory->resolve_partial_post_id('is_header', '1')) {
+        $inventory = method_exists($this->inventory, 'get_inventory') ? $this->inventory->get_inventory() : [];
+        $header_partial = $this->get_first_inventory_partial((array) ($inventory['header_partials'] ?? []), 'header');
+        $footer_partial = $this->get_first_inventory_partial((array) ($inventory['footer_partials'] ?? []), 'footer');
+
+        if (!$header_partial && method_exists($this->inventory, 'resolve_partial_post_id')) {
+            $header_id = (int) $this->inventory->resolve_partial_post_id('is_header', '1');
+            if ($header_id > 0) {
+                $header_partial = [
+                    'id'           => $header_id,
+                    'partial_type' => 'header',
+                    'variant'      => '1',
+                ];
+            }
+        }
+
+        if (!$footer_partial && method_exists($this->inventory, 'resolve_partial_post_id')) {
+            $footer_id = (int) $this->inventory->resolve_partial_post_id('is_footer', '1');
+            if ($footer_id > 0) {
+                $footer_partial = [
+                    'id'           => $footer_id,
+                    'partial_type' => 'footer',
+                    'variant'      => '1',
+                ];
+            }
+        }
+
+        if ($header_partial) {
             $actions[] = [
-                'label' => __('Header partial', 'livecanvas-forge-ai'),
+                'label' => sprintf(__('Header partial v%s', 'livecanvas-forge-ai'), (string) ($header_partial['variant'] ?: '1')),
                 'icon'  => 'layers',
                 'tone'  => 'neutral',
                 'url'   => $this->get_command_url([
                     'suggest_action' => 'update_header',
-                    'variant'        => '1',
+                    'target_id'      => (int) ($header_partial['id'] ?? 0),
+                    'variant'        => (string) ($header_partial['variant'] ?: '1'),
                 ]),
             ];
         }
 
-        if ($this->inventory->resolve_partial_post_id('is_footer', '1')) {
+        if ($footer_partial) {
             $actions[] = [
-                'label' => __('Footer partial', 'livecanvas-forge-ai'),
+                'label' => sprintf(__('Footer partial v%s', 'livecanvas-forge-ai'), (string) ($footer_partial['variant'] ?: '1')),
                 'icon'  => 'layers',
                 'tone'  => 'neutral',
                 'url'   => $this->get_command_url([
                     'suggest_action' => 'update_footer',
-                    'variant'        => '1',
+                    'target_id'      => (int) ($footer_partial['id'] ?? 0),
+                    'variant'        => (string) ($footer_partial['variant'] ?: '1'),
                 ]),
             ];
         }
@@ -6077,6 +6214,25 @@ final class LCFA_Admin {
         ];
 
         return array_slice($actions, 0, 7);
+    }
+
+    private function get_first_inventory_partial(array $partials, string $type): array {
+        foreach ($partials as $partial) {
+            if (!is_array($partial)) {
+                continue;
+            }
+
+            if ((string) ($partial['partial_type'] ?? $type) !== $type) {
+                continue;
+            }
+
+            return $partial + [
+                'id'      => 0,
+                'variant' => '1',
+            ];
+        }
+
+        return [];
     }
 
     private function get_default_windpress_provider_ids(array $providers): string {

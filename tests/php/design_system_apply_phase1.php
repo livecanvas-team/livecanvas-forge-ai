@@ -252,6 +252,7 @@ require LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
+require LCFA_DIR . 'includes/class-lcfa-design-system-fallback-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
@@ -343,6 +344,57 @@ if ($scenario === 'picowind' || $scenario === 'all') {
     lcfa_assert_same('corporate', get_theme_mod('data_theme'), 'Picowind apply should update data_theme');
     lcfa_assert_true($apply['build_executed'] === true, 'Picowind apply should execute a build when the gateway reports build availability');
     lcfa_assert_true(\WindPress\WindPress\Core\Cache::$themeJson !== '', 'Picowind apply should store theme.json');
+}
+
+if ($scenario === 'fallback' || $scenario === 'all') {
+    $GLOBALS['lcfa_test_theme_name'] = 'Custom Child';
+    $GLOBALS['lcfa_test_stylesheet'] = 'custom-child';
+    $GLOBALS['lcfa_test_template'] = 'custom-parent';
+    @mkdir(get_stylesheet_directory(), 0777, true);
+    @mkdir(get_template_directory(), 0777, true);
+    @unlink(get_stylesheet_directory() . '/assets/lcfa-design-system.css');
+    @unlink(get_stylesheet_directory() . '/assets/lcfa-design-system.json');
+
+    $environment = new LCFA_Environment();
+    $themeFiles = new LCFA_Theme_Files_Bridge($environment);
+    $service = new LCFA_Design_System_Apply(
+        $environment,
+        new LCFA_Design_System_Picostrap_Executor(),
+        new LCFA_Design_System_Picowind_Executor(
+            new LCFA_WindPress_Bridge($environment),
+            $themeFiles,
+            new Test_Design_System_Build_Gateway(['build_available' => false, 'message' => 'disabled'], ['ok' => false, 'message' => 'disabled'])
+        ),
+        new LCFA_Design_System_Fallback_Executor($environment, $themeFiles)
+    );
+
+    $fallbackPreview = $service->run([
+        'action' => 'design_system_apply',
+        'framework' => 'custom',
+        'colors' => ['primary' => '#abcdef', 'body_bg' => '#ffffff'],
+        'typography' => ['font_family_base' => 'Inter, sans-serif'],
+    ], true);
+    $fallbackCssPath = get_stylesheet_directory() . '/assets/lcfa-design-system.css';
+
+    lcfa_assert_same('fallback_theme', $fallbackPreview['target_stack'], 'Fallback preview should target portable theme assets');
+    lcfa_assert_same('theme_file_assets', $fallbackPreview['source_of_truth'], 'Fallback preview should use theme files as source of truth');
+    lcfa_assert_true(!file_exists($fallbackCssPath), 'Fallback preview must not write CSS files');
+    lcfa_assert_true(!empty($fallbackPreview['data']['writes']['css']['dry_run']), 'Fallback preview should report a dry-run CSS write');
+
+    $fallbackApply = $service->run([
+        'action' => 'design_system_apply',
+        'framework' => 'custom',
+        'colors' => ['primary' => '#abcdef', 'body_bg' => '#ffffff'],
+        'radius' => ['border_radius' => '8px'],
+    ], false);
+
+    lcfa_assert_same('fallback_theme', $fallbackApply['target_stack'], 'Fallback apply should target portable theme assets');
+    lcfa_assert_true(file_exists($fallbackCssPath), 'Fallback apply should write the portable CSS asset');
+    lcfa_assert_true(strpos((string) file_get_contents($fallbackCssPath), '--lcfa-color-primary: #abcdef;') !== false, 'Fallback CSS should contain the requested primary token');
+
+    $GLOBALS['lcfa_test_theme_name'] = 'Picostrap Child';
+    $GLOBALS['lcfa_test_stylesheet'] = 'picostrap-child';
+    $GLOBALS['lcfa_test_template'] = 'picostrap5';
 }
 
 if ($scenario === 'command' || $scenario === 'all') {

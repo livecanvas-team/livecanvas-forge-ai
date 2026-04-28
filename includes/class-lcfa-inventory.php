@@ -38,7 +38,7 @@ final class LCFA_Inventory {
                 'orderby'        => 'modified',
                 'order'          => 'DESC',
             ], static function (WP_Post $post): bool {
-                return get_post_meta($post->ID, 'is_header', true) !== '1' && get_post_meta($post->ID, 'is_footer', true) !== '1';
+                return (string) get_post_meta($post->ID, 'is_header', true) === '' && (string) get_post_meta($post->ID, 'is_footer', true) === '';
             }),
             'dynamic_templates' => $this->query_posts([
                 'post_type'      => 'lc_dynamic_template',
@@ -206,7 +206,7 @@ final class LCFA_Inventory {
     }
 
     private function normalize_post(WP_Post $post): array {
-        return [
+        $item = [
             'id'           => (int) $post->ID,
             'title'        => html_entity_decode(get_the_title($post->ID) ?: __('Untitled', 'livecanvas-forge-ai')),
             'slug'         => $post->post_name,
@@ -216,6 +216,32 @@ final class LCFA_Inventory {
             'edit_url'     => get_edit_post_link($post->ID, 'raw'),
             'view_url'     => get_permalink($post->ID),
         ];
+
+        if ($post->post_type === 'lc_partial') {
+            $header_variant = (string) get_post_meta($post->ID, 'is_header', true);
+            $footer_variant = (string) get_post_meta($post->ID, 'is_footer', true);
+
+            if ($header_variant !== '') {
+                $item['partial_type'] = 'header';
+                $item['variant'] = $header_variant;
+            } elseif ($footer_variant !== '') {
+                $item['partial_type'] = 'footer';
+                $item['variant'] = $footer_variant;
+            } else {
+                $item['partial_type'] = 'partial';
+                $item['variant'] = '';
+            }
+        }
+
+        if ($post->post_type === 'lc_dynamic_template') {
+            $assignment = get_post_meta($post->ID, '_lcfa_template_assignment', true);
+
+            if (is_array($assignment)) {
+                $item['template_assignment'] = $assignment;
+            }
+        }
+
+        return $item;
     }
 
     private function find_partials_by_flag(string $flag): array {
@@ -224,13 +250,14 @@ final class LCFA_Inventory {
             'post_status'    => ['publish', 'draft', 'private'],
             'posts_per_page' => 100,
             'meta_key'       => $flag,
-            'meta_value'     => '1',
             'orderby'        => 'modified',
             'order'          => 'DESC',
-        ]);
+        ], static function (WP_Post $post) use ($flag): bool {
+            return (string) get_post_meta($post->ID, $flag, true) !== '';
+        });
     }
 
-    private function query_count(string $post_type, string $meta_key = '', string $meta_value = '1'): int {
+    private function query_count(string $post_type, string $meta_key = '', ?string $meta_value = '1'): int {
         $cache_key = md5(wp_json_encode([$post_type, $meta_key, $meta_value]));
         if (array_key_exists($cache_key, $this->count_cache)) {
             return $this->count_cache[$cache_key];
@@ -244,8 +271,11 @@ final class LCFA_Inventory {
         ];
 
         if ($meta_key !== '') {
-            $args['meta_key']   = $meta_key;
-            $args['meta_value'] = $meta_value;
+            $args['meta_key'] = $meta_key;
+
+            if ($meta_value !== null) {
+                $args['meta_value'] = $meta_value;
+            }
         }
 
         $query = new WP_Query($args);
@@ -256,6 +286,6 @@ final class LCFA_Inventory {
     }
 
     private function query_flagged_count(string $post_type, string $meta_key): int {
-        return $this->query_count($post_type, $meta_key, '1');
+        return $this->query_count($post_type, $meta_key, null);
     }
 }

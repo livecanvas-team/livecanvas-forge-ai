@@ -200,7 +200,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas Forge command through the plugin contract. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
+      description: 'Execute a LiveCanvas Forge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -220,14 +220,35 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           root_scope: { type: 'string' },
           file_path: { type: 'string' },
           backup_id: { type: 'string' },
-          content: { type: 'string' },
-          body_html: { type: 'string' },
-          body_html_lines: {
+          section_intent: { type: 'string' },
+          section_operation: { type: 'string' },
+          content_strategy: { type: 'string' },
+          selected_section_anchor: { type: 'object' },
+          visual_reference: { type: 'object' },
+          attachments: {
+            type: 'array',
+            items: { type: 'object' }
+          },
+          header_html: { type: 'string' },
+          header_html_lines: {
             type: 'array',
             items: { type: 'string' }
           },
           footer_html: { type: 'string' },
           footer_html_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          pages: {
+            type: 'array',
+            items: { type: 'object' }
+          },
+          design_system: { type: 'object' },
+          template_assignment: { type: 'object' },
+          template_target: { type: 'string' },
+          content: { type: 'string' },
+          body_html: { type: 'string' },
+          body_html_lines: {
             type: 'array',
             items: { type: 'string' }
           },
