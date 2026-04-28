@@ -71,14 +71,29 @@ Recent foundation work also introduced:
 
 Status: `alpha`
 
-The plugin is already useful for experimentation and structured development workflows, but it is still evolving toward a more deterministic and plug-and-play product.
+The plugin is already useful for experimentation, local development, and structured LiveCanvas build workflows. It is not yet positioned as a finished production SaaS-style product.
 
-The current direction is:
+The most stable areas today are:
 
-- make agent connection simpler
-- expose clearer foundation operations
-- keep local and remote behavior as symmetrical as possible
-- make LiveCanvas page generation and global site scaffolding reliable first
+- WordPress + LiveCanvas stack inspection
+- coding-agent connection through the local MCP bridge
+- preview/apply command execution from the Command Deck
+- LiveCanvas page creation and update through `page_upsert`
+- header/footer partial creation and update through `global_shell_apply`
+- first-pass foundation orchestration through `site_foundation_run`
+- design-system token application for Picostrap, Picowind/WindPress, and custom fallback paths
+- dynamic template assignment metadata, including synchronization to native LiveCanvas `is_*` template meta
+
+The areas still under active development are:
+
+- richer WooCommerce dynamic template generation
+- ACF-aware template and page generation
+- deeper real-site smoke testing across different LiveCanvas/Picostrap/Picowind installs
+- more creative, image-aware generation from editor screenshots
+- stronger remote/local parity testing for complex write workflows
+- more complete custom-theme fallback enqueue behavior
+
+In short: the foundation engine is in place, the agent connection flow works, and the next work is about making generated site structures richer and more production-hardened.
 
 ## Core Idea
 
@@ -164,13 +179,50 @@ This is where the plugin currently executes work such as:
 
 ## Installation
 
+### Requirements
+
+Recommended environment:
+
+- WordPress
+- LiveCanvas
+- PHP compatible with the target WordPress install
+- Node.js for MCP/coding-agent integrations
+- Picostrap, Picowind/WindPress, or another active WordPress theme
+
 Install the plugin into:
 
 ```text
 wp-content/plugins/livecanvas-forge-ai
 ```
 
-Then activate it from WordPress admin.
+### Install From This Repository
+
+From the WordPress plugins directory:
+
+```bash
+cd wp-content/plugins
+git clone https://github.com/livecanvas-team/livecanvas-forge-ai.git
+```
+
+Then activate the plugin from:
+
+```text
+WordPress Admin > Plugins > LiveCanvas Forge AI > Activate
+```
+
+### Install From A ZIP
+
+You can also upload a ZIP of this repository from:
+
+```text
+WordPress Admin > Plugins > Add New > Upload Plugin
+```
+
+The extracted folder should be named:
+
+```text
+livecanvas-forge-ai
+```
 
 After activation, open:
 
@@ -192,6 +244,122 @@ If LiveCanvas is active, Forge AI also appears inside the LiveCanvas admin area.
 8. install the local config or download the generated bundle
 9. run the smoke test with `get_snapshot`
 10. move to `Command Deck` and start with a preview-first flow
+
+## Basic Usage
+
+### 1. Inspect The Site
+
+Start by running a site audit.
+
+From the Command Deck choose:
+
+```json
+{
+  "action": "site_audit",
+  "dry_run": true
+}
+```
+
+From an MCP-connected coding agent, call `livecanvas-forge_get_snapshot` first, then call `livecanvas-forge_run_lc_command` for command execution.
+
+### 2. Prepare The Site Foundation
+
+Use `site_prepare` to verify stack readiness before larger operations:
+
+```json
+{
+  "action": "site_prepare",
+  "dry_run": true
+}
+```
+
+Use `site_foundation_run` when you want one orchestration pass for preflight, design system, shell, and starter pages:
+
+```json
+{
+  "action": "site_foundation_run",
+  "dry_run": true,
+  "header_html": "<header>...</header>",
+  "footer_html": "<footer>...</footer>",
+  "pages": [
+    {
+      "title": "Home",
+      "slug": "home",
+      "status": "draft",
+      "body_html": "<section><h1>Home</h1></section>"
+    }
+  ]
+}
+```
+
+Run with `dry_run: true` first. Remove `dry_run` only after the preview result looks correct.
+
+### 3. Create Or Update A LiveCanvas Page
+
+Use `page_upsert` for page work:
+
+```json
+{
+  "action": "page_upsert",
+  "title": "Landing Page",
+  "slug": "landing-page",
+  "status": "draft",
+  "body_html": "<section class=\"py-5\"><h1>Landing Page</h1></section>"
+}
+```
+
+The result includes:
+
+- `target_id`
+- `frontend_url`
+- `edit_url`
+- `diff_html`
+- `existing_html`
+- `proposed_html`
+
+### 4. Update Header And Footer
+
+Use `global_shell_apply` for site shell work:
+
+```json
+{
+  "action": "global_shell_apply",
+  "variant": "1",
+  "header_html": "<header>...</header>",
+  "footer_html": "<footer>...</footer>",
+  "dry_run": true
+}
+```
+
+The action creates missing LiveCanvas partials or updates the matching variant.
+
+### 5. Work With Dynamic Templates
+
+Use `create_dynamic_template` or `update_dynamic_template` for LiveCanvas dynamic templates.
+
+Example for a single custom post type template:
+
+```json
+{
+  "action": "create_dynamic_template",
+  "title": "Single Service",
+  "slug": "single-service",
+  "status": "draft",
+  "content": "<main><h1>[lc_the_title]</h1></main>",
+  "template_assignment": {
+    "target": "single",
+    "post_type": "service"
+  }
+}
+```
+
+Forge stores its own assignment metadata and also syncs supported assignments to native LiveCanvas `is_*` template meta, for example `is_single_service`.
+
+### 6. Continue In LiveCanvas
+
+Forge AI is intended to do the structural work first.
+
+After a command succeeds, open the returned `edit_url` or use the LiveCanvas editor and continue refining the page, partial, or template visually.
 
 ## How Agent Connection Works
 
