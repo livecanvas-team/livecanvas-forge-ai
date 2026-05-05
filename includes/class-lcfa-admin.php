@@ -362,6 +362,12 @@ final class LCFA_Admin {
         $connection_icon_client     = $connected_client !== '' ? $connected_client : 'generic';
         $agent_processor            = $connected_client === 'generic' ? 'generic_mcp' : ($connected_client !== '' ? $connected_client . '_mcp' : 'forge_local_rules');
         $default_action             = !empty($context['action']) ? (string) $context['action'] : 'site_audit';
+        $codex_runtime_defaults     = LCFA_Settings::sanitize_codex_options([
+            'model'            => $connections['codex_model'] ?? '',
+            'speed'            => $connections['codex_speed'] ?? '',
+            'reasoning_effort' => $connections['codex_reasoning_effort'] ?? '',
+            'sandbox'          => $connections['codex_sandbox'] ?? '',
+        ]);
         $command_base_url           = $this->get_command_url([
             'post_id'   => $post->ID,
             'thread_id' => $current_thread_id,
@@ -380,6 +386,14 @@ final class LCFA_Admin {
                 'enabled'      => $connection_state === 'connected' && $connected_client !== '',
                 'processor'    => $agent_processor,
                 'displayLabel' => $connected_client !== '' ? ucfirst(str_replace(['-', '_'], ' ', $connected_client)) : __('Forge', 'livecanvas-forge-ai'),
+            ],
+            'codex'       => [
+                'enabled'   => $connected_client === 'codex',
+                'defaults'  => $codex_runtime_defaults,
+                'models'    => LCFA_Settings::get_codex_model_options(),
+                'speed'     => LCFA_Settings::get_codex_speed_options(),
+                'reasoning' => LCFA_Settings::get_codex_reasoning_effort_options(),
+                'sandbox'   => LCFA_Settings::get_codex_sandbox_options(),
             ],
             'postId'       => (int) $post->ID,
             'targetId'     => (int) ($context['target_id'] ?? 0),
@@ -471,6 +485,51 @@ final class LCFA_Admin {
         echo '<button type="button" class="lcfa-editor-bridge__close" data-lcfa-editor-close aria-label="' . esc_attr__('Close Forge AI panel', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('power') . '</button>';
         echo '</div>';
         echo '</div>';
+        if ($connected_client === 'codex') {
+            echo '<div class="lcfa-editor-bridge__runtime-top">';
+            echo '<div class="lcfa-editor-bridge__codex-runtime">';
+            echo '<div class="lcfa-editor-bridge__row lcfa-editor-bridge__runtime-primary">';
+            echo '<label class="lcfa-editor-bridge__field">';
+            echo '<span>' . esc_html__('Model', 'livecanvas-forge-ai') . '</span>';
+            echo '<select data-lcfa-editor-codex-model>';
+            foreach (LCFA_Settings::get_codex_model_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_runtime_defaults['model'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select>';
+            echo '</label>';
+            echo '<label class="lcfa-editor-bridge__field">';
+            echo '<span>' . esc_html__('Intelligence', 'livecanvas-forge-ai') . '</span>';
+            echo '<select data-lcfa-editor-codex-reasoning>';
+            foreach (LCFA_Settings::get_codex_reasoning_effort_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_runtime_defaults['reasoning_effort'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select>';
+            echo '</label>';
+            echo '</div>';
+            echo '<details class="lcfa-editor-bridge__runtime-details">';
+            echo '<summary>' . esc_html__('Runtime options', 'livecanvas-forge-ai') . '</summary>';
+            echo '<div class="lcfa-editor-bridge__row lcfa-editor-bridge__runtime-advanced">';
+            echo '<label class="lcfa-editor-bridge__field">';
+            echo '<span>' . esc_html__('Speed', 'livecanvas-forge-ai') . '</span>';
+            echo '<select data-lcfa-editor-codex-speed>';
+            foreach (LCFA_Settings::get_codex_speed_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_runtime_defaults['speed'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select>';
+            echo '</label>';
+            echo '<label class="lcfa-editor-bridge__field">';
+            echo '<span>' . esc_html__('Sandbox', 'livecanvas-forge-ai') . '</span>';
+            echo '<select data-lcfa-editor-codex-sandbox>';
+            foreach (LCFA_Settings::get_codex_sandbox_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_runtime_defaults['sandbox'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select>';
+            echo '</label>';
+            echo '</div>';
+            echo '</details>';
+            echo '</div>';
+            echo '</div>';
+        }
         echo '<div class="lcfa-editor-bridge__section">';
         echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Request', 'livecanvas-forge-ai') . '</div>';
         echo '<p class="lcfa-editor-bridge__helper">' . esc_html($connection_state === 'connected' ? sprintf(__('Describe the change you want on this page. Forge AI sends it to %s through MCP and updates this LiveCanvas page when the agent completes it.', 'livecanvas-forge-ai'), ucfirst(str_replace(['-', '_'], ' ', $connected_client))) : __('Describe the change you want on this page. Forge AI sends it and runs it inline on the current page.', 'livecanvas-forge-ai')) . '</p>';
@@ -3051,6 +3110,39 @@ final class LCFA_Admin {
         echo '<label><span>' . esc_html__('Remote username', 'livecanvas-forge-ai') . '</span><input type="text" name="remote_username" value="' . esc_attr($connections['remote_username']) . '"></label>';
         echo '<label><span>' . esc_html__('Remote application password', 'livecanvas-forge-ai') . '</span><input type="password" name="remote_application_password" value="" placeholder="' . esc_attr($connections['remote_application_password'] !== '' ? __('Stored. Leave blank to keep current value.', 'livecanvas-forge-ai') : __('xxxx xxxx xxxx xxxx xxxx xxxx', 'livecanvas-forge-ai')) . '"></label>';
         echo '<label><span>' . esc_html__('MCP server command', 'livecanvas-forge-ai') . '</span><textarea name="mcp_server_command" rows="4" placeholder="npx @livecanvas/forge-mcp">' . esc_textarea($connections['mcp_server_command']) . '</textarea></label>';
+
+        if ($preferred_client === 'codex') {
+            $codex_defaults = LCFA_Settings::sanitize_codex_options([
+                'model'            => $connections['codex_model'] ?? '',
+                'speed'            => $connections['codex_speed'] ?? '',
+                'reasoning_effort' => $connections['codex_reasoning_effort'] ?? '',
+                'sandbox'          => $connections['codex_sandbox'] ?? '',
+            ]);
+            echo '<div class="lcfa-guide">';
+            echo '<h3>' . esc_html__('Codex defaults', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html__('These defaults are used by frontend LiveCanvas prompts before each run. The drawer can still override them for a single request.', 'livecanvas-forge-ai') . '</p>';
+            echo '<label><span>' . esc_html__('Default model', 'livecanvas-forge-ai') . '</span><select name="codex_model">';
+            foreach (LCFA_Settings::get_codex_model_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_defaults['model'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select></label>';
+            echo '<label><span>' . esc_html__('Default speed', 'livecanvas-forge-ai') . '</span><select name="codex_speed">';
+            foreach (LCFA_Settings::get_codex_speed_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_defaults['speed'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select></label>';
+            echo '<label><span>' . esc_html__('Default intelligence', 'livecanvas-forge-ai') . '</span><select name="codex_reasoning_effort">';
+            foreach (LCFA_Settings::get_codex_reasoning_effort_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_defaults['reasoning_effort'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select></label>';
+            echo '<label><span>' . esc_html__('Default sandbox', 'livecanvas-forge-ai') . '</span><select name="codex_sandbox">';
+            foreach (LCFA_Settings::get_codex_sandbox_options() as $value => $label) {
+                echo '<option value="' . esc_attr((string) $value) . '"' . selected((string) $value, $codex_defaults['sandbox'], false) . '>' . esc_html((string) $label) . '</option>';
+            }
+            echo '</select></label>';
+            echo '</div>';
+        }
 
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary" type="submit">' . esc_html__('Save advanced settings', 'livecanvas-forge-ai') . '</button>';

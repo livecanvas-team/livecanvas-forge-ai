@@ -103,6 +103,12 @@ $request = LCFA_Settings::enqueue_agent_request([
     'target_id' => 5964,
     'variant' => '1',
     'action' => 'page_upsert',
+    'codex_options' => [
+        'model' => 'gpt-5.3-codex-spark',
+        'speed' => 'fast',
+        'reasoning_effort' => 'medium',
+        'sandbox' => 'workspace-write',
+    ],
     'attachments' => [
         [
             'kind' => 'image',
@@ -121,6 +127,10 @@ lcfa_assert_same('codex_mcp', $request['queued_for'] ?? '', 'queued frontend req
 lcfa_assert_same('frontend_bridge', $request['provenance']['origin'] ?? '', 'queued frontend requests should preserve frontend origin');
 lcfa_assert_same('browser_rest', $request['provenance']['transport'] ?? '', 'queued frontend requests should preserve browser REST transport');
 lcfa_assert_same(1, count($request['attachments'] ?? []), 'queued frontend requests should keep sanitized image attachments');
+lcfa_assert_same('gpt-5.3-codex-spark', $request['codex_options']['model'] ?? '', 'queued frontend requests should preserve the selected Codex model');
+lcfa_assert_same('fast', $request['codex_options']['speed'] ?? '', 'queued frontend requests should preserve the selected Codex speed');
+lcfa_assert_same('medium', $request['codex_options']['reasoning_effort'] ?? '', 'queued frontend requests should preserve the selected Codex intelligence');
+lcfa_assert_same('workspace-write', $request['codex_options']['sandbox'] ?? '', 'queued frontend requests should preserve the selected Codex sandbox');
 
 $pending = LCFA_Settings::get_agent_request((string) $request['id']);
 lcfa_assert_same($request['id'], $pending['id'] ?? '', 'queued frontend requests should be persisted by id');

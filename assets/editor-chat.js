@@ -9,6 +9,10 @@
   var configNode=shell.querySelector("[data-lcfa-editor-config]")||document.querySelector("[data-lcfa-editor-config]");
   var threadSelect=shell.querySelector("[data-lcfa-editor-thread]");
   var targetSelect=shell.querySelector("[data-lcfa-editor-target]");
+  var codexModelSelect=shell.querySelector("[data-lcfa-editor-codex-model]");
+  var codexSpeedSelect=shell.querySelector("[data-lcfa-editor-codex-speed]");
+  var codexReasoningSelect=shell.querySelector("[data-lcfa-editor-codex-reasoning]");
+  var codexSandboxSelect=shell.querySelector("[data-lcfa-editor-codex-sandbox]");
   var promptInput=shell.querySelector("[data-lcfa-editor-prompt]");
   var analyzeButton=shell.querySelector("[data-lcfa-editor-analyze]");
   var createThreadButton=shell.querySelector("[data-lcfa-editor-thread-create]");
@@ -63,6 +67,132 @@
   var getAgentLabel=function(){
     var agent=getAgentConfig();
     return String(agent.displayLabel||agent.client||"Coding agent");
+  };
+
+  var markLauncherReady=function(){
+    if(shell.dataset.ready==="1"){return;}
+    shell.dataset.ready="1";
+    shell.classList.add("is-ready");
+  };
+
+  var getLiveCanvasPrimaryLoader=function(){
+    return document.getElementById?document.getElementById("loader"):null;
+  };
+
+  var isPrimaryLiveCanvasLoaderActive=function(node){
+    if(!node||node===shell||(shell.contains&&shell.contains(node))){return false;}
+    if(node.hidden||node.getAttribute("aria-hidden")==="true"){return false;}
+    if(typeof window.getComputedStyle!=="function"){return true;}
+    var style=window.getComputedStyle(node);
+    return !!style&&style.display!=="none"&&style.visibility!=="hidden";
+  };
+
+  var isVisibleLoader=function(node){
+    if(!node||node===shell||(shell.contains&&shell.contains(node))){return false;}
+    if(node.hidden||node.getAttribute("aria-hidden")==="true"){return false;}
+    if(typeof window.getComputedStyle!=="function"){return true;}
+    var style=window.getComputedStyle(node);
+    if(!style||style.display==="none"||style.visibility==="hidden"||parseFloat(style.opacity||"1")===0){return false;}
+    var rect=typeof node.getBoundingClientRect==="function"?node.getBoundingClientRect():null;
+    return !rect||rect.width>0||rect.height>0;
+  };
+
+  var hasLiveCanvasLoader=function(){
+    var primaryLoader=getLiveCanvasPrimaryLoader();
+    if(isPrimaryLiveCanvasLoaderActive(primaryLoader)){return true;}
+    if(!document.querySelectorAll){return false;}
+    var selectors=[
+      "#loader",
+      "#lc-loading",
+      "#lc-loader",
+      "#lc-loading-overlay",
+      ".lc-loading",
+      ".lc-loader",
+      ".lc-editor-loading",
+      ".lc-editor-loader",
+      ".lc-loading-overlay",
+      ".livecanvas-loading",
+      ".livecanvas-loader",
+      ".livecanvas-editor-loader",
+      "[data-lc-loader]",
+      "[data-lc-loading]",
+      "[class*='lc-loader']",
+      "[class*='lc-loading']",
+      "[class*='livecanvas-loader']",
+      "[class*='livecanvas-loading']"
+    ];
+    for(var i=0;i<selectors.length;i++){
+      var nodes=[];
+      try{nodes=document.querySelectorAll(selectors[i]);}catch(error){nodes=[];}
+      for(var j=0;j<nodes.length;j++){
+        if(isVisibleLoader(nodes[j])){return true;}
+      }
+    }
+    return false;
+  };
+
+  var observePrimaryLiveCanvasLoader=function(onReady){
+    var loader=getLiveCanvasPrimaryLoader();
+    var Observer=window.MutationObserver||window.WebKitMutationObserver||(typeof MutationObserver==="function"?MutationObserver:null);
+    if(!loader||!Observer){return null;}
+    var observer=new Observer(function(){
+      if(!isPrimaryLiveCanvasLoaderActive(loader)){
+        observer.disconnect();
+        onReady();
+      }
+    });
+    try{
+      observer.observe(loader,{attributes:true,attributeFilter:["style","class","hidden","aria-hidden"]});
+      return observer;
+    }catch(error){
+      return null;
+    }
+  };
+
+  var waitForLauncherReady=function(){
+    var started=Date.now();
+    var maxWaitMs=6500;
+    var observer=null;
+    var finish=function(){
+      if(observer&&typeof observer.disconnect==="function"){observer.disconnect();}
+      markLauncherReady();
+    };
+    var check=function(){
+      if(!hasLiveCanvasLoader()||Date.now()-started>=maxWaitMs){
+        finish();
+        return;
+      }
+      setTimeout(check,180);
+    };
+    var startChecking=function(){
+      observer=observePrimaryLiveCanvasLoader(function(){setTimeout(check,80);});
+      check();
+    };
+
+    if(document.readyState&&document.readyState!=="complete"){
+      if(window.addEventListener){
+        window.addEventListener("load",function(){setTimeout(startChecking,120);},{once:true});
+      }else{
+        setTimeout(startChecking,250);
+      }
+      setTimeout(function(){
+        if(shell.dataset.ready!=="1"&&Date.now()-started>=maxWaitMs){finish();}
+      },maxWaitMs+250);
+      return;
+    }
+
+    startChecking();
+  };
+
+  var getCodexRuntimeOptions=function(){
+    var agent=getAgentConfig();
+    if(String(agent.client||"")!=="codex"){return null;}
+    var options={};
+    if(codexModelSelect&&codexModelSelect.value){options.model=codexModelSelect.value;}
+    if(codexSpeedSelect&&codexSpeedSelect.value){options.speed=codexSpeedSelect.value;}
+    if(codexReasoningSelect&&codexReasoningSelect.value){options.reasoning_effort=codexReasoningSelect.value;}
+    if(codexSandboxSelect&&codexSandboxSelect.value){options.sandbox=codexSandboxSelect.value;}
+    return Object.keys(options).length?options:null;
   };
 
   var isActiveConversationState=function(state){
@@ -942,6 +1072,10 @@
     if(selectedAnchor){
       requestPayload.selected_section_anchor=selectedAnchor;
     }
+    var codexRuntimeOptions=getCodexRuntimeOptions();
+    if(codexRuntimeOptions){
+      requestPayload.codex_options=codexRuntimeOptions;
+    }
     requestPayload=withFrontendProvenance(requestPayload);
     if(attachmentState&&attachmentState.data_url){
       requestPayload.attachments=[attachmentState];
@@ -1111,6 +1245,7 @@
   updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
   if(config.threads&&typeof config.threads==="object"){hydrateSelectedThread();}
   else{setConversationState(statusNode?statusNode.getAttribute("data-state")||"idle":"idle",statusNode?statusNode.textContent||"":"");}
+  waitForLauncherReady();
 
   document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});
   document.addEventListener("click",function(event){

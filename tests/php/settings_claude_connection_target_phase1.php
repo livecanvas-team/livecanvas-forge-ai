@@ -79,6 +79,12 @@ $defaults = LCFA_Settings::connection_defaults();
 
 lcfa_assert_true(array_key_exists('claude_connection_target', $defaults), 'connection defaults should expose claude_connection_target');
 lcfa_assert_same('', $defaults['claude_connection_target'], 'claude_connection_target should default to an empty string');
+lcfa_assert_true(array_key_exists('codex_model', $defaults), 'connection defaults should expose a Codex model default');
+lcfa_assert_true(array_key_exists('codex_speed', $defaults), 'connection defaults should expose a Codex speed default');
+lcfa_assert_true(array_key_exists('codex_reasoning_effort', $defaults), 'connection defaults should expose a Codex intelligence default');
+lcfa_assert_same('gpt-5.3-codex-spark', $defaults['codex_model'], 'Codex model should default to the fast frontend model');
+lcfa_assert_same('balanced', $defaults['codex_speed'], 'Codex speed should default to balanced');
+lcfa_assert_same('medium', $defaults['codex_reasoning_effort'], 'Codex intelligence should default to medium');
 
 $sanitized_legacy = LCFA_Settings::sanitize_connections([
     'preferred_client'         => 'claude-code',
@@ -95,6 +101,16 @@ $sanitized_desktop = LCFA_Settings::sanitize_connections([
 
 lcfa_assert_same('claude', $sanitized_desktop['preferred_client'] ?? '', 'claude should remain the canonical preferred_client');
 lcfa_assert_same('desktop_app', $sanitized_desktop['claude_connection_target'] ?? '', 'claude desktop target should be preserved');
+
+$sanitized_codex = LCFA_Settings::sanitize_connections([
+    'preferred_client' => 'codex',
+    'codex_model' => 'gpt-5.4-mini',
+    'codex_speed' => 'fast',
+    'codex_reasoning_effort' => 'low',
+]);
+lcfa_assert_same('gpt-5.4-mini', $sanitized_codex['codex_model'] ?? '', 'Codex model defaults should be saved from Connections');
+lcfa_assert_same('fast', $sanitized_codex['codex_speed'] ?? '', 'Codex speed defaults should be saved from Connections');
+lcfa_assert_same('low', $sanitized_codex['codex_reasoning_effort'] ?? '', 'Codex intelligence defaults should be saved from Connections');
 
 $GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
     LCFA_Settings::connection_defaults(),

@@ -1181,6 +1181,7 @@ final class LCFA_Rest_Api {
             'context_post_id'  => absint($agent_request['context_post_id'] ?? 0),
             'target_id'        => absint($agent_request['target_id'] ?? 0),
             'variant'          => sanitize_text_field((string) ($agent_request['variant'] ?? '1')),
+            'codex_options'    => LCFA_Settings::sanitize_codex_options((array) ($agent_request['codex_options'] ?? [])),
             'payload'          => is_array($agent_request['payload'] ?? null) ? $agent_request['payload'] : [],
             'attachments'      => is_array($agent_request['attachments'] ?? null) ? $agent_request['attachments'] : [],
             'provenance'       => is_array($agent_request['provenance'] ?? null) ? $agent_request['provenance'] : [],

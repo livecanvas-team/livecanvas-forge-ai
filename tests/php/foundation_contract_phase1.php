@@ -1570,6 +1570,22 @@ lcfa_assert_true($picowind_validation_ok['ok'] === true, 'validate_markup_for_fr
 lcfa_assert_true(($picowind_validation_ok['data']['valid'] ?? false) === true, 'validate_markup_for_framework should mark Tailwind/DaisyUI-friendly markup as valid');
 lcfa_assert_same('picowind', $picowind_validation_ok['data']['framework'] ?? '', 'validate_markup_for_framework should report the active framework');
 
+$applied_header_content = (string) $GLOBALS['lcfa_test_posts'][43]->post_content;
+$GLOBALS['lcfa_test_posts'][43]->post_content = '<header><nav class="navbar navbar-expand-lg"><a class="navbar-brand" href="/">Brand</a><button class="navbar-toggler" data-bs-toggle="collapse"></button><div class="navbar-collapse"><div class="row"><div class="col-md-6">Nav</div></div></div></nav></header>';
+
+$picowind_validation_shell_warning = $command_deck->execute([
+    'action'      => 'validate_markup_for_framework',
+    'body_html'   => '<section class="mx-auto max-w-6xl px-4 py-12"><article class="card bg-base-100 shadow"><div class="card-body">Team</div></article></section>',
+    'footer_html' => '',
+]);
+
+$GLOBALS['lcfa_test_posts'][43]->post_content = $applied_header_content;
+
+lcfa_assert_true($picowind_validation_shell_warning['ok'] === true, 'global shell conflicts should not make valid page markup fail validation');
+lcfa_assert_true(($picowind_validation_shell_warning['data']['valid'] ?? false) === true, 'valid page markup should remain valid when only the global shell conflicts');
+lcfa_assert_contains('global header partial', implode("\n", (array) ($picowind_validation_shell_warning['warnings'] ?? [])), 'validation should warn when the Picowind global header still contains Bootstrap markup');
+lcfa_assert_contains('data-bs-*', implode(',', (array) ($picowind_validation_shell_warning['data']['global_shell']['parts']['header']['signals'] ?? [])), 'global shell diagnostics should expose Bootstrap data attribute signals');
+
 $picowind_validation_fail = $command_deck->execute([
     'action'  => 'validate_markup_for_framework',
     'content' => '<main><div class="container"><div class="row"><div class="col-md-6"><a class="btn btn-primary">Buy</a></div></div></div></main>',
@@ -1812,6 +1828,26 @@ $empty_upsert_result = $command_deck->execute([
 
 lcfa_assert_true($empty_upsert_result['ok'] === false, 'page_upsert should reject empty generated HTML for an existing page');
 lcfa_assert_same($page_content_before_empty_upsert, (string) $GLOBALS['lcfa_test_posts'][100]->post_content, 'page_upsert should not erase existing page HTML when no content was generated');
+
+$header_content_before_empty_update = (string) $GLOBALS['lcfa_test_posts'][43]->post_content;
+$empty_header_update_result = $command_deck->execute([
+    'action'    => 'update_header',
+    'target_id' => 43,
+    'variant'   => '1',
+]);
+
+lcfa_assert_true($empty_header_update_result['ok'] === false, 'update_header should reject empty generated HTML for an existing header partial');
+lcfa_assert_same($header_content_before_empty_update, (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'update_header should not erase existing header HTML when no content was generated');
+
+$footer_content_before_empty_update = (string) $GLOBALS['lcfa_test_posts'][44]->post_content;
+$empty_footer_update_result = $command_deck->execute([
+    'action'    => 'update_footer',
+    'target_id' => 44,
+    'variant'   => '1',
+]);
+
+lcfa_assert_true($empty_footer_update_result['ok'] === false, 'update_footer should reject empty generated HTML for an existing footer partial');
+lcfa_assert_same($footer_content_before_empty_update, (string) $GLOBALS['lcfa_test_posts'][44]->post_content, 'update_footer should not erase existing footer HTML when no content was generated');
 
 $GLOBALS['lcfa_test_force_empty_edit_link'] = true;
 $fallback_edit_result = $command_deck->execute([

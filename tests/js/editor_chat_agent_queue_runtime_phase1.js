@@ -175,6 +175,10 @@ function createShell(config) {
     configNode,
     threadSelect: new MockElement('select'),
     targetSelect: new MockElement('select'),
+    codexModelSelect: new MockElement('select'),
+    codexSpeedSelect: new MockElement('select'),
+    codexReasoningSelect: new MockElement('select'),
+    codexSandboxSelect: new MockElement('select'),
     promptInput: new MockElement('textarea'),
     analyzeButton: createButton('Send'),
     createThreadButton: createButton('New thread'),
@@ -216,6 +220,10 @@ function createShell(config) {
 
   nodes.threadSelect.value = config.threadId;
   nodes.targetSelect.value = 'local';
+  nodes.codexModelSelect.value = 'gpt-5.5';
+  nodes.codexSpeedSelect.value = 'fast';
+  nodes.codexReasoningSelect.value = 'xhigh';
+  nodes.codexSandboxSelect.value = 'workspace-write';
   nodes.analyzeButton.disabled = true;
   nodes.attachmentClearButton.hidden = true;
   nodes.attachmentPreview.hidden = true;
@@ -239,6 +247,10 @@ function createShell(config) {
     '[data-lcfa-editor-config]': nodes.configNode,
     '[data-lcfa-editor-thread]': nodes.threadSelect,
     '[data-lcfa-editor-target]': nodes.targetSelect,
+    '[data-lcfa-editor-codex-model]': nodes.codexModelSelect,
+    '[data-lcfa-editor-codex-speed]': nodes.codexSpeedSelect,
+    '[data-lcfa-editor-codex-reasoning]': nodes.codexReasoningSelect,
+    '[data-lcfa-editor-codex-sandbox]': nodes.codexSandboxSelect,
     '[data-lcfa-editor-prompt]': nodes.promptInput,
     '[data-lcfa-editor-analyze]': nodes.analyzeButton,
     '[data-lcfa-editor-thread-create]': nodes.createThreadButton,
@@ -493,6 +505,9 @@ async function flush() {
   vm.createContext(context);
   vm.runInContext(script, context);
 
+  assert.strictEqual(shellNodes.shell.dataset.ready, '1', 'connected agent drawer should reveal the launcher when no LiveCanvas loader is active');
+  assert.strictEqual(shellNodes.shell.classList.contains('is-ready'), true, 'connected agent drawer should mark the launcher ready after load/loader checks');
+
   assert.strictEqual(
     shellNodes.threadLog.children[0].children[1].textContent,
     'Add a pricing section',
@@ -527,6 +542,11 @@ async function flush() {
   assert.strictEqual(agentBodies[0]._lcfa_agent, 'codex', 'connected agent flow should declare Codex as the target agent');
   assert.strictEqual(agentBodies[0]._lcfa_processed_by, 'agent_queue', 'connected agent flow should mark the prompt as queued for an MCP agent');
   assert.strictEqual(agentBodies[0].user_prompt, 'Add a new pricing section', 'connected agent flow should preserve the user prompt');
+  assert.deepStrictEqual(
+    agentBodies[0].codex_options,
+    { model: 'gpt-5.5', speed: 'fast', reasoning_effort: 'xhigh', sandbox: 'workspace-write' },
+    'connected Codex agent flow should send the visible profile model, intelligence, and sandbox options'
+  );
   assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'applied', 'connected agent flow should finish in the applied state when Codex completes the request');
   assert.ok(shellNodes.diffNode.innerHTML.includes('Codex diff'), 'connected agent flow should render Codex support details');
   assert.strictEqual(shellNodes.proposedNode.textContent, '<section>Codex result</section>', 'connected agent flow should render the Codex result markup');

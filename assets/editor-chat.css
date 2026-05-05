@@ -1,4 +1,5 @@
-.lcfa-editor-shell{position:fixed;top:96px;right:18px;z-index:999999;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.lcfa-editor-shell{position:fixed;top:96px;right:18px;z-index:999999;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease,visibility 0s linear .2s}
+.lcfa-editor-shell.is-ready{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);transition:opacity .2s ease,transform .2s ease}
 .lcfa-editor-launcher{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:8px 12px;border:1px solid rgba(53,208,242,.24);border-radius:999px;background:rgba(15,18,32,.94);box-shadow:0 18px 54px rgba(0,0,0,.38);color:#f5f7ff;cursor:pointer;backdrop-filter:blur(16px);font-size:11px;font-weight:700;letter-spacing:.01em;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}
 .lcfa-editor-launcher:hover{transform:translateY(-1px);border-color:rgba(53,208,242,.4)}
 .lcfa-editor-launcher .lcfa-icon{width:14px;height:14px;color:#35d0f2}
@@ -37,6 +38,15 @@
 .lcfa-editor-bridge__field select,.lcfa-editor-bridge__controls textarea{width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#f5f7ff;padding:10px 12px;box-shadow:none}
 .lcfa-editor-bridge__field select option{color:#111}
 .lcfa-editor-bridge__controls textarea{min-height:132px;resize:vertical;line-height:1.6}
+.lcfa-editor-bridge__runtime-top{margin:0 0 12px}
+.lcfa-editor-bridge__codex-runtime{display:grid;gap:8px}
+.lcfa-editor-bridge__runtime-primary{width:100%}
+.lcfa-editor-bridge__runtime-details{width:100%}
+.lcfa-editor-bridge__runtime-details>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;list-style:none;font-size:10px;font-weight:700;line-height:1.2;letter-spacing:0;text-transform:none;color:rgba(245,247,255,.56)}
+.lcfa-editor-bridge__runtime-details>summary::-webkit-details-marker{display:none}
+.lcfa-editor-bridge__runtime-details>summary::after{content:"+";display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-size:11px;color:rgba(245,247,255,.68)}
+.lcfa-editor-bridge__runtime-details[open]>summary::after{content:"-"}
+.lcfa-editor-bridge__runtime-advanced{margin-top:8px}
 .lcfa-editor-bridge__actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .lcfa-editor-bridge__actions.is-thread-tools{display:flex;flex-wrap:wrap;gap:8px}
 .lcfa-editor-bridge__actions.is-thread-tools .lcfa-editor-bridge__button{flex:1 1 calc(33.333% - 8px);min-height:32px;padding:7px 10px;font-size:11px}
@@ -52,6 +62,7 @@
 .lcfa-editor-bridge__button.is-upload{justify-content:flex-start}
 .lcfa-editor-bridge__button[disabled]{opacity:.45;pointer-events:none;cursor:not-allowed;filter:saturate(.7)}
 .lcfa-editor-bridge__action-note{margin:0;font-size:11px;line-height:1.55;color:rgba(245,247,255,.6)}
+.lcfa-editor-bridge__action-note.is-runtime-note{align-self:end}
 .lcfa-editor-bridge__thread-bar{display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px}
 .lcfa-editor-bridge__thread-status{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-size:11px;font-weight:700;line-height:1.35;color:#f5f7ff}
 .lcfa-editor-bridge__thread-status[data-state="thinking"],.lcfa-editor-bridge__thread-status[data-state="running"]{border-color:rgba(53,208,242,.24);background:linear-gradient(90deg,rgba(53,208,242,.14),rgba(238,30,149,.08));color:#8ee8ff;box-shadow:0 0 22px rgba(53,208,242,.10)}

@@ -352,6 +352,7 @@ lcfa_assert_contains('assets/editor-chat.js', $editor_header_markup, 'editor bri
 lcfa_assert_not_contains('lcfa-editor-bridge-styles', $editor_header_markup, 'editor bridge header should no longer inline the chat stylesheet');
 lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed', $editor_header_markup, 'editor bridge header should no longer emit raw inline CSS rules');
 lcfa_assert_contains('.lcfa-editor-shell{position:fixed;top:', $editor_chat_css, 'editor bridge stylesheet asset should pin the launcher near the top edge instead of the bottom-right overlay zone');
+lcfa_assert_contains('.lcfa-editor-shell.is-ready', $editor_chat_css, 'editor bridge stylesheet asset should keep the launcher hidden until the page and LiveCanvas loader are ready');
 lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed;right:20px;bottom:20px', $editor_chat_css, 'editor bridge stylesheet asset should no longer anchor the launcher over the bottom-right section controls');
 lcfa_assert_contains('width:392px', $editor_chat_css, 'editor bridge stylesheet asset should slim the drawer width for a more balanced editor footprint');
 lcfa_assert_contains('min-height:132px', $editor_chat_css, 'editor bridge stylesheet asset should enlarge the request textarea because the prompt composer is the primary interaction');
@@ -362,6 +363,11 @@ lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card', $editor_cha
 lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card[hidden]{display:none!important}', $editor_chat_css, 'editor bridge stylesheet asset should force-hide the upload preview card until an image is attached');
 lcfa_assert_contains('.lcfa-editor-bridge__connection', $editor_chat_css, 'editor bridge stylesheet asset should style the connection status badge in the drawer header');
 lcfa_assert_contains('var shell=document.querySelector("[data-lcfa-editor-shell]")', $editor_chat_js, 'editor bridge script asset should bootstrap the drawer runtime');
+lcfa_assert_contains('waitForLauncherReady', $editor_chat_js, 'editor bridge runtime asset should delay showing the Forge launcher until load readiness checks finish');
+lcfa_assert_contains('getElementById("loader")', $editor_chat_js, 'editor bridge runtime asset should use the LiveCanvas #loader as the primary readiness signal');
+lcfa_assert_contains('isPrimaryLiveCanvasLoaderActive', $editor_chat_js, 'editor bridge runtime asset should wait for the primary LiveCanvas loader to be hidden instead of only faded');
+lcfa_assert_contains('MutationObserver', $editor_chat_js, 'editor bridge runtime asset should observe the LiveCanvas loader until it is hidden');
+lcfa_assert_contains('hasLiveCanvasLoader', $editor_chat_js, 'editor bridge runtime asset should inspect visible LiveCanvas loader overlays before showing the launcher');
 lcfa_assert_contains('commandExecutionEndpoint', $editor_chat_js, 'editor bridge runtime asset should support async command execution endpoints');
 lcfa_assert_contains('new FileReader()', $editor_chat_js, 'editor bridge runtime asset should support screenshot attachments through FileReader');
 lcfa_assert_contains('attachmentTriggerButton.addEventListener("click"', $editor_chat_js, 'editor bridge runtime asset should open the upload picker from a dedicated button');
@@ -442,6 +448,34 @@ $composer_position = strpos($markup, 'data-lcfa-editor-composer');
 $thread_log_position = strpos($markup, 'data-lcfa-editor-thread-log');
 if ($composer_position === false || $thread_log_position === false || $composer_position >= $thread_log_position) {
     fwrite(STDERR, "editor bridge should render the prompt composer before the thread log so the primary action stays at the top\n");
+    exit(1);
+}
+
+$GLOBALS['lcfa_test_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(LCFA_Settings::connection_defaults(), [
+    'preferred_client' => 'codex',
+    'connection_status' => 'ready',
+    'codex_model' => 'gpt-5.3-codex-spark',
+    'codex_speed' => 'balanced',
+    'codex_reasoning_effort' => 'medium',
+]);
+ob_start();
+$admin->render_editor_bridge();
+$codex_markup = (string) ob_get_clean();
+lcfa_assert_not_contains('data-lcfa-editor-codex-profile', $codex_markup, 'connected Codex editor bridge should not render the combined model profile selector');
+lcfa_assert_contains('<span>Model</span>', $codex_markup, 'connected Codex editor bridge should label the dedicated model selector');
+lcfa_assert_contains('<span>Intelligence</span>', $codex_markup, 'connected Codex editor bridge should label the dedicated intelligence selector');
+lcfa_assert_contains('data-lcfa-editor-codex-model', $codex_markup, 'connected Codex editor bridge should expose the model selector');
+lcfa_assert_contains('data-lcfa-editor-codex-speed', $codex_markup, 'connected Codex editor bridge should expose the speed selector');
+lcfa_assert_contains('data-lcfa-editor-codex-reasoning', $codex_markup, 'connected Codex editor bridge should expose the intelligence selector');
+$codex_model_position = strpos($codex_markup, 'data-lcfa-editor-codex-model');
+$request_position = strpos($codex_markup, '<div class="lcfa-editor-bridge__label">Request</div>');
+$session_position = strpos($codex_markup, 'Session settings');
+if ($codex_model_position === false || $request_position === false || $codex_model_position >= $request_position) {
+    fwrite(STDERR, "connected Codex editor bridge should render the model selector above the Request composer\n");
+    exit(1);
+}
+if ($session_position === false || $codex_model_position >= $session_position) {
+    fwrite(STDERR, "connected Codex editor bridge should keep model controls above Session settings\n");
     exit(1);
 }
 

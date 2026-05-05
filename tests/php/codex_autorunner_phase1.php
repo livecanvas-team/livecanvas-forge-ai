@@ -115,6 +115,11 @@ $request = LCFA_Settings::enqueue_agent_request([
     'target_id'        => 5964,
     'variant'          => '1',
     'action'           => 'page_upsert',
+    'codex_options'    => [
+        'model' => 'gpt-5.3-codex-spark',
+        'speed' => 'fast',
+        'reasoning_effort' => 'medium',
+    ],
 ]);
 
 $specific = LCFA_Settings::claim_agent_request((string) $request['id'], 'codex');
@@ -134,7 +139,10 @@ lcfa_assert_contains('fail_frontend_prompt_request', $plan['prompt'], 'Codex aut
 lcfa_assert_contains('mcp__livecanvas_forge__get_frontend_prompt_request', $plan['prompt'], 'Codex autorunner prompt should name the LiveCanvas MCP claim tool explicitly');
 lcfa_assert_contains('Do not call list_mcp_resources', $plan['prompt'], 'Codex autorunner prompt should prevent resource discovery detours');
 lcfa_assert_contains('Never wrap generated LiveCanvas page content in <main>', $plan['prompt'], 'Codex autorunner prompt should enforce the LiveCanvas no-main-wrapper rule');
+lcfa_assert_contains('Speed profile: fast.', $plan['prompt'], 'Codex autorunner prompt should include the selected frontend speed profile');
 lcfa_assert_contains('--skip-git-repo-check', $plan['command'], 'Codex autorunner should work from a WordPress root that may not be a git repository');
+lcfa_assert_contains("--model 'gpt-5.3-codex-spark'", $plan['command'], 'Codex autorunner should pass the selected frontend model to codex exec');
+lcfa_assert_contains("'model_reasoning_effort=\"medium\"'", $plan['command'], 'Codex autorunner should pass the selected frontend intelligence to codex exec');
 lcfa_assert_contains('--dangerously-bypass-approvals-and-sandbox', $plan['command'], 'Codex autorunner should run non-interactively without cancelling MCP tool calls');
 lcfa_assert_contains('--ignore-rules', $plan['command'], 'Codex autorunner should avoid unrelated project rules during frontend queue work');
 lcfa_assert_contains('dangerously-bypass-approvals-and-sandbox', $plan['command'], 'Codex autorunner should allow the local MCP bridge to reach WordPress over HTTP');
@@ -142,6 +150,11 @@ lcfa_assert_contains('shell_environment_policy.inherit=all', $plan['command'], '
 lcfa_assert_contains('PATH=', $plan['command'], 'Codex autorunner should provide a deterministic PATH for node and local tools');
 lcfa_assert_contains("'--cd' '/tmp/lcfa workspace'", $plan['command'], 'Codex autorunner should quote the workspace path safely');
 lcfa_assert_contains('< ' . escapeshellarg($plan['prompt_file']), $plan['command'], 'Codex autorunner should feed the prompt through stdin');
+
+$sandbox_request = $request;
+$sandbox_request['codex_options']['sandbox'] = 'workspace-write';
+$sandbox_plan = LCFA_Codex_Autorunner::build_launch_plan($sandbox_request, '/Applications/Codex.app/Contents/Resources/codex', '/tmp/lcfa workspace', $run_dir);
+lcfa_assert_contains("--sandbox 'workspace-write'", $sandbox_plan['command'], 'Codex autorunner should pass the selected frontend sandbox mode when it is restricted');
 
 $stale_request = $request;
 $stale_request['runner'] = [

@@ -153,10 +153,10 @@ class WindPressCompiler {
   }
 
   async importCompiler(tailwindVersion) {
-    const assetsRoot = this.resolveWindPressAssetsRoot()
+    const modulePath = this.resolveCompilerAssetPath(tailwindVersion)
 
     if (tailwindVersion === 3) {
-      const moduleUrl = pathToFileURL(path.join(assetsRoot, 'tailwindcss-v3-BftSpQDZ.js')).href
+      const moduleUrl = pathToFileURL(modulePath).href
       const mod = await import(moduleUrl)
 
       return {
@@ -165,7 +165,7 @@ class WindPressCompiler {
       }
     }
 
-    const moduleUrl = pathToFileURL(path.join(assetsRoot, 'tailwindcss-CWOrU34n.js')).href
+    const moduleUrl = pathToFileURL(modulePath).href
     const mod = await import(moduleUrl)
 
     if (mod.__tla) {
@@ -178,6 +178,81 @@ class WindPressCompiler {
       loadSource: mod.loadSource,
       optimize: mod.optimize
     }
+  }
+
+  resolveCompilerAssetPath(tailwindVersion) {
+    const buildRoot = this.resolveWindPressBuildRoot()
+    const manifestPath = path.join(buildRoot, 'manifest.json')
+    const sourceKey = tailwindVersion === 3
+      ? 'assets/packages/core/tailwindcss-v3/index.ts'
+      : 'assets/packages/core/tailwindcss/index.ts'
+
+    const manifestAsset = this.resolveCompilerAssetFromManifest(manifestPath, sourceKey)
+
+    if (manifestAsset) {
+      return manifestAsset
+    }
+
+    return this.resolveCompilerAssetFromDirectory(path.join(buildRoot, 'assets'), tailwindVersion)
+  }
+
+  resolveCompilerAssetFromManifest(manifestPath, sourceKey) {
+    if (!fs.existsSync(manifestPath)) {
+      return ''
+    }
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+      const entry = manifest && typeof manifest === 'object' ? manifest[sourceKey] : null
+      const file = entry && typeof entry.file === 'string' ? entry.file : ''
+
+      if (file) {
+        const assetPath = path.join(path.dirname(manifestPath), file)
+
+        if (fs.existsSync(assetPath)) {
+          return assetPath
+        }
+      }
+    } catch (_error) {
+    }
+
+    return ''
+  }
+
+  resolveCompilerAssetFromDirectory(assetsRoot, tailwindVersion) {
+    if (!fs.existsSync(assetsRoot)) {
+      throw new Error(`WindPress build assets not found: ${assetsRoot}`)
+    }
+
+    const expectedExports = tailwindVersion === 3
+      ? ['build', 'optimize']
+      : ['compile', 'getCandidates', 'loadSource', 'optimize']
+    const prefixPattern = tailwindVersion === 3
+      ? /^tailwindcss-v3-[A-Za-z0-9_-]+\.js$/
+      : /^tailwindcss-(?!v3-)[A-Za-z0-9_-]+\.js$/
+    const candidates = fs.readdirSync(assetsRoot)
+      .filter((file) => prefixPattern.test(file))
+      .map((file) => {
+        const filePath = path.join(assetsRoot, file)
+        const stats = fs.statSync(filePath)
+
+        return {
+          file,
+          filePath,
+          bytes: stats.size
+        }
+      })
+      .sort((left, right) => left.bytes - right.bytes || left.file.localeCompare(right.file))
+
+    for (const candidate of candidates) {
+      const content = fs.readFileSync(candidate.filePath, 'utf8')
+
+      if (expectedExports.every((name) => hasNamedExport(content, name))) {
+        return candidate.filePath
+      }
+    }
+
+    throw new Error(`Unable to locate a WindPress Tailwind v${tailwindVersion} compiler asset in ${assetsRoot}. Found: ${candidates.map((candidate) => candidate.file).join(', ') || 'none'}`)
   }
 
   ensureFileFetchShim() {
@@ -216,14 +291,24 @@ class WindPressCompiler {
   }
 
   resolveWindPressAssetsRoot() {
-    const wpRoot = this.resolveWordPressRoot()
-    const assetsRoot = path.join(wpRoot, 'wp-content', 'plugins', 'windpress', 'build', 'assets')
+    const assetsRoot = path.join(this.resolveWindPressBuildRoot(), 'assets')
 
     if (!fs.existsSync(assetsRoot)) {
       throw new Error(`WindPress build assets not found: ${assetsRoot}`)
     }
 
     return assetsRoot
+  }
+
+  resolveWindPressBuildRoot() {
+    const wpRoot = this.resolveWordPressRoot()
+    const buildRoot = path.join(wpRoot, 'wp-content', 'plugins', 'windpress', 'build')
+
+    if (!fs.existsSync(buildRoot)) {
+      throw new Error(`WindPress build directory not found: ${buildRoot}`)
+    }
+
+    return buildRoot
   }
 
   resolveWordPressRoot() {
@@ -246,6 +331,18 @@ class WindPressCompiler {
 
     throw new Error('Unable to resolve the local WordPress root for WindPress compilation. Set LCFA_WP_ROOT or pass --wp-root.')
   }
+}
+
+function hasNamedExport(content, name) {
+  const escapedName = escapeRegExp(name)
+
+  return new RegExp(`export\\s*\\{[\\s\\S]*(?:\\bas\\s+${escapedName}\\b|\\b${escapedName}\\b)[\\s\\S]*\\}`, 'm').test(content)
+    || new RegExp(`export\\s+(?:async\\s+)?function\\s+${escapedName}\\b`, 'm').test(content)
+    || new RegExp(`export\\s+(?:const|let|var)\\s+${escapedName}\\b`, 'm').test(content)
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function normalizeProviderIds(input, providers) {

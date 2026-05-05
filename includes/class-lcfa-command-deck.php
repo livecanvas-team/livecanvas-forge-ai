@@ -279,6 +279,8 @@ final class LCFA_Command_Deck {
                 if (empty($inspection['valid']) && (string) ($inspection['message'] ?? '') !== '') {
                     $result['warnings'][] = (string) $inspection['message'];
                 }
+
+                $this->append_global_shell_framework_warnings($result, $framework, $variant);
                 break;
 
             case 'design_system_compose':
@@ -340,6 +342,7 @@ final class LCFA_Command_Deck {
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['data']['framework'] = $framework;
+                $this->append_global_shell_framework_warnings($result, $framework, $variant);
                 if (sanitize_key((string) ($payload['content_strategy'] ?? '')) === 'section_starter') {
                     $result['data']['section_intent'] = sanitize_key((string) ($payload['section_intent'] ?? ''));
                     $result['data']['section_operation'] = $this->normalize_section_operation((string) ($payload['section_operation'] ?? ''));
@@ -423,6 +426,12 @@ final class LCFA_Command_Deck {
 
                 if (!$target_id) {
                     return $this->error_result(__('The requested partial target was not found.', 'livecanvas-forge-ai'));
+                }
+
+                if (trim($content) === '') {
+                    return $this->error_result($action === 'update_header'
+                        ? __('Forge AI did not generate header HTML for this request, so the current header was left unchanged.', 'livecanvas-forge-ai')
+                        : __('Forge AI did not generate footer HTML for this request, so the current footer was left unchanged.', 'livecanvas-forge-ai'));
                 }
 
                 $existing = $this->inventory->get_target_content($action === 'update_header' ? 'header' : 'footer', $target_id, $variant);
@@ -1032,6 +1041,8 @@ final class LCFA_Command_Deck {
         $inventory = $this->inventory->get_inventory();
         $summary = is_array($inventory['summary'] ?? null) ? $inventory['summary'] : $this->inventory->get_summary();
         $settings = LCFA_Settings::get();
+        $windpress = $this->windpress_bridge->get_status();
+        $local_mcp = $this->local_mcp_bridge->get_status();
         $warnings = [];
         $theme = [
             'ok' => false,
@@ -1071,13 +1082,29 @@ final class LCFA_Command_Deck {
             $warnings[] = __('No footer partial is currently registered; global_shell_apply can create one.', 'livecanvas-forge-ai');
         }
 
+        $global_shell = $this->inspect_global_shell_for_framework((string) ($snapshot['detected_framework'] ?? ''), '1');
+        $warnings = array_merge($warnings, (array) ($global_shell['warnings'] ?? []));
+
+        if ((string) ($snapshot['detected_framework'] ?? '') === 'picowind') {
+            if (empty($windpress['available'])) {
+                $warnings[] = __('Picowind is active, but WindPress is not available; Tailwind/DaisyUI output may render without compiled CSS.', 'livecanvas-forge-ai');
+            } elseif (empty($windpress['cache']['css']['exists'])) {
+                $warnings[] = __('Picowind is active, but the WindPress CSS cache is missing; run build_windpress_cache after content changes.', 'livecanvas-forge-ai');
+            }
+
+            if (empty($local_mcp['build_available'])) {
+                $warnings[] = __('Local WindPress cache builds are not available from this runtime; verify the local MCP bridge before large Tailwind/DaisyUI rewrites.', 'livecanvas-forge-ai');
+            }
+        }
+
         return [
             'snapshot'          => $snapshot,
             'inventory_summary' => $summary,
             'inventory'         => $inventory,
             'theme'             => $theme,
-            'windpress'         => $this->windpress_bridge->get_status(),
-            'local_mcp'         => $this->local_mcp_bridge->get_status(),
+            'windpress'         => $windpress,
+            'local_mcp'         => $local_mcp,
+            'global_shell'      => $global_shell,
             'policy'            => [
                 'permission_profile'  => (string) ($settings['permission_profile'] ?? ''),
                 'allow_file_fallback' => !empty($settings['allow_file_fallback']),
@@ -2840,24 +2867,7 @@ HTML;
             ];
         }
 
-        $patterns = [
-            'row'                    => '/\brow\b/i',
-            'col-*'                  => '/\bcol-(?:sm|md|lg|xl|xxl)?-?\d+\b/i',
-            'container-fluid'        => '/\bcontainer-fluid\b/i',
-            'g-*'                    => '/\bg-\d+\b/i',
-            'd-flex'                 => '/\bd-flex\b/i',
-            'justify-content-*'      => '/\bjustify-content-[a-z-]+\b/i',
-            'align-items-*'          => '/\balign-items-[a-z-]+\b/i',
-            'btn btn-*'              => '/\bbtn\b[^"]*\bbtn-[a-z0-9-]+\b/i',
-        ];
-
-        $signals = [];
-
-        foreach ($patterns as $label => $pattern) {
-            if (preg_match($pattern, $content)) {
-                $signals[] = $label;
-            }
-        }
+        $signals = $this->detect_framework_conflict_signals($content);
 
         if (count($signals) < 2) {
             return [
@@ -2872,6 +2882,99 @@ HTML;
             'signals' => $signals,
             'message' => __('Picowind is active. Regenerate this page with Tailwind or DaisyUI-compatible markup instead of Bootstrap classes.', 'livecanvas-forge-ai'),
         ];
+    }
+
+    private function append_global_shell_framework_warnings(array &$result, string $framework, string $variant): void {
+        $inspection = $this->inspect_global_shell_for_framework($framework, $variant);
+
+        if ($inspection['parts'] ?? []) {
+            $result['data']['global_shell'] = $inspection;
+        }
+
+        foreach ((array) ($inspection['warnings'] ?? []) as $warning) {
+            $result['warnings'][] = (string) $warning;
+        }
+    }
+
+    private function inspect_global_shell_for_framework(string $framework, string $variant): array {
+        if ($framework !== 'picowind') {
+            return [
+                'valid'    => true,
+                'variant'  => $variant,
+                'parts'    => [],
+                'warnings' => [],
+            ];
+        }
+
+        $parts = [];
+        $warnings = [];
+
+        foreach (['header', 'footer'] as $target_type) {
+            $target = $this->inventory->get_target_content($target_type, 0, $variant);
+            $content = (string) ($target['content'] ?? '');
+
+            if (trim($content) === '') {
+                continue;
+            }
+
+            $signals = $this->detect_framework_conflict_signals($content);
+            $part = [
+                'target_type' => $target_type,
+                'target_id'   => (int) ($target['post']['id'] ?? 0),
+                'title'       => (string) ($target['post']['title'] ?? ''),
+                'signals'     => $signals,
+                'valid'       => count($signals) < 2,
+            ];
+
+            $parts[$target_type] = $part;
+
+            if (empty($part['valid'])) {
+                $warnings[] = sprintf(
+                    __('Picowind is active, but the global %1$s partial still contains Bootstrap-like markup (%2$s). Run global_shell_apply or site_foundation_run before judging page rendering.', 'livecanvas-forge-ai'),
+                    $target_type,
+                    implode(', ', array_slice($signals, 0, 5))
+                );
+            }
+        }
+
+        return [
+            'valid'    => count($warnings) === 0,
+            'variant'  => $variant,
+            'parts'    => $parts,
+            'warnings' => $warnings,
+        ];
+    }
+
+    private function detect_framework_conflict_signals(string $content): array {
+        $patterns = [
+            'row'                    => '/\brow\b/i',
+            'col-*'                  => '/\bcol-(?:sm|md|lg|xl|xxl)?-?\d+\b/i',
+            'container-fluid'        => '/\bcontainer-fluid\b/i',
+            'g-*'                    => '/\bg-\d+\b/i',
+            'd-flex'                 => '/\bd-flex\b/i',
+            'justify-content-*'      => '/\bjustify-content-[a-z-]+\b/i',
+            'align-items-*'          => '/\balign-items-[a-z-]+\b/i',
+            'navbar-expand-*'        => '/\bnavbar-expand(?:-[a-z]+)?\b/i',
+            'navbar-brand'           => '/\bnavbar-brand\b/i',
+            'navbar-toggler'         => '/\bnavbar-toggler\b/i',
+            'navbar-collapse'        => '/\bnavbar-collapse\b/i',
+            'dropdown-menu'          => '/\bdropdown-menu\b/i',
+            'data-bs-*'              => '/\bdata-bs-[a-z-]+\s*=/i',
+            '--bs-*'                 => '/--bs-[a-z0-9-]+\s*:/i',
+            'bootstrap-icons'        => '/\bbootstrap-icons\b/i',
+            'bi bi-*'                => '/\bbi\s+\bbi-[a-z0-9-]+\b/i',
+            'btn btn-*'              => '/\bbtn\b[^"\']*\bbtn-[a-z0-9-]+\b/i',
+        ];
+
+        $signals = [];
+
+        foreach ($patterns as $label => $pattern) {
+            if (preg_match($pattern, $content)) {
+                $signals[] = $label;
+            }
+        }
+
+        return array_values(array_unique($signals));
     }
 
     private function resolve_edit_post_url(int $post_id): string {

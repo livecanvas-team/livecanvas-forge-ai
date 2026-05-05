@@ -599,6 +599,8 @@ async function flush() {
   vm.runInContext(script, context);
 
   assert.strictEqual(shellNodes.shell.dataset.bound, '1', 'editor chat runtime should bind to the shell once');
+  assert.strictEqual(shellNodes.shell.dataset.ready, '1', 'editor chat runtime should reveal the launcher when no LiveCanvas loader is active');
+  assert.strictEqual(shellNodes.shell.classList.contains('is-ready'), true, 'editor chat runtime should mark the launcher ready after load/loader checks');
   assert.strictEqual(localStorageState['lcfa-editor-thread:42'], 'default', 'editor chat runtime should persist the selected thread key for the current post');
   assert.strictEqual(shellNodes.attachmentPreview.hidden, true, 'editor chat runtime should keep the screenshot preview hidden until an image is attached');
   assert.strictEqual(shellNodes.analyzeButton.disabled, true, 'editor chat runtime should keep the primary action disabled until the request has content');

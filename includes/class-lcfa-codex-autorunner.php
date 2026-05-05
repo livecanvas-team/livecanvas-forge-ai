@@ -44,8 +44,9 @@ final class LCFA_Codex_Autorunner {
             'pid'         => sanitize_text_field((string) ($started['pid'] ?? '')),
             'prompt_file' => $plan['prompt_file'],
             'log_file'    => $plan['log_file'],
-            'command'     => $plan['command'],
-            'updated_at'  => current_time('mysql', true),
+            'command'       => $plan['command'],
+            'codex_options' => $plan['codex_options'],
+            'updated_at'    => current_time('mysql', true),
         ];
 
         LCFA_Settings::update_agent_request_runner($request_id, $runner);
@@ -67,7 +68,8 @@ final class LCFA_Codex_Autorunner {
         $prompt = self::build_prompt($agent_request);
         file_put_contents($prompt_file, $prompt);
 
-        $sandbox_mode = self::resolve_sandbox_mode();
+        $codex_options = LCFA_Settings::sanitize_codex_options((array) ($agent_request['codex_options'] ?? []));
+        $sandbox_mode = self::resolve_sandbox_mode($codex_options['sandbox']);
         $process_path = self::resolve_process_path();
         $parts = [
             escapeshellarg($codex_binary),
@@ -75,6 +77,16 @@ final class LCFA_Codex_Autorunner {
             '--skip-git-repo-check',
             '--ignore-rules',
         ];
+
+        if ($codex_options['model'] !== '') {
+            $parts[] = '--model';
+            $parts[] = escapeshellarg($codex_options['model']);
+        }
+
+        if ($codex_options['reasoning_effort'] !== '') {
+            $parts[] = '-c';
+            $parts[] = escapeshellarg('model_reasoning_effort="' . $codex_options['reasoning_effort'] . '"');
+        }
 
         if ($sandbox_mode === 'danger-full-access') {
             $parts[] = '--dangerously-bypass-approvals-and-sandbox';
@@ -101,7 +113,13 @@ final class LCFA_Codex_Autorunner {
             'prompt'      => $prompt,
             'prompt_file' => $prompt_file,
             'log_file'    => $log_file,
-            'command'     => $command,
+            'command'       => $command,
+            'codex_options' => [
+                'model'            => $codex_options['model'],
+                'speed'            => $codex_options['speed'],
+                'reasoning_effort' => $codex_options['reasoning_effort'],
+                'sandbox'          => $sandbox_mode,
+            ],
         ];
     }
 
@@ -110,6 +128,9 @@ final class LCFA_Codex_Autorunner {
         $agent = sanitize_key((string) ($agent_request['agent'] ?? 'codex'));
         $post_id = absint($agent_request['post_id'] ?? $agent_request['target_id'] ?? 0);
         $action = sanitize_key((string) ($agent_request['action'] ?? 'page_upsert'));
+        $codex_options = LCFA_Settings::sanitize_codex_options((array) ($agent_request['codex_options'] ?? []));
+        $speed = $codex_options['speed'] !== '' ? $codex_options['speed'] : 'balanced';
+        $speed_instruction = self::get_speed_instruction($speed);
 
         return implode("\n", [
             'You are Codex running as the LiveCanvas Forge AI frontend worker.',
@@ -138,8 +159,21 @@ final class LCFA_Codex_Autorunner {
             'Operational constraints:',
             'Do not call list_mcp_resources, list_mcp_resource_templates, read_mcp_resource, local file searches, shell commands, or skill files before claiming this request.',
             'Use MCP tools for WordPress and LiveCanvas writes. Do not edit plugin files for this frontend request.',
+            'Speed profile: ' . $speed . '. ' . $speed_instruction,
             'Keep the final Codex message short; the drawer reads completion from complete_frontend_prompt_request.',
         ]);
+    }
+
+    private static function get_speed_instruction(string $speed): string {
+        if ($speed === 'fast') {
+            return 'Favor the smallest safe context read, avoid broad exploration, and apply a scoped change as soon as the target markup is clear.';
+        }
+
+        if ($speed === 'thorough') {
+            return 'Inspect enough surrounding context to preserve layout contracts, run validation before applying, and spend extra effort on edge cases.';
+        }
+
+        return 'Use a balanced workflow: inspect the target context, validate generated markup, and avoid unnecessary full-site exploration.';
     }
 
     public static function is_stale_queued_request(array $agent_request, int $now = 0, int $timeout = 180): bool {
@@ -252,9 +286,15 @@ final class LCFA_Codex_Autorunner {
         return rtrim(wp_normalize_path($base_dir), '/\\') . '/livecanvas-forge-ai/codex-runs';
     }
 
-    private static function resolve_sandbox_mode(): string {
-        $env_sandbox = sanitize_key((string) getenv('LCFA_CODEX_SANDBOX'));
+    private static function resolve_sandbox_mode(string $preferred_sandbox = ''): string {
         $allowed = ['read-only', 'workspace-write', 'danger-full-access'];
+        $preferred_sandbox = sanitize_key($preferred_sandbox);
+
+        if (in_array($preferred_sandbox, $allowed, true)) {
+            return $preferred_sandbox;
+        }
+
+        $env_sandbox = sanitize_key((string) getenv('LCFA_CODEX_SANDBOX'));
 
         if (in_array($env_sandbox, $allowed, true)) {
             return $env_sandbox;

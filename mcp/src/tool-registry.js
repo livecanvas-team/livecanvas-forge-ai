@@ -173,7 +173,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'validate_markup_for_framework',
-      description: 'Preflight page markup against the active framework policy before page_upsert. The MCP bridge auto-detects the active framework when it is omitted and accepts either a raw content string or the structured page fast-path fields body_html/body_html_lines plus footer_script/footer_script_lines. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
+      description: 'Preflight page markup against the active framework policy before page_upsert and report global shell conflicts that can affect the rendered page. The MCP bridge auto-detects the active framework when it is omitted and accepts either a raw content string or the structured page fast-path fields body_html/body_html_lines plus footer_script/footer_script_lines. For full homepage or framework migrations, run site_prepare first and address global_shell_apply/site_foundation_run and build_windpress_cache warnings before judging the result. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -200,7 +200,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas Forge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
+      description: 'Execute a LiveCanvas Forge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For full homepage or framework migrations, run site_prepare first, resolve global shell warnings with global_shell_apply/site_foundation_run, and rebuild WindPress with build_windpress_cache. For page_upsert flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -513,7 +513,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'build_windpress_cache',
-      description: 'Compile WindPress cache locally using the shipped WindPress compiler bundles.',
+      description: 'Compile WindPress cache locally using the shipped WindPress compiler bundles discovered from the installed WindPress manifest/assets.',
       inputSchema: {
         type: 'object',
         properties: {

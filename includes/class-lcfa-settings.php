@@ -142,6 +142,10 @@ final class LCFA_Settings {
             'preferred_client'            => '',
             'claude_connection_target'    => '',
             'workspace_root'              => '',
+            'codex_model'                 => 'gpt-5.3-codex-spark',
+            'codex_speed'                 => 'balanced',
+            'codex_reasoning_effort'      => 'medium',
+            'codex_sandbox'               => '',
             'connection_status'           => '',
             'connection_mode'             => '',
             'connection_last_verified_at' => '',
@@ -183,6 +187,15 @@ final class LCFA_Settings {
         if ($mcp_port < 1 || $mcp_port > 65535) {
             $mcp_port = 7681;
         }
+        $codex_options = self::sanitize_codex_options([
+            'model'            => $connections['codex_model'] ?? $current['codex_model'] ?? '',
+            'speed'            => $connections['codex_speed'] ?? $current['codex_speed'] ?? '',
+            'reasoning_effort' => $connections['codex_reasoning_effort'] ?? $current['codex_reasoning_effort'] ?? '',
+            'sandbox'          => $connections['codex_sandbox'] ?? $current['codex_sandbox'] ?? '',
+        ]);
+        $codex_options['model'] = $codex_options['model'] !== '' ? $codex_options['model'] : 'gpt-5.3-codex-spark';
+        $codex_options['speed'] = $codex_options['speed'] !== '' ? $codex_options['speed'] : 'balanced';
+        $codex_options['reasoning_effort'] = $codex_options['reasoning_effort'] !== '' ? $codex_options['reasoning_effort'] : 'medium';
         $connection_current_step = (string) ($connections['connection_current_step'] ?? '');
         $framework_change_previous = self::normalize_framework_key((string) ($connections['framework_change_previous'] ?? ''));
         $framework_change_next = self::normalize_framework_key((string) ($connections['framework_change_next'] ?? ''));
@@ -203,6 +216,10 @@ final class LCFA_Settings {
             'preferred_client'            => $preferred_client,
             'claude_connection_target'    => $claude_connection_target,
             'workspace_root'              => sanitize_text_field($connections['workspace_root'] ?? ''),
+            'codex_model'                 => $codex_options['model'],
+            'codex_speed'                 => $codex_options['speed'],
+            'codex_reasoning_effort'      => $codex_options['reasoning_effort'],
+            'codex_sandbox'               => $codex_options['sandbox'],
             'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
             'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
             'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
@@ -212,6 +229,61 @@ final class LCFA_Settings {
             'framework_change_pending'    => !empty($connections['framework_change_pending']) && $framework_change_previous !== '' && $framework_change_next !== '' && $framework_change_previous !== $framework_change_next,
             'framework_change_previous'   => $framework_change_previous,
             'framework_change_next'       => $framework_change_next,
+        ];
+    }
+
+    public static function get_codex_model_options(): array {
+        return [
+            ''                     => 'Use Codex default',
+            'gpt-5.3-codex-spark' => 'GPT-5.3 Codex Spark',
+            'gpt-5.4-mini'        => 'GPT-5.4 Mini',
+            'gpt-5.3-codex'       => 'GPT-5.3 Codex',
+            'gpt-5.4'             => 'GPT-5.4',
+            'gpt-5.5'             => 'GPT-5.5',
+            'gpt-5.2'             => 'GPT-5.2',
+        ];
+    }
+
+    public static function get_codex_reasoning_effort_options(): array {
+        return [
+            ''       => 'Use Codex default',
+            'low'    => 'Low',
+            'medium' => 'Medium',
+            'high'   => 'High',
+            'xhigh'  => 'Max',
+        ];
+    }
+
+    public static function get_codex_speed_options(): array {
+        return [
+            ''         => 'Use Forge default',
+            'fast'     => 'Fast',
+            'balanced' => 'Balanced',
+            'thorough' => 'Thorough',
+        ];
+    }
+
+    public static function get_codex_sandbox_options(): array {
+        return [
+            ''                   => 'Plugin default',
+            'danger-full-access' => 'Full access',
+            'workspace-write'    => 'Workspace write',
+            'read-only'          => 'Read only',
+        ];
+    }
+
+    public static function sanitize_codex_options(array $options): array {
+        $nested = is_array($options['codex_options'] ?? null) ? $options['codex_options'] : [];
+        $model = sanitize_text_field((string) ($options['model'] ?? $options['codex_model'] ?? $nested['model'] ?? ''));
+        $speed = sanitize_key((string) ($options['speed'] ?? $options['codex_speed'] ?? $nested['speed'] ?? ''));
+        $reasoning_effort = sanitize_key((string) ($options['reasoning_effort'] ?? $options['codex_reasoning_effort'] ?? $nested['reasoning_effort'] ?? ''));
+        $sandbox = sanitize_key((string) ($options['sandbox'] ?? $options['codex_sandbox'] ?? $nested['sandbox'] ?? ''));
+
+        return [
+            'model'            => array_key_exists($model, self::get_codex_model_options()) ? $model : '',
+            'speed'            => array_key_exists($speed, self::get_codex_speed_options()) ? $speed : '',
+            'reasoning_effort' => array_key_exists($reasoning_effort, self::get_codex_reasoning_effort_options()) ? $reasoning_effort : '',
+            'sandbox'          => array_key_exists($sandbox, self::get_codex_sandbox_options()) ? $sandbox : '',
         ];
     }
 
@@ -231,6 +303,16 @@ final class LCFA_Settings {
             $preferred_client,
             $raw_client
         );
+        $codex_options = self::sanitize_codex_options([
+            'model'            => $connections['codex_model'] ?? '',
+            'speed'            => $connections['codex_speed'] ?? '',
+            'reasoning_effort' => $connections['codex_reasoning_effort'] ?? '',
+            'sandbox'          => $connections['codex_sandbox'] ?? '',
+        ]);
+        $connections['codex_model'] = $codex_options['model'] !== '' ? $codex_options['model'] : 'gpt-5.3-codex-spark';
+        $connections['codex_speed'] = $codex_options['speed'] !== '' ? $codex_options['speed'] : 'balanced';
+        $connections['codex_reasoning_effort'] = $codex_options['reasoning_effort'] !== '' ? $codex_options['reasoning_effort'] : 'medium';
+        $connections['codex_sandbox'] = $codex_options['sandbox'];
 
         return $connections;
     }
@@ -659,6 +741,11 @@ final class LCFA_Settings {
         $thread_id   = self::normalize_thread_id((string) ($payload['thread_id'] ?? 'default'));
         $user_prompt = sanitize_textarea_field((string) ($payload['user_prompt'] ?? $payload['message'] ?? ''));
         $attachments = self::sanitize_thread_attachments((array) ($payload['attachments'] ?? []));
+        $codex_options = self::sanitize_codex_options($payload);
+        $codex_options['model'] = $codex_options['model'] !== '' ? $codex_options['model'] : (string) ($connections['codex_model'] ?? 'gpt-5.3-codex-spark');
+        $codex_options['speed'] = $codex_options['speed'] !== '' ? $codex_options['speed'] : (string) ($connections['codex_speed'] ?? 'balanced');
+        $codex_options['reasoning_effort'] = $codex_options['reasoning_effort'] !== '' ? $codex_options['reasoning_effort'] : (string) ($connections['codex_reasoning_effort'] ?? 'medium');
+        $codex_options = self::sanitize_codex_options($codex_options);
 
         $request = [
             'id'               => $request_id,
@@ -673,6 +760,7 @@ final class LCFA_Settings {
             'target_id'        => absint($payload['target_id'] ?? 0),
             'variant'          => sanitize_text_field((string) ($payload['variant'] ?? '1')),
             'action'           => sanitize_key((string) ($payload['action'] ?? 'page_upsert')),
+            'codex_options'    => $codex_options,
             'payload'          => self::sanitize_agent_payload($payload),
             'attachments'      => $attachments,
             'provenance'       => [
@@ -708,6 +796,7 @@ final class LCFA_Settings {
                     'target_id'        => $request['target_id'],
                     'variant'          => $request['variant'],
                     'request_id'       => $request_id,
+                    'codex_options'    => $codex_options,
                 ],
                 'attachments' => $attachments,
             ]);
@@ -1128,6 +1217,7 @@ final class LCFA_Settings {
             'target_id'        => absint($request['target_id'] ?? 0),
             'variant'          => sanitize_text_field((string) ($request['variant'] ?? '1')),
             'action'           => sanitize_key((string) ($request['action'] ?? 'page_upsert')),
+            'codex_options'    => self::sanitize_codex_options((array) ($request['codex_options'] ?? [])),
             'payload'          => self::sanitize_agent_payload((array) ($request['payload'] ?? [])),
             'attachments'      => self::sanitize_thread_attachments((array) ($request['attachments'] ?? [])),
             'provenance'       => self::sanitize_agent_payload((array) ($request['provenance'] ?? [])),
