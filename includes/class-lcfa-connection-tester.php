@@ -62,7 +62,7 @@ final class LCFA_Connection_Tester {
             $url = rest_url('lcfa/v1/');
         }
 
-        $endpoint = trailingslashit($url) . 'mcp/status';
+        $endpoint = trailingslashit($url) . 'mcp/health';
         $response = wp_remote_get($endpoint, [
             'timeout' => 8,
             'headers' => [
@@ -77,9 +77,10 @@ final class LCFA_Connection_Tester {
             $response,
             static function (array $payload): array {
                 return [
-                    'mcp_enabled'      => !empty($payload['mcp']['enabled']),
-                    'filesystem_mode'  => (string) ($payload['mcp']['filesystem_mode'] ?? ''),
-                    'preferred_client' => (string) ($payload['mcp']['preferred_client'] ?? ''),
+                    'plugin'        => (string) ($payload['plugin'] ?? ''),
+                    'script_exists' => !empty($payload['script_exists']),
+                    'wp_root'       => (string) ($payload['wp_root'] ?? ''),
+                    'rest_base'     => (string) ($payload['rest_base'] ?? ''),
                 ];
             }
         );
@@ -232,6 +233,50 @@ final class LCFA_Connection_Tester {
     }
 
     private function test_codex_registration(array $connections): array {
+        if (class_exists('LCFA_Codex_Config_Manager', false)) {
+            $manager = new LCFA_Codex_Config_Manager();
+            $inspection = $manager->inspect($connections);
+
+            if (empty($inspection['synced'])) {
+                return [
+                    'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                    'ok'      => false,
+                    'skipped' => false,
+                    'message' => (string) ($inspection['message'] ?? __('Codex config is stale. Regenerate or sync the Codex MCP config.', 'livecanvas-forge-ai')),
+                    'details' => [
+                        'config_path' => (string) ($inspection['expected']['config_path'] ?? ''),
+                        'status'      => (string) ($inspection['status'] ?? ''),
+                        'matches'     => is_array($inspection['matches'] ?? null) ? $inspection['matches'] : [],
+                    ],
+                ];
+            }
+
+            $smoke = $manager->run_smoke_test($connections);
+            if (empty($smoke['ok'])) {
+                return [
+                    'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                    'ok'      => false,
+                    'skipped' => false,
+                    'message' => (string) ($smoke['message'] ?? __('Codex MCP smoke test failed. Review the repair details.', 'livecanvas-forge-ai')),
+                    'details' => [
+                        'config_path' => (string) ($inspection['expected']['config_path'] ?? ''),
+                        'checks'      => is_array($smoke['checks'] ?? null) ? $smoke['checks'] : [],
+                    ],
+                ];
+            }
+
+            return [
+                'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
+                'ok'      => true,
+                'skipped' => false,
+                'message' => __('Codex config is synced and the MCP smoke test passed.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'config_path' => (string) ($inspection['expected']['config_path'] ?? ''),
+                    'hash'        => (string) ($inspection['expected']['hash'] ?? ''),
+                ],
+            ];
+        }
+
         $config_path = $this->resolve_codex_config_path();
         $workspace_root = trim((string) ($connections['workspace_root'] ?? ''));
         $rest_base = trim((string) ($connections['local_bridge_url'] ?? ''));

@@ -117,6 +117,44 @@ final class LCFA_Settings {
         update_option(self::CONNECTIONS_OPTION_KEY, self::sanitize_connections($connections));
     }
 
+    public static function sync_local_workspace_root(bool $force = false): array {
+        $connections = self::get_connections();
+        $normalized = self::normalize_local_workspace_root($connections, $force);
+
+        if ($normalized !== $connections) {
+            update_option(self::CONNECTIONS_OPTION_KEY, $normalized);
+        }
+
+        return $normalized;
+    }
+
+    public static function normalize_local_workspace_root(array $connections, bool $force = false): array {
+        $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
+        if ($wp_root === '' || !self::looks_like_wordpress_root($wp_root)) {
+            return $connections;
+        }
+
+        $mode = sanitize_key((string) ($connections['connection_mode'] ?? ''));
+        if (!$force && $mode !== 'local' && !self::looks_like_local_site_url(home_url('/'))) {
+            return $connections;
+        }
+
+        $workspace_root = untrailingslashit(trim((string) ($connections['workspace_root'] ?? '')));
+        if ($workspace_root !== '' && self::looks_like_wordpress_root($workspace_root)) {
+            return $connections;
+        }
+
+        $connections['workspace_root'] = $wp_root;
+        $connections['connection_last_bundle_hash'] = '';
+        if ((string) ($connections['connection_status'] ?? '') === 'ready') {
+            $connections['connection_status'] = 'needs_attention';
+            $connections['connection_last_error'] = __('Workspace root changed. Sync Codex config and rerun the smoke test.', 'livecanvas-forge-ai');
+            $connections['connection_current_step'] = 'smoke_test';
+        }
+
+        return $connections;
+    }
+
     public static function get_public_connections(): array {
         $connections = self::get_connections();
         $connections['remote_application_password'] = $connections['remote_application_password'] !== '' ? 'stored' : '';
@@ -346,7 +384,16 @@ final class LCFA_Settings {
     public static function rotate_mcp_token(): array {
         $connections = self::get_connections();
         $connections['mcp_token'] = self::generate_mcp_token();
+        $connections['connection_last_bundle_hash'] = '';
+        $connections['connection_status'] = '';
+        $connections['connection_last_verified_at'] = '';
+        $connections['connection_last_error'] = __('MCP token rotated. Sync Codex config and rerun the smoke test.', 'livecanvas-forge-ai');
+        $connections['connection_current_step'] = trim((string) ($connections['preferred_client'] ?? '')) !== '' ? 'smoke_test' : 'choose_client';
         self::update_connections($connections);
+
+        if (function_exists('delete_transient')) {
+            delete_transient('lcfa_local_mcp_status_' . md5(home_url('/') . '|' . LCFA_VERSION));
+        }
 
         return self::get_connections();
     }
@@ -363,6 +410,16 @@ final class LCFA_Settings {
 
     private static function generate_mcp_token(): string {
         return wp_generate_password(32, false, false);
+    }
+
+    private static function looks_like_wordpress_root(string $path): bool {
+        $path = untrailingslashit($path);
+
+        return $path !== '' && (is_file($path . '/wp-load.php') || is_dir($path . '/wp-content'));
+    }
+
+    private static function looks_like_local_site_url(string $url): bool {
+        return (bool) preg_match('#://(?:localhost|127\.0\.0\.1|\[::1\])(?::|/)|\.local(?::|/)|\.test(?::|/)#i', $url);
     }
 
     public static function get_genesis_plan(): array {

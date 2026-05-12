@@ -1890,14 +1890,14 @@ LCFA_Settings::update_connections(array_merge(LCFA_Settings::connection_defaults
     'mcp_token'        => 'test-token',
 ]));
 
-$GLOBALS['lcfa_test_remote_get_map']['https://example.test/wp-json/lcfa/v1/mcp/status'] = [
+$GLOBALS['lcfa_test_remote_get_map']['https://example.test/wp-json/lcfa/v1/mcp/health'] = [
     'response' => ['code' => 200],
     'body'     => wp_json_encode([
-        'mcp' => [
-            'enabled'           => true,
-            'filesystem_mode'   => 'local-theme-access',
-            'preferred_client'  => 'opencode',
-        ],
+        'ok'            => true,
+        'plugin'        => 'livecanvas-forge-ai',
+        'script_exists' => true,
+        'wp_root'       => '/Users/commander/Studio/consultala',
+        'rest_base'     => 'https://example.test/wp-json/lcfa/v1/',
     ], JSON_UNESCAPED_SLASHES),
 ];
 

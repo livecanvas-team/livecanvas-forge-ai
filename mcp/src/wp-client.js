@@ -337,7 +337,7 @@ class WPClient {
     const data = text ? safeJsonParse(text) : {}
 
     if (!response.ok) {
-      const message = extractErrorMessage(data) || `WordPress request failed (${response.status})`
+      const message = getHttpErrorMessage(response.status, data)
       const error = new Error(message)
       error.status = response.status
       error.payload = data
@@ -374,6 +374,17 @@ function extractErrorMessage(payload) {
   }
 
   return ''
+}
+
+function getHttpErrorMessage(status, payload) {
+  const message = extractErrorMessage(payload)
+  const code = payload && typeof payload === 'object' ? String(payload.code || '') : ''
+
+  if ((status === 401 || status === 403) && (code === 'rest_forbidden' || /not allowed|forbidden|unauthorized/i.test(message))) {
+    return 'WordPress rejected the LiveCanvas Forge MCP token. Sync Codex config or rotate the token and regenerate.'
+  }
+
+  return message || `WordPress request failed (${status})`
 }
 
 module.exports = {

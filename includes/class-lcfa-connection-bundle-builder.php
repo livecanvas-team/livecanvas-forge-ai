@@ -535,6 +535,7 @@ final class LCFA_Connection_Bundle_Builder {
             'fi',
             '',
             'if [ -n "$LCFA_CODEX_BIN" ]; then',
+            '  "$LCFA_CODEX_BIN" mcp remove livecanvas-forge >/dev/null 2>&1 || true',
             '  "$LCFA_CODEX_BIN" mcp add livecanvas-forge \\',
         ];
 
@@ -543,6 +544,7 @@ final class LCFA_Connection_Bundle_Builder {
         }
 
         $lines[] = '    -- ' . $this->join_shell_tokens($command);
+        $lines[] = '  echo "Codex MCP server livecanvas-forge updated. Restart Codex or reload the MCP server before testing."';
         $lines[] = 'else';
         $lines[] = "  cat <<'EOF'";
         $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';

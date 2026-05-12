@@ -175,7 +175,8 @@ final class LCFA_Local_MCP_Bridge {
 
     private function probe_rest_loopback(): array {
         $connections = LCFA_Settings::get_connections();
-        $response    = wp_remote_get(rest_url('lcfa/v1/mcp/status'), [
+        // Keep this probe atomic: /mcp/status builds local bridge status and would recurse into this method.
+        $response    = wp_remote_get(rest_url('lcfa/v1/mcp/health'), [
             'timeout' => 5,
             'headers' => [
                 'X-LCFA-MCP-Token' => (string) $connections['mcp_token'],
@@ -260,7 +261,7 @@ final class LCFA_Local_MCP_Bridge {
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open($command, $descriptors, $pipes, $working_directory, $environment);
+        $process = proc_open($command, $descriptors, $pipes, is_dir($working_directory) ? $working_directory : null, $environment);
 
         if (!is_resource($process)) {
             return [

@@ -40,6 +40,10 @@ final class LCFA_Plugin {
             LCFA_Settings::update_connections(LCFA_Settings::connection_defaults());
         }
 
+        if (method_exists('LCFA_Settings', 'sync_local_workspace_root')) {
+            LCFA_Settings::sync_local_workspace_root(true);
+        }
+
         add_option(LCFA_Settings::REDIRECT_OPTION_KEY, 1);
     }
 

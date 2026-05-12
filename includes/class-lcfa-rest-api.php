@@ -265,6 +265,12 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_read'],
         ]);
 
+        register_rest_route('lcfa/v1', '/mcp/health', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_mcp_health'],
+            'permission_callback' => [$this, 'can_mcp_health'],
+        ]);
+
         register_rest_route('lcfa/v1', '/mcp/local-status', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_mcp_local_status'],
@@ -956,6 +962,24 @@ final class LCFA_Rest_Api {
     public function get_mcp_status(): WP_REST_Response {
         return new WP_REST_Response([
             'mcp' => $this->context_builder->get_mcp_status(),
+        ]);
+    }
+
+    public function get_mcp_health(): WP_REST_Response {
+        $theme = wp_get_theme();
+
+        return new WP_REST_Response([
+            'ok'            => true,
+            'plugin'        => 'livecanvas-forge-ai',
+            'token_valid'   => true,
+            'site_url'      => home_url('/'),
+            'rest_base'     => rest_url('lcfa/v1/'),
+            'wp_root'       => untrailingslashit(ABSPATH),
+            'mcp_script'    => LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js',
+            'script_exists' => is_readable(LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js'),
+            'stylesheet'    => method_exists($theme, 'get_stylesheet') ? (string) $theme->get_stylesheet() : '',
+            'template'      => method_exists($theme, 'get_template') ? (string) $theme->get_template() : '',
+            'timestamp'     => current_time('mysql', true),
         ]);
     }
 
@@ -1840,6 +1864,10 @@ final class LCFA_Rest_Api {
 
     public function can_manage(?WP_REST_Request $request = null): bool {
         return current_user_can('manage_options');
+    }
+
+    public function can_mcp_health(?WP_REST_Request $request = null): bool {
+        return $this->has_valid_mcp_token($request);
     }
 
     private function has_valid_mcp_token(?WP_REST_Request $request = null): bool {

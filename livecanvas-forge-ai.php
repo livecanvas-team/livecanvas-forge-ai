@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas Forge AI
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.1.2
+ * Version: 0.1.3
  * Author: The LiveCanvas Team
  * Author URI: https://livecanvas.com/
  * Text Domain: livecanvas-forge-ai
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.1.2');
+define('LCFA_VERSION', '0.1.3');
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
@@ -25,6 +25,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-theme-files-bridge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-local-mcp-bridge.php';
+require_once LCFA_DIR . 'includes/class-lcfa-codex-config-manager.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-tester.php';
 require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';
 require_once LCFA_DIR . 'includes/class-lcfa-remote-client.php';
