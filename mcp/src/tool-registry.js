@@ -150,6 +150,21 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async () => client.getCommandActions()
     },
     {
+      name: 'get_agent_handoff_package',
+      description: 'Read the copy-ready virtual handoff package for Codex and MCP agents, including runbook, smoke tests, readiness files, and checksums.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 40
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getAgentHandoffPackage(argumentsMap)
+    },
+    {
       name: 'suggest_lc_command',
       description: 'Analyze a natural-language request and return the safest suggested companion action payload.',
       inputSchema: {

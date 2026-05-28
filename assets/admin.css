@@ -1844,6 +1844,12 @@
     color: #22c55e;
 }
 
+.lcfa-admin .lcfa-chip.is-warning {
+    border-color: rgba(251, 191, 36, 0.38);
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+}
+
 .lcfa-admin .lcfa-chip.is-negative {
     border-color: rgba(232, 62, 140, 0.32);
     color: #ff8eb9;
@@ -1923,6 +1929,601 @@
 .lcfa-admin .lcfa-genesis-task-list {
     display: grid;
     gap: 12px;
+}
+
+.lcfa-admin .lcfa-studio-app-shell:empty {
+    display: none;
+}
+
+.lcfa-admin .lcfa-studio-react {
+    display: block;
+}
+
+.lcfa-admin [data-lcfa-studio-fallback][hidden] {
+    display: none;
+}
+
+.lcfa-admin .lcfa-studio-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+}
+
+.lcfa-admin .lcfa-studio-meta {
+    margin: -4px 0 16px;
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-studio-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 14px;
+}
+
+.lcfa-admin .lcfa-studio-search {
+    display: grid;
+    gap: 6px;
+    min-width: min(100%, 260px);
+}
+
+.lcfa-admin .lcfa-studio-control,
+.lcfa-admin .lcfa-studio-search {
+    display: grid;
+    gap: 6px;
+}
+
+.lcfa-admin .lcfa-studio-control span,
+.lcfa-admin .lcfa-studio-search span {
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lcfa-admin .lcfa-studio-control select,
+.lcfa-admin .lcfa-studio-search input[type="search"] {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid rgba(169, 171, 203, 0.2);
+    border-radius: 12px;
+    background: rgba(12, 13, 22, 0.52);
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin .lcfa-studio-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: -4px 0 14px;
+}
+
+.lcfa-admin .lcfa-studio-columns label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-studio-columns input[type="checkbox"] {
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-studio-alert-list {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 14px;
+}
+
+.lcfa-admin .lcfa-studio-alert {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(38, 198, 218, 0.22);
+    background: rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-studio-alert strong {
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-alert p {
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-studio-alert.is-success {
+    border-color: rgba(34, 197, 94, 0.34);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-alert.is-info {
+    border-color: rgba(38, 198, 218, 0.26);
+    background: rgba(38, 198, 218, 0.09);
+}
+
+.lcfa-admin .lcfa-studio-alert.is-warning {
+    border-color: rgba(251, 191, 36, 0.36);
+    background: rgba(251, 191, 36, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-alert.is-negative,
+.lcfa-admin .lcfa-studio-alert.is-error {
+    border-color: rgba(232, 62, 140, 0.36);
+    background: rgba(232, 62, 140, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-briefing-list {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+}
+
+.lcfa-admin .lcfa-studio-briefing-list li {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text-soft);
+    line-height: 1.45;
+}
+
+.lcfa-admin .lcfa-studio-briefing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0 0 14px;
+}
+
+.lcfa-admin .lcfa-studio-briefing-block {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-briefing-block h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-briefing-row {
+    display: grid;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(169, 171, 203, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-briefing-row:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.lcfa-admin .lcfa-studio-briefing-row strong {
+    color: #fff;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-briefing-row span {
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-studio-briefing-row.is-warning strong {
+    color: #fbbf24;
+}
+
+.lcfa-admin .lcfa-studio-briefing-row.is-info strong {
+    color: #35d0f2;
+}
+
+.lcfa-admin .lcfa-studio-briefing-prompt {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(38, 198, 218, 0.24);
+    background: rgba(12, 13, 22, 0.52);
+    color: #e7e9f8;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-studio-smoke-list {
+    display: grid;
+    gap: 12px;
+    margin: 14px 0 0;
+}
+
+.lcfa-admin .lcfa-studio-smoke-item {
+    display: grid;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-smoke-item.is-available {
+    border-color: rgba(34, 197, 94, 0.18);
+}
+
+.lcfa-admin .lcfa-studio-smoke-item.is-missing {
+    border-color: rgba(251, 191, 36, 0.26);
+}
+
+.lcfa-admin .lcfa-studio-smoke-item__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.lcfa-admin .lcfa-studio-smoke-item strong {
+    color: #fff;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-smoke-item code {
+    width: fit-content;
+    max-width: 100%;
+    color: #35d0f2;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-studio-smoke-item p,
+.lcfa-admin .lcfa-studio-smoke-item small {
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-studio-runbook-checklist {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+}
+
+.lcfa-admin .lcfa-studio-runbook-checklist li {
+    position: relative;
+    padding: 10px 12px 10px 34px;
+    border-radius: 12px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--lcfa-text-soft);
+    line-height: 1.45;
+}
+
+.lcfa-admin .lcfa-studio-runbook-checklist li::before {
+    content: "";
+    position: absolute;
+    top: 13px;
+    left: 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(38, 198, 218, 0.46);
+    background: rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-studio-runbook-markdown {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.18);
+    background: rgba(12, 13, 22, 0.58);
+    color: #e7e9f8;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-studio-package-checksum {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin: 12px 0;
+    color: #35d0f2;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-studio-package-list {
+    display: grid;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-studio-package-item {
+    display: grid;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-package-item__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.lcfa-admin .lcfa-studio-package-item__head strong {
+    display: block;
+    color: #fff;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-studio-package-item__head span {
+    display: block;
+    margin-top: 3px;
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.lcfa-admin .lcfa-studio-fingerprint {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin: 12px 0;
+    color: #35d0f2;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-studio-contract-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-studio-readiness-score {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    margin: 0 0 14px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(38, 198, 218, 0.22);
+    background: rgba(38, 198, 218, 0.08);
+}
+
+.lcfa-admin .lcfa-studio-readiness-score strong {
+    color: #fff;
+    font-size: 30px;
+    line-height: 1;
+}
+
+.lcfa-admin .lcfa-studio-readiness-score span {
+    color: var(--lcfa-text-soft);
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-studio-gate-list {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0 0;
+}
+
+.lcfa-admin .lcfa-studio-gate-item {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-gate-item.is-pass {
+    border-color: rgba(34, 197, 94, 0.22);
+}
+
+.lcfa-admin .lcfa-studio-gate-item.is-warn {
+    border-color: rgba(251, 191, 36, 0.28);
+}
+
+.lcfa-admin .lcfa-studio-gate-item.is-fail {
+    border-color: rgba(232, 62, 140, 0.34);
+}
+
+.lcfa-admin .lcfa-studio-gate-item__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.lcfa-admin .lcfa-studio-gate-item strong {
+    color: #fff;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-gate-item p {
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-studio-health-grid {
+    margin-bottom: 14px;
+}
+
+.lcfa-admin .lcfa-studio-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0 0 14px;
+}
+
+.lcfa-admin .lcfa-studio-analysis-block,
+.lcfa-admin .lcfa-studio-timeline {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-analysis-block h3,
+.lcfa-admin .lcfa-studio-timeline h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-metric-list,
+.lcfa-admin .lcfa-studio-timeline {
+    display: grid;
+    gap: 10px;
+}
+
+.lcfa-admin .lcfa-studio-metric-row,
+.lcfa-admin .lcfa-studio-timeline-row {
+    display: grid;
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px solid rgba(169, 171, 203, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-metric-row:first-child,
+.lcfa-admin .lcfa-studio-timeline-row:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.lcfa-admin .lcfa-studio-metric-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-studio-metric-row span,
+.lcfa-admin .lcfa-studio-timeline-row span {
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-studio-metric-row strong,
+.lcfa-admin .lcfa-studio-timeline-row strong {
+    color: #fff;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.lcfa-admin .lcfa-studio-timeline-row.is-error {
+    border-color: rgba(232, 62, 140, 0.22);
+}
+
+.lcfa-admin .lcfa-studio-manifest-list {
+    display: grid;
+    gap: 12px;
+    margin: 14px 0 0;
+}
+
+.lcfa-admin .lcfa-studio-manifest-item {
+    display: grid;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(169, 171, 203, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-studio-manifest-item strong {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-studio-manifest-item code {
+    width: fit-content;
+    max-width: 100%;
+    color: #35d0f2;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-studio-manifest-item p,
+.lcfa-admin .lcfa-studio-manifest-item small {
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-studio-inspector__section {
+    display: grid;
+    gap: 10px;
+    padding: 12px 0;
+    border-top: 1px solid rgba(169, 171, 203, 0.12);
+}
+
+.lcfa-admin .lcfa-studio-inspector__section:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.lcfa-admin .lcfa-studio-inspector__section h3,
+.lcfa-admin .lcfa-studio-inspector__section p {
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-studio-inspector__section p {
+    color: var(--lcfa-text-soft);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-history-item.is-current,
+.lcfa-admin .lcfa-target-item.is-current {
+    border-color: rgba(38, 198, 218, 0.46);
+    background: rgba(38, 198, 218, 0.1);
+}
+
+.lcfa-admin .lcfa-studio-segmented {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-studio-segmented .button {
+    min-height: 36px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(169, 171, 203, 0.16);
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin .lcfa-studio-segmented .button.is-current {
+    border-color: rgba(38, 198, 218, 0.42);
+    background: rgba(38, 198, 218, 0.12);
+    color: #fff;
 }
 
 .lcfa-admin .lcfa-inventory-groups {
@@ -2493,6 +3094,8 @@
     .lcfa-admin .lcfa-summary-grid,
     .lcfa-admin .lcfa-brand-grid,
     .lcfa-admin .lcfa-genesis-page-grid,
+    .lcfa-admin .lcfa-studio-briefing-grid,
+    .lcfa-admin .lcfa-studio-analysis-grid,
     .lcfa-admin .lcfa-wizard__steps,
     .lcfa-admin .lcfa-agent-guide__panel-grid {
         grid-template-columns: 1fr;

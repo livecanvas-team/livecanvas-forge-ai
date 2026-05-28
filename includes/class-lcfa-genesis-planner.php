@@ -5,10 +5,12 @@ defined('ABSPATH') || exit;
 final class LCFA_Genesis_Planner {
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
+    private ?LCFA_AI_Client $ai_client;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, ?LCFA_AI_Client $ai_client = null) {
         $this->environment = $environment;
         $this->inventory   = $inventory;
+        $this->ai_client   = $ai_client;
     }
 
     public function generate(?array $brief = null): array {
@@ -18,10 +20,23 @@ final class LCFA_Genesis_Planner {
         $brief_hash = LCFA_Settings::get_project_brief_hash($brief);
         $pages     = $this->build_page_plan($brief, $snapshot);
         $tasks     = $this->build_task_plan($brief, $snapshot, $summary, $pages);
+        $ai        = $this->generate_ai_plan_enhancement($brief, $snapshot, $summary, $pages, $tasks);
+
+        if (!empty($ai['used']) && is_array($ai['plan'] ?? null)) {
+            $pages = $this->merge_ai_pages($pages, (array) ($ai['plan']['pages'] ?? []));
+            $tasks = $this->merge_ai_tasks($tasks, (array) ($ai['plan']['tasks'] ?? []), (array) ($ai['plan']['advisories'] ?? []));
+        }
 
         return [
             'generated_at' => current_time('mysql', true),
             'brief_hash'   => $brief_hash,
+            'ai'           => [
+                'available'  => !empty($ai['available']),
+                'used'       => !empty($ai['used']),
+                'provider'   => 'wordpress_ai_client',
+                'message'    => (string) ($ai['message'] ?? ''),
+                'advisories' => array_values((array) ($ai['plan']['advisories'] ?? [])),
+            ],
             'mode'         => (string) $brief['project_mode'],
             'brand'        => [
                 'name'        => (string) $brief['brand_name'],
@@ -48,6 +63,189 @@ final class LCFA_Genesis_Planner {
                 })),
             ],
         ];
+    }
+
+    private function generate_ai_plan_enhancement(array $brief, array $snapshot, array $summary, array $pages, array $tasks): array {
+        if (!$this->ai_client) {
+            return [
+                'available' => false,
+                'used'      => false,
+                'message'   => __('WordPress AI Client is not wired into Genesis Planner.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $status = $this->ai_client->get_status();
+        if (empty($status['available']) || empty($status['text_generation_supported'])) {
+            return [
+                'available' => !empty($status['available']),
+                'used'      => false,
+                'message'   => (string) ($status['message'] ?? __('WordPress AI Client is not ready for Genesis planning.', 'livecanvas-forge-ai')),
+            ];
+        }
+
+        $generated = $this->ai_client->generate_json(
+            $this->build_ai_plan_prompt($brief, $snapshot, $summary, $pages, $tasks),
+            $this->get_ai_plan_schema(),
+            [
+                'system_instruction' => __('You are planning a WordPress and LiveCanvas site build. Improve descriptions and prompts, but preserve existing task IDs and do not invent unsafe write actions.', 'livecanvas-forge-ai'),
+                'temperature'        => 0.25,
+                'max_tokens'         => 1800,
+            ]
+        );
+
+        if (function_exists('is_wp_error') && is_wp_error($generated)) {
+            return [
+                'available' => true,
+                'used'      => false,
+                'message'   => $generated->get_error_message(),
+            ];
+        }
+
+        $plan = is_array($generated['data'] ?? null) ? $generated['data'] : [];
+
+        return [
+            'available' => true,
+            'used'      => $plan !== [],
+            'message'   => $plan !== []
+                ? __('Genesis plan enriched with WordPress AI Client.', 'livecanvas-forge-ai')
+                : __('WordPress AI Client returned an empty Genesis enhancement.', 'livecanvas-forge-ai'),
+            'plan'      => $plan,
+        ];
+    }
+
+    private function build_ai_plan_prompt(array $brief, array $snapshot, array $summary, array $pages, array $tasks): string {
+        return implode("\n\n", [
+            'Create a concise enhancement pass for this LiveCanvas Forge Genesis build plan.',
+            'Return JSON only. Keep page slugs and task IDs stable. Do not add executable payload actions.',
+            'Project brief:',
+            $this->encode_json($brief),
+            'Detected stack:',
+            $this->encode_json($snapshot),
+            'Inventory summary:',
+            $this->encode_json($summary),
+            'Base pages:',
+            $this->encode_json($pages),
+            'Base tasks:',
+            $this->encode_json($tasks),
+        ]);
+    }
+
+    private function get_ai_plan_schema(): array {
+        return [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'properties' => [
+                'pages' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'properties' => [
+                            'slug' => ['type' => 'string'],
+                            'title' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'ai_notes' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+                'tasks' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'properties' => [
+                            'id' => ['type' => 'string'],
+                            'label' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'user_prompt' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+                'advisories' => [
+                    'type' => 'array',
+                    'items' => ['type' => 'string'],
+                ],
+            ],
+        ];
+    }
+
+    private function merge_ai_pages(array $pages, array $ai_pages): array {
+        $by_slug = [];
+        foreach ($ai_pages as $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+
+            $slug = sanitize_title((string) ($page['slug'] ?? ''));
+            if ($slug !== '') {
+                $by_slug[$slug] = $page;
+            }
+        }
+
+        foreach ($pages as $index => $page) {
+            $slug = sanitize_title((string) ($page['slug'] ?? ''));
+            $ai_page = $slug !== '' && isset($by_slug[$slug]) ? $by_slug[$slug] : null;
+
+            if (!is_array($ai_page)) {
+                continue;
+            }
+
+            $description = sanitize_text_field((string) ($ai_page['description'] ?? ''));
+            if ($description !== '') {
+                $pages[$index]['description'] = $description;
+            }
+
+            $notes = sanitize_text_field((string) ($ai_page['ai_notes'] ?? ''));
+            if ($notes !== '') {
+                $pages[$index]['ai_notes'] = $notes;
+            }
+        }
+
+        return $pages;
+    }
+
+    private function merge_ai_tasks(array $tasks, array $ai_tasks, array $advisories): array {
+        $by_id = [];
+        foreach ($ai_tasks as $task) {
+            if (!is_array($task)) {
+                continue;
+            }
+
+            $id = sanitize_key((string) ($task['id'] ?? ''));
+            if ($id !== '') {
+                $by_id[$id] = $task;
+            }
+        }
+
+        foreach ($tasks as $index => $task) {
+            $id = sanitize_key((string) ($task['id'] ?? ''));
+            $ai_task = $id !== '' && isset($by_id[$id]) ? $by_id[$id] : null;
+
+            if (!is_array($ai_task)) {
+                continue;
+            }
+
+            foreach (['label', 'description', 'user_prompt'] as $field) {
+                $value = sanitize_text_field((string) ($ai_task[$field] ?? ''));
+                if ($value !== '') {
+                    $tasks[$index][$field] = $value;
+                }
+            }
+        }
+
+        $advisories = array_slice($this->sanitize_text_list($advisories), 0, 4);
+        foreach ($advisories as $index => $advisory) {
+            $tasks[] = $this->task(
+                'ai-advisory-' . ($index + 1),
+                'ai_advisory',
+                __('AI planning advisory', 'livecanvas-forge-ai'),
+                $advisory,
+                [],
+                $advisory
+            );
+        }
+
+        return $tasks;
     }
 
     private function build_page_plan(array $brief, array $snapshot): array {
@@ -268,6 +466,27 @@ final class LCFA_Genesis_Planner {
         }
 
         return false;
+    }
+
+    private function sanitize_text_list(array $values): array {
+        $sanitized = [];
+
+        foreach ($values as $value) {
+            $value = sanitize_text_field((string) $value);
+            if ($value !== '') {
+                $sanitized[] = $value;
+            }
+        }
+
+        return array_values(array_unique($sanitized));
+    }
+
+    private function encode_json($value): string {
+        if (function_exists('wp_json_encode')) {
+            return (string) wp_json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
+        return (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     private function detect_page_kind(string $title): string {

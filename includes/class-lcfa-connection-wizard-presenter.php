@@ -57,7 +57,8 @@ final class LCFA_Connection_Wizard_Presenter {
     }
 
     private function build_banner(string $current_step, array $bundle, array $workspace_access): array {
-        $is_codex_local = $this->is_codex_local($bundle);
+        $is_codex = $this->is_codex($bundle);
+        $is_codex_remote_adapter = $this->is_codex_remote_adapter($bundle);
 
         if ($current_step === 'generate_bundle') {
             $local_writable = $this->can_write_workspace($bundle, $workspace_access);
@@ -65,17 +66,19 @@ final class LCFA_Connection_Wizard_Presenter {
 
             return [
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
-                'title'   => $is_codex_local && !$local_writable
+                'title'   => $is_codex && !$local_writable
                     ? __('Copy the Codex shortcut', 'livecanvas-forge-ai')
                     : ($local_writable
                     ? __('Write the client config in this workspace', 'livecanvas-forge-ai')
                     : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download the client bundle', 'livecanvas-forge-ai'))),
-                'body'    => $is_codex_local && !$local_writable
-                    ? __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, and let it auto-detect the embedded Codex desktop CLI if codex is not in your PATH.', 'livecanvas-forge-ai')
+                'body'    => $is_codex && !$local_writable
+                    ? ($is_codex_remote_adapter
+                        ? __('Codex needs a one-time registration command. Copy the shortcut below and run it on the machine where Codex runs; it starts the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai')
+                        : __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, and let it auto-detect the embedded Codex desktop CLI if codex is not in your PATH.', 'livecanvas-forge-ai'))
                     : ($local_writable
                     ? __('Forge AI can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
                     : __('This browser runtime cannot write to the selected host workspace directly. Download the bundle, open the project in your coding agent, then return here for the smoke test.', 'livecanvas-forge-ai')),
-                'next'    => $is_codex_local
+                'next'    => $is_codex
                     ? __('After running the Codex shortcut, verify with codex mcp list or /Applications/Codex.app/Contents/Resources/codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai')
                     : __('After this step, come back here and run the smoke test.', 'livecanvas-forge-ai'),
             ];
@@ -84,11 +87,11 @@ final class LCFA_Connection_Wizard_Presenter {
         if ($current_step === 'smoke_test') {
             return [
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
-                'title'   => $is_codex_local ? __('Verify the Codex registration', 'livecanvas-forge-ai') : __('Run the smoke test', 'livecanvas-forge-ai'),
-                'body'    => $is_codex_local
+                'title'   => $is_codex ? __('Verify the Codex registration', 'livecanvas-forge-ai') : __('Run the smoke test', 'livecanvas-forge-ai'),
+                'body'    => $is_codex
                     ? __('Run the Codex shortcut first. Once codex mcp list, or the embedded Codex desktop CLI path, shows livecanvas-forge, use the smoke test to verify that Forge AI is reachable from Codex.', 'livecanvas-forge-ai')
                     : __('Use the generated bundle to verify that Forge AI can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
-                'next'    => $is_codex_local
+                'next'    => $is_codex
                     ? __('A passing smoke test confirms that Codex can now call the livecanvas-forge tools.', 'livecanvas-forge-ai')
                     : __('A passing smoke test will move this connection to Ready.', 'livecanvas-forge-ai'),
             ];
@@ -162,40 +165,43 @@ final class LCFA_Connection_Wizard_Presenter {
             case 'generate_bundle':
                 $local_writable = $this->can_write_workspace($bundle, $workspace_access);
                 $is_opencode_local = $this->is_opencode_local($bundle);
-                $is_codex_local = $this->is_codex_local($bundle);
+                $is_codex = $this->is_codex($bundle);
+                $is_codex_remote_adapter = $this->is_codex_remote_adapter($bundle);
 
                 return [
                     'title'       => __('How do you want to continue?', 'livecanvas-forge-ai'),
-                    'description' => $is_codex_local
+                    'description' => $is_codex
                         ? ($local_writable
                             ? __('Choose one path below. Recommended: let Forge write the Codex helper directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
-                            : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai'))
+                            : ($is_codex_remote_adapter
+                                ? __('Choose one path below. Recommended: copy and run the Codex remote shortcut on the machine where Codex runs. Use the manual option only if you want to save the helper script.', 'livecanvas-forge-ai')
+                                : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai')))
                         : ($is_opencode_local
                         ? __('Choose one path below. Recommended: download the OpenCode config and place it in the project root before switching to OpenCode.', 'livecanvas-forge-ai')
                         : __('Choose one path below. Recommended: create the client configuration now. Use the manual option only if you want to place the bundle yourself.', 'livecanvas-forge-ai')),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
-                        'label'  => $is_codex_local && !$local_writable
+                        'label'  => $is_codex && !$local_writable
                             ? __('Copy Codex shortcut', 'livecanvas-forge-ai')
                             : ($local_writable
                             ? __('Write config in workspace', 'livecanvas-forge-ai')
                             : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download client bundle', 'livecanvas-forge-ai'))),
-                        'action' => $is_codex_local && !$local_writable ? 'copy_command' : ($local_writable ? 'install' : 'download'),
+                        'action' => $is_codex && !$local_writable ? 'copy_command' : ($local_writable ? 'install' : 'download'),
                     ],
                     'secondary_ctas' => [
                         [
-                            'label'  => $is_codex_local && !$local_writable
+                            'label'  => $is_codex && !$local_writable
                                 ? __('Download Codex helper', 'livecanvas-forge-ai')
                                 : ($local_writable ? __('Download client bundle', 'livecanvas-forge-ai') : __('Copy command', 'livecanvas-forge-ai')),
-                            'action' => $is_codex_local && !$local_writable ? 'download' : ($local_writable ? 'download' : 'copy_command'),
+                            'action' => $is_codex && !$local_writable ? 'download' : ($local_writable ? 'download' : 'copy_command'),
                         ],
                     ],
                 ];
 
             case 'smoke_test':
                 return [
-                    'title'       => $this->is_codex_local($bundle) ? __('Ready to verify Codex?', 'livecanvas-forge-ai') : __('Ready to verify the connection?', 'livecanvas-forge-ai'),
-                    'description' => $this->is_codex_local($bundle)
+                    'title'       => $this->is_codex($bundle) ? __('Ready to verify Codex?', 'livecanvas-forge-ai') : __('Ready to verify the connection?', 'livecanvas-forge-ai'),
+                    'description' => $this->is_codex($bundle)
                         ? __('Run the smoke test after you have executed the Codex shortcut and verified that Codex can see livecanvas-forge.', 'livecanvas-forge-ai')
                         : __('Run the smoke test after the client bundle is in place.', 'livecanvas-forge-ai'),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
@@ -326,14 +332,18 @@ final class LCFA_Connection_Wizard_Presenter {
             return [];
         }
 
-        if ($this->is_codex_local($bundle)) {
+        if ($this->is_codex($bundle)) {
+            $is_remote_adapter = $this->is_codex_remote_adapter($bundle);
+
             return [
                 'title' => __('What to do in Codex', 'livecanvas-forge-ai'),
                 'client' => 'codex',
                 'items' => [
                     [
                         'title' => __('Copy and run the Codex shortcut', 'livecanvas-forge-ai'),
-                        'caption' => __('Execute the generated install command once from this same project root. It auto-detects the embedded Codex desktop CLI.', 'livecanvas-forge-ai'),
+                        'caption' => $is_remote_adapter
+                            ? __('Execute the generated install command once on the machine where Codex runs. It registers the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai')
+                            : __('Execute the generated install command once from this same project root. It auto-detects the embedded Codex desktop CLI.', 'livecanvas-forge-ai'),
                         'tone' => 'project',
                     ],
                     [
@@ -382,8 +392,12 @@ final class LCFA_Connection_Wizard_Presenter {
             && (string) ($bundle['mode'] ?? 'local') === 'local';
     }
 
-    private function is_codex_local(array $bundle): bool {
-        return (string) ($bundle['client'] ?? '') === 'codex'
-            && (string) ($bundle['mode'] ?? 'local') === 'local';
+    private function is_codex_remote_adapter(array $bundle): bool {
+        return $this->is_codex($bundle)
+            && (string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter';
+    }
+
+    private function is_codex(array $bundle): bool {
+        return (string) ($bundle['client'] ?? '') === 'codex';
     }
 }

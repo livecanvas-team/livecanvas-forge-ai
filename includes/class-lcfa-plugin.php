@@ -17,8 +17,11 @@ final class LCFA_Plugin {
     private LCFA_Connection_Bundle_Builder $connection_bundle_builder;
     private LCFA_Connection_Onboarding $connection_onboarding;
     private LCFA_Prompt_Suggester $prompt_suggester;
+    private LCFA_AI_Client $ai_client;
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
+    private LCFA_Block_Patterns $block_patterns;
+    private LCFA_Ability_Registry $ability_registry;
     private LCFA_Rest_Api $rest_api;
     private LCFA_Admin $admin;
     private LCFA_Design_System_Preview $design_system_preview;
@@ -51,7 +54,8 @@ final class LCFA_Plugin {
         $this->environment = new LCFA_Environment();
         $this->installer   = new LCFA_Installer($this->environment);
         $this->inventory   = new LCFA_Inventory($this->environment);
-        $this->genesis_planner = new LCFA_Genesis_Planner($this->environment, $this->inventory);
+        $this->ai_client = new LCFA_AI_Client();
+        $this->genesis_planner = new LCFA_Genesis_Planner($this->environment, $this->inventory, $this->ai_client);
         $this->windpress_bridge = new LCFA_WindPress_Bridge($this->environment);
         $this->theme_files_bridge = new LCFA_Theme_Files_Bridge($this->environment);
         $this->local_mcp_bridge = new LCFA_Local_MCP_Bridge($this->environment);
@@ -80,12 +84,15 @@ final class LCFA_Plugin {
             $this->environment,
             new LCFA_Design_System_Picostrap_Composer(),
             $design_system_apply,
-            $this->design_system_preview
+            $this->design_system_preview,
+            $this->ai_client
         );
         $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client, $design_system_apply, $design_system_compose);
         $this->genesis_executor = new LCFA_Genesis_Executor($this->environment, $this->command_deck);
-        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor);
-        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor);
+        $this->block_patterns = new LCFA_Block_Patterns($this->environment);
+        $this->ability_registry = new LCFA_Ability_Registry($this->environment, $this->inventory, $this->context_builder, $this->command_deck, $this->windpress_bridge, $this->ai_client, $this->block_patterns);
+        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor, $this->ability_registry);
+        $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor, $this->ability_registry);
 
         add_action('plugins_loaded', [$this, 'boot']);
     }
@@ -94,5 +101,7 @@ final class LCFA_Plugin {
         $this->design_system_preview->hooks();
         $this->admin->hooks();
         $this->rest_api->hooks();
+        $this->block_patterns->hooks();
+        $this->ability_registry->hooks();
     }
 }

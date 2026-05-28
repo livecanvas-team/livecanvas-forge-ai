@@ -36,9 +36,43 @@ final class LCFA_Environment {
             'woocommerce_active'      => class_exists('WooCommerce'),
             'picostrap_candidates'    => $this->find_theme_candidates('picostrap'),
             'picowind_candidates'     => $this->find_theme_candidates('picowind'),
+            'mcp_adapter'             => $this->get_mcp_adapter_status(),
         ];
 
         return $this->snapshot_cache;
+    }
+
+    public function get_mcp_adapter_status(): array {
+        $adapter_class = 'WP\\MCP\\Core\\McpAdapter';
+        $http_transport = 'WP\\MCP\\Transport\\HttpTransport';
+        $error_handler = 'WP\\MCP\\Infrastructure\\ErrorHandling\\ErrorLogMcpErrorHandler';
+        $observability_handler = 'WP\\MCP\\Infrastructure\\Observability\\NullMcpObservabilityHandler';
+        $classes = [
+            'adapter'       => class_exists($adapter_class),
+            'http_transport' => class_exists($http_transport),
+            'error_handler' => class_exists($error_handler),
+            'observability' => class_exists($observability_handler),
+        ];
+        $available = !in_array(false, $classes, true);
+
+        return [
+            'available' => $available,
+            'classes'   => $classes,
+            'custom_server' => [
+                'id'        => 'livecanvas-forge-ai',
+                'namespace' => 'livecanvas-forge-ai',
+                'route'     => 'mcp',
+                'url'       => $this->build_rest_url('livecanvas-forge-ai/mcp'),
+            ],
+            'remote_proxy' => [
+                'package' => '@automattic/mcp-wordpress-remote',
+                'env'     => [
+                    'WP_API_URL',
+                    'WP_API_USERNAME',
+                    'WP_API_PASSWORD',
+                ],
+            ],
+        ];
     }
 
     public function is_livecanvas_active(): bool {
@@ -200,6 +234,20 @@ final class LCFA_Environment {
         }
 
         return false;
+    }
+
+    private function build_rest_url(string $path): string {
+        $path = ltrim($path, '/');
+
+        if (function_exists('rest_url')) {
+            return rest_url($path);
+        }
+
+        if (function_exists('home_url')) {
+            return trailingslashit(home_url('/')) . 'wp-json/' . $path;
+        }
+
+        return '/wp-json/' . $path;
     }
 
     public function find_theme_candidates(string $family): array {

@@ -1049,6 +1049,30 @@
     }).finally(function(){setBusy(false);});
   };
 
+  var getAbilityContractForAction=function(action){
+    action=String(action||"page_upsert");
+    var map={
+      page_upsert:["livecanvas-forge-ai/preview-page-upsert","livecanvas-forge-ai/apply-page-upsert"],
+      create_page:["livecanvas-forge-ai/preview-page-upsert","livecanvas-forge-ai/apply-page-upsert"],
+      update_page:["livecanvas-forge-ai/preview-page-upsert","livecanvas-forge-ai/apply-page-upsert"],
+      global_shell_apply:["livecanvas-forge-ai/preview-global-shell","livecanvas-forge-ai/apply-global-shell"],
+      update_header:["livecanvas-forge-ai/preview-global-shell","livecanvas-forge-ai/apply-global-shell"],
+      update_footer:["livecanvas-forge-ai/preview-global-shell","livecanvas-forge-ai/apply-global-shell"],
+      design_system_apply:["livecanvas-forge-ai/preview-design-system","livecanvas-forge-ai/apply-design-system"],
+      create_dynamic_template:["","livecanvas-forge-ai/apply-dynamic-template"],
+      update_dynamic_template:["","livecanvas-forge-ai/apply-dynamic-template"],
+      restore_audit_rollback:["","livecanvas-forge-ai/restore-audit-rollback"]
+    };
+    var contract=map[action]||["",""];
+    return {
+      action:action,
+      preview_ability:contract[0],
+      apply_ability:contract[1],
+      generic_preview:"livecanvas-forge-ai/preview-command",
+      generic_apply:"livecanvas-forge-ai/apply-command"
+    };
+  };
+
   var analyzeRequest=function(){
     if(!promptInput){return;}
     var prompt=promptInput.value.trim();
@@ -1068,6 +1092,7 @@
       variant:config.variant||"1",
       action:config.defaultAction||"site_audit"
     };
+    requestPayload.ability_contract=getAbilityContractForAction(requestPayload.action);
     var selectedAnchor=getSelectedSectionAnchor();
     if(selectedAnchor){
       requestPayload.selected_section_anchor=selectedAnchor;

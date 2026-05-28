@@ -25,8 +25,9 @@ final class LCFA_Rest_Api {
     private LCFA_Genesis_Planner $genesis_planner;
     private LCFA_Genesis_Executor $genesis_executor;
     private LCFA_Picostrap_Compile_Service $picostrap_compile_service;
+    private ?LCFA_Ability_Registry $ability_registry = null;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null, ?LCFA_Ability_Registry $ability_registry = null) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
@@ -38,6 +39,7 @@ final class LCFA_Rest_Api {
         $this->genesis_planner    = $genesis_planner;
         $this->genesis_executor   = $genesis_executor ?: new LCFA_Genesis_Executor($environment, $command_deck);
         $this->picostrap_compile_service = new LCFA_Picostrap_Compile_Service($environment);
+        $this->ability_registry = $ability_registry;
     }
 
     public function hooks(): void {
@@ -188,6 +190,18 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/history', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_history'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/studio', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_studio_state'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/studio/handoff-package', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_studio_handoff_package'],
             'permission_callback' => [$this, 'can_read'],
         ]);
 
@@ -696,6 +710,48 @@ final class LCFA_Rest_Api {
     public function get_history(): WP_REST_Response {
         return new WP_REST_Response([
             'history' => LCFA_Settings::get_history(),
+        ]);
+    }
+
+    public function get_studio_state(WP_REST_Request $request): WP_REST_Response {
+        $limit = absint($request->get_param('limit') ?: 20);
+        if ($limit < 1 || $limit > 40) {
+            $limit = 20;
+        }
+
+        return new WP_REST_Response($this->build_studio_state($limit));
+    }
+
+    public function get_studio_handoff_package(WP_REST_Request $request): WP_REST_Response {
+        $limit = absint($request->get_param('limit') ?: 20);
+        if ($limit < 1 || $limit > 40) {
+            $limit = 20;
+        }
+
+        $state = $this->build_studio_state($limit);
+        $package = is_array($state['agent_handoff_package'] ?? null) ? $state['agent_handoff_package'] : [];
+        $encoded = json_encode($package, JSON_UNESCAPED_SLASHES);
+        if (!is_string($encoded)) {
+            $encoded = '';
+        }
+
+        return new WP_REST_Response([
+            'studio' => [
+                'schema_version' => 'studio.handoff-package.v1',
+                'generated_at'   => sanitize_text_field((string) ($state['studio']['generated_at'] ?? '')),
+                'source_route'   => sanitize_text_field((string) ($state['studio']['rest_route'] ?? '')),
+                'rest_route'     => sanitize_text_field((string) ($state['studio']['handoff_package_route'] ?? (function_exists('rest_url') ? rest_url('lcfa/v1/studio/handoff-package') : ''))),
+            ],
+            'contract' => [
+                'schema_version'        => 'studio.handoff-package.v1',
+                'payload_version'       => 1,
+                'fingerprint_algorithm' => 'sha256',
+                'fingerprint'           => hash('sha256', $encoded),
+                'limits'                => [
+                    'runs' => $limit,
+                ],
+            ],
+            'agent_handoff_package' => $package,
         ]);
     }
 
@@ -1868,6 +1924,1204 @@ final class LCFA_Rest_Api {
 
     public function can_mcp_health(?WP_REST_Request $request = null): bool {
         return $this->has_valid_mcp_token($request);
+    }
+
+    private function build_studio_state(int $limit): array {
+        $settings      = LCFA_Settings::get();
+        $connections   = LCFA_Settings::get_connections();
+        $snapshot      = $this->environment->get_snapshot();
+        $diagnostics   = $this->get_studio_ability_diagnostics();
+        $ability       = is_array($diagnostics['ability_diagnostics'] ?? null) ? $diagnostics['ability_diagnostics'] : [];
+        $ability_manifest = $this->build_studio_ability_manifest($ability);
+        $adapter       = is_array($diagnostics['mcp_adapter'] ?? null) ? $diagnostics['mcp_adapter'] : [];
+        $ai_client     = is_array($diagnostics['ai_client'] ?? null) ? $diagnostics['ai_client'] : [];
+        $history       = array_slice(LCFA_Settings::get_history(), 0, $limit);
+        $runs          = $this->sanitize_studio_runs($history);
+        $run_analysis  = $this->build_studio_run_analysis($runs);
+        $public_write  = is_array($ability['mcp_public_write'] ?? null) ? $ability['mcp_public_write'] : [];
+        $allowlist     = is_array($ability['mcp_write_allowlist'] ?? null) ? $ability['mcp_write_allowlist'] : [];
+        $available     = is_array($ability['mcp_write_available'] ?? null) ? $ability['mcp_write_available'] : [];
+        $master_enabled = !empty($connections['mcp_write_abilities_enabled']) || !empty($ability['mcp_write_opt_in_enabled']);
+        $rollback_runs = count(array_filter($runs, static function (array $run): bool {
+            return !empty($run['rollback_available']);
+        }));
+        $run_errors = count(array_filter($runs, static function (array $run): bool {
+            return empty($run['ok']);
+        }));
+        $framework     = '';
+
+        if (isset($settings['framework']) && is_scalar($settings['framework'])) {
+            $framework = sanitize_key((string) $settings['framework']);
+        } elseif (isset($snapshot['framework']) && is_scalar($snapshot['framework'])) {
+            $framework = sanitize_key((string) $snapshot['framework']);
+        } elseif (isset($snapshot['detected_framework']) && is_scalar($snapshot['detected_framework'])) {
+            $framework = sanitize_key((string) $snapshot['detected_framework']);
+        }
+
+        $summary = [
+            'abilities'                => (int) ($ability['total'] ?? 0),
+            'mcp_public'               => (int) ($ability['mcp_public_total'] ?? 0),
+            'public_writes'            => count($public_write),
+            'runs'                     => count($runs),
+            'run_errors'               => $run_errors,
+            'rollbacks'                => $rollback_runs,
+            'framework'                => $framework,
+            'setup_complete'           => !empty($settings['completed']),
+            'mcp_adapter_ready'        => !empty($adapter['available']),
+            'ai_text_ready'            => !empty($ai_client['text_generation_supported']),
+            'mcp_write_master_enabled' => $master_enabled,
+        ];
+        $alerts = $this->build_studio_alerts($summary, $public_write, $allowlist, $master_enabled, $run_errors);
+        $mcp_write_policy = [
+            'master_enabled' => $master_enabled,
+            'allowlist'      => array_values(array_map('strval', $allowlist)),
+            'available'      => array_values(array_map('strval', $available)),
+            'public_write'   => array_values(array_map('strval', $public_write)),
+            'counts'         => [
+                'allowed' => count($allowlist),
+                'available' => count($available),
+                'exposed' => count($public_write),
+            ],
+        ];
+        $agent_smoke_tests = $this->build_studio_agent_smoke_tests($summary, $ability_manifest, $mcp_write_policy);
+        $operator_briefing = $this->build_studio_operator_briefing($summary, $alerts, $ability_manifest, $mcp_write_policy, $run_analysis);
+        $agent_runbook = $this->build_studio_agent_runbook($summary, $operator_briefing, $agent_smoke_tests, $ability_manifest, $mcp_write_policy);
+        $handoff_readiness = $this->build_studio_handoff_readiness($summary, $agent_smoke_tests, $agent_runbook, $mcp_write_policy);
+        $agent_handoff_package = $this->build_studio_agent_handoff_package(
+            $summary,
+            $operator_briefing,
+            $agent_smoke_tests,
+            $agent_runbook,
+            $handoff_readiness,
+            $ability_manifest,
+            $mcp_write_policy
+        );
+        $generated_at = function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s');
+
+        $state = [
+            'studio' => [
+                'version'        => 1,
+                'schema_version' => 'studio.v1',
+                'generated_at'   => $generated_at,
+                'rest_route'     => function_exists('rest_url') ? rest_url('lcfa/v1/studio') : '',
+                'handoff_package_route' => function_exists('rest_url') ? rest_url('lcfa/v1/studio/handoff-package') : '',
+            ],
+            'summary' => $summary,
+            'alerts'  => $alerts,
+            'operator_briefing' => $operator_briefing,
+            'agent_smoke_tests' => $agent_smoke_tests,
+            'agent_runbook' => $agent_runbook,
+            'handoff_readiness' => $handoff_readiness,
+            'agent_handoff_package' => $agent_handoff_package,
+            'abilities' => $ability,
+            'ability_manifest' => $ability_manifest,
+            'mcp_write_policy' => $mcp_write_policy,
+            'runs' => [
+                'items' => $runs,
+                'count' => count($runs),
+                'limit' => $limit,
+            ],
+            'run_analysis' => $run_analysis,
+            'diagnostics' => [
+                'mcp_adapter' => $adapter,
+                'ai_client'   => $ai_client,
+            ],
+        ];
+        $state['contract'] = $this->build_studio_contract($state, $limit);
+
+        return $state;
+    }
+
+    private function build_studio_handoff_readiness(array $summary, array $agent_smoke_tests, array $agent_runbook, array $mcp_write_policy): array {
+        $tests = is_array($agent_smoke_tests['tests'] ?? null) ? $agent_smoke_tests['tests'] : [];
+        $test_map = [];
+        foreach ($tests as $test) {
+            if (!is_array($test)) {
+                continue;
+            }
+
+            $id = sanitize_key((string) ($test['id'] ?? ''));
+            if ($id !== '') {
+                $test_map[$id] = $test;
+            }
+        }
+
+        $gates = [];
+        $score = 100;
+        $add_gate = static function (string $id, string $label, string $status, string $detail, int $weight) use (&$gates, &$score): void {
+            $status = sanitize_key($status);
+            if ($status === 'fail') {
+                $score -= $weight;
+            } elseif ($status === 'warn') {
+                $score -= (int) ceil($weight / 2);
+            }
+
+            $gates[] = [
+                'id'     => sanitize_key($id),
+                'label'  => sanitize_text_field($label),
+                'status' => $status,
+                'detail' => sanitize_text_field($detail),
+                'weight' => max(0, $weight),
+            ];
+        };
+
+        $read_only_ids = ['snapshot', 'ability_diagnostics', 'recent_runs'];
+        $read_only_available = 0;
+        foreach ($read_only_ids as $id) {
+            if (!empty($test_map[$id]['available'])) {
+                $read_only_available++;
+            }
+        }
+
+        $preview_ids = ['framework_validation', 'page_preview'];
+        $preview_available = 0;
+        foreach ($preview_ids as $id) {
+            if (!empty($test_map[$id]['available'])) {
+                $preview_available++;
+            }
+        }
+
+        $runbook_ready = !empty($agent_runbook['markdown']) && (int) ($agent_runbook['line_count'] ?? 0) > 10;
+        $public_writes = (int) ($summary['public_writes'] ?? 0);
+        $run_errors = (int) ($summary['run_errors'] ?? 0);
+        $policy_counts = is_array($mcp_write_policy['counts'] ?? null) ? $mcp_write_policy['counts'] : [];
+
+        $add_gate(
+            'setup_complete',
+            __('Setup complete', 'livecanvas-forge-ai'),
+            !empty($summary['setup_complete']) ? 'pass' : 'fail',
+            !empty($summary['setup_complete'])
+                ? __('Forge setup is complete.', 'livecanvas-forge-ai')
+                : __('Complete the setup wizard before agent handoff.', 'livecanvas-forge-ai'),
+            20
+        );
+        $add_gate(
+            'mcp_adapter',
+            __('MCP Adapter readiness', 'livecanvas-forge-ai'),
+            !empty($summary['mcp_adapter_ready']) ? 'pass' : 'warn',
+            !empty($summary['mcp_adapter_ready'])
+                ? __('WordPress MCP Adapter is available.', 'livecanvas-forge-ai')
+                : __('MCP Adapter is not detected; local REST/MCP bridges may still work.', 'livecanvas-forge-ai'),
+            10
+        );
+        $add_gate(
+            'read_only_smoke_tests',
+            __('Read-only smoke tests', 'livecanvas-forge-ai'),
+            $read_only_available === count($read_only_ids) ? 'pass' : 'fail',
+            sprintf(
+                /* translators: 1: available read-only tests, 2: expected read-only tests. */
+                __('%1$d of %2$d read-only smoke tests are available.', 'livecanvas-forge-ai'),
+                $read_only_available,
+                count($read_only_ids)
+            ),
+            20
+        );
+        $add_gate(
+            'preview_smoke_tests',
+            __('Preview smoke tests', 'livecanvas-forge-ai'),
+            $preview_available === count($preview_ids) ? 'pass' : 'fail',
+            sprintf(
+                /* translators: 1: available preview tests, 2: expected preview tests. */
+                __('%1$d of %2$d preview smoke tests are available.', 'livecanvas-forge-ai'),
+                $preview_available,
+                count($preview_ids)
+            ),
+            20
+        );
+        $add_gate(
+            'mcp_write_exposure',
+            __('MCP write exposure', 'livecanvas-forge-ai'),
+            $public_writes > 0 ? 'warn' : 'pass',
+            $public_writes > 0
+                ? sprintf(
+                    /* translators: 1: public write count, 2: allowlist count. */
+                    __('%1$d write ability is MCP-public; %2$d write ability is allowed.', 'livecanvas-forge-ai'),
+                    $public_writes,
+                    (int) ($policy_counts['allowed'] ?? 0)
+                )
+                : __('No MCP-public write ability is exposed.', 'livecanvas-forge-ai'),
+            15
+        );
+        $add_gate(
+            'recent_run_errors',
+            __('Recent run errors', 'livecanvas-forge-ai'),
+            $run_errors > 0 ? 'warn' : 'pass',
+            $run_errors > 0
+                ? sprintf(
+                    /* translators: %d: recent run error count. */
+                    __('%d recent run error(s) should be inspected before handoff.', 'livecanvas-forge-ai'),
+                    $run_errors
+                )
+                : __('No recent run errors were found in the selected window.', 'livecanvas-forge-ai'),
+            10
+        );
+        $add_gate(
+            'agent_runbook',
+            __('Agent runbook', 'livecanvas-forge-ai'),
+            $runbook_ready ? 'pass' : 'fail',
+            $runbook_ready
+                ? __('Markdown runbook is available for handoff.', 'livecanvas-forge-ai')
+                : __('Agent runbook is missing or too small.', 'livecanvas-forge-ai'),
+            5
+        );
+
+        $score = max(0, min(100, $score));
+        $blockers = array_values(array_filter($gates, static function (array $gate): bool {
+            return ($gate['status'] ?? '') === 'fail';
+        }));
+        $warnings = array_values(array_filter($gates, static function (array $gate): bool {
+            return ($gate['status'] ?? '') === 'warn';
+        }));
+        $status = !empty($blockers) ? 'blocked' : (!empty($warnings) ? 'review' : 'ready');
+        $recommended_mode = $status === 'ready'
+            ? 'preview_first'
+            : (!empty($blockers) ? 'read_only_only' : 'guarded_preview');
+
+        return [
+            'status'           => $status,
+            'score'            => $score,
+            'recommended_mode' => $recommended_mode,
+            'gates'            => $gates,
+            'blockers'         => $blockers,
+            'warnings'         => $warnings,
+            'counts'           => [
+                'gates'    => count($gates),
+                'blockers' => count($blockers),
+                'warnings' => count($warnings),
+            ],
+        ];
+    }
+
+    private function build_studio_agent_handoff_package(array $summary, array $operator_briefing, array $agent_smoke_tests, array $agent_runbook, array $handoff_readiness, array $ability_manifest, array $mcp_write_policy): array {
+        $json_options = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES;
+        $encode_json = static function ($value) use ($json_options): string {
+            $encoded = json_encode($value, $json_options);
+
+            return is_string($encoded) ? $encoded : '{}';
+        };
+
+        $raw_files = [
+            [
+                'path'       => 'forge-agent-runbook.md',
+                'media_type' => 'text/markdown',
+                'content'    => (string) ($agent_runbook['markdown'] ?? ''),
+            ],
+            [
+                'path'       => 'forge-agent-smoke-tests.json',
+                'media_type' => 'application/json',
+                'content'    => $encode_json($agent_smoke_tests),
+            ],
+            [
+                'path'       => 'forge-operator-briefing.json',
+                'media_type' => 'application/json',
+                'content'    => $encode_json($operator_briefing),
+            ],
+            [
+                'path'       => 'forge-handoff-readiness.json',
+                'media_type' => 'application/json',
+                'content'    => $encode_json($handoff_readiness),
+            ],
+            [
+                'path'       => 'forge-ability-manifest.json',
+                'media_type' => 'application/json',
+                'content'    => $encode_json($ability_manifest),
+            ],
+            [
+                'path'       => 'forge-mcp-write-policy.json',
+                'media_type' => 'application/json',
+                'content'    => $encode_json($mcp_write_policy),
+            ],
+        ];
+
+        $files = [];
+        $checksums = [];
+        $total_bytes = 0;
+
+        foreach ($raw_files as $raw_file) {
+            $content = (string) ($raw_file['content'] ?? '');
+            $path = sanitize_text_field((string) ($raw_file['path'] ?? ''));
+            $media_type = sanitize_text_field((string) ($raw_file['media_type'] ?? 'text/plain'));
+            $bytes = strlen($content);
+            $sha256 = hash('sha256', $content);
+
+            if ($path === '') {
+                continue;
+            }
+
+            $files[] = [
+                'path'       => $path,
+                'media_type' => $media_type,
+                'bytes'      => $bytes,
+                'sha256'     => $sha256,
+                'content'    => $content,
+            ];
+            $checksums[$path] = $sha256;
+            $total_bytes += $bytes;
+        }
+
+        $manifest_files = array_values(array_map(static function (array $file): array {
+            return [
+                'path'       => $file['path'],
+                'media_type' => $file['media_type'],
+                'bytes'      => $file['bytes'],
+                'sha256'     => $file['sha256'],
+            ];
+        }, $files));
+        $manifest = [
+            'checksum_algorithm' => 'sha256',
+            'paths'              => array_values(array_column($files, 'path')),
+            'checksums'          => $checksums,
+            'files'              => $manifest_files,
+        ];
+        $encoded_manifest = json_encode($manifest, JSON_UNESCAPED_SLASHES);
+        if (!is_string($encoded_manifest)) {
+            $encoded_manifest = '';
+        }
+
+        $package_checksum = hash('sha256', $encoded_manifest);
+        $status = sanitize_key((string) ($handoff_readiness['status'] ?? 'unknown'));
+        $recommended_mode = sanitize_key((string) ($handoff_readiness['recommended_mode'] ?? 'read_only_first'));
+
+        $manifest['package_checksum'] = $package_checksum;
+
+        return [
+            'package_version'  => 1,
+            'format'           => 'virtual_files',
+            'status'           => $status,
+            'recommended_mode' => $recommended_mode,
+            'summary'          => [
+                'status'           => $status,
+                'recommended_mode' => $recommended_mode,
+                'framework'        => sanitize_key((string) ($summary['framework'] ?? '')),
+                'public_writes'    => (int) ($summary['public_writes'] ?? 0),
+                'run_errors'       => (int) ($summary['run_errors'] ?? 0),
+                'files'            => count($files),
+                'bytes'            => $total_bytes,
+                'checksum'         => $package_checksum,
+            ],
+            'manifest'         => $manifest,
+            'files'            => $files,
+        ];
+    }
+
+    private function build_studio_contract(array $state, int $limit): array {
+        $fingerprint_state = $state;
+        unset($fingerprint_state['contract']);
+        if (isset($fingerprint_state['studio']) && is_array($fingerprint_state['studio'])) {
+            unset($fingerprint_state['studio']['generated_at']);
+        }
+
+        $sections = array_values(array_filter(array_keys($state), static function (string $section): bool {
+            return $section !== 'studio' && $section !== 'contract';
+        }));
+        sort($sections);
+        $encoded = json_encode($fingerprint_state);
+        if (!is_string($encoded)) {
+            $encoded = '';
+        }
+
+        $summary = is_array($state['summary'] ?? null) ? $state['summary'] : [];
+
+        return [
+            'schema_version'        => 'studio.v1',
+            'payload_version'       => 1,
+            'fingerprint_algorithm' => 'sha256',
+            'fingerprint'           => hash('sha256', $encoded),
+            'sections'              => $sections,
+            'section_count'         => count($sections),
+            'limits'                => [
+                'runs' => $limit,
+            ],
+            'readiness'             => [
+                'setup_complete'    => !empty($summary['setup_complete']),
+                'mcp_adapter_ready' => !empty($summary['mcp_adapter_ready']),
+                'ai_text_ready'     => !empty($summary['ai_text_ready']),
+            ],
+        ];
+    }
+
+    private function build_studio_agent_runbook(array $summary, array $operator_briefing, array $agent_smoke_tests, array $ability_manifest, array $mcp_write_policy): array {
+        $summary_lines = array_values(array_map('sanitize_text_field', (array) ($operator_briefing['summary'] ?? [])));
+        $risks = is_array($operator_briefing['risks'] ?? null) ? $operator_briefing['risks'] : [];
+        $next_actions = is_array($operator_briefing['next_actions'] ?? null) ? $operator_briefing['next_actions'] : [];
+        $tests = is_array($agent_smoke_tests['tests'] ?? null) ? $agent_smoke_tests['tests'] : [];
+        $manifest_counts = is_array($ability_manifest['counts'] ?? null) ? $ability_manifest['counts'] : [];
+        $policy_counts = is_array($mcp_write_policy['counts'] ?? null) ? $mcp_write_policy['counts'] : [];
+        $checklist = [
+            __('Confirm MCP connection and read-only ability access.', 'livecanvas-forge-ai'),
+            __('Run snapshot, ability diagnostics, and recent runs before preview workflows.', 'livecanvas-forge-ai'),
+            __('Use preview abilities before any apply ability.', 'livecanvas-forge-ai'),
+            __('Review public write exposure and rollback availability before applying changes.', 'livecanvas-forge-ai'),
+        ];
+        $lines = [
+            '# LiveCanvas Forge AI Agent Runbook',
+            '',
+            '## Current State',
+        ];
+
+        foreach ($summary_lines as $line) {
+            if ($line !== '') {
+                $lines[] = '- ' . $line;
+            }
+        }
+
+        $lines[] = '- Ability manifest entries: ' . (int) ($manifest_counts['items'] ?? 0);
+        $lines[] = '- MCP-public writes allowed: ' . (int) ($policy_counts['allowed'] ?? 0);
+        $lines[] = '';
+        $lines[] = '## Guardrails';
+
+        foreach ($checklist as $item) {
+            $lines[] = '- [ ] ' . sanitize_text_field($item);
+        }
+
+        $lines[] = '';
+        $lines[] = '## Active Risks';
+        if (empty($risks)) {
+            $lines[] = '- None reported by Studio readiness checks.';
+        } else {
+            foreach ($risks as $risk) {
+                if (!is_array($risk)) {
+                    continue;
+                }
+
+                $title = sanitize_text_field((string) ($risk['title'] ?? $risk['code'] ?? 'Risk'));
+                $message = sanitize_text_field((string) ($risk['message'] ?? ''));
+                $lines[] = '- ' . $title . ($message !== '' ? ': ' . $message : '');
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = '## Next Actions';
+        foreach ($next_actions as $action) {
+            if (!is_array($action)) {
+                continue;
+            }
+
+            $label = sanitize_text_field((string) ($action['label'] ?? $action['code'] ?? 'Action'));
+            $detail = sanitize_text_field((string) ($action['detail'] ?? ''));
+            $lines[] = '- ' . $label . ($detail !== '' ? ': ' . $detail : '');
+        }
+
+        $lines[] = '';
+        $lines[] = '## Smoke Test Order';
+        foreach ($tests as $index => $test) {
+            if (!is_array($test)) {
+                continue;
+            }
+
+            $phase = sanitize_key((string) ($test['phase'] ?? 'read_only'));
+            $label = sanitize_text_field((string) ($test['label'] ?? $test['id'] ?? 'Smoke test'));
+            $ability = sanitize_text_field((string) ($test['ability'] ?? ''));
+            $expected = sanitize_text_field((string) ($test['expected'] ?? ''));
+            $lines[] = sprintf(
+                '%d. [%s] %s - `%s`%s',
+                (int) $index + 1,
+                $phase,
+                $label,
+                $ability,
+                $expected !== '' ? ' - ' . $expected : ''
+            );
+        }
+
+        $agent_prompt = sanitize_text_field((string) ($operator_briefing['agent_prompt'] ?? ''));
+        if ($agent_prompt !== '') {
+            $lines[] = '';
+            $lines[] = '## Agent Prompt';
+            $lines[] = $agent_prompt;
+        }
+
+        $sanitized_lines = array_values(array_map('sanitize_text_field', $lines));
+        $markdown = implode("\n", $sanitized_lines);
+
+        return [
+            'title'      => __('LiveCanvas Forge AI Agent Runbook', 'livecanvas-forge-ai'),
+            'format'     => 'markdown',
+            'line_count' => count($sanitized_lines),
+            'checklist'  => array_values(array_map('sanitize_text_field', $checklist)),
+            'markdown'   => $markdown,
+            'sources'    => [
+                'summary'            => true,
+                'operator_briefing'  => true,
+                'agent_smoke_tests'  => true,
+                'ability_manifest'   => true,
+                'mcp_write_policy'   => true,
+            ],
+        ];
+    }
+
+    private function build_studio_agent_smoke_tests(array $summary, array $ability_manifest, array $mcp_write_policy): array {
+        $available_names = [];
+        foreach ((array) ($ability_manifest['items'] ?? []) as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $name = sanitize_text_field((string) ($item['name'] ?? ''));
+            if ($name !== '') {
+                $available_names[$name] = $item;
+            }
+        }
+
+        $public_write = array_flip(array_map('strval', (array) ($mcp_write_policy['public_write'] ?? [])));
+        $tests = [];
+        $add_test = static function (array $test) use (&$tests, $available_names, $public_write): void {
+            $ability = sanitize_text_field((string) ($test['ability'] ?? ''));
+            $phase = sanitize_key((string) ($test['phase'] ?? 'read_only'));
+            $is_write_guard = $phase === 'write_guard';
+            $tests[] = [
+                'id'        => sanitize_key((string) ($test['id'] ?? '')),
+                'phase'     => $phase,
+                'label'     => sanitize_text_field((string) ($test['label'] ?? '')),
+                'ability'   => $ability,
+                'intent'    => sanitize_text_field((string) ($test['intent'] ?? '')),
+                'payload'   => is_array($test['payload'] ?? null) ? $test['payload'] : [],
+                'expected'  => sanitize_text_field((string) ($test['expected'] ?? '')),
+                'risk'      => sanitize_key((string) ($test['risk'] ?? 'low')),
+                'available' => isset($available_names[$ability]),
+                'public_write_exposed' => $is_write_guard && isset($public_write[$ability]),
+            ];
+        };
+
+        $add_test([
+            'id'       => 'snapshot',
+            'phase'    => 'read_only',
+            'label'    => __('Snapshot handshake', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/get-snapshot',
+            'intent'   => __('Confirm the agent can read Forge and WordPress runtime context.', 'livecanvas-forge-ai'),
+            'payload'  => new stdClass(),
+            'expected' => __('Returns snapshot, public connection metadata, and MCP status without writing.', 'livecanvas-forge-ai'),
+            'risk'     => 'low',
+        ]);
+        $add_test([
+            'id'       => 'ability_diagnostics',
+            'phase'    => 'read_only',
+            'label'    => __('Ability diagnostics', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/get-ability-diagnostics',
+            'intent'   => __('Confirm the agent can inspect ability availability and MCP exposure.', 'livecanvas-forge-ai'),
+            'payload'  => new stdClass(),
+            'expected' => __('Returns ability totals, MCP-public names, write allowlist state, and adapter diagnostics.', 'livecanvas-forge-ai'),
+            'risk'     => 'low',
+        ]);
+        $add_test([
+            'id'       => 'recent_runs',
+            'phase'    => 'read_only',
+            'label'    => __('Recent runs', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/get-runs',
+            'intent'   => __('Confirm audit/run metadata can be read without exposing rollback payloads.', 'livecanvas-forge-ai'),
+            'payload'  => ['limit' => 5],
+            'expected' => __('Returns sanitized run rows, audit IDs, and rollback availability only.', 'livecanvas-forge-ai'),
+            'risk'     => 'low',
+        ]);
+        $add_test([
+            'id'       => 'framework_validation',
+            'phase'    => 'preview',
+            'label'    => __('Framework validation preview', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/validate-markup-for-framework',
+            'intent'   => __('Confirm generated markup can be preflighted against the active framework.', 'livecanvas-forge-ai'),
+            'payload'  => [
+                'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1></div></section>',
+                'framework' => (string) ($summary['framework'] ?: 'auto'),
+            ],
+            'expected' => __('Returns validation result and framework warnings without writing.', 'livecanvas-forge-ai'),
+            'risk'     => 'low',
+        ]);
+        $add_test([
+            'id'       => 'page_preview',
+            'phase'    => 'preview',
+            'label'    => __('Page upsert preview', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/preview-page-upsert',
+            'intent'   => __('Confirm page generation can be previewed before content is created or updated.', 'livecanvas-forge-ai'),
+            'payload'  => [
+                'payload' => [
+                    'title' => 'Forge Smoke Test',
+                    'slug' => 'forge-smoke-test',
+                    'status' => 'draft',
+                    'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1><p>Preview only.</p></div></section>',
+                    'dry_run' => true,
+                ],
+            ],
+            'expected' => __('Returns preview metadata, warnings, and target URLs without writing.', 'livecanvas-forge-ai'),
+            'risk'     => 'low',
+        ]);
+        $add_test([
+            'id'       => 'write_guard',
+            'phase'    => 'write_guard',
+            'label'    => __('Write ability guard', 'livecanvas-forge-ai'),
+            'ability'  => 'livecanvas-forge-ai/apply-page-upsert',
+            'intent'   => __('Verify that write ability exposure is intentional before any apply call is made.', 'livecanvas-forge-ai'),
+            'payload'  => new stdClass(),
+            'expected' => __('Do not execute automatically. Review the allowlist, preview result, and rollback plan first.', 'livecanvas-forge-ai'),
+            'risk'     => 'write',
+        ]);
+
+        $counts = [
+            'total'         => count($tests),
+            'available'     => 0,
+            'read_only'     => 0,
+            'preview'       => 0,
+            'write_guarded' => 0,
+        ];
+
+        foreach ($tests as $test) {
+            if (!empty($test['available'])) {
+                $counts['available']++;
+            }
+
+            if (($test['phase'] ?? '') === 'read_only') {
+                $counts['read_only']++;
+            } elseif (($test['phase'] ?? '') === 'preview') {
+                $counts['preview']++;
+            } elseif (($test['phase'] ?? '') === 'write_guard') {
+                $counts['write_guarded']++;
+            }
+        }
+
+        return [
+            'mode' => 'read_only_first',
+            'counts' => $counts,
+            'recommended_order' => array_values(array_map(static function (array $test): string {
+                return sanitize_key((string) ($test['id'] ?? ''));
+            }, $tests)),
+            'tests' => $tests,
+        ];
+    }
+
+    private function build_studio_alerts(array $summary, array $public_write, array $allowlist, bool $master_enabled, int $run_errors): array {
+        $alerts = [];
+        $add = static function (string $severity, string $code, string $title, string $message) use (&$alerts): void {
+            $alerts[] = [
+                'severity' => sanitize_key($severity),
+                'code'     => sanitize_key($code),
+                'title'    => sanitize_text_field($title),
+                'message'  => sanitize_text_field($message),
+            ];
+        };
+
+        if (empty($summary['setup_complete'])) {
+            $add(
+                'warning',
+                'setup_incomplete',
+                __('Setup incomplete', 'livecanvas-forge-ai'),
+                __('Finish Forge Setup before using automated workflows.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ((int) ($summary['abilities'] ?? 0) <= 0) {
+            $add(
+                'warning',
+                'abilities_empty',
+                __('No abilities registered', 'livecanvas-forge-ai'),
+                __('The WordPress Abilities API is not exposing Forge abilities in this runtime.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (empty($summary['mcp_adapter_ready'])) {
+            $add(
+                'info',
+                'mcp_adapter_missing',
+                __('MCP Adapter not detected', 'livecanvas-forge-ai'),
+                __('Install or activate the WordPress MCP Adapter for native MCP exposure.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (empty($summary['ai_text_ready'])) {
+            $add(
+                'info',
+                'ai_text_unavailable',
+                __('AI text unavailable', 'livecanvas-forge-ai'),
+                __('Configure a WordPress AI Client connector to enable server-side generation.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ($master_enabled && empty($allowlist)) {
+            $add(
+                'info',
+                'mcp_write_allowlist_empty',
+                __('MCP write opt-in has no allowlist', 'livecanvas-forge-ai'),
+                __('The master write opt-in is enabled, but no write ability is allowed for MCP exposure.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (!empty($public_write)) {
+            $add(
+                'warning',
+                'mcp_write_exposed',
+                __('MCP write abilities exposed', 'livecanvas-forge-ai'),
+                __('Review the allowlist before trusting remote MCP clients.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ($run_errors > 0) {
+            $add(
+                'warning',
+                'recent_run_errors',
+                __('Recent run errors', 'livecanvas-forge-ai'),
+                sprintf(
+                    /* translators: %d: number of failed recent runs. */
+                    __('%d recent run(s) failed.', 'livecanvas-forge-ai'),
+                    $run_errors
+                )
+            );
+        }
+
+        if (empty($alerts)) {
+            $add(
+                'success',
+                'studio_ready',
+                __('Studio ready', 'livecanvas-forge-ai'),
+                __('No blocking readiness issue was detected in the current Studio state.', 'livecanvas-forge-ai')
+            );
+        }
+
+        return $alerts;
+    }
+
+    private function build_studio_operator_briefing(array $summary, array $alerts, array $ability_manifest, array $mcp_write_policy, array $run_analysis): array {
+        $risks = [];
+        $next_actions = [];
+
+        foreach ($alerts as $alert) {
+            if (!is_array($alert) || ($alert['severity'] ?? '') === 'success') {
+                continue;
+            }
+
+            $risks[] = [
+                'severity' => sanitize_key((string) ($alert['severity'] ?? 'info')),
+                'code'     => sanitize_key((string) ($alert['code'] ?? '')),
+                'title'    => sanitize_text_field((string) ($alert['title'] ?? '')),
+                'message'  => sanitize_text_field((string) ($alert['message'] ?? '')),
+            ];
+        }
+
+        $add_action = static function (string $code, string $label, string $detail) use (&$next_actions): void {
+            $next_actions[] = [
+                'code'   => sanitize_key($code),
+                'label'  => sanitize_text_field($label),
+                'detail' => sanitize_text_field($detail),
+            ];
+        };
+
+        if (empty($summary['setup_complete'])) {
+            $add_action(
+                'finish_setup',
+                __('Finish Forge setup', 'livecanvas-forge-ai'),
+                __('Complete the Setup wizard before asking agents to apply changes.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (empty($summary['mcp_adapter_ready'])) {
+            $add_action(
+                'enable_mcp_adapter',
+                __('Enable MCP Adapter', 'livecanvas-forge-ai'),
+                __('Install or activate the WordPress MCP Adapter for native remote ability exposure.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (empty($summary['ai_text_ready'])) {
+            $add_action(
+                'configure_ai_client',
+                __('Configure AI Client', 'livecanvas-forge-ai'),
+                __('Connect a WordPress AI Client provider before relying on server-side text generation.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ((int) ($summary['public_writes'] ?? 0) > 0) {
+            $add_action(
+                'review_write_allowlist',
+                __('Review MCP write allowlist', 'livecanvas-forge-ai'),
+                __('Confirm every MCP-public write ability is intended before connecting remote agents.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ((int) ($summary['run_errors'] ?? 0) > 0) {
+            $add_action(
+                'inspect_failed_runs',
+                __('Inspect failed runs', 'livecanvas-forge-ai'),
+                __('Review recent run errors and rollback availability before continuing automation.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ((int) ($summary['abilities'] ?? 0) > 0) {
+            $add_action(
+                'test_readonly_abilities',
+                __('Test read-only abilities', 'livecanvas-forge-ai'),
+                __('Ask the connected agent to call get_snapshot, get_ability_diagnostics, and get_runs before any apply workflow.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if (empty($next_actions)) {
+            $add_action(
+                'start_preview_workflow',
+                __('Start with a dry-run preview', 'livecanvas-forge-ai'),
+                __('Run a preview ability first, then apply only after reviewing the result.', 'livecanvas-forge-ai')
+            );
+        }
+
+        $mcp_counts = is_array($ability_manifest['counts'] ?? null) ? $ability_manifest['counts'] : [];
+        $policy_counts = is_array($mcp_write_policy['counts'] ?? null) ? $mcp_write_policy['counts'] : [];
+        $run_totals = is_array($run_analysis['totals'] ?? null) ? $run_analysis['totals'] : [];
+        $summary_lines = [
+            sprintf(
+                /* translators: %s: framework slug. */
+                __('Framework: %s', 'livecanvas-forge-ai'),
+                (string) ($summary['framework'] ?: 'auto')
+            ),
+            sprintf(
+                /* translators: 1: total abilities, 2: public abilities. */
+                __('Abilities: %1$d total, %2$d MCP-public', 'livecanvas-forge-ai'),
+                (int) ($summary['abilities'] ?? 0),
+                (int) ($summary['mcp_public'] ?? 0)
+            ),
+            sprintf(
+                /* translators: 1: public write count, 2: allowlist count. */
+                __('Writes: %1$d MCP-public, %2$d allowed', 'livecanvas-forge-ai'),
+                (int) ($summary['public_writes'] ?? 0),
+                (int) ($policy_counts['allowed'] ?? 0)
+            ),
+            sprintf(
+                /* translators: 1: recent runs, 2: errors, 3: rollback-ready runs. */
+                __('Runs: %1$d recent, %2$d errors, %3$d rollback-ready', 'livecanvas-forge-ai'),
+                (int) ($summary['runs'] ?? 0),
+                (int) ($summary['run_errors'] ?? 0),
+                (int) ($summary['rollbacks'] ?? 0)
+            ),
+            sprintf(
+                /* translators: 1: AI readiness, 2: MCP Adapter readiness. */
+                __('Readiness: AI text %1$s, MCP Adapter %2$s', 'livecanvas-forge-ai'),
+                !empty($summary['ai_text_ready']) ? 'ready' : 'unavailable',
+                !empty($summary['mcp_adapter_ready']) ? 'ready' : 'pending'
+            ),
+        ];
+        $risk_titles = array_values(array_filter(array_map(static function (array $risk): string {
+            return sanitize_text_field((string) ($risk['title'] ?? ''));
+        }, $risks)));
+        $risk_sentence = empty($risk_titles) ? __('Studio ready', 'livecanvas-forge-ai') : implode('; ', $risk_titles);
+        $agent_prompt = sprintf(
+            /* translators: 1: framework, 2: public abilities, 3: public writes, 4: run errors, 5: risk sentence. */
+            __('Inspect this WordPress site through LiveCanvas Forge AI. Start read-only: call get_snapshot, get_ability_diagnostics, and get_runs. Do not apply write abilities until dry-run previews are reviewed. Current framework: %1$s. MCP-public abilities: %2$d. MCP-public writes: %3$d. Recent run errors: %4$d. Readiness notes: %5$s.', 'livecanvas-forge-ai'),
+            (string) ($summary['framework'] ?: 'auto'),
+            (int) ($mcp_counts['public'] ?? $summary['mcp_public'] ?? 0),
+            (int) ($summary['public_writes'] ?? 0),
+            (int) ($run_totals['errors'] ?? $summary['run_errors'] ?? 0),
+            $risk_sentence
+        );
+
+        return [
+            'title'        => __('Forge Studio operator briefing', 'livecanvas-forge-ai'),
+            'summary'      => array_values(array_map('sanitize_text_field', $summary_lines)),
+            'risks'        => $risks,
+            'next_actions' => $next_actions,
+            'agent_prompt' => sanitize_text_field($agent_prompt),
+        ];
+    }
+
+    private function build_studio_ability_manifest(array $ability): array {
+        $items = [];
+        $source = 'diagnostics';
+        $public = [];
+        $write = [];
+        $readonly = [];
+
+        if ($this->ability_registry instanceof LCFA_Ability_Registry && method_exists($this->ability_registry, 'get_ability_manifest')) {
+            $source = 'registry';
+            $manifest = $this->ability_registry->get_ability_manifest();
+
+            foreach ($manifest as $name => $definition) {
+                if (!is_array($definition)) {
+                    continue;
+                }
+
+                $annotations = is_array($definition['meta']['annotations'] ?? null) ? $definition['meta']['annotations'] : [];
+                $input_schema = is_array($definition['input_schema'] ?? null) ? $definition['input_schema'] : [];
+                $properties = is_array($input_schema['properties'] ?? null) ? array_keys($input_schema['properties']) : [];
+                $required = is_array($input_schema['required'] ?? null) ? $input_schema['required'] : [];
+                $mcp_public = !empty($definition['meta']['mcp']['public']);
+                $is_readonly = !empty($annotations['readonly']);
+                $is_write = !$is_readonly || !empty($annotations['destructive']);
+                $sanitized_name = sanitize_text_field((string) $name);
+
+                if ($mcp_public) {
+                    $public[] = $sanitized_name;
+                }
+
+                if ($is_write) {
+                    $write[] = $sanitized_name;
+                } else {
+                    $readonly[] = $sanitized_name;
+                }
+
+                $items[] = [
+                    'name'                 => $sanitized_name,
+                    'label'                => sanitize_text_field((string) ($definition['label'] ?? '')),
+                    'description'          => sanitize_text_field((string) ($definition['description'] ?? '')),
+                    'category'             => sanitize_key((string) ($definition['category'] ?? '')),
+                    'mcp_public'           => $mcp_public,
+                    'readonly'             => $is_readonly,
+                    'destructive'          => !empty($annotations['destructive']),
+                    'idempotent'           => !empty($annotations['idempotent']),
+                    'show_in_rest'         => !empty($definition['meta']['show_in_rest']),
+                    'input_schema_type'    => sanitize_key((string) ($input_schema['type'] ?? 'object')),
+                    'input_required'       => array_values(array_map('sanitize_key', array_map('strval', $required))),
+                    'input_properties'     => array_values(array_map('sanitize_key', array_map('strval', $properties))),
+                    'input_property_count' => count($properties),
+                ];
+            }
+        } else {
+            $diagnostic_items = is_array($ability['items'] ?? null) ? $ability['items'] : [];
+
+            foreach ($diagnostic_items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $sanitized_name = sanitize_text_field((string) ($item['name'] ?? ''));
+                if ($sanitized_name === '') {
+                    continue;
+                }
+
+                $is_readonly = !empty($item['readonly']);
+                $is_write = !$is_readonly || !empty($item['destructive']);
+
+                if (!empty($item['mcp_public'])) {
+                    $public[] = $sanitized_name;
+                }
+
+                if ($is_write) {
+                    $write[] = $sanitized_name;
+                } else {
+                    $readonly[] = $sanitized_name;
+                }
+
+                $items[] = [
+                    'name'                 => $sanitized_name,
+                    'label'                => sanitize_text_field((string) ($item['label'] ?? '')),
+                    'description'          => sanitize_text_field((string) ($item['description'] ?? '')),
+                    'category'             => sanitize_key((string) ($item['category'] ?? '')),
+                    'mcp_public'           => !empty($item['mcp_public']),
+                    'readonly'             => $is_readonly,
+                    'destructive'          => !empty($item['destructive']),
+                    'idempotent'           => !empty($item['idempotent']),
+                    'show_in_rest'         => true,
+                    'input_schema_type'    => 'object',
+                    'input_required'       => [],
+                    'input_properties'     => [],
+                    'input_property_count' => 0,
+                ];
+            }
+        }
+
+        return [
+            'source' => $source,
+            'counts' => [
+                'items'     => count($items),
+                'public'    => count($public),
+                'write'     => count($write),
+                'readonly'  => count($readonly),
+            ],
+            'mcp_public' => $public,
+            'write'      => $write,
+            'readonly'   => $readonly,
+            'items'      => $items,
+        ];
+    }
+
+    private function build_studio_run_analysis(array $runs): array {
+        $totals = [
+            'runs'      => count($runs),
+            'ok'        => 0,
+            'errors'    => 0,
+            'apply'     => 0,
+            'preview'   => 0,
+            'audited'   => 0,
+            'rollbacks' => 0,
+        ];
+        $by_action = [];
+        $by_mode = [];
+        $by_origin = [];
+        $recent_errors = [];
+        $timeline = [];
+
+        foreach ($runs as $run) {
+            if (!is_array($run)) {
+                continue;
+            }
+
+            $ok = !empty($run['ok']);
+            $action = sanitize_key((string) ($run['action'] ?? 'unknown'));
+            $mode = sanitize_key((string) ($run['mode'] ?? 'unknown'));
+            $origin = sanitize_key((string) ($run['origin'] ?? 'unknown'));
+
+            if ($action === '') {
+                $action = 'unknown';
+            }
+
+            if ($mode === '') {
+                $mode = 'unknown';
+            }
+
+            if ($origin === '') {
+                $origin = 'unknown';
+            }
+
+            $totals[$ok ? 'ok' : 'errors']++;
+            if ($mode === 'apply') {
+                $totals['apply']++;
+            } elseif ($mode === 'preview') {
+                $totals['preview']++;
+            }
+
+            if (!empty($run['audit_id'])) {
+                $totals['audited']++;
+            }
+
+            if (!empty($run['rollback_available'])) {
+                $totals['rollbacks']++;
+            }
+
+            if (!isset($by_action[$action])) {
+                $by_action[$action] = [
+                    'name'   => $action,
+                    'count'  => 0,
+                    'errors' => 0,
+                ];
+            }
+            $by_action[$action]['count']++;
+            if (!$ok) {
+                $by_action[$action]['errors']++;
+            }
+
+            if (!isset($by_mode[$mode])) {
+                $by_mode[$mode] = [
+                    'name'   => $mode,
+                    'count'  => 0,
+                    'errors' => 0,
+                ];
+            }
+            $by_mode[$mode]['count']++;
+            if (!$ok) {
+                $by_mode[$mode]['errors']++;
+            }
+
+            if (!isset($by_origin[$origin])) {
+                $by_origin[$origin] = [
+                    'name'   => $origin,
+                    'count'  => 0,
+                    'errors' => 0,
+                ];
+            }
+            $by_origin[$origin]['count']++;
+            if (!$ok) {
+                $by_origin[$origin]['errors']++;
+            }
+
+            $timeline[] = [
+                'time'     => sanitize_text_field((string) ($run['time'] ?? '')),
+                'status'   => $ok ? 'ok' : 'error',
+                'action'   => $action,
+                'mode'     => $mode,
+                'audit_id' => sanitize_key((string) ($run['audit_id'] ?? '')),
+                'summary'  => sanitize_text_field((string) (($run['summary'] ?? '') ?: ($run['message'] ?? ''))),
+            ];
+
+            if (!$ok && count($recent_errors) < 5) {
+                $recent_errors[] = [
+                    'time'     => sanitize_text_field((string) ($run['time'] ?? '')),
+                    'action'   => $action,
+                    'mode'     => $mode,
+                    'audit_id' => sanitize_key((string) ($run['audit_id'] ?? '')),
+                    'message'  => sanitize_text_field((string) (($run['message'] ?? '') ?: ($run['summary'] ?? ''))),
+                ];
+            }
+        }
+
+        $sort_counts = static function (array $left, array $right): int {
+            if ($left['count'] === $right['count']) {
+                return strcmp((string) $left['name'], (string) $right['name']);
+            }
+
+            return $right['count'] <=> $left['count'];
+        };
+
+        $by_action = array_values($by_action);
+        $by_mode = array_values($by_mode);
+        $by_origin = array_values($by_origin);
+        usort($by_action, $sort_counts);
+        usort($by_mode, $sort_counts);
+        usort($by_origin, $sort_counts);
+
+        return [
+            'totals'        => $totals,
+            'by_action'     => array_slice($by_action, 0, 12),
+            'by_mode'       => array_slice($by_mode, 0, 8),
+            'by_origin'     => array_slice($by_origin, 0, 8),
+            'recent_errors' => $recent_errors,
+            'timeline'      => array_slice($timeline, 0, 12),
+        ];
+    }
+
+    private function get_studio_ability_diagnostics(): array {
+        if ($this->ability_registry instanceof LCFA_Ability_Registry) {
+            return $this->ability_registry->get_ability_diagnostics();
+        }
+
+        return [
+            'ability_diagnostics' => [
+                'total'                => 0,
+                'mcp_public_total'     => 0,
+                'mcp_public'           => [],
+                'mcp_public_preview'   => [],
+                'mcp_public_write'     => [],
+                'has_mcp_public_write' => false,
+                'mcp_write_opt_in_enabled' => false,
+                'mcp_write_allowlist'  => [],
+                'mcp_write_available'  => method_exists('LCFA_Settings', 'get_mcp_write_ability_options')
+                    ? array_keys(LCFA_Settings::get_mcp_write_ability_options())
+                    : [],
+                'items'                => [],
+            ],
+            'mcp_adapter' => method_exists($this->environment, 'get_mcp_adapter_status')
+                ? $this->environment->get_mcp_adapter_status()
+                : [],
+            'ai_client' => [
+                'available' => false,
+                'text_generation_supported' => false,
+                'connectors' => [
+                    'available' => false,
+                    'count' => 0,
+                    'text_generation_count' => 0,
+                ],
+            ],
+        ];
+    }
+
+    private function sanitize_studio_runs(array $history): array {
+        $runs = [];
+
+        foreach ($history as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $audit_id = sanitize_key((string) ($entry['audit_id'] ?? ''));
+            $runs[] = [
+                'time'               => sanitize_text_field((string) ($entry['time'] ?? '')),
+                'audit_id'           => $audit_id,
+                'action'             => sanitize_key((string) ($entry['action'] ?? '')),
+                'mode'               => sanitize_key((string) ($entry['mode'] ?? '')),
+                'ok'                 => !empty($entry['ok']),
+                'message'            => sanitize_text_field((string) ($entry['message'] ?? '')),
+                'summary'            => sanitize_text_field((string) ($entry['summary'] ?? '')),
+                'target_type'        => sanitize_key((string) ($entry['target_type'] ?? '')),
+                'target_id'          => absint($entry['target_id'] ?? 0),
+                'target_title'       => sanitize_text_field((string) ($entry['target_title'] ?? '')),
+                'rollback_available' => !empty($entry['rollback_available']) && $audit_id !== '',
+                'execution_target'   => sanitize_key((string) ($entry['execution_target'] ?? 'local')),
+                'origin'             => sanitize_key((string) ($entry['origin'] ?? '')),
+                'processed_by'       => sanitize_key((string) ($entry['processed_by'] ?? '')),
+            ];
+        }
+
+        return $runs;
     }
 
     private function has_valid_mcp_token(?WP_REST_Request $request = null): bool {

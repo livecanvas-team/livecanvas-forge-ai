@@ -59,6 +59,7 @@ final class LCFA_Remote_Client {
 
         $snapshot = is_array($response['snapshot'] ?? null) ? $response['snapshot'] : [];
         $mcp      = is_array($response['mcp'] ?? null) ? $response['mcp'] : [];
+        $mcp_adapter = is_array($snapshot['mcp_adapter'] ?? null) ? $snapshot['mcp_adapter'] : [];
 
         $this->status_cache = [
             'configured' => true,
@@ -71,6 +72,11 @@ final class LCFA_Remote_Client {
                 'livecanvas_active' => !empty($snapshot['livecanvas_active']),
                 'windpress_active'  => !empty($snapshot['windpress_active']),
                 'site_mode'         => (string) ($snapshot['site_mode'] ?? ''),
+            ],
+            'mcp_adapter' => [
+                'available'     => !empty($mcp_adapter['available']),
+                'custom_server' => is_array($mcp_adapter['custom_server'] ?? null) ? $mcp_adapter['custom_server'] : [],
+                'remote_proxy'  => is_array($mcp_adapter['remote_proxy'] ?? null) ? $mcp_adapter['remote_proxy'] : [],
             ],
             'mcp'        => [
                 'enabled'         => !empty($mcp['enabled']),

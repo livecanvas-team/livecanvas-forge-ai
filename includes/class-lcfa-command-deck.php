@@ -143,6 +143,10 @@ final class LCFA_Command_Deck {
                 'label'       => __('Restore theme backup', 'livecanvas-forge-ai'),
                 'description' => __('Restores a previously captured theme or template backup back into the active theme roots.', 'livecanvas-forge-ai'),
             ],
+            'restore_audit_rollback' => [
+                'label'       => __('Restore audit rollback', 'livecanvas-forge-ai'),
+                'description' => __('Restores the previous WordPress content stored for a Forge audit ID, or trashes posts created by that run.', 'livecanvas-forge-ai'),
+            ],
         ];
     }
 
@@ -160,6 +164,7 @@ final class LCFA_Command_Deck {
         $relative_path = sanitize_text_field($payload['relative_path'] ?? '');
         $file_path = sanitize_text_field($payload['file_path'] ?? '');
         $backup_id = sanitize_text_field($payload['backup_id'] ?? '');
+        $audit_id = sanitize_key((string) ($payload['audit_id'] ?? ''));
         $root_scope = sanitize_key($payload['root_scope'] ?? 'stylesheet');
         $execution_target = sanitize_key($payload['execution_target'] ?? 'local');
         $genesis_task_id = sanitize_key((string) ($payload['genesis_task_id'] ?? ''));
@@ -342,6 +347,7 @@ final class LCFA_Command_Deck {
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['data']['framework'] = $framework;
+                $result['data']['operation'] = $is_update ? 'update' : 'create';
                 $this->append_global_shell_framework_warnings($result, $framework, $variant);
                 if (sanitize_key((string) ($payload['content_strategy'] ?? '')) === 'section_starter') {
                     $result['data']['section_intent'] = sanitize_key((string) ($payload['section_intent'] ?? ''));
@@ -441,6 +447,7 @@ final class LCFA_Command_Deck {
                 $result['target_title']  = $existing['post']['title'] ?? '';
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
+                $result['data']['operation'] = 'update';
                 $result['summary']       = sprintf(__('Update %s variant %s.', 'livecanvas-forge-ai'), $result['target_type'], $variant);
 
                 if (!$dry_run) {
@@ -470,6 +477,7 @@ final class LCFA_Command_Deck {
                 $result['target_title'] = $title;
                 $result['summary']      = sprintf(__('Create dynamic template "%s".', 'livecanvas-forge-ai'), $title);
                 $result['diff_html']    = $this->build_diff('', $content);
+                $result['data']['operation'] = 'create';
                 $result['data']['template_assignment'] = $template_assignment;
                 $result['data']['native_template_keys'] = $native_template_keys;
 
@@ -513,6 +521,7 @@ final class LCFA_Command_Deck {
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['summary']       = sprintf(__('Update dynamic template #%d.', 'livecanvas-forge-ai'), $target_id);
+                $result['data']['operation'] = 'update';
                 $result['data']['template_assignment'] = $template_assignment;
                 $result['data']['native_template_keys'] = $native_template_keys;
 
@@ -915,6 +924,16 @@ final class LCFA_Command_Deck {
                 $result['message'] = __('Theme backup restored.', 'livecanvas-forge-ai');
                 $result['data']    = $restore_result;
                 break;
+
+            case 'restore_audit_rollback':
+                $restore = $this->restore_audit_rollback($audit_id, $dry_run);
+
+                if (empty($restore['ok'])) {
+                    return $this->error_result((string) ($restore['message'] ?? __('Audit rollback restore failed.', 'livecanvas-forge-ai')));
+                }
+
+                $result = array_merge($result, $restore);
+                break;
         }
 
         if (!empty($policy['notice'])) {
@@ -940,9 +959,11 @@ final class LCFA_Command_Deck {
         ];
         $result['provenance'] = $provenance;
         $result['data']['provenance'] = $provenance;
+        $this->attach_audit_envelope($result, $payload, $provenance);
 
         LCFA_Settings::append_history([
             'time'         => current_time('mysql', true),
+            'audit_id'     => (string) ($result['audit_id'] ?? ''),
             'action'       => $result['action'],
             'mode'         => $result['mode'],
             'ok'           => $result['ok'],
@@ -951,6 +972,7 @@ final class LCFA_Command_Deck {
             'target_type'  => $result['target_type'],
             'target_id'    => $result['target_id'],
             'target_title' => $result['target_title'],
+            'rollback_available' => !empty($result['rollback_available']),
             'execution_target' => 'local',
         ] + $provenance);
 
@@ -1019,9 +1041,11 @@ final class LCFA_Command_Deck {
         ];
         $result['provenance'] = $provenance;
         $result['data']['provenance'] = $provenance;
+        $this->attach_audit_envelope($result, $payload, $provenance);
 
         LCFA_Settings::append_history([
             'time'             => current_time('mysql', true),
+            'audit_id'         => (string) ($result['audit_id'] ?? ''),
             'action'           => (string) ($result['action'] ?? ''),
             'mode'             => (string) ($result['mode'] ?? ($dry_run ? 'preview' : 'apply')),
             'ok'               => !empty($result['ok']),
@@ -1030,10 +1054,235 @@ final class LCFA_Command_Deck {
             'target_type'      => (string) ($result['target_type'] ?? ''),
             'target_id'        => (int) ($result['target_id'] ?? 0),
             'target_title'     => (string) ($result['target_title'] ?? ''),
+            'rollback_available' => !empty($result['rollback_available']),
             'execution_target' => 'remote',
         ] + $provenance);
 
         return $result;
+    }
+
+    private function restore_audit_rollback(string $audit_id, bool $dry_run): array {
+        $audit_id = sanitize_key($audit_id);
+
+        if ($audit_id === '') {
+            return [
+                'ok'      => false,
+                'message' => __('An audit ID is required to restore a rollback.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!method_exists('LCFA_Settings', 'get_rollback_record')) {
+            return [
+                'ok'      => false,
+                'message' => __('Rollback records are not available in this runtime.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $record = LCFA_Settings::get_rollback_record($audit_id);
+        $restore = is_array($record['restore'] ?? null) ? $record['restore'] : [];
+        $restore_type = sanitize_key((string) ($restore['type'] ?? ''));
+
+        if (!$record || $restore_type === '') {
+            return [
+                'ok'      => false,
+                'message' => __('No rollback record was found for this audit ID.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $result = [
+            'ok'               => true,
+            'action'           => 'restore_audit_rollback',
+            'mode'             => $dry_run ? 'preview' : 'apply',
+            'execution_target' => 'local',
+            'message'          => $dry_run ? __('Audit rollback preview prepared.', 'livecanvas-forge-ai') : __('Audit rollback restored.', 'livecanvas-forge-ai'),
+            'summary'          => sprintf(__('Restore rollback for %s.', 'livecanvas-forge-ai'), $audit_id),
+            'target_type'      => 'rollback',
+            'target_id'        => absint($record['target_id'] ?? 0),
+            'target_title'     => sanitize_text_field((string) ($record['target_title'] ?? '')),
+            'existing_html'    => '',
+            'proposed_html'    => '',
+            'diff_html'        => '',
+            'warnings'         => [],
+            'data'             => [
+                'audit_id' => $audit_id,
+                'rollback_record' => [
+                    'created_at'       => (string) ($record['created_at'] ?? ''),
+                    'action'           => (string) ($record['action'] ?? ''),
+                    'target_type'      => (string) ($record['target_type'] ?? ''),
+                    'target_id'        => absint($record['target_id'] ?? 0),
+                    'target_title'     => (string) ($record['target_title'] ?? ''),
+                    'restore_type'     => $restore_type,
+                    'previously_restored_at' => (string) ($record['restored_at'] ?? ''),
+                ],
+            ],
+        ];
+
+        if ($restore_type === 'global_shell_parts') {
+            $parts = is_array($restore['parts'] ?? null) ? $restore['parts'] : [];
+            $current_parts = [];
+            $previous_parts = [];
+            $restored_parts = [];
+
+            foreach ($parts as $part) {
+                if (!is_array($part)) {
+                    continue;
+                }
+
+                $part_target_id = absint($part['target_id'] ?? 0);
+                if ($part_target_id < 1) {
+                    continue;
+                }
+
+                $current_content = $this->get_post_content_for_rollback($part_target_id);
+                $previous_content = (string) ($part['previous_content'] ?? '');
+                $current_parts[] = $current_content;
+                $previous_parts[] = $previous_content;
+                $created_post = !empty($part['created_post']);
+                $part_result = [
+                    'type'         => sanitize_key((string) ($part['type'] ?? 'partial')),
+                    'target_id'    => $part_target_id,
+                    'target_title' => sanitize_text_field((string) ($part['target_title'] ?? '')),
+                    'operation'    => $created_post ? 'trash_created_post' : 'restore_previous_content',
+                    'ok'           => true,
+                ];
+
+                if (!$dry_run) {
+                    $part_result = array_merge($part_result, $created_post
+                        ? $this->trash_post_for_rollback($part_target_id)
+                        : $this->update_post_content_for_rollback($part_target_id, $previous_content)
+                    );
+                }
+
+                $restored_parts[] = $part_result;
+            }
+
+            $result['existing_html'] = implode("\n\n", $current_parts);
+            $result['proposed_html'] = implode("\n\n", $previous_parts);
+            $result['diff_html'] = $this->build_diff($result['existing_html'], $result['proposed_html']);
+            $result['data']['parts'] = $restored_parts;
+            $result['ok'] = empty(array_filter($restored_parts, static function (array $part): bool {
+                return empty($part['ok']);
+            }));
+
+            if (empty($result['ok'])) {
+                $result['message'] = __('One or more rollback parts could not be restored.', 'livecanvas-forge-ai');
+            }
+        } else {
+            $target_id = absint($restore['target_id'] ?? 0);
+            $previous_content = (string) ($restore['previous_content'] ?? '');
+            $created_post = !empty($restore['created_post']);
+
+            if ($target_id < 1) {
+                return [
+                    'ok'      => false,
+                    'message' => __('The rollback record does not contain a valid target ID.', 'livecanvas-forge-ai'),
+                ];
+            }
+
+            $result['target_id'] = $target_id;
+            $result['target_title'] = sanitize_text_field((string) ($restore['target_title'] ?? $result['target_title']));
+            $result['existing_html'] = $this->get_post_content_for_rollback($target_id);
+            $result['proposed_html'] = $created_post ? '' : $previous_content;
+            $result['diff_html'] = $this->build_diff($result['existing_html'], $result['proposed_html']);
+            $result['data']['restore_operation'] = $created_post ? 'trash_created_post' : 'restore_previous_content';
+
+            if (!$dry_run) {
+                $restore_result = $created_post
+                    ? $this->trash_post_for_rollback($target_id)
+                    : $this->update_post_content_for_rollback($target_id, $previous_content);
+
+                $result['ok'] = !empty($restore_result['ok']);
+                $result['data']['restore_result'] = $restore_result;
+
+                if (empty($result['ok'])) {
+                    $result['message'] = (string) ($restore_result['message'] ?? __('Audit rollback restore failed.', 'livecanvas-forge-ai'));
+                }
+            }
+        }
+
+        if (!$dry_run && !empty($result['ok']) && method_exists('LCFA_Settings', 'mark_rollback_record_restored')) {
+            LCFA_Settings::mark_rollback_record_restored($audit_id, $result);
+        }
+
+        return $result;
+    }
+
+    private function get_post_content_for_rollback(int $post_id): string {
+        if (!function_exists('get_post')) {
+            return '';
+        }
+
+        $post = get_post($post_id);
+
+        if (is_object($post) && isset($post->post_content)) {
+            return (string) $post->post_content;
+        }
+
+        if (is_array($post) && isset($post['post_content'])) {
+            return (string) $post['post_content'];
+        }
+
+        return '';
+    }
+
+    private function update_post_content_for_rollback(int $post_id, string $content): array {
+        if (!function_exists('wp_update_post')) {
+            return [
+                'ok'      => false,
+                'message' => __('wp_update_post() is not available in this runtime.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $updated = $this->with_unfiltered_post_content(static function () use ($post_id, $content) {
+            return wp_update_post([
+                'ID'           => $post_id,
+                'post_content' => $content,
+            ], true);
+        });
+
+        if (is_wp_error($updated)) {
+            return [
+                'ok'      => false,
+                'message' => $updated->get_error_message(),
+            ];
+        }
+
+        return [
+            'ok'        => true,
+            'target_id' => (int) $updated,
+            'message'   => __('Previous post content restored.', 'livecanvas-forge-ai'),
+        ];
+    }
+
+    private function trash_post_for_rollback(int $post_id): array {
+        if (function_exists('wp_trash_post')) {
+            $trashed = wp_trash_post($post_id);
+
+            if ($trashed) {
+                return [
+                    'ok'        => true,
+                    'target_id' => $post_id,
+                    'message'   => __('Created post moved to trash.', 'livecanvas-forge-ai'),
+                ];
+            }
+        }
+
+        if (function_exists('wp_delete_post')) {
+            $deleted = wp_delete_post($post_id, false);
+
+            if ($deleted) {
+                return [
+                    'ok'        => true,
+                    'target_id' => $post_id,
+                    'message'   => __('Created post deleted.', 'livecanvas-forge-ai'),
+                ];
+            }
+        }
+
+        return [
+            'ok'      => false,
+            'message' => __('The created post could not be trashed or deleted.', 'livecanvas-forge-ai'),
+        ];
     }
 
     private function prepare_site_foundation(): array {
@@ -1860,6 +2109,7 @@ HTML,
             'write_theme_template',
             'write_theme_file',
             'restore_theme_backup',
+            'restore_audit_rollback',
         ], true);
     }
 
@@ -1901,14 +2151,178 @@ HTML,
         ];
     }
 
+    private function attach_audit_envelope(array &$result, array $payload, array $provenance): void {
+        if (!is_array($result['data'] ?? null)) {
+            $result['data'] = [];
+        }
+
+        $mode = sanitize_key((string) ($result['mode'] ?? (!empty($payload['dry_run']) ? 'preview' : 'apply')));
+        $action = sanitize_key((string) ($result['action'] ?? ($payload['action'] ?? '')));
+
+        if ($mode === 'preview' && !empty($result['ok'])) {
+            $next_actions = [
+                __('Review warnings and diff_html before applying.', 'livecanvas-forge-ai'),
+                __('Run the matching apply command only after an explicit user confirmation.', 'livecanvas-forge-ai'),
+            ];
+            $result['required_next_actions'] = $next_actions;
+            $result['data']['required_next_actions'] = $next_actions;
+
+            return;
+        }
+
+        if ($mode !== 'apply' || empty($result['ok']) || $this->is_read_action($action)) {
+            return;
+        }
+
+        $existing_audit = is_array($result['data']['audit'] ?? null) ? $result['data']['audit'] : [];
+        $audit_id = sanitize_key((string) ($result['audit_id'] ?? ($existing_audit['id'] ?? '')));
+        if ($audit_id === '') {
+            $audit_id = sanitize_key('audit-' . strtolower(wp_generate_password(12, false, false)));
+        }
+
+        $rollback = $this->build_rollback_reference($result);
+        $audit = [
+            'id'                 => $audit_id,
+            'created_at'         => current_time('mysql', true),
+            'action'             => $action,
+            'mode'               => 'apply',
+            'execution_target'   => sanitize_key((string) ($result['execution_target'] ?? 'local')),
+            'target_type'        => sanitize_key((string) ($result['target_type'] ?? '')),
+            'target_id'          => absint($result['target_id'] ?? 0),
+            'target_title'       => sanitize_text_field((string) ($result['target_title'] ?? '')),
+            'rollback_available' => !empty($rollback['available']),
+            'rollback_reference' => $rollback,
+            'provenance'         => $provenance,
+        ];
+
+        $result['audit_id'] = $audit_id;
+        $result['rollback_available'] = !empty($rollback['available']);
+        $result['data']['audit'] = array_merge($existing_audit, $audit);
+
+        if (!empty($rollback['available']) && method_exists('LCFA_Settings', 'store_rollback_record')) {
+            LCFA_Settings::store_rollback_record($audit_id, $this->build_rollback_record($audit_id, $result, $rollback, $provenance));
+        }
+    }
+
+    private function build_rollback_record(string $audit_id, array $result, array $rollback, array $provenance): array {
+        $record = [
+            'audit_id'           => sanitize_key($audit_id),
+            'created_at'         => current_time('mysql', true),
+            'action'             => sanitize_key((string) ($result['action'] ?? '')),
+            'execution_target'   => sanitize_key((string) ($result['execution_target'] ?? 'local')),
+            'target_type'        => sanitize_key((string) ($result['target_type'] ?? '')),
+            'target_id'          => absint($result['target_id'] ?? 0),
+            'target_title'       => sanitize_text_field((string) ($result['target_title'] ?? '')),
+            'rollback_reference' => $rollback,
+            'provenance'         => $provenance,
+            'restore'            => [
+                'type' => sanitize_key((string) ($rollback['type'] ?? '')),
+            ],
+        ];
+
+        if (($rollback['type'] ?? '') === 'global_shell_parts') {
+            $parts = is_array($result['data']['parts'] ?? null) ? $result['data']['parts'] : [];
+            $record['restore']['parts'] = [];
+
+            foreach ($parts as $type => $part) {
+                if (!is_array($part)) {
+                    continue;
+                }
+
+                $target_id = absint($part['target_id'] ?? 0);
+                if ($target_id < 1) {
+                    continue;
+                }
+
+                $operation = sanitize_key((string) ($part['operation'] ?? 'update'));
+                $record['restore']['parts'][] = [
+                    'type'             => sanitize_key((string) ($part['type'] ?? $type)),
+                    'operation'        => $operation,
+                    'target_id'        => $target_id,
+                    'target_title'     => sanitize_text_field((string) ($part['target_title'] ?? '')),
+                    'previous_content' => (string) ($part['existing_html'] ?? ''),
+                    'created_post'     => $operation === 'create',
+                ];
+            }
+
+            return $record;
+        }
+
+        $record['restore'] = array_merge($record['restore'], [
+            'target_type'      => sanitize_key((string) ($rollback['target_type'] ?? ($result['target_type'] ?? ''))),
+            'target_id'        => absint($rollback['target_id'] ?? ($result['target_id'] ?? 0)),
+            'target_title'     => sanitize_text_field((string) ($result['target_title'] ?? '')),
+            'previous_content' => (string) ($result['existing_html'] ?? ''),
+            'created_post'     => ($rollback['type'] ?? '') === 'created_post',
+        ]);
+
+        return $record;
+    }
+
+    private function build_rollback_reference(array $result): array {
+        $target_type = sanitize_key((string) ($result['target_type'] ?? ''));
+        $target_id = absint($result['target_id'] ?? 0);
+        $existing_html = (string) ($result['existing_html'] ?? '');
+
+        if ($target_type === 'global_shell') {
+            $parts = is_array($result['data']['parts'] ?? null) ? $result['data']['parts'] : [];
+            $part_refs = [];
+
+            foreach ($parts as $type => $part) {
+                if (!is_array($part)) {
+                    continue;
+                }
+
+                $part_target_id = absint($part['target_id'] ?? 0);
+                if ($part_target_id < 1) {
+                    continue;
+                }
+
+                $part_existing_html = (string) ($part['existing_html'] ?? '');
+                $part_refs[] = [
+                    'type'         => sanitize_key((string) ($part['type'] ?? $type)),
+                    'operation'    => sanitize_key((string) ($part['operation'] ?? 'update')),
+                    'target_id'    => $part_target_id,
+                    'content_hash' => $part_existing_html !== '' ? md5($part_existing_html) : '',
+                ];
+            }
+
+            return [
+                'available' => !empty($part_refs),
+                'type'      => 'global_shell_parts',
+                'parts'     => $part_refs,
+            ];
+        }
+
+        if ($target_id > 0 && in_array($target_type, ['page', 'header', 'footer', 'partial', 'dynamic_template'], true)) {
+            $operation = sanitize_key((string) ($result['data']['operation'] ?? ''));
+            $created = $operation === 'create';
+
+            return [
+                'available'    => true,
+                'type'         => $created ? 'created_post' : 'previous_post_content',
+                'target_type'  => $target_type,
+                'target_id'    => $target_id,
+                'content_hash' => !$created ? md5($existing_html) : '',
+            ];
+        }
+
+        return [
+            'available' => false,
+            'type'      => '',
+        ];
+    }
+
     private function get_payload_provenance(array $payload, string $default_origin = 'admin_command_deck', string $default_processed_by = 'forge_local_rules'): array {
         $origin = sanitize_key((string) ($payload['_lcfa_origin'] ?? $payload['origin'] ?? $default_origin));
-        $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'api'];
+        $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'wp_ability', 'api'];
         if (!in_array($origin, $allowed_origins, true)) {
             $origin = $default_origin;
         }
 
-        $default_transport = $origin === 'mcp_agent' ? 'mcp_stdio' : ($origin === 'remote_companion' ? 'remote_rest' : 'browser_rest');
+        $default_transport = $origin === 'mcp_agent'
+            ? 'mcp_stdio'
+            : (in_array($origin, ['remote_companion', 'wp_ability', 'api'], true) ? ($origin === 'remote_companion' ? 'remote_rest' : 'api') : 'browser_rest');
         $transport = sanitize_key((string) ($payload['_lcfa_transport'] ?? $payload['transport'] ?? $default_transport));
         $allowed_transports = ['browser_rest', 'mcp_stdio', 'mcp_bridge', 'remote_rest', 'api'];
         if (!in_array($transport, $allowed_transports, true)) {
@@ -1923,7 +2337,25 @@ HTML,
         }
 
         $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
-        $allowed_processors = ['forge_local_rules', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+        $allowed_processors = [
+            'forge_local_rules',
+            'codex_mcp',
+            'opencode_mcp',
+            'claude_mcp',
+            'cursor_mcp',
+            'generic_mcp',
+            'remote_companion',
+            'wp_ability_preview',
+            'wp_ability_apply',
+            'wp_ability_preview_page_upsert',
+            'wp_ability_preview_global_shell',
+            'wp_ability_preview_design_system',
+            'wp_ability_apply_page_upsert',
+            'wp_ability_apply_global_shell',
+            'wp_ability_apply_dynamic_template',
+            'wp_ability_apply_design_system',
+            'wp_ability_restore_audit_rollback',
+        ];
         if (!in_array($processed_by, $allowed_processors, true)) {
             $processed_by = $default_processed_by;
         }

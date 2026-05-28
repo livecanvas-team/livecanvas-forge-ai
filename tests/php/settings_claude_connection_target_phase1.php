@@ -82,6 +82,10 @@ lcfa_assert_same('', $defaults['claude_connection_target'], 'claude_connection_t
 lcfa_assert_true(array_key_exists('codex_model', $defaults), 'connection defaults should expose a Codex model default');
 lcfa_assert_true(array_key_exists('codex_speed', $defaults), 'connection defaults should expose a Codex speed default');
 lcfa_assert_true(array_key_exists('codex_reasoning_effort', $defaults), 'connection defaults should expose a Codex intelligence default');
+lcfa_assert_true(array_key_exists('mcp_write_abilities_enabled', $defaults), 'connection defaults should expose the MCP write ability opt-in flag');
+lcfa_assert_same(false, $defaults['mcp_write_abilities_enabled'], 'MCP write abilities should default to private');
+lcfa_assert_true(array_key_exists('mcp_public_write_abilities', $defaults), 'connection defaults should expose the MCP write ability allowlist');
+lcfa_assert_same([], $defaults['mcp_public_write_abilities'], 'MCP write ability allowlist should default to empty until configured');
 lcfa_assert_same('gpt-5.3-codex-spark', $defaults['codex_model'], 'Codex model should default to the fast frontend model');
 lcfa_assert_same('balanced', $defaults['codex_speed'], 'Codex speed should default to balanced');
 lcfa_assert_same('medium', $defaults['codex_reasoning_effort'], 'Codex intelligence should default to medium');
@@ -107,10 +111,36 @@ $sanitized_codex = LCFA_Settings::sanitize_connections([
     'codex_model' => 'gpt-5.4-mini',
     'codex_speed' => 'fast',
     'codex_reasoning_effort' => 'low',
+    'mcp_write_abilities_enabled' => '1',
 ]);
 lcfa_assert_same('gpt-5.4-mini', $sanitized_codex['codex_model'] ?? '', 'Codex model defaults should be saved from Connections');
 lcfa_assert_same('fast', $sanitized_codex['codex_speed'] ?? '', 'Codex speed defaults should be saved from Connections');
 lcfa_assert_same('low', $sanitized_codex['codex_reasoning_effort'] ?? '', 'Codex intelligence defaults should be saved from Connections');
+lcfa_assert_same(true, $sanitized_codex['mcp_write_abilities_enabled'] ?? null, 'MCP write ability opt-in should sanitize to boolean true');
+lcfa_assert_same(array_keys(LCFA_Settings::get_mcp_write_ability_options()), $sanitized_codex['mcp_public_write_abilities'] ?? [], 'legacy write opt-in should default to all curated write abilities when no allowlist was submitted');
+
+$sanitized_write_allowlist = LCFA_Settings::sanitize_connections([
+    'preferred_client' => 'codex',
+    'mcp_write_abilities_enabled' => '1',
+    'mcp_public_write_abilities_submitted' => '1',
+    'mcp_public_write_abilities' => [
+        'livecanvas-forge-ai/apply-page-upsert',
+        'livecanvas-forge-ai/apply-command',
+        'livecanvas-forge-ai/restore-audit-rollback',
+    ],
+]);
+lcfa_assert_same([
+    'livecanvas-forge-ai/apply-page-upsert',
+    'livecanvas-forge-ai/restore-audit-rollback',
+], $sanitized_write_allowlist['mcp_public_write_abilities'] ?? [], 'MCP write allowlist should keep only curated dedicated write abilities');
+lcfa_assert_same(true, $sanitized_write_allowlist['mcp_public_write_abilities_configured'] ?? null, 'submitted write allowlist should be marked configured');
+
+$sanitized_empty_write_allowlist = LCFA_Settings::sanitize_connections([
+    'preferred_client' => 'codex',
+    'mcp_write_abilities_enabled' => '1',
+    'mcp_public_write_abilities_submitted' => '1',
+]);
+lcfa_assert_same([], $sanitized_empty_write_allowlist['mcp_public_write_abilities'] ?? ['not-empty'], 'submitted empty write allowlist should expose no write abilities');
 
 $GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
     LCFA_Settings::connection_defaults(),

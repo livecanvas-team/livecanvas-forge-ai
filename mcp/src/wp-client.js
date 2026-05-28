@@ -60,6 +60,10 @@ class WPClient {
     return this.request('GET', 'history')
   }
 
+  async getAgentHandoffPackage(params = {}) {
+    return this.request('GET', 'studio/handoff-package', { query: params })
+  }
+
   async getThemeBackups(params = {}) {
     return this.request('GET', 'theme/backups', { query: params })
   }

@@ -22,6 +22,9 @@ final class LCFA_Connection_Bundle_Builder {
             'mode'                => $mode,
             'server_name'         => 'livecanvas-forge',
             'workspace_root'      => $workspace_root,
+            'connection_strategy' => (string) ($common['connection_strategy'] ?? ($mode === 'remote' ? 'remote-rest' : 'local-mcp')),
+            'mcp_adapter_url'     => (string) ($common['mcp_adapter_url'] ?? ''),
+            'remote_site_url'     => (string) ($common['remote_site_url'] ?? ''),
             'command'             => $command,
             'command_string'      => $command_string,
             'copy_command_string' => $shortcut['command'] ?: $command_string,
@@ -544,7 +547,9 @@ final class LCFA_Connection_Bundle_Builder {
         }
 
         $lines[] = '    -- ' . $this->join_shell_tokens($command);
-        $lines[] = '  echo "Codex MCP server livecanvas-forge updated. Restart Codex or reload the MCP server before testing."';
+        $lines[] = $this->uses_wordpress_mcp_remote_proxy($environment, $command)
+            ? '  echo "Codex MCP server livecanvas-forge updated for the remote WordPress MCP Adapter. Restart Codex or reload the MCP server before testing."'
+            : '  echo "Codex MCP server livecanvas-forge updated. Restart Codex or reload the MCP server before testing."';
         $lines[] = 'else';
         $lines[] = "  cat <<'EOF'";
         $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';
@@ -608,6 +613,10 @@ final class LCFA_Connection_Bundle_Builder {
     }
 
     private function build_smoke_test_command(array $environment, array $command): string {
+        if ($this->uses_wordpress_mcp_remote_proxy($environment, $command)) {
+            return "codex mcp get livecanvas-forge || /Applications/Codex.app/Contents/Resources/codex mcp get livecanvas-forge\n# Then reopen Codex and ask it to call livecanvas-forge-ai/get-snapshot.";
+        }
+
         $lines = [];
 
         foreach ($environment as $key => $value) {
@@ -631,6 +640,13 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = implode("\n", $joined);
 
         return implode("\n", $lines);
+    }
+
+    private function uses_wordpress_mcp_remote_proxy(array $environment, array $command): bool {
+        $command_string = implode(' ', $command);
+
+        return !empty($environment['WP_API_URL'])
+            && strpos($command_string, '@automattic/mcp-wordpress-remote') !== false;
     }
 
     private function join_shell_tokens(array $command): string {

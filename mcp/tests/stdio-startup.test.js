@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
+const initializeTimeoutMs = 6000
+const delayedPreflightMs = 10000
 
 async function run() {
   const requests = []
@@ -8,18 +10,20 @@ async function run() {
     requests.push(req.url)
 
     if (req.url === '/wp-json/lcfa/v1/mcp/workspace-root/' || req.url === '/wp-json/lcfa/v1/mcp/workspace-root') {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
-      }, 2000)
+      }, delayedPreflightMs)
+      timer.unref()
       return
     }
 
     if (req.url === '/wp-json/lcfa/v1/mcp/status/' || req.url === '/wp-json/lcfa/v1/mcp/status') {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ mcp: { endpoint: 'ws://127.0.0.1:7681' } }))
-      }, 2000)
+      }, delayedPreflightMs)
+      timer.unref()
       return
     }
 
@@ -62,7 +66,7 @@ async function run() {
     initializeMessage
   ]))
 
-  const output = await waitForStdout(child, 800)
+  const output = await waitForStdout(child, initializeTimeoutMs)
   await waitForRequest(requests, '/wp-json/lcfa/v1/mcp/workspace-root', 3000)
 
   child.kill('SIGKILL')
@@ -91,7 +95,7 @@ async function run() {
     initializeMessage
   ]))
 
-  const lfOutput = await waitForStdout(lfChild, 800)
+  const lfOutput = await waitForStdout(lfChild, initializeTimeoutMs)
   lfChild.kill('SIGKILL')
 
   assert.match(lfOutput, /"protocolVersion":"2024-11-05"/, 'stdio server should also accept LF-only headers used by some MCP clients')
@@ -125,7 +129,7 @@ async function run() {
     Buffer.from('\n')
   ]))
 
-  const ndjsonOutput = await waitForStdout(ndjsonChild, 800)
+  const ndjsonOutput = await waitForStdout(ndjsonChild, initializeTimeoutMs)
   ndjsonChild.kill('SIGKILL')
 
   assert.match(ndjsonOutput, /"protocolVersion":"2025-11-25"/, 'stdio server should negotiate the client-requested protocol version for newline-delimited JSON-RPC clients')

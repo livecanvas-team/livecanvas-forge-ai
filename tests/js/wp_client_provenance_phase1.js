@@ -35,8 +35,9 @@ class CaptureClient extends WPClient {
       processed_by: 'codex_mcp',
     },
   })
+  await client.getAgentHandoffPackage({ limit: 3 })
 
-  assert.strictEqual(client.calls.length, 4, 'suggestCommand, runCommand, and agent queue helpers should call the REST API once each')
+  assert.strictEqual(client.calls.length, 5, 'suggestCommand, runCommand, agent queue helpers, and handoff package should call the REST API once each')
 
   const suggestBody = client.calls[0].options.body
   assert.strictEqual(client.calls[0].route, 'command/suggest', 'suggestCommand should call command/suggest')
@@ -63,6 +64,10 @@ class CaptureClient extends WPClient {
   assert.strictEqual(client.calls[3].route, 'agent/request/complete', 'completeAgentRequest should call agent/request/complete')
   assert.strictEqual(completeBody.request_id, 'req-123', 'completeAgentRequest should send the request id')
   assert.strictEqual(completeBody.result.provenance.processed_by, 'codex_mcp', 'completeAgentRequest should preserve Codex MCP result provenance')
+
+  assert.strictEqual(client.calls[4].method, 'GET', 'getAgentHandoffPackage should read from the REST API')
+  assert.strictEqual(client.calls[4].route, 'studio/handoff-package', 'getAgentHandoffPackage should call the dedicated handoff package endpoint')
+  assert.strictEqual(client.calls[4].options.query.limit, 3, 'getAgentHandoffPackage should pass the requested run limit')
 
   console.log('PASS wp_client_provenance_phase1')
 })().catch((error) => {

@@ -308,6 +308,38 @@ lcfa_assert_true(empty($remote_bundle['workspace_files']), 'remote bundle should
 lcfa_assert_same('opencode.json', $remote_bundle['download_files'][0]['name'] ?? '', 'remote bundle should expose downloadable client config');
 lcfa_assert_true(strpos((string) ($remote_bundle['download_files'][0]['content'] ?? ''), '"livecanvas-forge"') !== false, 'remote bundle should serialize the MCP server name');
 
+$remote_codex_bundle = $builder->build([
+    'client'         => 'codex',
+    'mode'           => 'remote',
+    'workspace_root' => '',
+    'common'         => [
+        'connection_strategy' => 'remote-mcp-adapter',
+        'mcp_adapter_url'     => 'https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+        'remote_site_url'     => 'https://remote.example/',
+    ],
+    'client_payload' => [
+        'command' => 'npx -y @automattic/mcp-wordpress-remote@latest',
+        'env'     => [
+            'WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+            'WP_API_USERNAME=admin',
+            'WP_API_PASSWORD=abcd efgh ijkl mnop',
+            'LOG_FILE=/tmp/livecanvas-forge-codex-remote.log',
+            'LCFA_WP_ROOT=/wordpress',
+        ],
+    ],
+]);
+
+lcfa_assert_same('remote-mcp-adapter', $remote_codex_bundle['connection_strategy'] ?? '', 'remote Codex bundle should declare the MCP Adapter strategy');
+lcfa_assert_same('https://remote.example/wp-json/livecanvas-forge-ai/mcp', $remote_codex_bundle['mcp_adapter_url'] ?? '', 'remote Codex bundle should expose the MCP Adapter URL');
+lcfa_assert_true(empty($remote_codex_bundle['workspace_files']), 'remote Codex bundle should not propose local workspace writes');
+lcfa_assert_false(isset($remote_codex_bundle['environment']['LCFA_WP_ROOT']), 'remote Codex bundle should strip local filesystem environment');
+lcfa_assert_same('@automattic/mcp-wordpress-remote@latest', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the WordPress MCP remote proxy package');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_URL=') !== false, 'remote Codex shortcut should register WP_API_URL with Codex');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_PASSWORD=') !== false, 'remote Codex shortcut should register the Application Password with Codex');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'remote WordPress MCP Adapter') !== false, 'remote Codex shortcut should explain the remote MCP Adapter target');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), 'codex mcp get livecanvas-forge') !== false, 'remote Codex smoke command should verify the Codex MCP registration');
+lcfa_assert_false(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), '--tool') !== false, 'remote Codex smoke command should not append local bridge CLI flags to the proxy package');
+
 $onboarding = new LCFA_Connection_Onboarding($builder);
 
 $choose_client_state = $onboarding->derive_state([
@@ -498,6 +530,35 @@ lcfa_assert_same('Copy Codex shortcut', $codex_bundle_view['active_panel']['prim
 lcfa_assert_same('Download Codex helper', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should still offer the helper script as a fallback');
 lcfa_assert_same('What to do in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific visual strip');
 
+$codex_remote_bundle_view = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'generate_bundle',
+    ],
+    'bundle' => [
+        'client'              => 'codex',
+        'mode'                => 'remote',
+        'connection_strategy' => 'remote-mcp-adapter',
+        'mcp_adapter_url'     => 'https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+        'workspace_root'      => '',
+        'command_string'      => "'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'copy_command_string' => "codex mcp add livecanvas-forge \\\n  --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' \\\n  --env WP_API_USERNAME='admin' \\\n  --env WP_API_PASSWORD='abcd efgh ijkl mnop' \\\n  -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'shortcut_title'      => 'Codex shortcut',
+        'shortcut_command'    => "codex mcp add livecanvas-forge \\\n  --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' \\\n  --env WP_API_USERNAME='admin' \\\n  --env WP_API_PASSWORD='abcd efgh ijkl mnop' \\\n  -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'workspace_files'     => [],
+        'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason'    => 'missing',
+        'path'      => '',
+    ],
+]);
+
+lcfa_assert_same('Copy Codex shortcut', $codex_remote_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex remote flow should elevate the remote registration shortcut to the primary action');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['active_panel']['description'] ?? ''), 'remote shortcut') !== false, 'Codex remote flow should explain that the shortcut is remote-safe');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'remote proxy') !== false, 'Codex remote visual help should mention the WordPress MCP Adapter remote proxy');
+
 $codex_smoke = $presenter->build([
     'state' => [
         'status'       => 'not_connected',
@@ -523,6 +584,7 @@ $admin_instance = $admin_reflection->newInstanceWithoutConstructor();
 $default_tab_method = new ReflectionMethod('LCFA_Admin', 'get_default_dashboard_tab');
 $post_setup_redirect_method = new ReflectionMethod('LCFA_Admin', 'get_post_setup_redirect_tab');
 $hero_content_method = new ReflectionMethod('LCFA_Admin', 'get_dashboard_hero_content');
+$internal_tabs_method = new ReflectionMethod('LCFA_Admin', 'render_internal_tabs');
 $reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconfigured_connections');
 $visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
 $admin_codex_command_method = new ReflectionMethod('LCFA_Admin', 'build_codex_register_command');
@@ -532,6 +594,9 @@ $active_step_panel_method = new ReflectionMethod('LCFA_Admin', 'render_connectio
 $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_onboarding_hero');
 $connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
 $framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
+$remote_codex_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
+$secondary_panels_method = new ReflectionMethod('LCFA_Admin', 'render_connections_secondary_panels');
+$ability_diagnostics_card_method = new ReflectionMethod('LCFA_Admin', 'render_ability_diagnostics_card');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -545,6 +610,16 @@ $genesis_hero = $hero_content_method->invoke($admin_instance, 'genesis');
 lcfa_assert_same('Project Brief & Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should explain the real purpose of the tab');
 lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'after your coding agent connection is ready') !== false, 'genesis hero subtitle should position Genesis after Connections');
 
+$studio_hero = $hero_content_method->invoke($admin_instance, 'studio');
+lcfa_assert_same('Forge Studio', $studio_hero['title'] ?? '', 'studio hero should expose the operational Studio tab');
+lcfa_assert_true(strpos((string) ($studio_hero['subtitle'] ?? ''), 'MCP exposure') !== false, 'studio hero subtitle should mention MCP exposure');
+
+ob_start();
+$internal_tabs_method->invoke($admin_instance, 'studio', ['completed' => true]);
+$internal_tabs_markup = (string) ob_get_clean();
+lcfa_assert_true(strpos($internal_tabs_markup, 'tab=studio') !== false, 'internal tabs should include the Forge Studio tab');
+lcfa_assert_true(strpos($internal_tabs_markup, 'Forge Studio') !== false, 'internal tabs should label the Forge Studio tab');
+
 $admin_codex_command = (string) $admin_codex_command_method->invoke($admin_instance, [
     'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
     'env'     => [
@@ -555,6 +630,24 @@ $admin_codex_command = (string) $admin_codex_command_method->invoke($admin_insta
 ]);
 lcfa_assert_true(strpos($admin_codex_command, '/Applications/Codex.app/Contents/Resources/codex') !== false, 'admin Codex guide should mention the desktop app CLI path');
 lcfa_assert_true(strpos($admin_codex_command, '[mcp_servers.livecanvas-forge]') !== false, 'admin Codex guide should include the config.toml fallback snippet');
+
+$admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instance, [
+    'remote_site_url' => 'https://remote.example',
+    'remote_username' => 'admin',
+    'remote_application_password' => 'abcd efgh ijkl mnop',
+], [
+    'mcp_adapter' => [
+        'available' => true,
+        'custom_server' => [
+            'url' => 'https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+        ],
+    ],
+]);
+
+lcfa_assert_same('npx -y @automattic/mcp-wordpress-remote@latest', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the WordPress MCP remote proxy command');
+lcfa_assert_true(in_array('WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point WP_API_URL at the Forge MCP Adapter route');
+lcfa_assert_true(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve Application Password spacing');
+lcfa_assert_same('remote-mcp-adapter', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the MCP Adapter strategy');
 
 ob_start();
 $visual_help_method->invoke($admin_instance, $opencode_fast_path);
@@ -601,6 +694,53 @@ lcfa_assert_true(strpos($connection_hero_markup, 'Not connected') !== false, 'co
 lcfa_assert_false(strpos($connection_hero_markup, 'Mode:') !== false, 'connections hero should stop repeating the mode chip');
 lcfa_assert_false(strpos($connection_hero_markup, 'Framework:') !== false, 'connections hero should stop repeating the framework chip');
 lcfa_assert_false(strpos($connection_hero_markup, 'Local MCP bridge status') !== false, 'connections hero should stop repeating local bridge loading copy');
+
+ob_start();
+$secondary_panels_method->invoke($admin_instance);
+$secondary_panels_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($secondary_panels_markup, 'data-lcfa-connections-panel="diagnostics"') !== false, 'connections tab should reserve an async ability diagnostics panel');
+lcfa_assert_true(strpos($secondary_panels_markup, 'Ability diagnostics') !== false, 'connections diagnostics placeholder should be labelled clearly');
+
+ob_start();
+$ability_diagnostics_card_method->invoke($admin_instance, [
+    'ability_diagnostics' => [
+        'total' => 25,
+        'mcp_public_total' => 17,
+        'mcp_public_preview' => [
+            'livecanvas-forge-ai/preview-page-upsert',
+            'livecanvas-forge-ai/preview-global-shell',
+        ],
+        'mcp_public_write' => [],
+        'has_mcp_public_write' => false,
+        'mcp_write_opt_in_enabled' => false,
+        'items' => [],
+    ],
+    'mcp_adapter' => [
+        'available' => true,
+        'custom_server' => [
+            'url' => 'https://example.test/wp-json/livecanvas-forge-ai/mcp',
+        ],
+    ],
+    'ai_client' => [
+        'available' => true,
+        'text_generation_supported' => true,
+        'connectors' => [
+            'available' => true,
+            'count' => 2,
+            'text_generation_count' => 1,
+        ],
+    ],
+]);
+$ability_diagnostics_markup = (string) ob_get_clean();
+
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'Abilities: 25') !== false, 'ability diagnostics card should show total ability count');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'MCP public: 17') !== false, 'ability diagnostics card should show MCP-public ability count');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'No public write abilities') !== false, 'ability diagnostics card should explicitly report write abilities are private');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'Write opt-in disabled') !== false, 'ability diagnostics card should show the default write opt-in state');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'AI text ready') !== false, 'ability diagnostics card should show AI Client text-generation readiness');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'Connectors: 2') !== false, 'ability diagnostics card should show connector count');
+lcfa_assert_true(strpos($ability_diagnostics_markup, 'livecanvas-forge-ai/preview-page-upsert') !== false, 'ability diagnostics card should list public preview abilities');
 
 ob_start();
 $connection_wizard_method->invoke(

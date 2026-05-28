@@ -11,14 +11,34 @@ Status: `alpha`
 Usable today:
 
 - connect coding agents through the local MCP bridge or REST contract
+- expose WordPress 7 Abilities and a custom WordPress MCP Adapter server when available
 - inspect WordPress, LiveCanvas, Picostrap, Picowind, WindPress, WooCommerce, and ACF context
 - run preview/apply operations from the Command Deck
+- use dedicated preview/apply abilities for page upsert, global shell, design system, dynamic templates, and audit rollback
 - create and update LiveCanvas pages with `page_upsert`
 - create and update header/footer partials with `global_shell_apply`
 - apply design-system tokens for Picostrap, Picowind/WindPress, or a custom-theme fallback
 - run first-pass site foundation workflows with `site_foundation_run`
 - create/update LiveCanvas dynamic templates and sync supported assignments to native `is_*` meta
 - use the Forge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references
+- queue LiveCanvas editor prompts with a preferred WordPress Ability contract for the connected coding agent
+- inspect recent runs with audit IDs and restore stored rollback records for local apply operations
+- use the PHP-rendered `Forge Studio` tab to inspect abilities, MCP write exposure, AI readiness, and audited runs
+- consume the read-only `/wp-json/lcfa/v1/studio` state endpoint for a future React/DataViews Studio UI
+- load a first progressive React `Forge Studio` shell that consumes the Studio endpoint and falls back to the PHP view if REST or WordPress admin JS dependencies are unavailable
+- use the React Studio shell with search, filters, sorting, configurable columns, copy actions, and rollback shortcuts for abilities and runs
+- persist Studio view preferences locally and provide refresh/reset/copy-state controls for the REST-backed Studio shell
+- inspect selected abilities and runs from the React Studio sidebar, with copy JSON and rollback/deck shortcuts
+- review Studio readiness alerts for setup gaps, MCP write exposure, AI/MCP diagnostics, and recent run errors
+- review run-health analytics with action/origin mix, timeline, failures, audited runs, and rollback counts
+- copy a compact ability manifest with MCP exposure, write/read-only flags, and input schema hints
+- copy an operator briefing and read-only agent prompt generated from the current Studio state
+- run an ordered agent smoke-test plan for read-only, preview, and write-guard verification
+- copy a Markdown agent runbook with current state, guardrails, risks, next actions, and smoke-test order
+- inspect Studio API contract metadata, section list, run limits, readiness flags, and SHA-256 payload fingerprint
+- review a backend-calculated handoff readiness score with pass/warn/fail gates for agent delivery
+- copy a virtual agent handoff package with runbook, smoke tests, briefing, readiness, ability manifest, write policy, and checksums
+- fetch the same handoff package from the dedicated read-only `/wp-json/lcfa/v1/studio/handoff-package` endpoint
 
 Still in progress:
 
@@ -28,6 +48,7 @@ Still in progress:
 - more creative screenshot-aware generation
 - stronger remote/local parity testing for complex write workflows
 - more complete fallback enqueue behavior for custom themes
+- a complete DataViews-based Forge Studio UI; the first progressive React shell is now available
 
 ## What It Does
 
@@ -42,6 +63,7 @@ Main areas:
 - `Setup`: project profile, framework, site mode, policy
 - `Connections`: agent bootstrap for Codex, Cursor, Claude Code, OpenCode, and generic MCP clients
 - `Genesis`: project brief and executable site plan
+- `Forge Studio`: operational view for abilities, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
 - `Command Deck`: preview/apply console for structured operations
 - `LiveCanvas editor drawer`: in-editor prompt surface for contextual page edits
 - `MCP package`: local Node bridge in [`mcp/`](./mcp/)
@@ -119,6 +141,25 @@ Common `run_lc_command` actions:
 | `create_dynamic_template` | Create a LiveCanvas dynamic template. |
 | `update_dynamic_template` | Update a LiveCanvas dynamic template. |
 | `site_foundation_run` | Orchestrate preflight, design system, shell, and starter pages. |
+| `restore_audit_rollback` | Restore stored previous content for a local apply audit ID. |
+
+WordPress 7 ability highlights:
+
+| Ability | Purpose |
+| --- | --- |
+| `livecanvas-forge-ai/get-snapshot` | Read site and Forge runtime context. |
+| `livecanvas-forge-ai/get-runs` | Read recent runs and rollback availability. |
+| `livecanvas-forge-ai/get-agent-handoff-package` | Read a sanitized virtual handoff package for connected agents. |
+| `livecanvas-forge-ai/preview-page-upsert` | Preview page create/update without writing. |
+| `livecanvas-forge-ai/apply-page-upsert` | Apply page create/update with audit metadata. |
+| `livecanvas-forge-ai/preview-global-shell` | Preview header/footer shell changes. |
+| `livecanvas-forge-ai/apply-global-shell` | Apply header/footer shell changes. |
+| `livecanvas-forge-ai/preview-block-pattern` | Convert supplied HTML into a native block pattern preview. |
+| `livecanvas-forge-ai/restore-audit-rollback` | Restore a stored rollback by audit ID. |
+
+Write abilities are not MCP-public by default. Under `Forge AI > Connections > Advanced settings`, enable the master write opt-in only for trusted MCP clients, then select the specific write abilities to expose in the allowlist.
+
+The backend also exposes `GET /wp-json/lcfa/v1/studio` and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The handoff-package endpoint returns only the copy-ready agent bundle and its fingerprint. MCP clients can also call `get_agent_handoff_package`.
 
 ## Example User Prompts For Coding Agents
 

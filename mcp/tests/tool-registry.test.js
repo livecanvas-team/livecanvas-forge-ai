@@ -97,6 +97,15 @@ async function run() {
   const compilePicostrap = tools.find((tool) => tool.name === 'compile_picostrap_bundle')
   assert.ok(compilePicostrap, 'compile_picostrap_bundle should be registered')
 
+  const handoffPackage = tools.find((tool) => tool.name === 'get_agent_handoff_package')
+  assert.ok(handoffPackage, 'get_agent_handoff_package should be registered')
+  assert.ok(handoffPackage.inputSchema.properties.limit, 'get_agent_handoff_package should expose a run limit')
+  assert.match(
+    handoffPackage.description,
+    /handoff package/i,
+    'get_agent_handoff_package should describe the handoff package'
+  )
+
   const validateMarkup = tools.find((tool) => tool.name === 'validate_markup_for_framework')
   assert.ok(validateMarkup, 'validate_markup_for_framework should be registered')
   assert.ok(validateMarkup.inputSchema.properties.body_html_lines, 'validate_markup_for_framework should expose body_html_lines')

@@ -9,6 +9,7 @@ final class LCFA_Settings {
     public const GENESIS_PROGRESS_OPTION_KEY = 'lcfa_genesis_progress';
     public const CONNECTIONS_OPTION_KEY = 'lcfa_connections';
     public const HISTORY_OPTION_KEY = 'lcfa_command_history';
+    public const ROLLBACK_RECORDS_OPTION_KEY = 'lcfa_rollback_records';
     public const THREADS_OPTION_KEY = 'lcfa_command_threads';
     public const AGENT_REQUESTS_OPTION_KEY = 'lcfa_agent_requests';
     public const REDIRECT_OPTION_KEY = 'lcfa_do_activation_redirect';
@@ -170,6 +171,9 @@ final class LCFA_Settings {
             'picostrap_package_url'       => '',
             'local_bridge_url'            => rest_url('lcfa/v1/'),
             'mcp_enabled'                 => true,
+            'mcp_write_abilities_enabled' => false,
+            'mcp_public_write_abilities'  => [],
+            'mcp_public_write_abilities_configured' => false,
             'mcp_host'                    => '127.0.0.1',
             'mcp_port'                    => '7681',
             'mcp_token'                   => self::generate_mcp_token(),
@@ -237,6 +241,19 @@ final class LCFA_Settings {
         $connection_current_step = (string) ($connections['connection_current_step'] ?? '');
         $framework_change_previous = self::normalize_framework_key((string) ($connections['framework_change_previous'] ?? ''));
         $framework_change_next = self::normalize_framework_key((string) ($connections['framework_change_next'] ?? ''));
+        $write_abilities_submitted = !empty($connections['mcp_public_write_abilities_submitted']);
+        $public_write_abilities = self::sanitize_mcp_write_abilities($connections['mcp_public_write_abilities'] ?? []);
+
+        if (!array_key_exists('mcp_public_write_abilities', $connections) && !$write_abilities_submitted) {
+            $public_write_abilities = self::sanitize_mcp_write_abilities($current['mcp_public_write_abilities'] ?? []);
+        }
+
+        if (!empty($connections['mcp_write_abilities_enabled']) && !$write_abilities_submitted && $public_write_abilities === [] && empty($current['mcp_public_write_abilities'])) {
+            $public_write_abilities = array_keys(self::get_mcp_write_ability_options());
+        }
+        $public_write_abilities_configured = $write_abilities_submitted
+            ? true
+            : !empty($current['mcp_public_write_abilities_configured']);
 
         return [
             'transport'                   => in_array($connections['transport'] ?? '', ['rest', 'mcp', 'hybrid'], true) ? $connections['transport'] : 'rest',
@@ -244,6 +261,9 @@ final class LCFA_Settings {
             'picostrap_package_url'       => esc_url_raw($connections['picostrap_package_url'] ?? ''),
             'local_bridge_url'            => esc_url_raw($connections['local_bridge_url'] ?? rest_url('lcfa/v1/')),
             'mcp_enabled'                 => !empty($connections['mcp_enabled']),
+            'mcp_write_abilities_enabled' => !empty($connections['mcp_write_abilities_enabled']),
+            'mcp_public_write_abilities'  => $public_write_abilities,
+            'mcp_public_write_abilities_configured' => $public_write_abilities_configured,
             'mcp_host'                    => sanitize_text_field($connections['mcp_host'] ?? '127.0.0.1'),
             'mcp_port'                    => (string) $mcp_port,
             'mcp_token'                   => $mcp_token,
@@ -280,6 +300,40 @@ final class LCFA_Settings {
             'gpt-5.5'             => 'GPT-5.5',
             'gpt-5.2'             => 'GPT-5.2',
         ];
+    }
+
+    public static function get_mcp_write_ability_options(): array {
+        return [
+            'livecanvas-forge-ai/apply-page-upsert' => [
+                'label'       => self::translate('Apply page upsert'),
+                'description' => self::translate('Create or update LiveCanvas pages.'),
+            ],
+            'livecanvas-forge-ai/apply-global-shell' => [
+                'label'       => self::translate('Apply global shell'),
+                'description' => self::translate('Create or update header/footer partials.'),
+            ],
+            'livecanvas-forge-ai/apply-dynamic-template' => [
+                'label'       => self::translate('Apply dynamic template'),
+                'description' => self::translate('Create or update LiveCanvas dynamic templates.'),
+            ],
+            'livecanvas-forge-ai/apply-design-system' => [
+                'label'       => self::translate('Apply design system'),
+                'description' => self::translate('Apply stack-native design tokens and related runtime assets.'),
+            ],
+            'livecanvas-forge-ai/restore-audit-rollback' => [
+                'label'       => self::translate('Restore audit rollback'),
+                'description' => self::translate('Restore or trash content from a stored audit rollback record.'),
+            ],
+        ];
+    }
+
+    public static function sanitize_mcp_write_abilities($abilities): array {
+        $allowed = array_keys(self::get_mcp_write_ability_options());
+        $abilities = is_array($abilities) ? $abilities : [];
+
+        return array_values(array_intersect($allowed, array_values(array_unique(array_map(static function ($ability): string {
+            return sanitize_text_field((string) $ability);
+        }, $abilities)))));
     }
 
     public static function get_codex_reasoning_effort_options(): array {
@@ -331,6 +385,10 @@ final class LCFA_Settings {
         return in_array($value, ['picostrap', 'picowind'], true) ? $value : '';
     }
 
+    private static function translate(string $text): string {
+        return function_exists('__') ? __($text, 'livecanvas-forge-ai') : $text;
+    }
+
     private static function normalize_connections_snapshot(array $connections): array {
         $raw_client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
         $preferred_client = self::normalize_preferred_client($raw_client);
@@ -341,6 +399,12 @@ final class LCFA_Settings {
             $preferred_client,
             $raw_client
         );
+        $connections['mcp_write_abilities_enabled'] = !empty($connections['mcp_write_abilities_enabled']);
+        $connections['mcp_public_write_abilities'] = self::sanitize_mcp_write_abilities($connections['mcp_public_write_abilities'] ?? []);
+        $connections['mcp_public_write_abilities_configured'] = !empty($connections['mcp_public_write_abilities_configured']);
+        if (!empty($connections['mcp_write_abilities_enabled']) && empty($connections['mcp_public_write_abilities_configured']) && $connections['mcp_public_write_abilities'] === []) {
+            $connections['mcp_public_write_abilities'] = array_keys(self::get_mcp_write_ability_options());
+        }
         $codex_options = self::sanitize_codex_options([
             'model'            => $connections['codex_model'] ?? '',
             'speed'            => $connections['codex_speed'] ?? '',
@@ -536,6 +600,51 @@ final class LCFA_Settings {
         $history = array_slice($history, 0, 40);
 
         update_option(self::HISTORY_OPTION_KEY, $history);
+    }
+
+    public static function get_rollback_records(): array {
+        $records = get_option(self::ROLLBACK_RECORDS_OPTION_KEY, []);
+
+        return is_array($records) ? $records : [];
+    }
+
+    public static function get_rollback_record(string $audit_id): array {
+        $audit_id = sanitize_key($audit_id);
+        $records = self::get_rollback_records();
+        $record = $records[$audit_id] ?? [];
+
+        return is_array($record) ? $record : [];
+    }
+
+    public static function store_rollback_record(string $audit_id, array $record): void {
+        $audit_id = sanitize_key($audit_id);
+
+        if ($audit_id === '') {
+            return;
+        }
+
+        $records = self::get_rollback_records();
+        $records[$audit_id] = $record;
+        $records = array_slice($records, -40, 40, true);
+
+        update_option(self::ROLLBACK_RECORDS_OPTION_KEY, $records);
+    }
+
+    public static function mark_rollback_record_restored(string $audit_id, array $restore_result): void {
+        $audit_id = sanitize_key($audit_id);
+        $records = self::get_rollback_records();
+
+        if ($audit_id === '' || !isset($records[$audit_id]) || !is_array($records[$audit_id])) {
+            return;
+        }
+
+        $records[$audit_id]['restored_at'] = current_time('mysql', true);
+        $records[$audit_id]['restore_result'] = [
+            'ok'      => !empty($restore_result['ok']),
+            'message' => sanitize_text_field((string) ($restore_result['message'] ?? '')),
+        ];
+
+        update_option(self::ROLLBACK_RECORDS_OPTION_KEY, $records);
     }
 
     public static function get_threads(): array {
@@ -803,6 +912,8 @@ final class LCFA_Settings {
         $codex_options['speed'] = $codex_options['speed'] !== '' ? $codex_options['speed'] : (string) ($connections['codex_speed'] ?? 'balanced');
         $codex_options['reasoning_effort'] = $codex_options['reasoning_effort'] !== '' ? $codex_options['reasoning_effort'] : (string) ($connections['codex_reasoning_effort'] ?? 'medium');
         $codex_options = self::sanitize_codex_options($codex_options);
+        $ability_contract = self::agent_ability_contract_for((string) ($payload['action'] ?? 'page_upsert'));
+        $payload['ability_contract'] = $ability_contract;
 
         $request = [
             'id'               => $request_id,
@@ -817,6 +928,7 @@ final class LCFA_Settings {
             'target_id'        => absint($payload['target_id'] ?? 0),
             'variant'          => sanitize_text_field((string) ($payload['variant'] ?? '1')),
             'action'           => sanitize_key((string) ($payload['action'] ?? 'page_upsert')),
+            'ability_contract' => $ability_contract,
             'codex_options'    => $codex_options,
             'payload'          => self::sanitize_agent_payload($payload),
             'attachments'      => $attachments,
@@ -853,6 +965,7 @@ final class LCFA_Settings {
                     'target_id'        => $request['target_id'],
                     'variant'          => $request['variant'],
                     'request_id'       => $request_id,
+                    'ability_contract' => $ability_contract,
                     'codex_options'    => $codex_options,
                 ],
                 'attachments' => $attachments,
@@ -1274,6 +1387,7 @@ final class LCFA_Settings {
             'target_id'        => absint($request['target_id'] ?? 0),
             'variant'          => sanitize_text_field((string) ($request['variant'] ?? '1')),
             'action'           => sanitize_key((string) ($request['action'] ?? 'page_upsert')),
+            'ability_contract' => self::sanitize_agent_payload((array) ($request['ability_contract'] ?? self::agent_ability_contract_for((string) ($request['action'] ?? 'page_upsert')))),
             'codex_options'    => self::sanitize_codex_options((array) ($request['codex_options'] ?? [])),
             'payload'          => self::sanitize_agent_payload((array) ($request['payload'] ?? [])),
             'attachments'      => self::sanitize_thread_attachments((array) ($request['attachments'] ?? [])),
@@ -1347,6 +1461,31 @@ final class LCFA_Settings {
         $agent = sanitize_key($agent);
 
         return in_array($agent, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $agent : 'codex';
+    }
+
+    private static function agent_ability_contract_for(string $action): array {
+        $action = sanitize_key($action);
+        $map = [
+            'page_upsert'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
+            'create_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
+            'update_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
+            'global_shell_apply'      => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],
+            'update_header'           => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],
+            'update_footer'           => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],
+            'design_system_apply'     => ['preview' => 'livecanvas-forge-ai/preview-design-system', 'apply' => 'livecanvas-forge-ai/apply-design-system'],
+            'create_dynamic_template' => ['preview' => '', 'apply' => 'livecanvas-forge-ai/apply-dynamic-template'],
+            'update_dynamic_template' => ['preview' => '', 'apply' => 'livecanvas-forge-ai/apply-dynamic-template'],
+            'restore_audit_rollback'  => ['preview' => '', 'apply' => 'livecanvas-forge-ai/restore-audit-rollback'],
+        ];
+        $contract = $map[$action] ?? ['preview' => '', 'apply' => ''];
+
+        return [
+            'action'          => $action !== '' ? $action : 'page_upsert',
+            'preview_ability' => $contract['preview'],
+            'apply_ability'   => $contract['apply'],
+            'generic_preview' => 'livecanvas-forge-ai/preview-command',
+            'generic_apply'   => 'livecanvas-forge-ai/apply-command',
+        ];
     }
 
     private static function agent_processor_for(string $agent): string {
