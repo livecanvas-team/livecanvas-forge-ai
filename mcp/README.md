@@ -93,6 +93,13 @@ Core companion tools:
 - `get_theme_context`
 - `get_genesis_plan`
 - `generate_genesis_plan`
+- `get_agent_handoff_package`
+- `get_handoff_summary`
+- `get_connection_handoff`
+- `get_block_pattern_library`
+- `get_native_pattern_page_blueprints`
+- `preview_native_pattern_page`
+- `apply_native_pattern_page`
 - `get_page_html`
 - `get_acf_fields`
 - `list_lc_blocks`

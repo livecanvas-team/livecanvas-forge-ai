@@ -308,6 +308,10 @@ final class LCFA_Settings {
                 'label'       => self::translate('Apply page upsert'),
                 'description' => self::translate('Create or update LiveCanvas pages.'),
             ],
+            'livecanvas-forge-ai/apply-native-pattern-page' => [
+                'label'       => self::translate('Apply native pattern page'),
+                'description' => self::translate('Create a draft WordPress-native page from Forge block patterns.'),
+            ],
             'livecanvas-forge-ai/apply-global-shell' => [
                 'label'       => self::translate('Apply global shell'),
                 'description' => self::translate('Create or update header/footer partials.'),
@@ -1469,6 +1473,8 @@ final class LCFA_Settings {
             'page_upsert'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
             'create_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
             'update_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
+            'native_pattern_page_apply' => ['preview' => 'livecanvas-forge-ai/preview-native-pattern-page', 'apply' => 'livecanvas-forge-ai/apply-native-pattern-page'],
+            'create_native_pattern_page' => ['preview' => 'livecanvas-forge-ai/preview-native-pattern-page', 'apply' => 'livecanvas-forge-ai/apply-native-pattern-page'],
             'global_shell_apply'      => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],
             'update_header'           => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],
             'update_footer'           => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],

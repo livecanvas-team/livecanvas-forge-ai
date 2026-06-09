@@ -3404,6 +3404,18 @@ final class LCFA_Admin {
         ]);
         echo '</div>';
 
+        if (!empty($bundle['agent_start_prompt'])) {
+            echo '<div class="lcfa-agent-guide__window">';
+            echo '<h3>' . esc_html__('First agent prompt', 'livecanvas-forge-ai') . '</h3>';
+            $this->render_code_block_explanation(__('Send this to the connected coding agent after the MCP server is visible. It asks the agent to fetch the lightweight connection handoff, inspect current guardrails, and stay read-only before reviewed previews.', 'livecanvas-forge-ai'));
+            $this->render_code_block((string) $bundle['agent_start_prompt'], [
+                'language'   => 'text',
+                'label'      => __('Prompt', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy prompt', 'livecanvas-forge-ai'),
+            ]);
+            echo '</div>';
+        }
+
         echo '</div>';
         echo '</div>';
         echo '</div>';

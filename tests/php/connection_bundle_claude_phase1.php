@@ -95,6 +95,10 @@ lcfa_assert_same('Claude Desktop config', $desktop_bundle['shortcut_title'] ?? '
 lcfa_assert_same('/Users/commander/Studio/consultala/livecanvas-forge.claude-desktop.json', $desktop_bundle['workspace_files'][0]['path'] ?? '', 'Desktop local bundle should expose a Claude Desktop config file in the workspace');
 lcfa_assert_true(strpos((string) ($desktop_bundle['download_files'][0]['content'] ?? ''), '"mcpServers"') !== false, 'Desktop local bundle should serialize a Claude Desktop config JSON block');
 lcfa_assert_true(strpos((string) ($desktop_bundle['copy_command_string'] ?? ''), '"type": "stdio"') !== false, 'Desktop local bundle should prefer copying the Claude Desktop JSON snippet');
+lcfa_assert_same('get_connection_handoff', $desktop_bundle['agent_start_tool'] ?? '', 'Desktop local bundle should start with the local connection handoff tool');
+lcfa_assert_same('get_agent_handoff_package', $desktop_bundle['handoff_package_tool'] ?? '', 'Desktop local bundle should expose the full handoff package tool');
+lcfa_assert_true(strpos((string) ($desktop_bundle['agent_start_prompt'] ?? ''), 'get_connection_handoff') !== false, 'Desktop local bundle should include the lightweight first handoff prompt');
+lcfa_assert_true(strpos((string) ($desktop_bundle['agent_start_prompt'] ?? ''), 'get_agent_handoff_package') !== false, 'Desktop local bundle should mention the full handoff package follow-up');
 
 $cli_bundle = $builder->build([
     'client'                    => 'claude',
@@ -121,6 +125,7 @@ lcfa_assert_same('livecanvas-forge.claude-cli.sh', $cli_bundle['download_files']
 lcfa_assert_same('Claude CLI shortcut', $cli_bundle['shortcut_title'] ?? '', 'CLI local bundle should advertise the CLI shortcut explicitly');
 lcfa_assert_same('/Users/commander/Studio/consultala/livecanvas-forge.claude-cli.sh', $cli_bundle['workspace_files'][0]['path'] ?? '', 'CLI local bundle should expose a Claude CLI helper in the workspace');
 lcfa_assert_true(strpos((string) ($cli_bundle['shortcut_command'] ?? ''), 'claude mcp add --transport stdio') !== false, 'CLI bundle should expose the Claude CLI registration shortcut');
+lcfa_assert_true(strpos((string) ($cli_bundle['download_files'][0]['content'] ?? ''), 'get_connection_handoff') !== false, 'CLI helper should print the first connection handoff prompt for the agent operator');
 
 $remote_desktop_bundle = $builder->build([
     'client'                    => 'claude',
@@ -145,5 +150,6 @@ lcfa_assert_same('livecanvas-forge.claude-desktop.txt', $remote_desktop_bundle['
 lcfa_assert_same('Claude Desktop reference', $remote_desktop_bundle['shortcut_title'] ?? '', 'Remote Claude Desktop bundle should expose a reference block title');
 lcfa_assert_true(strpos((string) ($remote_desktop_bundle['download_files'][0]['content'] ?? ''), '"mcpServers"') === false, 'Remote Claude Desktop copy should stay conservative and avoid a ready-to-paste JSON config');
 lcfa_assert_true(strpos((string) ($remote_desktop_bundle['download_files'][0]['content'] ?? ''), 'localhost') === false, 'Remote Claude Desktop copy should not suggest localhost values');
+lcfa_assert_true(strpos((string) ($remote_desktop_bundle['download_files'][0]['content'] ?? ''), 'First agent prompt') !== false, 'Remote Claude reference should include the first handoff prompt');
 
 echo "PASS\n";

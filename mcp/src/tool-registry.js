@@ -165,6 +165,112 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => client.getAgentHandoffPackage(argumentsMap)
     },
     {
+      name: 'get_handoff_summary',
+      description: 'Read the compact readiness summary for Codex and MCP agents, including status, score, blockers, warnings, missing tests, and next action.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 40
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getHandoffSummary(argumentsMap)
+    },
+    {
+      name: 'get_connection_handoff',
+      description: 'Read only the first prompt, connection mode, transport, and read-only guardrails for a new Codex or MCP agent session.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 40
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getConnectionHandoff(argumentsMap)
+    },
+    {
+      name: 'get_block_pattern_library',
+      description: 'Read export-ready WordPress-native Forge block patterns with checksums for fallback pages and reusable pattern previews.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 40
+          },
+          include_content: { type: 'boolean' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getBlockPatternLibrary(argumentsMap)
+    },
+    {
+      name: 'get_native_pattern_page_blueprints',
+      description: 'Read no-write WordPress-native page blueprint recipes composed from registered Forge block patterns.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          include_patterns: { type: 'boolean' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getNativePatternPageBlueprints(argumentsMap)
+    },
+    {
+      name: 'preview_native_pattern_page',
+      description: 'Compose a WordPress-native block page preview from registered Forge block patterns without creating or updating a page.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          blueprint: { type: 'string' },
+          blueprint_id: { type: 'string' },
+          pattern_name: { type: 'string' },
+          pattern_names: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          patterns: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.previewNativePatternPage(argumentsMap)
+    },
+    {
+      name: 'apply_native_pattern_page',
+      description: 'Create a new draft WordPress-native page from registered Forge block patterns. This is a dedicated write action and never updates existing content.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          slug: { type: 'string' },
+          status: {
+            type: 'string',
+            enum: ['draft', 'pending', 'private']
+          },
+          blueprint: { type: 'string' },
+          blueprint_id: { type: 'string' },
+          pattern_name: { type: 'string' },
+          pattern_names: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          patterns: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.applyNativePatternPage(argumentsMap)
+    },
+    {
       name: 'suggest_lc_command',
       description: 'Analyze a natural-language request and return the safest suggested companion action payload.',
       inputSchema: {

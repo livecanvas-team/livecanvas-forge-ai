@@ -242,6 +242,11 @@ lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''
 lcfa_assert_same((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), (string) ($legacy_saved_bundle['copy_command_string'] ?? ''), 'codex bundles should prefer copying the Codex shortcut, not the raw MCP command');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex helper script should auto-detect the desktop app CLI');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex helper script should include a config.toml fallback snippet');
+lcfa_assert_same('get_connection_handoff', $legacy_saved_bundle['agent_start_tool'] ?? '', 'local Codex bundles should start with the lightweight connection handoff tool');
+lcfa_assert_same('get_agent_handoff_package', $legacy_saved_bundle['handoff_package_tool'] ?? '', 'local Codex bundles should still expose the full handoff package tool');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'get_connection_handoff') !== false, 'local Codex bundles should expose a first prompt that fetches the connection handoff');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'get_agent_handoff_package') !== false, 'local Codex bundles should mention the full handoff package as the follow-up tool');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'Stay read-only') !== false, 'local Codex first prompt should keep the initial handoff read-only');
 
 $runtime_only_script = <<<'PHP'
 <?php
@@ -339,6 +344,9 @@ lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'remote WordPress MCP Adapter') !== false, 'remote Codex shortcut should explain the remote MCP Adapter target');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), 'codex mcp get livecanvas-forge') !== false, 'remote Codex smoke command should verify the Codex MCP registration');
 lcfa_assert_false(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), '--tool') !== false, 'remote Codex smoke command should not append local bridge CLI flags to the proxy package');
+lcfa_assert_same('livecanvas-forge-ai/get-connection-handoff', $remote_codex_bundle['agent_start_tool'] ?? '', 'remote Codex bundles should start with the WordPress Ability connection handoff name');
+lcfa_assert_same('livecanvas-forge-ai/get-agent-handoff-package', $remote_codex_bundle['handoff_package_tool'] ?? '', 'remote Codex bundles should still expose the WordPress Ability package name');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['agent_start_prompt'] ?? ''), 'livecanvas-forge-ai/get-connection-handoff') !== false, 'remote Codex first prompt should use the WordPress Ability connection handoff name');
 
 $onboarding = new LCFA_Connection_Onboarding($builder);
 
@@ -529,6 +537,7 @@ $codex_bundle_view = $presenter->build([
 lcfa_assert_same('Copy Codex shortcut', $codex_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex local flow should elevate the registration shortcut to the primary action');
 lcfa_assert_same('Download Codex helper', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should still offer the helper script as a fallback');
 lcfa_assert_same('What to do in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific visual strip');
+lcfa_assert_true(strpos((string) ($codex_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex visual help should point to the connection handoff tool instead of the legacy snapshot tool');
 
 $codex_remote_bundle_view = $presenter->build([
     'state' => [
@@ -558,6 +567,7 @@ $codex_remote_bundle_view = $presenter->build([
 lcfa_assert_same('Copy Codex shortcut', $codex_remote_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex remote flow should elevate the remote registration shortcut to the primary action');
 lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['active_panel']['description'] ?? ''), 'remote shortcut') !== false, 'Codex remote flow should explain that the shortcut is remote-safe');
 lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'remote proxy') !== false, 'Codex remote visual help should mention the WordPress MCP Adapter remote proxy');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'livecanvas-forge-ai/get-connection-handoff') !== false, 'Codex remote visual help should use the WordPress Ability connection handoff name');
 
 $codex_smoke = $presenter->build([
     'state' => [

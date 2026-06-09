@@ -909,6 +909,264 @@ The handoff package is now exposed directly to agent runtimes:
 - the local Node MCP bridge exposes `get_agent_handoff_package`, forwarding to `/wp-json/lcfa/v1/studio/handoff-package`
 - tests cover ability registration/counts, MCP-public diagnostics, package structure, checksum presence, rollback-payload exclusion, MCP tool schema, and WP client routing
 
+### Implemented In The Twenty-Fifth Development Pass
+
+Connection bundles now bootstrap agents with a lightweight handoff first:
+
+- generated bundles expose `agent_start_tool`, `connection_handoff_tool`, `handoff_package_tool`, and `agent_start_prompt`
+- local MCP clients start with `get_connection_handoff`
+- Codex remote mode through WordPress MCP Adapter starts with `livecanvas-forge-ai/get-connection-handoff`
+- the full package remains available through `get_agent_handoff_package` or `livecanvas-forge-ai/get-agent-handoff-package`
+- generic and Claude reference/helper files include a first-prompt section for operators
+- the Connections technical summary renders a copyable `First agent prompt` panel
+- the Codex visual guide now points users to the connection handoff instead of the legacy snapshot-only check
+- tests cover local/remote tool naming, admin rendering, generated helper content, and Codex visual guidance
+
+### Implemented In The Twenty-Sixth Development Pass
+
+Studio and handoff packages now carry the same connection bootstrap:
+
+- `/wp-json/lcfa/v1/studio` returns top-level `connection_handoff`
+- the Studio contract lists `connection_handoff` as a stable section
+- the connection handoff includes client, mode, status, transport, first tool, first prompt, guardrail, recommended sequence, and setup summary
+- remote Codex with WordPress MCP Adapter receives the lightweight WordPress Ability tool name: `livecanvas-forge-ai/get-connection-handoff`
+- local MCP flows receive the lightweight local Node tool name: `get_connection_handoff`
+- both flows also expose the full package tool for deeper runbook and smoke-test context
+- the React Studio shell renders a `Connection handoff` panel with copy actions for the first prompt and full JSON
+- REST handoff packages include:
+  - `forge-agent-start-prompt.txt`
+  - `forge-connection-handoff.json`
+- the WordPress Ability handoff package includes the same start prompt and connection handoff metadata for remote MCP Adapter clients
+- tests cover Studio section exposure, prompt content, package virtual files, React affordances, and Ability package parity
+
+### Implemented In The Twenty-Seventh Development Pass
+
+The connection handoff is now available as a small dedicated agent surface:
+
+- REST registers `GET /wp-json/lcfa/v1/studio/connection-handoff`
+- `/wp-json/lcfa/v1/studio` now includes `studio.connection_handoff_route`
+- the endpoint returns only:
+  - route metadata
+  - payload contract and SHA-256 fingerprint
+  - `connection_handoff`
+- the local Node MCP bridge exposes `get_connection_handoff`
+- `WPClient` routes `getConnectionHandoff()` to `studio/connection-handoff`
+- WordPress 7 Abilities register `livecanvas-forge-ai/get-connection-handoff`
+- the connection handoff ability is read-only, idempotent, MCP-public by default, and does not include the larger virtual file package
+- the React Studio handoff panel can copy the dedicated endpoint
+- tests cover REST route registration, endpoint contract, MCP tool schema, WP client routing, Ability registration/counts, MCP Adapter public exposure, and package separation
+
+### Implemented In The Twenty-Eighth Development Pass
+
+Agent bootstrap prompts now start from the smallest safe surface:
+
+- Connection bundles, Studio connection handoff, and WordPress 7 Ability handoff all start with `get_connection_handoff` or `livecanvas-forge-ai/get-connection-handoff`
+- `get_agent_handoff_package` and `livecanvas-forge-ai/get-agent-handoff-package` remain copy-ready follow-up tools for the full runbook, smoke tests, ability diagnostics, MCP status, AI status, and recent run summary
+- the Connections wizard visual guide now points Codex users to the connection handoff instead of the larger package
+- the admin `First agent prompt` explanation now describes the lightweight connection handoff path
+- tests cover local/remote bundle prompts, Studio endpoint parity, WordPress Ability parity, admin rendering, and Codex visual guidance
+
+### Implemented In The Twenty-Ninth Development Pass
+
+The native block pattern layer now has an agent-readable export surface:
+
+- `LCFA_Block_Patterns` exposes a `block-pattern-library.v1` export with pattern metadata, optional content, byte counts, suggested use, and SHA-256 checksums
+- WordPress 7 Abilities register `livecanvas-forge-ai/get-block-pattern-library` as a read-only MCP-public ability
+- REST registers `GET /wp-json/lcfa/v1/studio/block-pattern-library` with endpoint contract metadata and payload fingerprinting
+- `/wp-json/lcfa/v1/studio` includes top-level `block_pattern_library` plus `studio.block_pattern_library_route`
+- Studio handoff packages include `forge-block-pattern-library.json`
+- the local MCP bridge exposes `get_block_pattern_library`
+- the React Studio shell renders a Block Pattern Library panel with copy actions for the library, endpoint, pattern content, and checksums
+- tests cover service export shape, metadata-only exports, Ability counts/public exposure, REST endpoint parity, MCP tool schema, WP client routing, handoff package inclusion, and React affordances
+
+### Implemented In The Thirtieth Development Pass
+
+Agents can now compose native WordPress page previews from registered Forge patterns:
+
+- `LCFA_Block_Patterns` exposes `build_native_page_preview()` with ordered pattern selection, slug normalization, missing-pattern warnings, block content checksums, and no-write next actions
+- WordPress 7 Abilities register `livecanvas-forge-ai/preview-native-pattern-page` as an MCP-public preview ability
+- REST registers `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview` for local MCP and admin clients
+- the local MCP bridge exposes `preview_native_pattern_page`
+- Studio smoke tests include a native pattern page preview check alongside framework and page previews
+- tests cover native block content composition, missing pattern reporting, Ability registration/exposure, REST routing, WP client routing, and MCP schema items
+
+### Implemented In The Thirty-First Development Pass
+
+Native page composition now has a read-only recipe layer before preview:
+
+- `LCFA_Block_Patterns` exposes `native-pattern-page-blueprints.v1` recipes such as `starter-landing`, `hero-only`, and `feature-summary`
+- WordPress 7 Abilities register `livecanvas-forge-ai/get-native-pattern-page-blueprints` as an MCP-public read-only ability
+- REST registers `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints` with payload fingerprinting and metadata-only mode
+- `/wp-json/lcfa/v1/studio` includes top-level `native_pattern_page_blueprints` plus `studio.native_pattern_page_blueprints_route`
+- Studio handoff packages include `forge-native-pattern-page-blueprints.json`
+- `preview-native-pattern-page` accepts `blueprint` or `blueprint_id` and rejects unknown blueprint-only requests with available alternatives
+- the local MCP bridge exposes `get_native_pattern_page_blueprints`
+- tests cover blueprint export shape, REST endpoint parity, Ability exposure, MCP tool schema, WP client routing, and handoff package inclusion
+
+### Implemented In The Thirty-Second Development Pass
+
+Forge Studio now exposes the native page blueprint layer to operators:
+
+- the React Studio shell renders a `Native page blueprints` panel from `native_pattern_page_blueprints`
+- operators can copy the full blueprint payload, the dedicated endpoint, individual blueprint ids, and preview payloads
+- the panel shows availability, blueprint count, preview ability, pattern count, pattern names, descriptions, and suggested use
+- tests cover the new React component, copy actions, data attributes, and Studio route tokens
+
+### Implemented In The Thirty-Third Development Pass
+
+Native page preview routes are now discoverable from Studio:
+
+- `/wp-json/lcfa/v1/studio` exposes `studio.native_pattern_page_preview_route`
+- the React `Native page blueprints` panel can copy the dedicated preview endpoint
+- operators can now copy the blueprint endpoint, preview endpoint, blueprint id, and preview payload from the same panel
+- tests cover the Studio route field and the new copy affordance
+
+### Implemented In The Thirty-Fourth Development Pass
+
+Native page blueprints now include copy-ready preview requests:
+
+- each blueprint carries `preview_request` with method, REST route, WordPress Ability, local MCP tool, and payload
+- the blueprint library advertises `preview_tool` and `preview_route` alongside `preview_ability`
+- the React Studio blueprint panel can copy either the bare preview payload or the complete preview request
+- tests cover the request shape, MCP tool hints, REST state payload, and Studio copy token
+
+### Implemented In The Thirty-Fifth Development Pass
+
+Native page blueprint previews can now run directly inside Forge Studio:
+
+- the Studio React shell includes a reusable `postStudioJson()` helper for authenticated no-write POST previews
+- each blueprint row has a `Run preview` action that posts its preview payload to `studio/native-pattern-page-preview`
+- preview results are rendered inline with status, byte count, checksum, and copy actions for full result and block content
+- tests cover the new helper, preview action labels, result copy actions, and preview result data attribute
+
+### Implemented In The Thirty-Sixth Development Pass
+
+Native page preview results now include operator-facing diagnostics in Studio:
+
+- inline preview output shows page title, content format, byte count, pattern count, warning count, and checksum
+- selected pattern metadata is rendered with names, titles, byte counts, and shortened checksums
+- warning and missing-pattern details are visible without opening raw JSON
+- no-write next actions are listed below the result so operators can decide whether to review, copy, or hand off the generated block content
+- tests cover the diagnostic tokens and preview result sections
+
+### Implemented In The Thirty-Seventh Development Pass
+
+Native WordPress page generation now has a dedicated apply path:
+
+- WordPress 7 Abilities register `livecanvas-forge-ai/apply-native-pattern-page` as a write ability that is not MCP-public by default
+- `LCFA_Settings::get_mcp_write_ability_options()` includes the apply ability so trusted MCP clients can explicitly allowlist it
+- REST registers `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`
+- the local MCP bridge exposes `apply_native_pattern_page`
+- the ability always creates a new native WordPress page and supports only `draft`, `pending`, or `private` statuses
+- successful applies store an audit entry and rollback record that can trash the created page through `restore-audit-rollback`
+- tests cover ability registration, opt-in counts, REST routing, MCP routing, successful draft creation, history, and rollback metadata
+
+### Implemented In The Thirty-Eighth Development Pass
+
+Forge Studio can now execute the native page apply flow from the blueprint panel:
+
+- native page blueprint exports include copy-ready `apply_request` objects with REST route, WordPress Ability, MCP tool, and draft payload
+- the blueprint library advertises `apply_tool` and `apply_route` alongside the existing preview contract
+- the React `Native page blueprints` panel can copy the apply endpoint and request
+- operators can run preview first, then create a new draft page from the same blueprint row after confirmation
+- inline apply results show created page ID, draft status, audit ID, edit link, view link, and copy action
+- tests cover the apply contract tokens, blueprint apply request shape, and Studio UI affordances
+
+### Implemented In The Thirty-Ninth Development Pass
+
+Native page apply results are now wired into the Studio audit workflow:
+
+- successful blueprint applies trigger a Studio state refresh so summary, runs, and rollback counts reflect the new draft
+- inline apply results show rollback readiness when the native page creation stored a restore record
+- operators can copy the apply audit ID directly from the blueprint row
+- rollback-ready native drafts link back to the Command Deck restore flow with the generated audit ID
+- tests cover the refresh callback, audit copy action, rollback shortcut, and rollback data attribute
+
+### Implemented In The Fortieth Development Pass
+
+Agent handoff smoke tests now cover native page apply safety:
+
+- Studio smoke tests include a dedicated `native_pattern_page_apply_guard` entry for `livecanvas-forge-ai/apply-native-pattern-page`
+- the guard is a write-check entry with an empty payload so agents do not accidentally create a draft from a copied smoke test
+- expected-result text instructs agents to run `native_pattern_page_preview` first, review the result, and create only a new draft page after approval
+- the generated runbook now lists the native apply guard alongside the existing page-upsert write guard
+- tests cover smoke-test counts, guarded-write totals, runbook guidance, and public-write exposure status
+
+### Implemented In The Forty-First Development Pass
+
+Handoff readiness now follows the smoke-test contract dynamically:
+
+- read-only, preview, and guarded-write readiness counts are derived from smoke test phases instead of fixed ID lists
+- native page preview now contributes to preview readiness before native draft creation is considered
+- guarded write checks now have their own readiness gate so missing apply guards surface before agent handoff
+- Forge Studio shows read-only, preview, and write-guard availability ratios directly in the readiness panel
+- tests cover dynamic readiness counts, native preview availability, guarded-write warnings, and the new Studio chips
+
+### Implemented In The Forty-Second Development Pass
+
+Agent handoff packages now include a compact machine-readable summary:
+
+- both Studio REST handoff packages and WordPress Ability handoff packages include `forge-handoff-summary.json`
+- the summary exposes status, recommended mode, score, next action, smoke counts, blocker/warning lists, unavailable tests, and guarded write tests
+- package summaries surface readiness score, blocker count, warning count, unavailable smoke-test count, and write-guard count for quick UI/agent inspection
+- the WordPress Ability handoff package now includes the native page apply guard in its smoke-test bundle too
+- Forge Studio displays package score, blocker, warning, and missing-test chips in the Agent Handoff Package panel
+- tests cover package file inclusion, summary schema/source, native apply guard presence, and sanitized payload safety
+
+### Implemented In The Forty-Third Development Pass
+
+The compact handoff summary is now available without downloading the full package:
+
+- REST registers `GET /wp-json/lcfa/v1/studio/handoff-summary`
+- Studio state exposes `studio.handoff_summary_route` and top-level `handoff_summary`
+- WordPress 7 Abilities register `livecanvas-forge-ai/get-handoff-summary` as MCP-public read-only
+- the local Node MCP bridge exposes `get_handoff_summary`
+- agents can now fetch just status, score, blockers, warnings, unavailable smoke tests, guarded write tests, and next action before deciding whether the full handoff package is needed
+- tests cover REST routing, endpoint payloads, ability registration, MCP exposure, local WP client routing, and tool schema
+
+### Implemented In The Forty-Fourth Development Pass
+
+Forge Studio now exposes the compact handoff summary as a first-class UI panel:
+
+- the React Studio app renders `Handoff summary` directly after the readiness gates
+- operators can copy the compact summary, summary endpoint, unavailable smoke tests, and guarded write tests without opening the full handoff package
+- the panel shows score, status, next action, recommended mode, framework, public writes, run errors, smoke-test counts, and write-policy counts
+- blockers and warnings are rendered as alert rows, while unavailable tests and guarded writes are rendered as smoke-test rows
+- tests cover the new component, copy actions, data attributes, and handoff-summary contract tokens
+
+### Implemented In The Forty-Fifth Development Pass
+
+Forge Studio can now verify the compact handoff summary endpoint independently:
+
+- the Studio runtime has a shared `fetchStudioJson` helper for GET requests with nonce-aware fallback fetch support
+- the `Handoff summary` panel can refresh `studio.handoff_summary_route` directly instead of relying only on the initial Studio payload
+- a successful endpoint refresh switches the panel source from `studio_state` to `endpoint`
+- operators can copy the raw endpoint response for agent debugging and contract comparison
+- endpoint errors are rendered inline so REST connectivity issues are visible without opening browser dev tools
+- tests cover the refresh action, endpoint response copy action, source marker, and endpoint error marker
+
+### Implemented In The Forty-Sixth Development Pass
+
+Forge Studio now checks handoff summary parity after endpoint refresh:
+
+- the `Handoff summary` panel compares the initial Studio payload with the dedicated summary endpoint response
+- parity checks cover status, recommended mode, score, next action, framework, public writes, run errors, readiness counts, smoke-test counts, blocker counts, warning counts, unavailable tests, and guarded write tests
+- the panel exposes `Parity: unverified`, `Parity: verified`, or `Parity: drift` with match counts
+- drift rows identify the exact field and show the Studio value versus the endpoint value
+- operators can copy the endpoint parity report for debugging agent handoff contract mismatches
+- tests cover parity helpers, UI labels, copy action, and drift data markers
+
+### Implemented In The Forty-Seventh Development Pass
+
+Forge Studio now includes a copy-ready integration test plan:
+
+- the React Studio app renders `Integration test plan` immediately after the overview
+- the test plan lists the read-only REST endpoints, MCP tools, native page preview, and guarded draft creation path
+- operators can copy the full test plan, a Codex smoke prompt, the REST endpoint checklist, and the first native preview request
+- the smoke prompt instructs agents to verify connection handoff, compact summary, blueprint reads, and preview before any write
+- the README now includes a short `How To Test This Build` section with the minimum pass condition
+- tests cover the new panel, schema token, copy actions, and MCP tool references
+
 ## Open Questions
 
 - Should write abilities be exposed only on the custom Forge MCP server, or also through the default WordPress MCP Adapter surface when WordPress core adds finer-grained controls?

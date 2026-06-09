@@ -126,6 +126,7 @@ $render_bundle_details->invoke($admin, [
     'command_string'      => "node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio",
     'environment'         => ['LCFA_REST_BASE' => 'http://localhost:8887/wp-json/lcfa/v1/'],
     'smoke_test_command'  => 'codex mcp list',
+    'agent_start_prompt'  => "Use the LiveCanvas Forge AI MCP connection for this WordPress project.\nFirst call get_connection_handoff with {\"limit\":5}.\nThen call get_agent_handoff_package only if you need the full runbook.",
     'workspace_files'     => [['path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh']],
 ]);
 $bundle_markup = (string) ob_get_clean();
@@ -135,5 +136,9 @@ lcfa_assert_contains('language-bash', $bundle_markup, 'bundle command blocks sho
 lcfa_assert_contains('lcfa-agent-guide__bundle-layout', $bundle_markup, 'bundle details should render a dedicated bundle layout wrapper');
 lcfa_assert_contains('lcfa-agent-guide__window lcfa-agent-guide__window--files', $bundle_markup, 'bundle details should render Files in a dedicated full-width row');
 lcfa_assert_contains('lcfa-agent-guide__panel-grid lcfa-agent-guide__panel-grid--bundle', $bundle_markup, 'bundle details should render the remaining windows in a responsive bundle grid');
+lcfa_assert_contains('First agent prompt', $bundle_markup, 'bundle details should render the first handoff prompt window');
+lcfa_assert_contains('Copy prompt', $bundle_markup, 'first handoff prompt should expose a dedicated copy action');
+lcfa_assert_contains('get_connection_handoff', $bundle_markup, 'first handoff prompt should tell the agent to fetch the lightweight connection handoff first');
+lcfa_assert_contains('get_agent_handoff_package', $bundle_markup, 'first handoff prompt should keep the full handoff package as a follow-up option');
 
 echo "PASS\n";

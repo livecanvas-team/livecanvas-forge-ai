@@ -334,6 +334,10 @@ final class LCFA_Connection_Wizard_Presenter {
 
         if ($this->is_codex($bundle)) {
             $is_remote_adapter = $this->is_codex_remote_adapter($bundle);
+            $handoff_tool = (string) ($bundle['agent_start_tool'] ?? '');
+            if ($handoff_tool === '') {
+                $handoff_tool = $is_remote_adapter ? 'livecanvas-forge-ai/get-connection-handoff' : 'get_connection_handoff';
+            }
 
             return [
                 'title' => __('What to do in Codex', 'livecanvas-forge-ai'),
@@ -352,8 +356,8 @@ final class LCFA_Connection_Wizard_Presenter {
                         'tone' => 'mcp',
                     ],
                     [
-                        'title' => __('Open Codex and call get_snapshot', 'livecanvas-forge-ai'),
-                        'caption' => __('Once Codex sees the MCP server, return here and run the smoke test.', 'livecanvas-forge-ai'),
+                        'title' => sprintf(__('Open Codex and call %s', 'livecanvas-forge-ai'), $handoff_tool),
+                        'caption' => __('Once Codex sees the MCP server, ask it to fetch the Forge connection handoff, then return here and run the smoke test.', 'livecanvas-forge-ai'),
                         'tone' => 'verify',
                     ],
                 ],

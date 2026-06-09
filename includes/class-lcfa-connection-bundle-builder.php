@@ -13,6 +13,8 @@ final class LCFA_Connection_Bundle_Builder {
         $command_string = $this->join_shell_tokens($command);
         $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $workspace_root, $mode);
         $claude_connection_target = $this->normalize_claude_target($payload, $client);
+        $agent_start_tool = $this->build_connection_handoff_tool($environment, $command);
+        $handoff_package_tool = $this->build_handoff_package_tool($environment, $command);
 
         $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment);
 
@@ -34,6 +36,10 @@ final class LCFA_Connection_Bundle_Builder {
             'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment),
             'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment),
             'smoke_test_command'  => $this->build_smoke_test_command($environment, $command),
+            'agent_start_tool'    => $agent_start_tool,
+            'connection_handoff_tool' => $agent_start_tool,
+            'handoff_package_tool' => $handoff_package_tool,
+            'agent_start_prompt'  => $this->build_agent_start_prompt($agent_start_tool, $handoff_package_tool),
             'status'              => 'generated',
         ];
     }
@@ -485,16 +491,27 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = '';
         $lines[] = '# Smoke test';
         $lines[] = $this->build_smoke_test_command($environment, $command);
+        $lines[] = '';
+        $lines[] = '# First agent prompt';
+        $lines[] = $this->build_agent_start_prompt($this->build_connection_handoff_tool($environment, $command), $this->build_handoff_package_tool($environment, $command));
 
         return implode("\n", $lines) . "\n";
     }
 
     private function build_codex_script(array $command, array $environment): string {
-        return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_codex_register_command($command, $environment) . "\n";
+        return "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+            . $this->build_codex_register_command($command, $environment)
+            . "\n\n"
+            . $this->build_agent_start_shell_notice('Codex', $environment, $command)
+            . "\n";
     }
 
     private function build_claude_script(array $command, array $environment): string {
-        return "#!/usr/bin/env bash\nset -euo pipefail\n\n" . $this->build_claude_register_command($command, $environment) . "\n";
+        return "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+            . $this->build_claude_register_command($command, $environment)
+            . "\n\n"
+            . $this->build_agent_start_shell_notice('Claude', $environment, $command)
+            . "\n";
     }
 
     private function build_client_shortcut(string $client, string $mode, string $claude_connection_target, array $command, array $environment): array {
@@ -608,6 +625,9 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = '';
         $lines[] = '# Smoke test';
         $lines[] = $this->build_smoke_test_command($environment, $command);
+        $lines[] = '';
+        $lines[] = '# First agent prompt';
+        $lines[] = $this->build_agent_start_prompt($this->build_connection_handoff_tool($environment, $command), $this->build_handoff_package_tool($environment, $command));
 
         return implode("\n", $lines) . "\n";
     }
@@ -640,6 +660,39 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = implode("\n", $joined);
 
         return implode("\n", $lines);
+    }
+
+    private function build_connection_handoff_tool(array $environment, array $command): string {
+        return $this->uses_wordpress_mcp_remote_proxy($environment, $command)
+            ? 'livecanvas-forge-ai/get-connection-handoff'
+            : 'get_connection_handoff';
+    }
+
+    private function build_handoff_package_tool(array $environment, array $command): string {
+        return $this->uses_wordpress_mcp_remote_proxy($environment, $command)
+            ? 'livecanvas-forge-ai/get-agent-handoff-package'
+            : 'get_agent_handoff_package';
+    }
+
+    private function build_agent_start_prompt(string $connection_tool, string $package_tool): string {
+        $connection_tool = $connection_tool !== '' ? $connection_tool : 'get_connection_handoff';
+        $package_tool = $package_tool !== '' ? $package_tool : 'get_agent_handoff_package';
+
+        return implode("\n", [
+            'Use the LiveCanvas Forge AI MCP connection for this WordPress project.',
+            'First call ' . $connection_tool . ' with {"limit":5}.',
+            'If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.',
+            'Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.',
+            'Then call ' . $package_tool . ' with {"limit":5} only if you need the full runbook, smoke tests, readiness files, ability manifest, MCP write policy, or recent run summary.',
+            'Summarize the site framework, available tools, active risks, and whether write abilities are exposed.',
+            'Stay read-only until a preview or dry-run has been reviewed.',
+        ]);
+    }
+
+    private function build_agent_start_shell_notice(string $agent_label, array $environment, array $command): string {
+        return "cat <<'EOF'\n\nNext prompt for " . $agent_label . ":\n"
+            . $this->build_agent_start_prompt($this->build_connection_handoff_tool($environment, $command), $this->build_handoff_package_tool($environment, $command))
+            . "\nEOF";
     }
 
     private function uses_wordpress_mcp_remote_proxy(array $environment, array $command): bool {

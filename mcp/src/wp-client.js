@@ -64,6 +64,30 @@ class WPClient {
     return this.request('GET', 'studio/handoff-package', { query: params })
   }
 
+  async getHandoffSummary(params = {}) {
+    return this.request('GET', 'studio/handoff-summary', { query: params })
+  }
+
+  async getConnectionHandoff(params = {}) {
+    return this.request('GET', 'studio/connection-handoff', { query: params })
+  }
+
+  async getBlockPatternLibrary(params = {}) {
+    return this.request('GET', 'studio/block-pattern-library', { query: params })
+  }
+
+  async getNativePatternPageBlueprints(params = {}) {
+    return this.request('GET', 'studio/native-pattern-page-blueprints', { query: params })
+  }
+
+  async previewNativePatternPage(payload = {}) {
+    return this.request('POST', 'studio/native-pattern-page-preview', { body: payload })
+  }
+
+  async applyNativePatternPage(payload = {}) {
+    return this.request('POST', 'studio/native-pattern-page-apply', { body: payload })
+  }
+
   async getThemeBackups(params = {}) {
     return this.request('GET', 'theme/backups', { query: params })
   }

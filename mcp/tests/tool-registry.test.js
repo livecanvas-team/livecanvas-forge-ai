@@ -106,6 +106,64 @@ async function run() {
     'get_agent_handoff_package should describe the handoff package'
   )
 
+  const handoffSummary = tools.find((tool) => tool.name === 'get_handoff_summary')
+  assert.ok(handoffSummary, 'get_handoff_summary should be registered')
+  assert.ok(handoffSummary.inputSchema.properties.limit, 'get_handoff_summary should expose a run limit')
+  assert.match(
+    handoffSummary.description,
+    /readiness summary/i,
+    'get_handoff_summary should describe the readiness summary'
+  )
+
+  const connectionHandoff = tools.find((tool) => tool.name === 'get_connection_handoff')
+  assert.ok(connectionHandoff, 'get_connection_handoff should be registered')
+  assert.ok(connectionHandoff.inputSchema.properties.limit, 'get_connection_handoff should expose a run limit')
+  assert.match(
+    connectionHandoff.description,
+    /first prompt/i,
+    'get_connection_handoff should describe the first prompt'
+  )
+
+  const blockPatternLibrary = tools.find((tool) => tool.name === 'get_block_pattern_library')
+  assert.ok(blockPatternLibrary, 'get_block_pattern_library should be registered')
+  assert.ok(blockPatternLibrary.inputSchema.properties.include_content, 'get_block_pattern_library should expose include_content')
+  assert.match(
+    blockPatternLibrary.description,
+    /block patterns/i,
+    'get_block_pattern_library should describe block patterns'
+  )
+
+  const nativePatternPageBlueprints = tools.find((tool) => tool.name === 'get_native_pattern_page_blueprints')
+  assert.ok(nativePatternPageBlueprints, 'get_native_pattern_page_blueprints should be registered')
+  assert.ok(nativePatternPageBlueprints.inputSchema.properties.include_patterns, 'get_native_pattern_page_blueprints should expose include_patterns')
+  assert.match(
+    nativePatternPageBlueprints.description,
+    /blueprint recipes/i,
+    'get_native_pattern_page_blueprints should describe blueprint recipes'
+  )
+
+  const nativePatternPagePreview = tools.find((tool) => tool.name === 'preview_native_pattern_page')
+  assert.ok(nativePatternPagePreview, 'preview_native_pattern_page should be registered')
+  assert.ok(nativePatternPagePreview.inputSchema.properties.blueprint, 'preview_native_pattern_page should expose blueprint')
+  assert.ok(nativePatternPagePreview.inputSchema.properties.blueprint_id, 'preview_native_pattern_page should expose blueprint_id')
+  assert.ok(nativePatternPagePreview.inputSchema.properties.pattern_names.items, 'preview_native_pattern_page should declare pattern_names array items')
+  assert.match(
+    nativePatternPagePreview.description,
+    /without creating or updating/i,
+    'preview_native_pattern_page should make its no-write behavior clear'
+  )
+
+  const nativePatternPageApply = tools.find((tool) => tool.name === 'apply_native_pattern_page')
+  assert.ok(nativePatternPageApply, 'apply_native_pattern_page should be registered')
+  assert.ok(nativePatternPageApply.inputSchema.properties.blueprint, 'apply_native_pattern_page should expose blueprint')
+  assert.ok(nativePatternPageApply.inputSchema.properties.pattern_names.items, 'apply_native_pattern_page should declare pattern_names array items')
+  assert.ok(nativePatternPageApply.inputSchema.properties.status.enum.includes('draft'), 'apply_native_pattern_page should constrain status choices')
+  assert.match(
+    nativePatternPageApply.description,
+    /dedicated write action/i,
+    'apply_native_pattern_page should make write behavior clear'
+  )
+
   const validateMarkup = tools.find((tool) => tool.name === 'validate_markup_for_framework')
   assert.ok(validateMarkup, 'validate_markup_for_framework should be registered')
   assert.ok(validateMarkup.inputSchema.properties.body_html_lines, 'validate_markup_for_framework should expose body_html_lines')

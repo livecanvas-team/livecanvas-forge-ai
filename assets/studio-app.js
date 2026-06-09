@@ -37,17 +37,60 @@
         });
     }
 
-    function fetchStudioState(config) {
-        if (apiFetch && typeof apiFetch === 'function') {
-            return apiFetch({ url: config.endpoint });
+    function fetchStudioJson(config, url, errorMessage) {
+        if (!url) {
+            return Promise.reject(new Error(errorMessage || 'Forge Studio REST endpoint is missing.'));
         }
 
-        return window.fetch(config.endpoint, {
+        if (apiFetch && typeof apiFetch === 'function') {
+            return apiFetch({ url: url });
+        }
+
+        return window.fetch(url, {
             credentials: 'same-origin',
-            headers: config.nonce ? { 'X-WP-Nonce': config.nonce } : {}
+            headers: config && config.nonce ? { 'X-WP-Nonce': config.nonce } : {}
         }).then(function (response) {
             if (!response.ok) {
-                throw new Error('Forge Studio REST request failed.');
+                throw new Error(errorMessage || 'Forge Studio REST request failed.');
+            }
+
+            return response.json();
+        });
+    }
+
+    function fetchStudioState(config) {
+        return fetchStudioJson(config, config.endpoint, 'Forge Studio REST request failed.');
+    }
+
+    function postStudioJson(config, url, payload) {
+        var headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (!url) {
+            return Promise.reject(new Error('Forge Studio action endpoint is missing.'));
+        }
+
+        if (apiFetch && typeof apiFetch === 'function') {
+            return apiFetch({
+                url: url,
+                method: 'POST',
+                data: payload || {}
+            });
+        }
+
+        if (config && config.nonce) {
+            headers['X-WP-Nonce'] = config.nonce;
+        }
+
+        return window.fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: JSON.stringify(payload || {})
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('Forge Studio action request failed.');
             }
 
             return response.json();
@@ -327,6 +370,170 @@
         );
     }
 
+    function IntegrationTestPlanPanel(props) {
+        var data = props.data || {};
+        var studio = data.studio || {};
+        var summary = data.summary || {};
+        var readiness = data.handoff_readiness || {};
+        var blueprintsPayload = data.native_pattern_page_blueprints || {};
+        var blueprints = asArray(blueprintsPayload.blueprints);
+        var firstBlueprint = blueprints[0] || {};
+        var endpoints = {
+            studio_state: String(props.studioEndpoint || ''),
+            connection_handoff: String(studio.connection_handoff_route || ''),
+            handoff_summary: String(studio.handoff_summary_route || ''),
+            handoff_package: String(studio.handoff_package_route || ''),
+            block_pattern_library: String(studio.block_pattern_library_route || ''),
+            native_page_blueprints: String(studio.native_pattern_page_blueprints_route || ''),
+            native_page_preview: String(studio.native_pattern_page_preview_route || ''),
+            native_page_apply: String(studio.native_pattern_page_apply_route || '')
+        };
+        var codexPrompt = [
+            'Test LiveCanvas Forge AI without changing existing content.',
+            'First call get_connection_handoff, then get_handoff_summary.',
+            'Read the native page blueprints and run a native page preview only.',
+            'If the preview is valid, report the exact apply request but do not create a draft until I confirm.'
+        ].join(' ');
+        var steps = [
+            {
+                id: 'studio_state',
+                label: 'Load Studio state',
+                phase: 'read',
+                endpoint: endpoints.studio_state,
+                expected: 'HTTP 200 and studio.v1 contract'
+            },
+            {
+                id: 'connection_handoff',
+                label: 'Read connection handoff',
+                phase: 'read',
+                endpoint: endpoints.connection_handoff,
+                tool: 'get_connection_handoff',
+                expected: 'first agent prompt is available'
+            },
+            {
+                id: 'handoff_summary',
+                label: 'Refresh handoff summary',
+                phase: 'read',
+                endpoint: endpoints.handoff_summary,
+                tool: 'get_handoff_summary',
+                expected: 'summary endpoint matches Studio parity checks'
+            },
+            {
+                id: 'block_pattern_library',
+                label: 'Read native pattern library',
+                phase: 'read',
+                endpoint: endpoints.block_pattern_library,
+                tool: 'get_block_pattern_library',
+                expected: 'patterns expose content and checksums'
+            },
+            {
+                id: 'native_page_blueprints',
+                label: 'Read native page blueprints',
+                phase: 'read',
+                endpoint: endpoints.native_page_blueprints,
+                tool: 'get_native_pattern_page_blueprints',
+                expected: 'at least one blueprint is available'
+            },
+            {
+                id: 'native_page_preview',
+                label: 'Run native page preview',
+                phase: 'preview',
+                endpoint: endpoints.native_page_preview,
+                tool: 'preview_native_pattern_page',
+                request: firstBlueprint.preview_request || null,
+                expected: 'preview returns block content without writing'
+            },
+            {
+                id: 'native_page_apply',
+                label: 'Create draft native page after approval',
+                phase: 'guarded_write',
+                endpoint: endpoints.native_page_apply,
+                tool: 'apply_native_pattern_page',
+                request: firstBlueprint.apply_request || null,
+                expected: 'new draft page with audit rollback metadata'
+            }
+        ];
+        var restEndpoints = Object.keys(endpoints).filter(function (key) {
+            return !!endpoints[key];
+        }).map(function (key) {
+            return key + ': ' + endpoints[key];
+        }).join("\n");
+        var testPlan = {
+            schema_version: 'studio.integration-test-plan.v1',
+            status: readiness.status || 'unknown',
+            recommended_mode: readiness.recommended_mode || 'read_only_first',
+            framework: summary.framework || 'auto',
+            codex_prompt: codexPrompt,
+            endpoints: endpoints,
+            steps: steps
+        };
+
+        return h(Card, {
+            className: 'lcfa-studio-integration-test-plan',
+            title: 'Integration test plan',
+            description: 'Copy-ready smoke path for validating the current Forge Studio, REST, and MCP integration.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    'data-lcfa-copy-text': toJson(testPlan),
+                    'data-lcfa-copy-label': 'Copy integration test plan',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy integration test plan'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    'data-lcfa-copy-text': codexPrompt,
+                    'data-lcfa-copy-label': 'Copy Codex smoke prompt',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy Codex smoke prompt'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !restEndpoints,
+                    'data-lcfa-copy-text': restEndpoints,
+                    'data-lcfa-copy-label': 'Copy REST endpoint checklist',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy REST endpoint checklist'),
+                firstBlueprint.preview_request ? h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    'data-lcfa-copy-text': toJson(firstBlueprint.preview_request),
+                    'data-lcfa-copy-label': 'Copy first preview request',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy first preview request') : null
+            ),
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, { tone: readiness.status === 'ready' ? 'positive' : (readiness.status === 'blocked' ? 'negative' : 'warning') }, 'Handoff: ' + (readiness.status || 'unknown')),
+                h(Chip, null, 'Mode: ' + (readiness.recommended_mode || 'read_only_first')),
+                h(Chip, null, 'Framework: ' + (summary.framework || 'auto')),
+                h(Chip, null, 'Blueprints: ' + count(blueprints.length)),
+                h(Chip, null, 'Steps: ' + steps.length)
+            ),
+            h('pre', { className: 'lcfa-studio-briefing-prompt', 'data-lcfa-studio-integration-test-plan': 'codex-prompt' }, codexPrompt),
+            h('div', { className: 'lcfa-studio-gate-list', 'data-lcfa-studio-integration-test-plan': 'steps' },
+                steps.map(function (step) {
+                    var available = !!(step.endpoint || step.tool || step.request);
+                    var phaseTone = step.phase === 'guarded_write' ? 'warning' : (step.phase === 'preview' ? '' : 'positive');
+
+                    return h('div', { key: step.id, className: className(['lcfa-studio-gate-item', available ? 'is-pass' : 'is-warn']) },
+                        h('div', { className: 'lcfa-studio-gate-item__head' },
+                            h('strong', null, step.label),
+                            h('div', { className: 'lcfa-chip-row' },
+                                h(Chip, { tone: phaseTone }, step.phase),
+                                h(Chip, { tone: available ? 'positive' : 'warning' }, available ? 'available' : 'missing')
+                            )
+                        ),
+                        step.endpoint ? h('code', null, step.endpoint) : null,
+                        step.tool ? h('p', null, 'MCP tool: ' + step.tool) : null,
+                        step.expected ? h('p', null, step.expected) : null
+                    );
+                })
+            )
+        );
+    }
+
     function ContractPanel(props) {
         var contract = props.contract || {};
         var readiness = contract.readiness || {};
@@ -372,6 +579,8 @@
         var gates = asArray(readiness.gates);
         var blockers = asArray(readiness.blockers);
         var warnings = asArray(readiness.warnings);
+        var counts = readiness.counts || {};
+        var endpoint = String(props.summaryEndpoint || '');
         var status = String(readiness.status || 'unknown');
 
         return h(Card, {
@@ -386,7 +595,15 @@
                     'data-lcfa-copy-text': toJson(readiness),
                     'data-lcfa-copy-label': 'Copy readiness',
                     'data-lcfa-copied-label': 'Copied'
-                }, 'Copy readiness')
+                }, 'Copy readiness'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint,
+                    'data-lcfa-copy-text': endpoint,
+                    'data-lcfa-copy-label': 'Copy summary endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy summary endpoint')
             ),
             h('div', { className: 'lcfa-studio-readiness-score', 'data-lcfa-studio-handoff-readiness': 'score' },
                 h('strong', null, String(count(readiness.score))),
@@ -396,7 +613,10 @@
             h('div', { className: 'lcfa-chip-row' },
                 h(Chip, null, 'Gates: ' + gates.length),
                 h(Chip, { tone: blockers.length > 0 ? 'negative' : 'positive' }, 'Blockers: ' + blockers.length),
-                h(Chip, { tone: warnings.length > 0 ? 'warning' : 'positive' }, 'Warnings: ' + warnings.length)
+                h(Chip, { tone: warnings.length > 0 ? 'warning' : 'positive' }, 'Warnings: ' + warnings.length),
+                h(Chip, null, 'Read-only: ' + count(counts.read_only_available) + '/' + count(counts.read_only_required)),
+                h(Chip, null, 'Preview: ' + count(counts.preview_available) + '/' + count(counts.preview_required)),
+                h(Chip, null, 'Write guards: ' + count(counts.write_guard_available) + '/' + count(counts.write_guard_required))
             ),
             gates.length ? h('div', { className: 'lcfa-studio-gate-list', 'data-lcfa-studio-handoff-readiness': 'gates' },
                 gates.map(function (gate) {
@@ -411,6 +631,332 @@
                     );
                 })
             ) : h('p', { className: 'lcfa-empty' }, 'No handoff readiness gates are available.')
+        );
+    }
+
+    function HandoffSummaryPanel(props) {
+        var studioSummary = props.summary || {};
+        var endpointResponseState = useState(null);
+        var endpointResponse = endpointResponseState[0];
+        var setEndpointResponse = endpointResponseState[1];
+        var endpointLoadingState = useState(false);
+        var endpointLoading = endpointLoadingState[0];
+        var setEndpointLoading = endpointLoadingState[1];
+        var endpointErrorState = useState('');
+        var endpointError = endpointErrorState[0];
+        var setEndpointError = endpointErrorState[1];
+        var endpointSummary = endpointResponse && endpointResponse.handoff_summary && typeof endpointResponse.handoff_summary === 'object'
+            ? endpointResponse.handoff_summary
+            : null;
+        var summary = endpointSummary || studioSummary;
+        var blockers = asArray(summary.blockers);
+        var warnings = asArray(summary.warnings);
+        var unavailableTests = asArray(summary.unavailable_tests);
+        var writeGuardTests = asArray(summary.write_guard_tests);
+        var counts = summary.counts || {};
+        var smokeCounts = summary.smoke_counts || {};
+        var writePolicyCounts = summary.write_policy_counts || {};
+        var endpoint = String(props.endpoint || '');
+        var source = endpointSummary ? 'endpoint' : 'studio_state';
+        var status = String(summary.status || 'unknown');
+        var statusTone = status === 'ready' ? 'positive' : (status === 'blocked' ? 'negative' : 'warning');
+        var parity = buildParity(studioSummary, endpointSummary);
+        var parityTone = parity.status === 'verified' ? 'positive' : (parity.status === 'drift' ? 'warning' : '');
+
+        function nestedValue(value, path) {
+            var cursor = value || {};
+
+            return path.split('.').reduce(function (current, part) {
+                if (!current || typeof current !== 'object') {
+                    return undefined;
+                }
+
+                return current[part];
+            }, cursor);
+        }
+
+        function compareValue(value) {
+            if (Array.isArray(value)) {
+                return String(value.length);
+            }
+
+            if (value && typeof value === 'object') {
+                return String(Object.keys(value).length);
+            }
+
+            return String(value === undefined || value === null ? '' : value);
+        }
+
+        function buildParity(localSummary, remoteSummary) {
+            var checks = [
+                ['status', 'Status'],
+                ['recommended_mode', 'Recommended mode'],
+                ['score', 'Score'],
+                ['next_action', 'Next action'],
+                ['framework', 'Framework'],
+                ['public_writes', 'Public writes'],
+                ['run_errors', 'Run errors'],
+                ['counts.read_only_available', 'Read-only available'],
+                ['counts.read_only_required', 'Read-only required'],
+                ['counts.preview_available', 'Preview available'],
+                ['counts.preview_required', 'Preview required'],
+                ['counts.write_guard_available', 'Write guards available'],
+                ['counts.write_guard_required', 'Write guards required'],
+                ['smoke_counts.available', 'Smoke tests available'],
+                ['smoke_counts.tests', 'Smoke tests total'],
+                ['blockers', 'Blocker count'],
+                ['warnings', 'Warning count'],
+                ['unavailable_tests', 'Unavailable test count'],
+                ['write_guard_tests', 'Write guard test count']
+            ];
+            var mismatches = [];
+
+            if (!remoteSummary) {
+                return {
+                    status: 'unverified',
+                    checked: checks.length,
+                    matches: 0,
+                    mismatches: []
+                };
+            }
+
+            checks.forEach(function (check) {
+                var localValue = compareValue(nestedValue(localSummary, check[0]));
+                var remoteValue = compareValue(nestedValue(remoteSummary, check[0]));
+
+                if (localValue !== remoteValue) {
+                    mismatches.push({
+                        id: check[0],
+                        label: check[1],
+                        studio_state: localValue,
+                        endpoint: remoteValue
+                    });
+                }
+            });
+
+            return {
+                status: mismatches.length ? 'drift' : 'verified',
+                checked: checks.length,
+                matches: checks.length - mismatches.length,
+                mismatches: mismatches
+            };
+        }
+
+        function refreshEndpointSummary() {
+            if (!endpoint || endpointLoading) {
+                return;
+            }
+
+            setEndpointLoading(true);
+            setEndpointError('');
+
+            fetchStudioJson({ nonce: props.nonce || '' }, endpoint, 'Forge Studio handoff summary request failed.').then(function (payload) {
+                setEndpointResponse(payload || {});
+                setEndpointLoading(false);
+            }).catch(function (fetchError) {
+                setEndpointError(fetchError && fetchError.message ? fetchError.message : 'Forge Studio handoff summary request failed.');
+                setEndpointLoading(false);
+            });
+        }
+
+        function renderGate(gate, type) {
+            var gateStatus = type === 'blocker' ? 'fail' : 'warn';
+
+            return h('div', { key: type + '-' + (gate.id || gate.label), className: className(['lcfa-studio-gate-item', 'is-' + gateStatus]) },
+                h('div', { className: 'lcfa-studio-gate-item__head' },
+                    h('strong', null, gate.label || gate.id || type),
+                    h(Chip, { tone: type === 'blocker' ? 'negative' : 'warning' }, type)
+                ),
+                gate.detail ? h('p', null, gate.detail) : null
+            );
+        }
+
+        function renderSmokeTest(test, prefix) {
+            var available = !test || test.available !== false;
+            var id = String((test && test.id) || '');
+
+            return h('div', { key: prefix + '-' + (id || (test && test.label) || prefix), className: className(['lcfa-studio-smoke-item', available ? 'is-available' : 'is-missing']) },
+                h('div', { className: 'lcfa-studio-smoke-item__head' },
+                    h('strong', null, (test && test.label) || id || 'Smoke test'),
+                    h(Chip, { tone: available ? 'positive' : 'warning' }, available ? 'available' : 'missing')
+                ),
+                test && test.ability ? h('code', null, test.ability) : null,
+                h('div', { className: 'lcfa-chip-row' },
+                    h(Chip, null, 'Phase: ' + ((test && test.phase) || 'read_only')),
+                    h(Chip, null, 'Risk: ' + ((test && test.risk) || 'low')),
+                    test && test.public_write_exposed ? h(Chip, { tone: 'warning' }, 'Public write') : null
+                )
+            );
+        }
+
+        return h(Card, {
+            className: 'lcfa-studio-handoff-summary',
+            title: 'Handoff summary',
+            description: 'Compact readiness snapshot for agents before they request the full package.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint || endpointLoading,
+                    onClick: refreshEndpointSummary,
+                    'data-lcfa-studio-handoff-summary-refresh': '1'
+                }, endpointLoading ? 'Refreshing summary...' : 'Refresh summary'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    'data-lcfa-copy-text': toJson(summary),
+                    'data-lcfa-copy-label': 'Copy handoff summary',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy handoff summary'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint,
+                    'data-lcfa-copy-text': endpoint,
+                    'data-lcfa-copy-label': 'Copy handoff summary endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy handoff summary endpoint'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpointResponse,
+                    'data-lcfa-copy-text': toJson(endpointResponse || {}),
+                    'data-lcfa-copy-label': 'Copy endpoint response',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy endpoint response'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpointSummary,
+                    'data-lcfa-copy-text': toJson(parity),
+                    'data-lcfa-copy-label': 'Copy endpoint parity',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy endpoint parity'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !unavailableTests.length,
+                    'data-lcfa-copy-text': toJson(unavailableTests),
+                    'data-lcfa-copy-label': 'Copy missing tests',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy missing tests'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !writeGuardTests.length,
+                    'data-lcfa-copy-text': toJson(writeGuardTests),
+                    'data-lcfa-copy-label': 'Copy write guards',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy write guards')
+            ),
+            endpointError ? h('p', { className: 'lcfa-empty', 'data-lcfa-studio-handoff-summary': 'endpoint-error' }, endpointError) : null,
+            h('div', { className: 'lcfa-studio-readiness-score', 'data-lcfa-studio-handoff-summary': 'score' },
+                h('strong', null, String(count(summary.score))),
+                h('span', null, status.charAt(0).toUpperCase() + status.slice(1)),
+                h(Chip, { tone: statusTone }, 'Next: ' + (summary.next_action || 'review'))
+            ),
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, null, 'Schema: ' + (summary.schema_version || 'handoff-summary.v1')),
+                h(Chip, { tone: endpointSummary ? 'positive' : '' }, 'Source: ' + source),
+                h(Chip, { tone: parityTone }, 'Parity: ' + parity.status),
+                h(Chip, null, 'Parity checks: ' + count(parity.matches) + '/' + count(parity.checked)),
+                h(Chip, { tone: statusTone }, 'Mode: ' + (summary.recommended_mode || 'read_only_first')),
+                h(Chip, null, 'Framework: ' + (summary.framework || 'unknown')),
+                h(Chip, { tone: count(summary.public_writes) > 0 ? 'warning' : 'positive' }, 'Public writes: ' + count(summary.public_writes)),
+                h(Chip, { tone: count(summary.run_errors) > 0 ? 'warning' : 'positive' }, 'Run errors: ' + count(summary.run_errors))
+            ),
+            parity.mismatches.length ? h('div', { className: 'lcfa-studio-gate-list', 'data-lcfa-studio-handoff-summary': 'parity-drift' },
+                parity.mismatches.map(function (mismatch) {
+                    return h('div', { key: mismatch.id, className: 'lcfa-studio-gate-item is-warn' },
+                        h('div', { className: 'lcfa-studio-gate-item__head' },
+                            h('strong', null, mismatch.label || mismatch.id),
+                            h(Chip, { tone: 'warning' }, 'drift')
+                        ),
+                        h('p', null, 'Studio: ' + mismatch.studio_state + ' / Endpoint: ' + mismatch.endpoint)
+                    );
+                })
+            ) : null,
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, null, 'Read-only: ' + count(counts.read_only_available) + '/' + count(counts.read_only_required)),
+                h(Chip, null, 'Preview: ' + count(counts.preview_available) + '/' + count(counts.preview_required)),
+                h(Chip, null, 'Write guards: ' + count(counts.write_guard_available) + '/' + count(counts.write_guard_required)),
+                h(Chip, null, 'Smoke tests: ' + count(smokeCounts.available) + '/' + count(smokeCounts.tests)),
+                h(Chip, null, 'Write policy: ' + count(writePolicyCounts.write) + ' write')
+            ),
+            (blockers.length || warnings.length) ? h('div', { className: 'lcfa-studio-gate-list', 'data-lcfa-studio-handoff-summary': 'alerts' },
+                blockers.map(function (gate) {
+                    return renderGate(gate, 'blocker');
+                }).concat(warnings.map(function (gate) {
+                    return renderGate(gate, 'warning');
+                }))
+            ) : h('p', { className: 'lcfa-empty' }, 'No handoff blockers or warnings are present.'),
+            unavailableTests.length ? h('div', { className: 'lcfa-studio-smoke-list', 'data-lcfa-studio-handoff-summary': 'unavailable-tests' },
+                unavailableTests.map(function (test) {
+                    return renderSmokeTest(test, 'missing');
+                })
+            ) : h('p', { className: 'lcfa-empty' }, 'No unavailable smoke tests are listed.'),
+            writeGuardTests.length ? h('div', { className: 'lcfa-studio-smoke-list', 'data-lcfa-studio-handoff-summary': 'write-guards' },
+                writeGuardTests.map(function (test) {
+                    return renderSmokeTest(test, 'write-guard');
+                })
+            ) : h('p', { className: 'lcfa-empty' }, 'No guarded write tests are listed.')
+        );
+    }
+
+    function ConnectionHandoffPanel(props) {
+        var handoff = props.handoff || {};
+        var prompt = String(handoff.agent_start_prompt || '');
+        var sequence = asArray(handoff.recommended_sequence);
+        var tool = String(handoff.agent_start_tool || '');
+        var endpoint = String(props.endpoint || '');
+
+        return h(Card, {
+            className: 'lcfa-studio-connection-handoff',
+            title: 'Connection handoff',
+            description: 'First prompt and connection metadata for a new agent session.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !prompt,
+                    'data-lcfa-copy-text': prompt,
+                    'data-lcfa-copy-label': 'Copy first prompt',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy first prompt'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    'data-lcfa-copy-text': toJson(handoff),
+                    'data-lcfa-copy-label': 'Copy connection handoff',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy connection handoff'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint,
+                    'data-lcfa-copy-text': endpoint,
+                    'data-lcfa-copy-label': 'Copy handoff endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy handoff endpoint')
+            ),
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, null, 'Client: ' + (handoff.client || 'unset')),
+                h(Chip, null, 'Mode: ' + (handoff.mode || 'unset')),
+                h(Chip, { tone: handoff.ready ? 'positive' : 'warning' }, 'Status: ' + (handoff.status || 'not_connected')),
+                h(Chip, null, 'Transport: ' + (handoff.transport || 'unknown'))
+            ),
+            tool ? h('code', { className: 'lcfa-studio-connection-tool', 'data-lcfa-studio-connection-handoff': 'tool' }, tool) : null,
+            prompt ? h('pre', { className: 'lcfa-studio-briefing-prompt', 'data-lcfa-studio-connection-handoff': 'prompt' }, prompt) : h('p', { className: 'lcfa-empty' }, 'No first agent prompt is available.'),
+            sequence.length ? h('div', { className: 'lcfa-studio-briefing-grid', 'data-lcfa-studio-connection-handoff': 'sequence' },
+                sequence.map(function (step) {
+                    return h('div', { key: step.id || step.label, className: 'lcfa-studio-briefing-row' },
+                        h('strong', null, step.label || step.id || 'Step'),
+                        step.tool ? h('span', null, step.tool) : null
+                    );
+                })
+            ) : null
         );
     }
 
@@ -670,7 +1216,7 @@
         return h(Card, {
             className: 'lcfa-studio-agent-smoke-tests',
             title: 'Agent smoke tests',
-            description: 'Ordered read-only and preview checks for MCP-connected agents.'
+            description: 'Ordered read-only, preview, and guarded write checks for MCP-connected agents.'
         },
             h('div', { className: 'lcfa-studio-actions' },
                 h('button', {
@@ -770,6 +1316,454 @@
         );
     }
 
+    function BlockPatternLibraryPanel(props) {
+        var library = props.library || {};
+        var patterns = asArray(library.patterns);
+        var counts = library.counts || {};
+        var endpoint = String(props.endpoint || '');
+
+        return h(Card, {
+            className: 'lcfa-studio-block-pattern-library',
+            title: 'Block pattern library',
+            description: 'Export-ready native WordPress patterns for fallback pages and reusable previews.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !patterns.length,
+                    'data-lcfa-copy-text': toJson(library),
+                    'data-lcfa-copy-label': 'Copy block pattern library',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy block pattern library'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint,
+                    'data-lcfa-copy-text': endpoint,
+                    'data-lcfa-copy-label': 'Copy pattern library endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy pattern library endpoint')
+            ),
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, { tone: library.available ? 'positive' : 'warning' }, library.available ? 'Available' : 'Unavailable'),
+                h(Chip, null, 'Patterns: ' + count(counts.patterns || patterns.length)),
+                h(Chip, null, 'Bytes: ' + count(counts.bytes)),
+                h(Chip, null, 'Format: ' + ((library.export && library.export.format) || 'wordpress_block_patterns'))
+            ),
+            patterns.length ? h('div', { className: 'lcfa-studio-pattern-list', 'data-lcfa-studio-block-pattern-library': 'patterns' },
+                patterns.map(function (pattern) {
+                    var name = String(pattern.name || '');
+                    var sha = String(pattern.sha256 || '');
+                    var content = String(pattern.content || '');
+
+                    return h('div', { key: name || sha, className: 'lcfa-studio-pattern-item' },
+                        h('div', { className: 'lcfa-studio-package-item__head' },
+                            h('div', null,
+                                h('strong', null, pattern.title || name || 'Pattern'),
+                                h('span', null, name)
+                            ),
+                            h('div', { className: 'lcfa-chip-row' },
+                                h(Chip, null, count(pattern.bytes) + ' bytes'),
+                                sha ? h(Chip, null, sha.slice(0, 12) + '...') : null
+                            )
+                        ),
+                        pattern.description ? h('p', null, pattern.description) : null,
+                        pattern.suggested_use ? h('small', null, pattern.suggested_use) : null,
+                        h('div', { className: 'lcfa-studio-actions' },
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                disabled: !content,
+                                'data-lcfa-copy-text': content,
+                                'data-lcfa-copy-label': 'Copy pattern content',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy pattern content'),
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                disabled: !sha,
+                                'data-lcfa-copy-text': sha,
+                                'data-lcfa-copy-label': 'Copy pattern checksum',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy pattern checksum')
+                        )
+                    );
+                })
+            ) : h('p', { className: 'lcfa-empty' }, 'No block pattern library is available.')
+        );
+    }
+
+    function NativePatternPageBlueprintsPanel(props) {
+        var payload = props.blueprints || {};
+        var blueprints = asArray(payload.blueprints);
+        var counts = payload.counts || {};
+        var endpoint = String(props.endpoint || '');
+        var previewEndpoint = String(props.previewEndpoint || '');
+        var applyEndpoint = String(props.applyEndpoint || '');
+        var previewAbility = String(payload.preview_ability || 'livecanvas-forge-ai/preview-native-pattern-page');
+        var applyAbility = String(payload.apply_ability || 'livecanvas-forge-ai/apply-native-pattern-page');
+        var previewResultsState = useState({});
+        var previewResults = previewResultsState[0];
+        var setPreviewResults = previewResultsState[1];
+        var applyResultsState = useState({});
+        var applyResults = applyResultsState[0];
+        var setApplyResults = applyResultsState[1];
+
+        function setBlueprintPreview(id, nextValue) {
+            setPreviewResults(function (current) {
+                var next = {};
+
+                Object.keys(current || {}).forEach(function (key) {
+                    next[key] = current[key];
+                });
+                next[id] = Object.assign({}, next[id] || {}, nextValue || {});
+
+                return next;
+            });
+        }
+
+        function setBlueprintApply(id, nextValue) {
+            setApplyResults(function (current) {
+                var next = {};
+
+                Object.keys(current || {}).forEach(function (key) {
+                    next[key] = current[key];
+                });
+                next[id] = Object.assign({}, next[id] || {}, nextValue || {});
+
+                return next;
+            });
+        }
+
+        function runBlueprintPreview(id, url, previewPayload) {
+            if (!id || !url) {
+                return;
+            }
+
+            setBlueprintPreview(id, {
+                loading: true,
+                error: '',
+                result: null
+            });
+
+            postStudioJson({ nonce: props.nonce || '' }, url, previewPayload).then(function (result) {
+                setBlueprintPreview(id, {
+                    loading: false,
+                    error: '',
+                    result: result
+                });
+            }).catch(function (error) {
+                setBlueprintPreview(id, {
+                    loading: false,
+                    error: error && error.message ? error.message : 'Preview request failed.',
+                    result: null
+                });
+            });
+        }
+
+        function runBlueprintApply(id, url, applyPayload) {
+            if (!id || !url) {
+                return;
+            }
+
+            if (window.confirm && !window.confirm('Create a new draft page from this native blueprint?')) {
+                return;
+            }
+
+            setBlueprintApply(id, {
+                loading: true,
+                error: '',
+                result: null
+            });
+
+            postStudioJson({ nonce: props.nonce || '' }, url, applyPayload).then(function (result) {
+                setBlueprintApply(id, {
+                    loading: false,
+                    error: '',
+                    result: result
+                });
+
+                if (result && result.native_pattern_page_apply && result.native_pattern_page_apply.ok && typeof props.onApplySuccess === 'function') {
+                    props.onApplySuccess(result.native_pattern_page_apply);
+                }
+            }).catch(function (error) {
+                setBlueprintApply(id, {
+                    loading: false,
+                    error: error && error.message ? error.message : 'Apply request failed.',
+                    result: null
+                });
+            });
+        }
+
+        return h(Card, {
+            className: 'lcfa-studio-native-pattern-page-blueprints',
+            title: 'Native page blueprints',
+            description: 'Native WordPress page recipes with preview-first draft creation.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !blueprints.length,
+                    'data-lcfa-copy-text': toJson(payload),
+                    'data-lcfa-copy-label': 'Copy native page blueprints',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy native page blueprints'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !endpoint,
+                    'data-lcfa-copy-text': endpoint,
+                    'data-lcfa-copy-label': 'Copy blueprint endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy blueprint endpoint'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !previewEndpoint,
+                    'data-lcfa-copy-text': previewEndpoint,
+                    'data-lcfa-copy-label': 'Copy preview endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy preview endpoint'),
+                h('button', {
+                    type: 'button',
+                    className: 'button button-small',
+                    disabled: !applyEndpoint,
+                    'data-lcfa-copy-text': applyEndpoint,
+                    'data-lcfa-copy-label': 'Copy apply endpoint',
+                    'data-lcfa-copied-label': 'Copied'
+                }, 'Copy apply endpoint')
+            ),
+            h('div', { className: 'lcfa-chip-row' },
+                h(Chip, { tone: payload.available ? 'positive' : 'warning' }, payload.available ? 'Available' : 'Unavailable'),
+                h(Chip, null, 'Blueprints: ' + count(counts.blueprints || blueprints.length)),
+                h(Chip, null, 'Preview: ' + previewAbility),
+                h(Chip, null, 'Apply: ' + applyAbility)
+            ),
+            blueprints.length ? h('div', { className: 'lcfa-studio-pattern-list', 'data-lcfa-studio-native-pattern-page-blueprints': 'blueprints' },
+                blueprints.map(function (blueprint) {
+                    var id = String(blueprint.id || '');
+                    var patternNames = asArray(blueprint.pattern_names);
+                    var previewPayload = blueprint.preview_payload && typeof blueprint.preview_payload === 'object'
+                        ? blueprint.preview_payload
+                        : { blueprint: id };
+                    var previewRequest = blueprint.preview_request && typeof blueprint.preview_request === 'object'
+                        ? blueprint.preview_request
+                        : {
+                            method: 'POST',
+                            rest_route: previewEndpoint || '/wp-json/lcfa/v1/studio/native-pattern-page-preview',
+                            mcp_tool: 'preview_native_pattern_page',
+                            ability: previewAbility,
+                            payload: previewPayload
+                        };
+                    var applyPayload = blueprint.apply_payload && typeof blueprint.apply_payload === 'object'
+                        ? blueprint.apply_payload
+                        : Object.assign({}, previewPayload, { status: 'draft' });
+                    var applyRequest = blueprint.apply_request && typeof blueprint.apply_request === 'object'
+                        ? blueprint.apply_request
+                        : {
+                            method: 'POST',
+                            rest_route: applyEndpoint || '/wp-json/lcfa/v1/studio/native-pattern-page-apply',
+                            mcp_tool: 'apply_native_pattern_page',
+                            ability: applyAbility,
+                            payload: applyPayload
+                        };
+                    var previewUrl = previewEndpoint || String(previewRequest.rest_route || '');
+                    var applyUrl = applyEndpoint || String(applyRequest.rest_route || '');
+                    var previewState = previewResults[id] || {};
+                    var applyState = applyResults[id] || {};
+                    var previewResult = previewState.result && previewState.result.native_pattern_page_preview
+                        ? previewState.result.native_pattern_page_preview
+                        : null;
+                    var applyResult = applyState.result && applyState.result.native_pattern_page_apply
+                        ? applyState.result.native_pattern_page_apply
+                        : null;
+                    var page = previewResult && previewResult.page ? previewResult.page : {};
+                    var createdPage = applyResult && applyResult.page ? applyResult.page : {};
+                    var content = String(page.content || '');
+                    var sha = String(page.sha256 || '');
+                    var auditId = String(applyResult && applyResult.audit_id ? applyResult.audit_id : '');
+                    var editUrl = String(createdPage.edit_url || '');
+                    var frontendUrl = String(createdPage.frontend_url || '');
+                    var rollbackUrl = applyResult && applyResult.rollback_available && auditId
+                        ? commandUrl(props.commandUrl || '', 'restore_audit_rollback', auditId)
+                        : '';
+                    var selectedPatterns = asArray(page.patterns);
+                    var warnings = previewResult ? asArray(previewResult.warnings) : [];
+                    var missing = previewResult ? asArray(previewResult.missing) : [];
+                    var nextActions = previewResult ? asArray(previewResult.next_actions) : [];
+
+                    return h('div', { key: id || blueprint.title, className: 'lcfa-studio-pattern-item' },
+                        h('div', { className: 'lcfa-studio-package-item__head' },
+                            h('div', null,
+                                h('strong', null, blueprint.title || id || 'Blueprint'),
+                                h('span', null, id)
+                            ),
+                            h('div', { className: 'lcfa-chip-row' },
+                                h(Chip, null, count(blueprint.pattern_count || patternNames.length) + ' patterns')
+                            )
+                        ),
+                        blueprint.description ? h('p', null, blueprint.description) : null,
+                        blueprint.suggested_use ? h('small', null, blueprint.suggested_use) : null,
+                        patternNames.length ? h('div', { className: 'lcfa-chip-row' },
+                            patternNames.map(function (patternName) {
+                                return h(Chip, { key: patternName }, patternName);
+                            })
+                        ) : null,
+                        h('div', { className: 'lcfa-studio-actions' },
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                disabled: !id,
+                                'data-lcfa-copy-text': id,
+                                'data-lcfa-copy-label': 'Copy blueprint id',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy blueprint id'),
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                'data-lcfa-copy-text': toJson(previewPayload),
+                                'data-lcfa-copy-label': 'Copy preview payload',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy preview payload'),
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                'data-lcfa-copy-text': toJson(previewRequest),
+                                'data-lcfa-copy-label': 'Copy preview request',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy preview request'),
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                'data-lcfa-copy-text': toJson(applyRequest),
+                                'data-lcfa-copy-label': 'Copy apply request',
+                                'data-lcfa-copied-label': 'Copied'
+                            }, 'Copy apply request'),
+                            h('button', {
+                                type: 'button',
+                                className: 'button button-small',
+                                disabled: !previewUrl || !!previewState.loading,
+                                onClick: function () {
+                                    runBlueprintPreview(id, previewUrl, previewPayload);
+                                }
+                            }, previewState.loading ? 'Running preview...' : 'Run preview')
+                        ),
+                        previewState.error ? h('p', { className: 'lcfa-empty', 'data-lcfa-studio-native-page-preview': 'error' }, previewState.error) : null,
+                        previewResult ? h('div', { className: 'lcfa-studio-preview-result', 'data-lcfa-studio-native-page-preview': id },
+                            h('div', { className: 'lcfa-chip-row' },
+                                h(Chip, { tone: previewResult.ok ? 'positive' : 'warning' }, previewResult.ok ? 'Preview ready' : 'Preview failed'),
+                                h(Chip, null, 'Title: ' + (page.title || 'Untitled')),
+                                h(Chip, null, 'Format: ' + (page.content_format || 'wordpress_blocks')),
+                                h(Chip, null, 'Bytes: ' + count(page.bytes)),
+                                h(Chip, null, 'Patterns: ' + selectedPatterns.length),
+                                warnings.length ? h(Chip, { tone: 'warning' }, 'Warnings: ' + warnings.length) : null,
+                                sha ? h(Chip, null, sha.slice(0, 12) + '...') : null
+                            ),
+                            selectedPatterns.length ? h('div', { className: 'lcfa-studio-briefing-grid', 'data-lcfa-studio-native-page-preview': 'patterns' },
+                                selectedPatterns.map(function (pattern) {
+                                    var patternSha = String(pattern.sha256 || '');
+
+                                    return h('div', { key: pattern.name || pattern.title || patternSha, className: 'lcfa-studio-briefing-row' },
+                                        h('strong', null, pattern.title || pattern.name || 'Pattern'),
+                                        h('span', null, pattern.name || ''),
+                                        h('small', null, count(pattern.bytes) + ' bytes' + (patternSha ? ' - ' + patternSha.slice(0, 12) + '...' : ''))
+                                    );
+                                })
+                            ) : null,
+                            warnings.length || missing.length ? h('div', { className: 'lcfa-studio-briefing-grid', 'data-lcfa-studio-native-page-preview': 'warnings' },
+                                warnings.map(function (warning, index) {
+                                    return h('div', { key: warning.code || String(index), className: 'lcfa-studio-briefing-row' },
+                                        h('strong', null, warning.code || 'warning'),
+                                        h('span', null, warning.message || '')
+                                    );
+                                }).concat(missing.map(function (patternName) {
+                                    return h('div', { key: 'missing-' + patternName, className: 'lcfa-studio-briefing-row' },
+                                        h('strong', null, 'missing_pattern'),
+                                        h('span', null, patternName)
+                                    );
+                                }))
+                            ) : null,
+                            nextActions.length ? h('div', { className: 'lcfa-studio-briefing-grid', 'data-lcfa-studio-native-page-preview': 'next-actions' },
+                                nextActions.map(function (action) {
+                                    return h('div', { key: action.id || action.label, className: 'lcfa-studio-briefing-row' },
+                                        h('strong', null, action.label || action.id || 'Next action'),
+                                        h('span', null, action.writes ? 'Writes required' : 'No write')
+                                    );
+                                })
+                            ) : null,
+                            h('div', { className: 'lcfa-studio-actions' },
+                                h('button', {
+                                    type: 'button',
+                                    className: 'button button-small',
+                                    'data-lcfa-copy-text': toJson(previewState.result),
+                                    'data-lcfa-copy-label': 'Copy preview result',
+                                    'data-lcfa-copied-label': 'Copied'
+                                }, 'Copy preview result'),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'button button-small',
+                                    disabled: !content,
+                                    'data-lcfa-copy-text': content,
+                                    'data-lcfa-copy-label': 'Copy preview content',
+                                    'data-lcfa-copied-label': 'Copied'
+                                }, 'Copy preview content'),
+                                h('button', {
+                                    type: 'button',
+                                    className: 'button button-primary button-small',
+                                    disabled: !applyUrl || !previewResult.ok || !!applyState.loading,
+                                    onClick: function () {
+                                        runBlueprintApply(id, applyUrl, applyPayload);
+                                    }
+                                }, applyState.loading ? 'Creating draft...' : 'Create draft page')
+                            )
+                        ) : null,
+                        applyState.error ? h('p', { className: 'lcfa-empty', 'data-lcfa-studio-native-page-apply': 'error' }, applyState.error) : null,
+                        applyResult ? h('div', { className: 'lcfa-studio-preview-result', 'data-lcfa-studio-native-page-apply': id },
+                            h('div', { className: 'lcfa-chip-row' },
+                                h(Chip, { tone: applyResult.ok ? 'positive' : 'warning' }, applyResult.ok ? 'Draft created' : 'Apply failed'),
+                                h(Chip, null, 'Page: #' + count(createdPage.id)),
+                                h(Chip, null, 'Status: ' + (createdPage.status || 'draft')),
+                                auditId ? h(Chip, null, 'Audit: ' + auditId) : null,
+                                applyResult.rollback_available ? h(Chip, { tone: 'positive' }, 'Rollback ready') : null
+                            ),
+                            h('div', { className: 'lcfa-studio-actions' },
+                                h('button', {
+                                    type: 'button',
+                                    className: 'button button-small',
+                                    'data-lcfa-copy-text': toJson(applyState.result),
+                                    'data-lcfa-copy-label': 'Copy apply result',
+                                    'data-lcfa-copied-label': 'Copied'
+                                }, 'Copy apply result'),
+                                auditId ? h('button', {
+                                    type: 'button',
+                                    className: 'button button-small',
+                                    'data-lcfa-copy-text': auditId,
+                                    'data-lcfa-copy-label': 'Copy audit ID',
+                                    'data-lcfa-copied-label': 'Copied'
+                                }, 'Copy audit ID') : null,
+                                rollbackUrl ? h('a', {
+                                    className: 'button button-small',
+                                    href: rollbackUrl,
+                                    'data-lcfa-studio-native-page-rollback': auditId
+                                }, 'Rollback draft') : null,
+                                editUrl ? h('a', {
+                                    className: 'button button-small',
+                                    href: editUrl
+                                }, 'Edit draft') : null,
+                                frontendUrl ? h('a', {
+                                    className: 'button button-small',
+                                    href: frontendUrl
+                                }, 'View draft') : null
+                            )
+                        ) : null
+                    );
+                })
+            ) : h('p', { className: 'lcfa-empty' }, 'No native page blueprints are available.')
+        );
+    }
+
     function AgentHandoffPackagePanel(props) {
         var bundle = props.bundle || {};
         var summary = bundle.summary || {};
@@ -814,7 +1808,11 @@
                 h(Chip, { tone: bundle.status === 'ready' ? 'positive' : (bundle.status === 'blocked' ? 'negative' : 'warning') }, 'Status: ' + (bundle.status || 'unknown')),
                 h(Chip, null, 'Mode: ' + (bundle.recommended_mode || 'read_only_first')),
                 h(Chip, null, 'Files: ' + count(summary.files || files.length)),
-                h(Chip, null, 'Bytes: ' + count(summary.bytes))
+                h(Chip, null, 'Bytes: ' + count(summary.bytes)),
+                h(Chip, null, 'Score: ' + count(summary.readiness_score)),
+                h(Chip, { tone: count(summary.blockers) > 0 ? 'negative' : 'positive' }, 'Blockers: ' + count(summary.blockers)),
+                h(Chip, { tone: count(summary.warnings) > 0 ? 'warning' : 'positive' }, 'Warnings: ' + count(summary.warnings)),
+                h(Chip, { tone: count(summary.unavailable_tests) > 0 ? 'warning' : 'positive' }, 'Missing tests: ' + count(summary.unavailable_tests))
             ),
             checksum ? h('code', { className: 'lcfa-studio-package-checksum', 'data-lcfa-studio-handoff-package': 'checksum' }, checksum) : null,
             files.length ? h('div', { className: 'lcfa-studio-package-list', 'data-lcfa-studio-handoff-package': 'files' },
@@ -1312,11 +2310,25 @@
                         onRefresh: load,
                         onResetView: resetView
                     }),
+                    h(IntegrationTestPlanPanel, {
+                        data: data,
+                        studioEndpoint: config.endpoint || ''
+                    }),
                     h(ContractPanel, {
                         contract: data.contract || {}
                     }),
                     h(HandoffReadinessPanel, {
-                        readiness: data.handoff_readiness || {}
+                        readiness: data.handoff_readiness || {},
+                        summaryEndpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : '')
+                    }),
+                    h(HandoffSummaryPanel, {
+                        summary: data.handoff_summary || {},
+                        endpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : ''),
+                        nonce: config.nonce || ''
+                    }),
+                    h(ConnectionHandoffPanel, {
+                        handoff: data.connection_handoff || {},
+                        endpoint: String(data.studio && data.studio.connection_handoff_route ? data.studio.connection_handoff_route : '')
                     }),
                     h(OperatorBriefingPanel, {
                         briefing: data.operator_briefing || {}
@@ -1326,6 +2338,19 @@
                     }),
                     h(AgentRunbookPanel, {
                         runbook: data.agent_runbook || {}
+                    }),
+                    h(BlockPatternLibraryPanel, {
+                        library: data.block_pattern_library || {},
+                        endpoint: String(data.studio && data.studio.block_pattern_library_route ? data.studio.block_pattern_library_route : '')
+                    }),
+                    h(NativePatternPageBlueprintsPanel, {
+                        blueprints: data.native_pattern_page_blueprints || {},
+                        endpoint: String(data.studio && data.studio.native_pattern_page_blueprints_route ? data.studio.native_pattern_page_blueprints_route : ''),
+                        previewEndpoint: String(data.studio && data.studio.native_pattern_page_preview_route ? data.studio.native_pattern_page_preview_route : ''),
+                        applyEndpoint: String(data.studio && data.studio.native_pattern_page_apply_route ? data.studio.native_pattern_page_apply_route : ''),
+                        commandUrl: String(config.links && config.links.command ? config.links.command : ''),
+                        onApplySuccess: load,
+                        nonce: config.nonce || ''
                     }),
                     h(AgentHandoffPackagePanel, {
                         bundle: data.agent_handoff_package || {},

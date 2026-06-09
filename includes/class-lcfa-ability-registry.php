@@ -199,11 +199,47 @@ final class LCFA_Ability_Registry {
                 $readonly_annotations,
                 true
             ),
+            'livecanvas-forge-ai/get-block-pattern-library' => $this->ability(
+                __('Get Forge block pattern library', 'livecanvas-forge-ai'),
+                __('Returns export-ready WordPress-native Forge block patterns with checksums for connected agents without writing.', 'livecanvas-forge-ai'),
+                $this->block_pattern_library_schema(),
+                [$this, 'get_block_pattern_library'],
+                [$this, 'can_read'],
+                $readonly_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/get-native-pattern-page-blueprints' => $this->ability(
+                __('Get native pattern page blueprints', 'livecanvas-forge-ai'),
+                __('Returns no-write WordPress-native page blueprints composed from registered Forge patterns.', 'livecanvas-forge-ai'),
+                $this->native_pattern_page_blueprints_schema(),
+                [$this, 'get_native_pattern_page_blueprints'],
+                [$this, 'can_read'],
+                $readonly_annotations,
+                true
+            ),
             'livecanvas-forge-ai/get-runs' => $this->ability(
                 __('Get Forge runs', 'livecanvas-forge-ai'),
                 __('Returns recent Forge command history and rollback availability without exposing stored rollback content.', 'livecanvas-forge-ai'),
                 $this->runs_schema(),
                 [$this, 'get_runs'],
+                [$this, 'can_read'],
+                $readonly_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/get-connection-handoff' => $this->ability(
+                __('Get connection handoff', 'livecanvas-forge-ai'),
+                __('Returns the first prompt, connection mode, transport, and read-only guardrails for a new Codex or MCP agent session.', 'livecanvas-forge-ai'),
+                $this->runs_schema(),
+                [$this, 'get_connection_handoff'],
+                [$this, 'can_read'],
+                $readonly_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/get-handoff-summary' => $this->ability(
+                __('Get handoff summary', 'livecanvas-forge-ai'),
+                __('Returns a compact readiness summary for Codex and MCP agents without the full virtual file package.', 'livecanvas-forge-ai'),
+                $this->runs_schema(),
+                [$this, 'get_handoff_summary'],
                 [$this, 'can_read'],
                 $readonly_annotations,
                 true
@@ -276,6 +312,15 @@ final class LCFA_Ability_Registry {
                 $preview_annotations,
                 true
             ),
+            'livecanvas-forge-ai/preview-native-pattern-page' => $this->ability(
+                __('Preview native pattern page', 'livecanvas-forge-ai'),
+                __('Composes a WordPress-native block page preview from registered Forge patterns without creating or updating a page.', 'livecanvas-forge-ai'),
+                $this->native_pattern_page_preview_schema(),
+                [$this, 'preview_native_pattern_page'],
+                [$this, 'can_read'],
+                $preview_annotations,
+                true
+            ),
             'livecanvas-forge-ai/apply-page-upsert' => $this->ability(
                 __('Apply page upsert', 'livecanvas-forge-ai'),
                 __('Applies a LiveCanvas page create/update command. The action is forced to page_upsert and writes only after the caller invokes this dedicated apply ability.', 'livecanvas-forge-ai'),
@@ -284,6 +329,15 @@ final class LCFA_Ability_Registry {
                 [$this, 'can_write'],
                 $write_annotations,
                 $this->write_ability_is_mcp_public('livecanvas-forge-ai/apply-page-upsert')
+            ),
+            'livecanvas-forge-ai/apply-native-pattern-page' => $this->ability(
+                __('Apply native pattern page', 'livecanvas-forge-ai'),
+                __('Creates a new WordPress-native draft page from registered Forge patterns. This dedicated write ability never updates existing content.', 'livecanvas-forge-ai'),
+                $this->native_pattern_page_apply_schema(),
+                [$this, 'apply_native_pattern_page'],
+                [$this, 'can_write'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/apply-native-pattern-page')
             ),
             'livecanvas-forge-ai/apply-global-shell' => $this->ability(
                 __('Apply global shell', 'livecanvas-forge-ai'),
@@ -343,6 +397,77 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    public function get_connection_handoff($input = []): array {
+        $input = $this->normalize_input($input);
+        $limit = absint($input['limit'] ?? 20);
+        if ($limit < 1 || $limit > 40) {
+            $limit = 20;
+        }
+
+        $snapshot = $this->get_snapshot();
+        $diagnostics = $this->get_ability_diagnostics();
+        $runs = $this->get_runs(['limit' => $limit]);
+        $ability = is_array($diagnostics['ability_diagnostics'] ?? null) ? $diagnostics['ability_diagnostics'] : [];
+        $run_items = is_array($runs['runs']['items'] ?? null) ? $runs['runs']['items'] : [];
+        $run_errors = count(array_filter($run_items, static function (array $run): bool {
+            return empty($run['ok']);
+        }));
+        $rollback_ready = count(array_filter($run_items, static function (array $run): bool {
+            return !empty($run['rollback_available']);
+        }));
+        $summary = [
+            'source'         => 'wordpress_ability',
+            'framework'      => sanitize_key((string) (($snapshot['snapshot']['detected_framework'] ?? '') ?: ($snapshot['snapshot']['framework'] ?? ''))),
+            'abilities'      => (int) ($ability['total'] ?? 0),
+            'mcp_public'     => (int) ($ability['mcp_public_total'] ?? 0),
+            'public_writes'  => count((array) ($ability['mcp_public_write'] ?? [])),
+            'runs'           => count($run_items),
+            'run_errors'     => $run_errors,
+            'rollbacks'      => $rollback_ready,
+            'limit'          => $limit,
+        ];
+
+        return [
+            'connection_handoff' => $this->build_agent_handoff_connection_handoff($summary),
+        ];
+    }
+
+    public function get_handoff_summary($input = []): array {
+        $input = $this->normalize_input($input);
+        $limit = absint($input['limit'] ?? 20);
+        if ($limit < 1 || $limit > 40) {
+            $limit = 20;
+        }
+
+        $snapshot = $this->get_snapshot();
+        $diagnostics = $this->get_ability_diagnostics();
+        $runs = $this->get_runs(['limit' => $limit]);
+        $ability = is_array($diagnostics['ability_diagnostics'] ?? null) ? $diagnostics['ability_diagnostics'] : [];
+        $run_items = is_array($runs['runs']['items'] ?? null) ? $runs['runs']['items'] : [];
+        $run_errors = count(array_filter($run_items, static function (array $run): bool {
+            return empty($run['ok']);
+        }));
+        $rollback_ready = count(array_filter($run_items, static function (array $run): bool {
+            return !empty($run['rollback_available']);
+        }));
+        $summary = [
+            'source'         => 'wordpress_ability',
+            'framework'      => sanitize_key((string) (($snapshot['snapshot']['detected_framework'] ?? '') ?: ($snapshot['snapshot']['framework'] ?? ''))),
+            'abilities'      => (int) ($ability['total'] ?? 0),
+            'mcp_public'     => (int) ($ability['mcp_public_total'] ?? 0),
+            'public_writes'  => count((array) ($ability['mcp_public_write'] ?? [])),
+            'runs'           => count($run_items),
+            'run_errors'     => $run_errors,
+            'rollbacks'      => $rollback_ready,
+            'limit'          => $limit,
+        ];
+        $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
+
+        return [
+            'handoff_summary' => $this->build_agent_handoff_summary($summary, $smoke_tests),
+        ];
+    }
+
     public function get_agent_handoff_package($input = []): array {
         $input = $this->normalize_input($input);
         $limit = absint($input['limit'] ?? 20);
@@ -375,8 +500,37 @@ final class LCFA_Ability_Registry {
             'limit'          => $limit,
         ];
         $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
-        $runbook = $this->build_agent_handoff_runbook($summary, $smoke_tests);
+        $connection_handoff = $this->build_agent_handoff_connection_handoff($summary);
+        $block_pattern_library_result = $this->get_block_pattern_library(['include_content' => true]);
+        $block_pattern_library = is_array($block_pattern_library_result['block_pattern_library'] ?? null)
+            ? $block_pattern_library_result['block_pattern_library']
+            : [];
+        $native_pattern_page_blueprints_result = $this->get_native_pattern_page_blueprints(['include_patterns' => true]);
+        $native_pattern_page_blueprints = is_array($native_pattern_page_blueprints_result['native_pattern_page_blueprints'] ?? null)
+            ? $native_pattern_page_blueprints_result['native_pattern_page_blueprints']
+            : [];
+        $runbook = $this->build_agent_handoff_runbook($summary, $smoke_tests, $connection_handoff);
+        $handoff_summary = $this->build_agent_handoff_summary($summary, $smoke_tests);
+        $summary['handoff_status'] = $handoff_summary['status'];
+        $summary['readiness_score'] = $handoff_summary['score'];
+        $summary['unavailable_tests'] = count((array) ($handoff_summary['unavailable_tests'] ?? []));
+        $summary['write_guards'] = count((array) ($handoff_summary['write_guard_tests'] ?? []));
         $package = $this->build_virtual_handoff_package([
+            [
+                'path'       => 'forge-agent-start-prompt.txt',
+                'media_type' => 'text/plain',
+                'content'    => (string) ($connection_handoff['agent_start_prompt'] ?? ''),
+            ],
+            [
+                'path'       => 'forge-handoff-summary.json',
+                'media_type' => 'application/json',
+                'content'    => $this->encode_handoff_json($handoff_summary),
+            ],
+            [
+                'path'       => 'forge-connection-handoff.json',
+                'media_type' => 'application/json',
+                'content'    => $this->encode_handoff_json($connection_handoff),
+            ],
             [
                 'path'       => 'forge-agent-runbook.md',
                 'media_type' => 'text/markdown',
@@ -386,6 +540,16 @@ final class LCFA_Ability_Registry {
                 'path'       => 'forge-agent-smoke-tests.json',
                 'media_type' => 'application/json',
                 'content'    => $this->encode_handoff_json($smoke_tests),
+            ],
+            [
+                'path'       => 'forge-block-pattern-library.json',
+                'media_type' => 'application/json',
+                'content'    => $this->encode_handoff_json($block_pattern_library),
+            ],
+            [
+                'path'       => 'forge-native-pattern-page-blueprints.json',
+                'media_type' => 'application/json',
+                'content'    => $this->encode_handoff_json($native_pattern_page_blueprints),
             ],
             [
                 'path'       => 'forge-ability-diagnostics.json',
@@ -410,6 +574,9 @@ final class LCFA_Ability_Registry {
         ], $summary);
 
         return [
+            'connection_handoff' => $connection_handoff,
+            'block_pattern_library' => $block_pattern_library,
+            'native_pattern_page_blueprints' => $native_pattern_page_blueprints,
             'agent_handoff_package' => $package,
         ];
     }
@@ -546,6 +713,53 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    public function get_block_pattern_library($input = []): array {
+        $input = $this->normalize_input($input);
+        $include_content = !array_key_exists('include_content', $input) || !empty($input['include_content']);
+
+        return [
+            'block_pattern_library' => $this->block_patterns instanceof LCFA_Block_Patterns
+                ? $this->block_patterns->get_pattern_library(['include_content' => $include_content])
+                : [
+                    'schema_version' => 'block-pattern-library.v1',
+                    'available'      => false,
+                    'source'         => 'unavailable',
+                    'category'       => 'livecanvas-forge-ai',
+                    'block'          => 'livecanvas-forge-ai/section-shell',
+                    'include_content' => $include_content,
+                    'counts'         => ['patterns' => 0, 'bytes' => 0],
+                    'context'        => [],
+                    'export'         => [
+                        'format'          => 'wordpress_block_patterns',
+                        'can_import'      => false,
+                        'preview_ability' => 'livecanvas-forge-ai/preview-block-pattern',
+                    ],
+                    'patterns'       => [],
+                ],
+        ];
+    }
+
+    public function get_native_pattern_page_blueprints($input = []): array {
+        $input = $this->normalize_input($input);
+        $include_patterns = !array_key_exists('include_patterns', $input) || !empty($input['include_patterns']);
+
+        return [
+            'native_pattern_page_blueprints' => $this->block_patterns instanceof LCFA_Block_Patterns
+                ? $this->block_patterns->get_native_page_blueprints(['include_patterns' => $include_patterns])
+                : [
+                    'schema_version'   => 'native-pattern-page-blueprints.v1',
+                    'available'        => false,
+                    'source'           => 'unavailable',
+                    'include_patterns' => $include_patterns,
+                    'counts'           => ['blueprints' => 0],
+                    'preview_ability'  => 'livecanvas-forge-ai/preview-native-pattern-page',
+                    'preview_tool'     => 'preview_native_pattern_page',
+                    'preview_route'    => '/wp-json/lcfa/v1/studio/native-pattern-page-preview',
+                    'blueprints'       => [],
+                ],
+        ];
+    }
+
     public function get_runs($input = []): array {
         $input = $this->normalize_input($input);
         $limit = absint($input['limit'] ?? 20);
@@ -677,6 +891,23 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    public function preview_native_pattern_page($input = []): array {
+        $input = $this->normalize_input($input);
+
+        if (!$this->block_patterns instanceof LCFA_Block_Patterns) {
+            return [
+                'native_pattern_page_preview' => [
+                    'ok'      => false,
+                    'message' => __('Block pattern service is not available in this runtime.', 'livecanvas-forge-ai'),
+                ],
+            ];
+        }
+
+        return [
+            'native_pattern_page_preview' => $this->block_patterns->build_native_page_preview($input),
+        ];
+    }
+
     public function apply_page_upsert($input = []): array {
         $payload = $this->normalize_command_payload($input);
         $payload['action'] = 'page_upsert';
@@ -684,6 +915,179 @@ final class LCFA_Ability_Registry {
 
         return [
             'result' => $this->command_deck->execute($this->with_provenance($payload, 'wp_ability_apply_page_upsert', 'wordpress_abilities')),
+        ];
+    }
+
+    public function apply_native_pattern_page($input = []): array {
+        $input = $this->normalize_input($input);
+
+        if (!$this->block_patterns instanceof LCFA_Block_Patterns) {
+            return [
+                'native_pattern_page_apply' => [
+                    'ok'      => false,
+                    'message' => __('Block pattern service is not available in this runtime.', 'livecanvas-forge-ai'),
+                ],
+            ];
+        }
+
+        $preview = $this->block_patterns->build_native_page_preview($input);
+        if (empty($preview['ok']) || !is_array($preview['page'] ?? null)) {
+            return [
+                'native_pattern_page_apply' => [
+                    'ok'      => false,
+                    'message' => sanitize_text_field((string) ($preview['message'] ?? __('Native page preview failed.', 'livecanvas-forge-ai'))),
+                    'preview' => $preview,
+                ],
+            ];
+        }
+
+        if (!function_exists('wp_insert_post')) {
+            return [
+                'native_pattern_page_apply' => [
+                    'ok'      => false,
+                    'message' => __('WordPress post insertion is not available in this runtime.', 'livecanvas-forge-ai'),
+                    'preview' => $preview,
+                ],
+            ];
+        }
+
+        $preview_page = $preview['page'];
+        $title = sanitize_text_field((string) ($input['title'] ?? $preview_page['title'] ?? __('Forge native page', 'livecanvas-forge-ai')));
+        if ($title === '') {
+            $title = __('Forge native page', 'livecanvas-forge-ai');
+        }
+
+        $status = sanitize_key((string) ($input['status'] ?? 'draft'));
+        if (!in_array($status, ['draft', 'pending', 'private'], true)) {
+            $status = 'draft';
+        }
+
+        $postarr = [
+            'post_type'    => 'page',
+            'post_status'  => $status,
+            'post_title'   => $title,
+            'post_content' => (string) ($preview_page['content'] ?? ''),
+        ];
+        $slug = sanitize_title((string) ($input['slug'] ?? ''));
+        if ($slug !== '') {
+            $postarr['post_name'] = $slug;
+        }
+
+        $post_id = wp_insert_post($postarr, true);
+        if (function_exists('is_wp_error') && is_wp_error($post_id)) {
+            return [
+                'native_pattern_page_apply' => [
+                    'ok'      => false,
+                    'message' => method_exists($post_id, 'get_error_message') ? $post_id->get_error_message() : __('WordPress returned an error while creating the native page.', 'livecanvas-forge-ai'),
+                    'preview' => $preview,
+                ],
+            ];
+        }
+
+        $post_id = absint($post_id);
+        if ($post_id < 1) {
+            return [
+                'native_pattern_page_apply' => [
+                    'ok'      => false,
+                    'message' => __('WordPress did not return a created page ID.', 'livecanvas-forge-ai'),
+                    'preview' => $preview,
+                ],
+            ];
+        }
+
+        $audit_id = $this->create_apply_audit_id();
+        $created_at = function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s');
+        $provenance = [
+            'origin'       => 'wp_ability',
+            'processed_by' => 'wp_ability_apply_native_pattern_page',
+            'ruleset'      => 'wordpress_abilities',
+        ];
+        $edit_url = function_exists('get_edit_post_link') ? (string) get_edit_post_link($post_id, '') : '';
+        $frontend_url = function_exists('get_permalink') ? (string) get_permalink($post_id) : '';
+        $message = __('Native pattern page created as a WordPress draft.', 'livecanvas-forge-ai');
+
+        $result = [
+            'ok'             => true,
+            'schema_version' => 'native-pattern-page-apply.v1',
+            'message'        => $message,
+            'audit_id'       => $audit_id,
+            'rollback_available' => true,
+            'page'           => [
+                'id'             => $post_id,
+                'title'          => $title,
+                'status'         => $status,
+                'post_type'      => 'page',
+                'content_format' => 'wordpress_blocks',
+                'bytes'          => absint($preview_page['bytes'] ?? strlen((string) ($preview_page['content'] ?? ''))),
+                'sha256'         => sanitize_text_field((string) ($preview_page['sha256'] ?? '')),
+                'blueprint'      => sanitize_key((string) ($preview_page['blueprint'] ?? '')),
+                'patterns'       => is_array($preview_page['patterns'] ?? null) ? $preview_page['patterns'] : [],
+                'edit_url'       => $edit_url,
+                'frontend_url'   => $frontend_url,
+            ],
+            'preview'        => $preview,
+            'audit'          => [
+                'id'                 => $audit_id,
+                'created_at'         => $created_at,
+                'action'             => 'native_pattern_page_apply',
+                'mode'               => 'apply',
+                'execution_target'   => 'local',
+                'target_type'        => 'page',
+                'target_id'          => $post_id,
+                'target_title'       => $title,
+                'rollback_available' => true,
+                'rollback_reference' => [
+                    'available'   => true,
+                    'type'        => 'created_post',
+                    'target_type' => 'page',
+                    'target_id'   => $post_id,
+                    'content_hash'=> '',
+                ],
+                'provenance'         => $provenance,
+            ],
+        ];
+
+        if (method_exists('LCFA_Settings', 'store_rollback_record')) {
+            LCFA_Settings::store_rollback_record($audit_id, [
+                'audit_id'           => $audit_id,
+                'created_at'         => $created_at,
+                'action'             => 'native_pattern_page_apply',
+                'execution_target'   => 'local',
+                'target_type'        => 'page',
+                'target_id'          => $post_id,
+                'target_title'       => $title,
+                'rollback_reference' => $result['audit']['rollback_reference'],
+                'provenance'         => $provenance,
+                'restore'            => [
+                    'type'             => 'created_post',
+                    'target_type'      => 'page',
+                    'target_id'        => $post_id,
+                    'target_title'     => $title,
+                    'previous_content' => '',
+                    'created_post'     => true,
+                ],
+            ]);
+        }
+
+        if (method_exists('LCFA_Settings', 'append_history')) {
+            LCFA_Settings::append_history([
+                'time'               => $created_at,
+                'audit_id'           => $audit_id,
+                'action'             => 'native_pattern_page_apply',
+                'mode'               => 'apply',
+                'ok'                 => true,
+                'message'            => $message,
+                'summary'            => sprintf(__('Create native pattern page #%d.', 'livecanvas-forge-ai'), $post_id),
+                'target_type'        => 'page',
+                'target_id'          => $post_id,
+                'target_title'       => $title,
+                'rollback_available' => true,
+                'execution_target'   => 'local',
+            ] + $provenance);
+        }
+
+        return [
+            'native_pattern_page_apply' => $result,
         ];
     }
 
@@ -796,6 +1200,14 @@ final class LCFA_Ability_Registry {
         return $payload;
     }
 
+    private function create_apply_audit_id(): string {
+        if (function_exists('wp_generate_password')) {
+            return sanitize_key('audit-' . strtolower(wp_generate_password(12, false, false)));
+        }
+
+        return sanitize_key('audit-' . substr(md5((string) microtime(true)), 0, 12));
+    }
+
     private function write_abilities_are_mcp_public(): bool {
         $connections = LCFA_Settings::get_connections();
 
@@ -858,6 +1270,32 @@ final class LCFA_Ability_Registry {
                     'minimum'     => 1,
                     'maximum'     => 40,
                     'description' => __('Maximum number of recent runs to return.', 'livecanvas-forge-ai'),
+                ],
+            ],
+        ];
+    }
+
+    private function block_pattern_library_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'properties'           => [
+                'include_content' => [
+                    'type'        => 'boolean',
+                    'description' => __('Whether to include full block pattern content in the library export.', 'livecanvas-forge-ai'),
+                ],
+            ],
+        ];
+    }
+
+    private function native_pattern_page_blueprints_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'properties'           => [
+                'include_patterns' => [
+                    'type'        => 'boolean',
+                    'description' => __('Whether to include the pattern names used by each native page blueprint.', 'livecanvas-forge-ai'),
                 ],
             ],
         ];
@@ -1039,6 +1477,56 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    private function native_pattern_page_preview_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'properties'           => [
+                'title' => [
+                    'type'        => 'string',
+                    'description' => __('Draft page title for the native block preview.', 'livecanvas-forge-ai'),
+                ],
+                'pattern_name' => [
+                    'type'        => 'string',
+                    'description' => __('Optional single Forge pattern name or slug to include.', 'livecanvas-forge-ai'),
+                ],
+                'blueprint' => [
+                    'type'        => 'string',
+                    'description' => __('Optional native pattern page blueprint id to compose.', 'livecanvas-forge-ai'),
+                ],
+                'blueprint_id' => [
+                    'type'        => 'string',
+                    'description' => __('Alias for blueprint.', 'livecanvas-forge-ai'),
+                ],
+                'pattern_names' => [
+                    'type'        => 'array',
+                    'items'       => ['type' => 'string'],
+                    'description' => __('Optional ordered Forge pattern names or slugs to compose.', 'livecanvas-forge-ai'),
+                ],
+                'patterns' => [
+                    'type'        => 'array',
+                    'items'       => ['type' => 'string'],
+                    'description' => __('Alias for pattern_names.', 'livecanvas-forge-ai'),
+                ],
+            ],
+        ];
+    }
+
+    private function native_pattern_page_apply_schema(): array {
+        $schema = $this->native_pattern_page_preview_schema();
+        $schema['properties']['slug'] = [
+            'type'        => 'string',
+            'description' => __('Optional new page slug. The ability always creates a new native page.', 'livecanvas-forge-ai'),
+        ];
+        $schema['properties']['status'] = [
+            'type'        => 'string',
+            'enum'        => ['draft', 'pending', 'private'],
+            'description' => __('Post status for the new native page. Publish is intentionally not supported by this ability.', 'livecanvas-forge-ai'),
+        ];
+
+        return $schema;
+    }
+
     private function audit_rollback_schema(): array {
         return [
             'type'                 => 'object',
@@ -1094,12 +1582,39 @@ final class LCFA_Ability_Registry {
             'low'
         );
         $add(
+            'block_pattern_library',
+            'read_only',
+            __('Block pattern library export', 'livecanvas-forge-ai'),
+            'livecanvas-forge-ai/get-block-pattern-library',
+            ['include_content' => true],
+            __('Returns export-ready native WordPress patterns without writing.', 'livecanvas-forge-ai'),
+            'low'
+        );
+        $add(
+            'native_pattern_page_blueprints',
+            'read_only',
+            __('Native pattern page blueprints', 'livecanvas-forge-ai'),
+            'livecanvas-forge-ai/get-native-pattern-page-blueprints',
+            ['include_patterns' => true],
+            __('Returns no-write native page blueprint recipes without writing.', 'livecanvas-forge-ai'),
+            'low'
+        );
+        $add(
             'agent_handoff_package',
             'read_only',
             __('Agent handoff package', 'livecanvas-forge-ai'),
             'livecanvas-forge-ai/get-agent-handoff-package',
             ['limit' => (int) ($summary['limit'] ?? 20)],
             __('Returns this virtual file bundle without writing.', 'livecanvas-forge-ai'),
+            'low'
+        );
+        $add(
+            'handoff_summary',
+            'read_only',
+            __('Handoff summary', 'livecanvas-forge-ai'),
+            'livecanvas-forge-ai/get-handoff-summary',
+            ['limit' => (int) ($summary['limit'] ?? 20)],
+            __('Returns compact readiness, blocker, warning, and next-action metadata without writing.', 'livecanvas-forge-ai'),
             'low'
         );
         $add(
@@ -1121,6 +1636,18 @@ final class LCFA_Ability_Registry {
                 'framework' => (string) (($summary['framework'] ?? '') ?: 'auto'),
             ],
             __('Returns validation output without writing.', 'livecanvas-forge-ai'),
+            'low'
+        );
+        $add(
+            'native_pattern_page_preview',
+            'preview',
+            __('Native pattern page preview', 'livecanvas-forge-ai'),
+            'livecanvas-forge-ai/preview-native-pattern-page',
+            [
+                'title' => __('Forge native page smoke test', 'livecanvas-forge-ai'),
+                'pattern_names' => ['conversion-hero', 'feature-grid'],
+            ],
+            __('Returns a composed WordPress block page preview without writing.', 'livecanvas-forge-ai'),
             'low'
         );
         $add(
@@ -1146,6 +1673,15 @@ final class LCFA_Ability_Registry {
             __('Do not execute automatically; review preview, allowlist, and rollback plan first.', 'livecanvas-forge-ai'),
             'write'
         );
+        $add(
+            'native_pattern_page_apply_guard',
+            'write_guard',
+            __('Native pattern page apply guard', 'livecanvas-forge-ai'),
+            'livecanvas-forge-ai/apply-native-pattern-page',
+            [],
+            __('Do not execute automatically; run native_pattern_page_preview first, review the result, then create only a new draft page after approval.', 'livecanvas-forge-ai'),
+            'write'
+        );
 
         return [
             'mode'              => 'read_only_first',
@@ -1165,7 +1701,62 @@ final class LCFA_Ability_Registry {
         ];
     }
 
-    private function build_agent_handoff_runbook(array $summary, array $smoke_tests): string {
+    private function build_agent_handoff_connection_handoff(array $summary): array {
+        $connections = LCFA_Settings::get_public_connections();
+        $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        if ($client === 'claude-code') {
+            $client = 'claude';
+        }
+        if (!in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)) {
+            $client = '';
+        }
+
+        $mode = sanitize_key((string) ($connections['connection_mode'] ?? ''));
+        if (!in_array($mode, ['local', 'remote'], true)) {
+            $mode = '';
+        }
+
+        $status = sanitize_key((string) ($connections['connection_status'] ?? ''));
+        if ($status === '') {
+            $status = 'unknown';
+        }
+
+        $prompt_lines = [
+            __('Use the LiveCanvas Forge AI WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
+            __('First call livecanvas-forge-ai/get-connection-handoff with {"limit":5}.', 'livecanvas-forge-ai'),
+            __('If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.', 'livecanvas-forge-ai'),
+            __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
+            __('Then call livecanvas-forge-ai/get-agent-handoff-package with {"limit":5} only if you need the full runbook, smoke tests, ability diagnostics, MCP status, AI status, or recent run summary.', 'livecanvas-forge-ai'),
+            __('Then run read-only checks starting with livecanvas-forge-ai/get-snapshot, livecanvas-forge-ai/get-ability-diagnostics, and livecanvas-forge-ai/get-runs when available.', 'livecanvas-forge-ai'),
+            __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
+            __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
+        ];
+        $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
+
+        return [
+            'schema_version' => 'connection-handoff.v1',
+            'source'         => 'wordpress_ability',
+            'client'         => $client,
+            'mode'           => $mode,
+            'status'         => $status,
+            'transport'      => 'wordpress_ability',
+            'agent_start_tool' => 'livecanvas-forge-ai/get-connection-handoff',
+            'connection_handoff_tool' => 'livecanvas-forge-ai/get-connection-handoff',
+            'handoff_package_tool' => 'livecanvas-forge-ai/get-agent-handoff-package',
+            'agent_start_prompt' => implode("\n", $prompt_lines),
+            'agent_start_prompt_lines' => $prompt_lines,
+            'guardrail'      => 'read_only_first',
+            'summary'        => [
+                'framework'        => sanitize_key((string) ($summary['framework'] ?? '')),
+                'abilities'        => (int) ($summary['abilities'] ?? 0),
+                'mcp_public'       => (int) ($summary['mcp_public'] ?? 0),
+                'public_writes'    => (int) ($summary['public_writes'] ?? 0),
+                'run_errors'       => (int) ($summary['run_errors'] ?? 0),
+            ],
+        ];
+    }
+
+    private function build_agent_handoff_runbook(array $summary, array $smoke_tests, array $connection_handoff): string {
         $lines = [
             '# LiveCanvas Forge AI Agent Handoff',
             '',
@@ -1175,8 +1766,10 @@ final class LCFA_Ability_Registry {
             '- Abilities: ' . (int) ($summary['abilities'] ?? 0) . ' total, ' . (int) ($summary['mcp_public'] ?? 0) . ' MCP-public',
             '- MCP-public writes: ' . (int) ($summary['public_writes'] ?? 0),
             '- Recent runs: ' . (int) ($summary['runs'] ?? 0) . ', errors: ' . (int) ($summary['run_errors'] ?? 0) . ', rollback-ready: ' . (int) ($summary['rollbacks'] ?? 0),
+            '- Agent start tool: `' . sanitize_text_field((string) ($connection_handoff['agent_start_tool'] ?? '')) . '`',
             '',
             '## Guardrails',
+            '- [ ] Fetch the connection handoff before inspecting or editing content.',
             '- [ ] Start with get-snapshot, get-ability-diagnostics, and get-runs.',
             '- [ ] Use preview abilities before apply abilities.',
             '- [ ] Do not execute write abilities automatically.',
@@ -1197,6 +1790,18 @@ final class LCFA_Ability_Registry {
                 sanitize_text_field((string) ($test['label'] ?? $test['id'] ?? 'Smoke test')),
                 sanitize_text_field((string) ($test['ability'] ?? ''))
             );
+        }
+
+        $prompt = (string) ($connection_handoff['agent_start_prompt'] ?? '');
+        if (trim($prompt) !== '') {
+            $lines[] = '';
+            $lines[] = '## First Agent Prompt';
+            foreach (preg_split('/\r\n|\r|\n/', $prompt) ?: [] as $line) {
+                $line = sanitize_text_field((string) $line);
+                if ($line !== '') {
+                    $lines[] = $line;
+                }
+            }
         }
 
         return implode("\n", array_values(array_map('sanitize_text_field', $lines)));
@@ -1263,12 +1868,82 @@ final class LCFA_Ability_Registry {
                 'mcp_public'    => (int) ($summary['mcp_public'] ?? 0),
                 'public_writes' => (int) ($summary['public_writes'] ?? 0),
                 'run_errors'    => (int) ($summary['run_errors'] ?? 0),
+                'status'        => sanitize_key((string) ($summary['handoff_status'] ?? '')),
+                'readiness_score' => absint($summary['readiness_score'] ?? 0),
+                'unavailable_tests' => absint($summary['unavailable_tests'] ?? 0),
+                'write_guards'   => absint($summary['write_guards'] ?? 0),
                 'files'         => count($files),
                 'bytes'         => $total_bytes,
                 'checksum'      => $package_checksum,
             ],
             'manifest'         => $manifest,
             'files'            => $files,
+        ];
+    }
+
+    private function build_agent_handoff_summary(array $summary, array $smoke_tests): array {
+        $tests = is_array($smoke_tests['tests'] ?? null) ? $smoke_tests['tests'] : [];
+        $unavailable_tests = [];
+        $write_guard_tests = [];
+        $public_write_tests = [];
+
+        foreach ($tests as $test) {
+            if (!is_array($test)) {
+                continue;
+            }
+
+            $entry = [
+                'id'                   => sanitize_key((string) ($test['id'] ?? '')),
+                'phase'                => sanitize_key((string) ($test['phase'] ?? 'read_only')),
+                'label'                => sanitize_text_field((string) ($test['label'] ?? '')),
+                'ability'              => sanitize_text_field((string) ($test['ability'] ?? '')),
+                'risk'                 => sanitize_key((string) ($test['risk'] ?? 'low')),
+                'available'            => !empty($test['available']),
+                'public_write_exposed' => !empty($test['public_write_exposed']),
+            ];
+
+            if (empty($entry['available'])) {
+                $unavailable_tests[] = $entry;
+            }
+
+            if (($entry['phase'] ?? '') === 'write_guard') {
+                $write_guard_tests[] = $entry;
+            }
+
+            if (!empty($entry['public_write_exposed'])) {
+                $public_write_tests[] = $entry;
+            }
+        }
+
+        $run_errors = (int) ($summary['run_errors'] ?? 0);
+        $public_writes = (int) ($summary['public_writes'] ?? 0);
+        $status = !empty($unavailable_tests) ? 'blocked' : (($run_errors > 0 || $public_writes > 0) ? 'review' : 'ready');
+        $score = 100;
+        if (!empty($unavailable_tests)) {
+            $score -= min(50, count($unavailable_tests) * 10);
+        }
+        if ($run_errors > 0) {
+            $score -= 10;
+        }
+        if ($public_writes > 0) {
+            $score -= 15;
+        }
+        $score = max(0, min(100, $score));
+
+        return [
+            'schema_version'       => 'handoff-summary.v1',
+            'source'               => 'wordpress_ability',
+            'status'               => $status,
+            'recommended_mode'     => $status === 'ready' ? 'preview_first' : ($status === 'blocked' ? 'read_only_only' : 'guarded_preview'),
+            'score'                => $score,
+            'next_action'          => $status === 'ready' ? 'run_preview_before_apply' : ($status === 'blocked' ? 'resolve_missing_abilities' : 'review_warnings'),
+            'framework'            => sanitize_key((string) ($summary['framework'] ?? '')),
+            'public_writes'        => $public_writes,
+            'run_errors'           => $run_errors,
+            'smoke_counts'         => is_array($smoke_tests['counts'] ?? null) ? $smoke_tests['counts'] : [],
+            'unavailable_tests'    => $unavailable_tests,
+            'write_guard_tests'    => $write_guard_tests,
+            'public_write_tests'   => $public_write_tests,
         ];
     }
 

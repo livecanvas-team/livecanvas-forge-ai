@@ -36,8 +36,14 @@ class CaptureClient extends WPClient {
     },
   })
   await client.getAgentHandoffPackage({ limit: 3 })
+  await client.getHandoffSummary({ limit: 2 })
+  await client.getConnectionHandoff({ limit: 4 })
+  await client.getBlockPatternLibrary({ include_content: false })
+  await client.getNativePatternPageBlueprints({ include_patterns: false })
+  await client.previewNativePatternPage({ title: 'Native Pattern Page', pattern_names: ['conversion-hero'] })
+  await client.applyNativePatternPage({ title: 'Native Pattern Page', blueprint: 'starter-landing' })
 
-  assert.strictEqual(client.calls.length, 5, 'suggestCommand, runCommand, agent queue helpers, and handoff package should call the REST API once each')
+  assert.strictEqual(client.calls.length, 11, 'suggestCommand, runCommand, agent queue helpers, handoff package, handoff summary, connection handoff, block pattern library, native page blueprints, native pattern page preview, and native pattern page apply should call the REST API once each')
 
   const suggestBody = client.calls[0].options.body
   assert.strictEqual(client.calls[0].route, 'command/suggest', 'suggestCommand should call command/suggest')
@@ -68,6 +74,30 @@ class CaptureClient extends WPClient {
   assert.strictEqual(client.calls[4].method, 'GET', 'getAgentHandoffPackage should read from the REST API')
   assert.strictEqual(client.calls[4].route, 'studio/handoff-package', 'getAgentHandoffPackage should call the dedicated handoff package endpoint')
   assert.strictEqual(client.calls[4].options.query.limit, 3, 'getAgentHandoffPackage should pass the requested run limit')
+
+  assert.strictEqual(client.calls[5].method, 'GET', 'getHandoffSummary should read from the REST API')
+  assert.strictEqual(client.calls[5].route, 'studio/handoff-summary', 'getHandoffSummary should call the dedicated handoff summary endpoint')
+  assert.strictEqual(client.calls[5].options.query.limit, 2, 'getHandoffSummary should pass the requested run limit')
+
+  assert.strictEqual(client.calls[6].method, 'GET', 'getConnectionHandoff should read from the REST API')
+  assert.strictEqual(client.calls[6].route, 'studio/connection-handoff', 'getConnectionHandoff should call the dedicated connection handoff endpoint')
+  assert.strictEqual(client.calls[6].options.query.limit, 4, 'getConnectionHandoff should pass the requested run limit')
+
+  assert.strictEqual(client.calls[7].method, 'GET', 'getBlockPatternLibrary should read from the REST API')
+  assert.strictEqual(client.calls[7].route, 'studio/block-pattern-library', 'getBlockPatternLibrary should call the dedicated block pattern library endpoint')
+  assert.strictEqual(client.calls[7].options.query.include_content, false, 'getBlockPatternLibrary should pass metadata-only export preference')
+
+  assert.strictEqual(client.calls[8].method, 'GET', 'getNativePatternPageBlueprints should read from the REST API')
+  assert.strictEqual(client.calls[8].route, 'studio/native-pattern-page-blueprints', 'getNativePatternPageBlueprints should call the dedicated native pattern page blueprints endpoint')
+  assert.strictEqual(client.calls[8].options.query.include_patterns, false, 'getNativePatternPageBlueprints should pass metadata-only export preference')
+
+  assert.strictEqual(client.calls[9].method, 'POST', 'previewNativePatternPage should post to the REST API')
+  assert.strictEqual(client.calls[9].route, 'studio/native-pattern-page-preview', 'previewNativePatternPage should call the native pattern page preview endpoint')
+  assert.deepStrictEqual(client.calls[9].options.body.pattern_names, ['conversion-hero'], 'previewNativePatternPage should pass pattern names')
+
+  assert.strictEqual(client.calls[10].method, 'POST', 'applyNativePatternPage should post to the REST API')
+  assert.strictEqual(client.calls[10].route, 'studio/native-pattern-page-apply', 'applyNativePatternPage should call the native pattern page apply endpoint')
+  assert.strictEqual(client.calls[10].options.body.blueprint, 'starter-landing', 'applyNativePatternPage should pass blueprint id')
 
   console.log('PASS wp_client_provenance_phase1')
 })().catch((error) => {
