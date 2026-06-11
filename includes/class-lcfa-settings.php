@@ -1473,6 +1473,7 @@ final class LCFA_Settings {
             'page_upsert'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
             'create_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
             'update_page'             => ['preview' => 'livecanvas-forge-ai/preview-page-upsert', 'apply' => 'livecanvas-forge-ai/apply-page-upsert'],
+            'update_partial'          => ['preview' => '', 'apply' => ''],
             'native_pattern_page_apply' => ['preview' => 'livecanvas-forge-ai/preview-native-pattern-page', 'apply' => 'livecanvas-forge-ai/apply-native-pattern-page'],
             'create_native_pattern_page' => ['preview' => 'livecanvas-forge-ai/preview-native-pattern-page', 'apply' => 'livecanvas-forge-ai/apply-native-pattern-page'],
             'global_shell_apply'      => ['preview' => 'livecanvas-forge-ai/preview-global-shell', 'apply' => 'livecanvas-forge-ai/apply-global-shell'],

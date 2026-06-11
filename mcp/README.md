@@ -106,6 +106,7 @@ Core companion tools:
 - `list_command_actions`
 - `suggest_lc_command`
 - `run_lc_command`
+- `update_partial` through `run_lc_command` for reusable LiveCanvas partials
 
 Theme filesystem tools:
 

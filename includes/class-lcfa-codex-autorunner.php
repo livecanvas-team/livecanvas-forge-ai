@@ -147,7 +147,7 @@ final class LCFA_Codex_Autorunner {
             '1. Before any analysis, call mcp__livecanvas_forge__get_frontend_prompt_request with {"agent":"' . $agent . '","request_id":"' . $request_id . '"}. If your runtime exposes un-namespaced MCP tools, call get_frontend_prompt_request with the same payload.',
             '2. If no request is returned, call fail_frontend_prompt_request for request_id "' . $request_id . '" with a clear reason and stop.',
             '3. Use the returned payload, page context, theme context, and page HTML to decide the safest change.',
-            '4. Apply the change through run_lc_command. For page changes use action "' . $action . '", target_id/post_id ' . (string) $post_id . ', auto_apply true when the user asked for a direct frontend change.',
+            '4. Apply the change through run_lc_command. Use action "' . $action . '", target_id/post_id ' . (string) $post_id . ', auto_apply true when the user asked for a direct frontend change.',
             '5. Call complete_frontend_prompt_request with request_id "' . $request_id . '" and the exact run_lc_command result.',
             '6. If you cannot safely apply the request, call fail_frontend_prompt_request with request_id "' . $request_id . '".',
             '',

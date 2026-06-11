@@ -225,6 +225,11 @@ async function run() {
     /site_foundation_run/i,
     'run_lc_command should document the foundation orchestration action'
   )
+  assert.match(
+    runLcCommand.description,
+    /update_partial/i,
+    'run_lc_command should document generic partial writes'
+  )
 
   const frameworkClient = createFrameworkAwareClient('picowind')
   const frameworkRegistry = createToolRegistry(

@@ -242,6 +242,16 @@ final class LCFA_Context_Builder {
                     __('Targets the LiveCanvas footer partial for global closing sections and legal/footer UI.', 'livecanvas-forge-ai'),
                 ],
             ],
+            'partial' => [
+                'label'          => __('Generic partial', 'livecanvas-forge-ai'),
+                'target_type'    => 'partial',
+                'command_action' => 'update_partial',
+                'count'          => count((array) ($inventory['other_partials'] ?? [])),
+                'supports_preview' => true,
+                'notes'          => [
+                    __('Use when editing a reusable LiveCanvas partial that is not the global header or footer.', 'livecanvas-forge-ai'),
+                ],
+            ],
             'dynamic_template' => [
                 'label'          => __('Dynamic template', 'livecanvas-forge-ai'),
                 'target_type'    => 'dynamic_template',

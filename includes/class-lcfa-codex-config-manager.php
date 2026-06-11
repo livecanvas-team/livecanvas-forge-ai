@@ -4,6 +4,12 @@ defined('ABSPATH') || exit;
 
 final class LCFA_Codex_Config_Manager {
     private const SERVER_NAME = 'livecanvas-forge';
+    private const NODE_PATH_CANDIDATES = [
+        '/opt/homebrew/bin/node',
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+        '/opt/local/bin/node',
+    ];
 
     public function get_expected_config(array $connections = []): array {
         $connections = $connections !== [] ? $connections : LCFA_Settings::get_connections();
@@ -16,9 +22,10 @@ final class LCFA_Codex_Config_Manager {
             'LCFA_SITE_URL'     => trailingslashit(home_url('/')),
             'LCFA_WP_ROOT'      => $wp_root,
         ];
-        $command = 'node';
+        $command = $this->resolve_node_command();
         $args = [$script_path, '--transport=stdio'];
         $fingerprint = [
+            'node_command' => $command,
             'script_path' => $script_path,
             'rest_base'   => $environment['LCFA_REST_BASE'],
             'site_url'    => $environment['LCFA_SITE_URL'],
@@ -153,7 +160,7 @@ final class LCFA_Codex_Config_Manager {
                 : __('Codex is pointing to an old plugin path. Sync Codex config.', 'livecanvas-forge-ai'),
             'path'    => (string) $expected['script_path'],
         ];
-        $checks['node'] = $this->check_node();
+        $checks['node'] = $this->check_node($expected);
 
         if (empty($checks['rest_health']['ok']) || empty($checks['script']['ok']) || empty($checks['node']['ok'])) {
             return $this->summarize_smoke($expected, $checks);
@@ -213,20 +220,22 @@ final class LCFA_Codex_Config_Manager {
         ];
     }
 
-    private function check_node(): array {
-        $execution = $this->run_process('node --version', [], untrailingslashit(ABSPATH), 8);
+    private function check_node(array $expected): array {
+        $command = (string) ($expected['command'] ?? 'node');
+        $execution = $this->run_process($this->quote_shell_value($command) . ' --version', [], untrailingslashit(ABSPATH), 8);
 
         return [
             'ok'      => !empty($execution['ok']),
             'message' => !empty($execution['ok'])
-                ? trim((string) ($execution['stdout'] ?? ''))
-                : __('Node.js is not available to the current PHP process.', 'livecanvas-forge-ai'),
+                ? sprintf(__('Node.js is available: %1$s (%2$s)', 'livecanvas-forge-ai'), trim((string) ($execution['stdout'] ?? '')), $command)
+                : sprintf(__('Node.js is not available to the current PHP process. Install Node.js or set LCFA_NODE_BINARY to an executable node path. Checked command: %s', 'livecanvas-forge-ai'), $command),
+            'command' => $command,
         ];
     }
 
     private function run_mcp_status_tool(array $expected): array {
         $args = [
-            'node',
+            (string) ($expected['command'] ?? 'node'),
             (string) $expected['script_path'],
             '--tool',
             'get_mcp_status',
@@ -344,6 +353,48 @@ final class LCFA_Codex_Config_Manager {
         return implode(' ', array_map([$this, 'quote_shell_value'], $parts));
     }
 
+    private function resolve_node_command(): string {
+        foreach (['LCFA_NODE_BINARY', 'NODE_BINARY'] as $env_key) {
+            $candidate = trim((string) getenv($env_key));
+            if ($candidate !== '' && is_executable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        foreach ($this->get_node_path_candidates() as $candidate) {
+            if ($candidate !== '' && is_executable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        $execution = $this->run_process('command -v node', [], defined('ABSPATH') ? untrailingslashit((string) ABSPATH) : '', 3);
+        $resolved = trim((string) ($execution['stdout'] ?? ''));
+        if (!empty($execution['ok']) && $resolved !== '' && is_executable($resolved)) {
+            return $resolved;
+        }
+
+        return 'node';
+    }
+
+    private function get_node_path_candidates(): array {
+        $candidates = self::NODE_PATH_CANDIDATES;
+        $home = trim((string) getenv('HOME'));
+        if ($home !== '') {
+            $nvm_matches = glob(rtrim($home, '/\\') . '/.nvm/versions/node/*/bin/node');
+            if (is_array($nvm_matches)) {
+                rsort($nvm_matches, SORT_NATURAL);
+                $candidates = array_merge($candidates, $nvm_matches);
+            }
+            $fnm_matches = glob(rtrim($home, '/\\') . '/.local/share/fnm/node-versions/*/installation/bin/node');
+            if (is_array($fnm_matches)) {
+                rsort($fnm_matches, SORT_NATURAL);
+                $candidates = array_merge($candidates, $fnm_matches);
+            }
+        }
+
+        return array_values(array_unique(array_map('strval', $candidates)));
+    }
+
     private function get_config_path(): string {
         $home = (string) getenv('HOME');
         if ($home === '') {
@@ -451,6 +502,16 @@ final class LCFA_Codex_Config_Manager {
                 $environment[$key] = $value;
             }
         }
+        $path_parts = array_filter(explode(PATH_SEPARATOR, (string) ($environment['PATH'] ?? '')));
+        $path_parts = array_merge($path_parts, [
+            '/opt/homebrew/bin',
+            '/usr/local/bin',
+            '/usr/bin',
+            '/bin',
+            '/usr/sbin',
+            '/sbin',
+        ]);
+        $environment['PATH'] = implode(PATH_SEPARATOR, array_values(array_unique($path_parts)));
 
         return $environment;
     }

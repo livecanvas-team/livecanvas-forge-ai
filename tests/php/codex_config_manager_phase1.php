@@ -6,15 +6,20 @@ $tmp = sys_get_temp_dir() . '/lcfa-codex-config-manager-' . getmypid();
 $wp_root = $tmp . '/site';
 $plugin_root = $wp_root . '/wp-content/plugins/livecanvas-forge-ai';
 $home = $tmp . '/home';
+$node_binary = $tmp . '/bin/node';
 @mkdir($plugin_root . '/mcp/bin', 0777, true);
 @mkdir($home, 0777, true);
+@mkdir(dirname($node_binary), 0777, true);
 file_put_contents($wp_root . '/wp-load.php', '<?php');
 file_put_contents($plugin_root . '/mcp/bin/livecanvas-forge-mcp.js', '#!/usr/bin/env node');
+file_put_contents($node_binary, "#!/usr/bin/env sh\necho v99.0.0\n");
+chmod($node_binary, 0777);
 
 define('ABSPATH', $wp_root . '/');
 define('LCFA_DIR', $plugin_root . '/');
 define('LCFA_VERSION', 'test');
 putenv('HOME=' . $home);
+putenv('LCFA_NODE_BINARY=' . $node_binary);
 
 function __($text, $domain = null) { return $text; }
 function trailingslashit($value) { return rtrim((string) $value, '/') . '/'; }
@@ -57,6 +62,7 @@ function lcfa_config_assert_contains(string $needle, string $haystack, string $m
 
 $manager = new LCFA_Codex_Config_Manager();
 $expected = $manager->get_expected_config(LCFA_Settings::get_connections());
+lcfa_config_assert_contains('command = "' . $node_binary . '"', $expected['snippet'], 'expected TOML should use an explicit Node binary when LCFA_NODE_BINARY is available');
 lcfa_config_assert_contains($plugin_root . '/mcp/bin/livecanvas-forge-mcp.js', $expected['snippet'], 'expected TOML should point to the current plugin MCP script');
 lcfa_config_assert_contains('LCFA_MCP_TOKEN = "new-token"', $expected['snippet'], 'expected TOML should contain the current MCP token');
 lcfa_config_assert_contains('LCFA_WP_ROOT = "' . untrailingslashit(ABSPATH) . '"', $expected['snippet'], 'expected TOML should contain the current WordPress root');

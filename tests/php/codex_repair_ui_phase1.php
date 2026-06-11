@@ -19,8 +19,16 @@ lcfa_repair_assert_contains("class-lcfa-codex-config-manager.php", $plugin, 'plu
 lcfa_repair_assert_contains("admin_post_lcfa_repair_codex_connection", $admin, 'admin should register the Codex repair post action');
 lcfa_repair_assert_contains("Repair Codex Connection", $admin, 'Connections UI should render a repair panel for Codex');
 lcfa_repair_assert_contains("codex_repair_action", $admin, 'Codex repair forms should post a specific repair action');
+lcfa_repair_assert_contains("get_codex_onboarding_state", $admin, 'Connections UI should expose a unified Codex onboarding state model');
+lcfa_repair_assert_contains("render_codex_fast_path_panel", $admin, 'Connections UI should render Codex as the fast path');
+lcfa_repair_assert_contains("connect_codex", $admin, 'Codex fast path should post a composite connect action');
+lcfa_repair_assert_contains("Other clients", $admin, 'non-Codex clients should remain available under Other clients');
 lcfa_repair_assert_contains("sync_local_workspace_root(true)", $admin, 'Codex repair should force-sync WordPress workspace root');
 lcfa_repair_assert_contains("Restart Codex or reload the MCP server", $admin, 'Codex repair should tell the user to restart Codex after config changes');
+lcfa_repair_assert_contains("connection_current_step'] = 'smoke_test'", $admin, 'Codex connect should move to smoke_test instead of ready');
+lcfa_repair_assert_contains("@automattic/mcp-wordpress-remote@latest", $admin, 'remote Codex should use the WordPress MCP remote adapter package');
+lcfa_repair_assert_contains("Remote Codex prerequisites", $admin, 'remote Codex should block setup behind a prerequisite checklist');
+lcfa_repair_assert_contains("does not use LCFA_WP_ROOT", $admin, 'remote Codex UI should make clear that no local WordPress root is used');
 lcfa_repair_assert_contains("connection_last_bundle_hash", $settings, 'settings should keep a fingerprint field for verified connection config');
 lcfa_repair_assert_contains("normalize_local_workspace_root", $settings, 'settings should normalize stale local workspace roots');
 lcfa_repair_assert_contains("mcp remove livecanvas-forge", $bundle_builder, 'Codex helper should remove stale registration before adding the current one');

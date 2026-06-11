@@ -115,17 +115,21 @@ final class LCFA_Prompt_Suggester {
             $suggested['action'] = $this->contains_any($prompt, ['create', 'new', 'generate']) ? 'create_dynamic_template' : 'update_dynamic_template';
             $reasons[] = __('Detected a dynamic template request.', 'livecanvas-forge-ai');
             $score += 2;
-        } elseif ($context_target_type === 'header' && $this->looks_like_write_request($prompt)) {
+        } elseif ($context_target_type === 'header' && ($this->looks_like_write_request($prompt) || $section_intent !== '')) {
             $suggested['action'] = 'update_header';
             $reasons[] = __('The current editor context is a header partial, so the request maps to update_header.', 'livecanvas-forge-ai');
             $score += 2;
-        } elseif ($context_target_type === 'footer' && $this->looks_like_write_request($prompt)) {
+        } elseif ($context_target_type === 'footer' && ($this->looks_like_write_request($prompt) || $section_intent !== '')) {
             $suggested['action'] = 'update_footer';
             $reasons[] = __('The current editor context is a footer partial, so the request maps to update_footer.', 'livecanvas-forge-ai');
             $score += 2;
-        } elseif ($context_target_type === 'dynamic_template' && $this->looks_like_write_request($prompt)) {
+        } elseif ($context_target_type === 'dynamic_template' && ($this->looks_like_write_request($prompt) || $section_intent !== '')) {
             $suggested['action'] = 'update_dynamic_template';
             $reasons[] = __('The current editor context is a dynamic template, so the request maps to update_dynamic_template.', 'livecanvas-forge-ai');
+            $score += 2;
+        } elseif ($context_target_type === 'partial' && ($this->looks_like_write_request($prompt) || $section_intent !== '')) {
+            $suggested['action'] = 'update_partial';
+            $reasons[] = __('The current editor context is a generic LiveCanvas partial, so the request maps to update_partial.', 'livecanvas-forge-ai');
             $score += 2;
         } elseif ($prioritize_page_intent) {
             $suggested['action'] = $this->detect_page_action($prompt, $suggested['target_id']);
@@ -483,12 +487,27 @@ final class LCFA_Prompt_Suggester {
             'modifica',
             'riscrivi',
             'rifinisci',
+            'rendi',
+            'migliora',
+            'sistema',
+            'correggi',
+            'cambia',
+            'sposta',
+            'riduci',
+            'rimpicciolisci',
+            'ingrandisci',
+            'aumenta',
+            'ottimizza',
+            'semplifica',
+            'pulisci',
+            'snellisci',
+            'allinea',
         ]);
     }
 
     private function should_prioritize_page_intent(string $prompt, int $target_id, string $section_intent = ''): bool {
         $mentions_page = $this->contains_any($prompt, ['landing page', 'homepage', 'home page', 'page', 'pagina']);
-        $mentions_page_write = $this->contains_any($prompt, ['create', 'new', 'generate', 'build', 'make', 'add', 'insert', 'append', 'update', 'edit', 'modify', 'rewrite', 'refresh', 'crea', 'genera', 'aggiorna', 'aggiungi', 'inserisci', 'metti', 'fammi', 'creami', 'modifica', 'riscrivi']);
+        $mentions_page_write = $this->looks_like_write_request($prompt);
         $explicit_windpress_runtime = $this->contains_any($prompt, [
             'build tailwind cache',
             'compile tailwind',

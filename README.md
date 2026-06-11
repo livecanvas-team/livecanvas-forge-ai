@@ -163,6 +163,7 @@ Common `run_lc_command` actions:
 | `design_system_apply` | Apply normalized design tokens to the active stack. |
 | `global_shell_apply` | Create or update LiveCanvas header/footer partials. |
 | `page_upsert` | Create or update a LiveCanvas page and return URLs. |
+| `update_partial` | Update a reusable LiveCanvas partial that is not header/footer. |
 | `create_dynamic_template` | Create a LiveCanvas dynamic template. |
 | `update_dynamic_template` | Update a LiveCanvas dynamic template. |
 | `site_foundation_run` | Orchestrate preflight, design system, shell, and starter pages. |

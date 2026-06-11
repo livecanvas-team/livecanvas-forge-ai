@@ -1020,11 +1020,44 @@ final class LCFA_Admin {
         check_admin_referer('lcfa_repair_codex_connection');
 
         $repair_action = sanitize_key((string) ($_POST['codex_repair_action'] ?? ''));
-        $connections = method_exists('LCFA_Settings', 'sync_local_workspace_root')
+        $stored_connections = LCFA_Settings::get_connections();
+        $requested_mode = $this->normalize_connection_mode((string) ($_POST['connection_mode'] ?? ($stored_connections['connection_mode'] ?: 'local')));
+        $connections = $requested_mode === 'local' && method_exists('LCFA_Settings', 'sync_local_workspace_root')
             ? LCFA_Settings::sync_local_workspace_root(true)
-            : LCFA_Settings::get_connections();
+            : $stored_connections;
         $connections['preferred_client'] = 'codex';
-        $connections['connection_mode'] = 'local';
+        $connections['connection_mode'] = $requested_mode;
+
+        if (($repair_action === 'connect_codex' || $repair_action === 'sync_codex') && $requested_mode === 'remote') {
+            $remote_prerequisites = $this->get_remote_codex_prerequisites($connections, $this->remote_client->get_status());
+            if (empty($remote_prerequisites['ready'])) {
+                $connections['connection_status'] = '';
+                $connections['connection_last_verified_at'] = '';
+                $connections['connection_last_error'] = __('Complete the remote URL, username, and Application Password before connecting Codex remotely.', 'livecanvas-forge-ai');
+                $connections['connection_current_step'] = 'confirm_details';
+                LCFA_Settings::update_connections($connections);
+                LCFA_Settings::set_notice($connections['connection_last_error'], 'error');
+                wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+                exit;
+            }
+
+            $bundle = $this->build_selected_connection_bundle([
+                'preferred_client' => 'codex',
+                'connection_mode'  => 'remote',
+                'workspace_root'   => '',
+            ]);
+            $fingerprint_source = (string) ($bundle['shortcut_command'] ?? ($bundle['command_string'] ?? ''));
+            $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, $fingerprint_source, $connections);
+            $connections['connection_status'] = '';
+            $connections['connection_last_verified_at'] = '';
+            $connections['connection_last_error'] = __('Codex remote shortcut generated. Run it where Codex runs, then run the smoke test.', 'livecanvas-forge-ai');
+            $connections['connection_current_step'] = 'smoke_test';
+            LCFA_Settings::update_connections($connections);
+            LCFA_Settings::set_notice(__('Codex remote setup is ready. Copy the shortcut, restart or reload Codex, then run the smoke test.', 'livecanvas-forge-ai'));
+            wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+            exit;
+        }
+
         if (!class_exists('LCFA_Codex_Config_Manager', false)) {
             LCFA_Settings::set_notice(__('Codex config manager is not available in this runtime.', 'livecanvas-forge-ai'), 'error');
             wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
@@ -1042,7 +1075,7 @@ final class LCFA_Admin {
             exit;
         }
 
-        if ($repair_action === 'sync_codex') {
+        if ($repair_action === 'connect_codex' || $repair_action === 'sync_codex') {
             $sync = $manager->sync($connections);
             $expected = $manager->get_expected_config($connections);
             if (!empty($sync['ok'])) {
@@ -1052,7 +1085,7 @@ final class LCFA_Admin {
                 $connections['connection_last_error'] = __('Codex config updated. Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
                 $connections['connection_current_step'] = 'smoke_test';
                 LCFA_Settings::update_connections($connections);
-                LCFA_Settings::set_notice((string) ($sync['message'] ?? __('Codex config updated.', 'livecanvas-forge-ai')));
+                LCFA_Settings::set_notice($repair_action === 'connect_codex' ? __('Codex config updated. Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai') : (string) ($sync['message'] ?? __('Codex config updated.', 'livecanvas-forge-ai')));
             } else {
                 LCFA_Settings::set_notice((string) ($sync['message'] ?? __('Codex config could not be updated.', 'livecanvas-forge-ai')), 'error');
             }
@@ -1061,6 +1094,30 @@ final class LCFA_Admin {
         }
 
         if ($repair_action === 'smoke') {
+            if ($requested_mode === 'remote') {
+                $result = $this->connection_tester->run_checks(['mode' => 'remote']);
+                $connections['connection_last_verified_at'] = (string) ($result['checked_at'] ?? current_time('mysql', true));
+                $connections['connection_status'] = !empty($result['ok']) ? 'ready' : 'needs_attention';
+                $connections['connection_last_error'] = !empty($result['ok']) ? '' : (string) ($result['summary'] ?? '');
+                $connections['connection_current_step'] = !empty($result['ok']) ? 'ready' : 'smoke_test';
+                if (!empty($result['ok'])) {
+                    $bundle = $this->build_selected_connection_bundle([
+                        'preferred_client' => 'codex',
+                        'connection_mode'  => 'remote',
+                        'workspace_root'   => '',
+                    ]);
+                    $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, (string) ($bundle['shortcut_command'] ?? ($bundle['command_string'] ?? '')), $connections);
+                }
+                LCFA_Settings::update_connections($connections);
+                LCFA_Settings::set_connection_test_result($result);
+                LCFA_Settings::set_notice(
+                    (string) ($result['summary'] ?? __('Connection checks completed.', 'livecanvas-forge-ai')),
+                    !empty($result['ok']) ? 'success' : 'error'
+                );
+                wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+                exit;
+            }
+
             $smoke = $manager->run_smoke_test($connections);
             $checked_at = current_time('mysql', true);
             $result = [
@@ -2489,11 +2546,13 @@ final class LCFA_Admin {
 
     private function render_connections_tab(array $settings, array $snapshot): void {
         $connections      = LCFA_Settings::get_connections();
-        $preferred_client = $this->normalize_connection_client((string) ($connections['preferred_client'] ?: ($settings['ai_tool'] ?: 'codex')));
+        $stored_preferred_client = trim((string) ($connections['preferred_client'] ?? ''));
+        $preferred_client = $this->normalize_connection_client($stored_preferred_client !== '' ? $stored_preferred_client : 'codex');
         $selected_mode    = $this->normalize_connection_mode((string) ($connections['connection_mode'] ?: 'local'));
         if ($selected_mode === 'local' && method_exists('LCFA_Settings', 'sync_local_workspace_root')) {
             $connections = LCFA_Settings::sync_local_workspace_root(true);
         }
+        $show_codex_fast_path = $stored_preferred_client === '' || $preferred_client === 'codex';
         $connection_test  = LCFA_Settings::consume_connection_test_result();
         $is_local_mode    = $selected_mode === 'local';
         $remote_status    = $is_local_mode ? [] : $this->remote_client->get_status();
@@ -2504,17 +2563,22 @@ final class LCFA_Admin {
             'connection_mode'  => $selected_mode,
             'workspace_root'   => $connections['workspace_root'],
         ]);
-        $codex_repair = $this->get_codex_repair_state($connections, $bundle);
-        if (!empty($codex_repair['should_invalidate_ready'])) {
+        $codex_onboarding = $this->get_codex_onboarding_state($connections, $bundle, $selected_mode, $remote_status);
+        if (!empty($codex_onboarding['should_invalidate_ready'])) {
             $connections['connection_status'] = 'needs_attention';
-            $connections['connection_last_error'] = (string) ($codex_repair['message'] ?? __('Codex config is stale. Regenerate or sync the Codex MCP config.', 'livecanvas-forge-ai'));
+            $connections['connection_last_error'] = (string) ($codex_onboarding['message'] ?? __('Codex config is stale. Regenerate or sync the Codex MCP config.', 'livecanvas-forge-ai'));
             $connections['connection_current_step'] = 'smoke_test';
             LCFA_Settings::update_connections($connections);
+            $codex_onboarding = $this->get_codex_onboarding_state($connections, $bundle, $selected_mode, $remote_status);
         }
         $onboarding_state = $this->connection_onboarding->derive_state($connections, [
             'local_ready'  => !empty($mcp_status['rest_base']),
             'remote_ready' => !empty($remote_status['available']),
         ]);
+        if ($show_codex_fast_path) {
+            $onboarding_state['status'] = (string) ($codex_onboarding['status'] ?? 'needs_setup');
+            $onboarding_state['message'] = (string) ($codex_onboarding['message'] ?? '');
+        }
         $workspace_write_state = LCFA_Workspace_Access::inspect((string) ($bundle['workspace_root'] ?? ''));
         $wizard_view = $this->connection_wizard_presenter->build([
             'state'            => $onboarding_state,
@@ -2533,14 +2597,13 @@ final class LCFA_Admin {
                 (string) ($connections['framework_change_previous'] ?? ''),
                 (string) ($connections['framework_change_next'] ?? '')
             );
+        } elseif ($show_codex_fast_path) {
+            $this->render_codex_fast_path_panel($codex_onboarding, $bundle, $connections, $selected_mode, $workspace_write_state);
+            $this->render_codex_other_clients_panel($connections, $selected_mode);
         } elseif (($onboarding_state['status'] ?? 'not_connected') === 'ready') {
             $this->render_connection_ready_card($wizard_view, $bundle, $connections, $workspace_write_state);
         } else {
             $this->render_connection_wizard($wizard_view, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $onboarding_state, $workspace_write_state);
-        }
-
-        if (!empty($codex_repair['enabled'])) {
-            $this->render_codex_repair_panel($codex_repair);
         }
 
         $this->render_connections_secondary_panels();
@@ -2566,6 +2629,479 @@ final class LCFA_Admin {
         if (!empty($state['message'])) {
             echo '<p class="lcfa-guide-copy">' . esc_html((string) $state['message']) . '</p>';
         }
+        echo '</section>';
+    }
+
+    private function get_codex_onboarding_state(array $connections, array $bundle, string $selected_mode, array $remote_status): array {
+        $mode = $this->normalize_connection_mode((string) ($bundle['mode'] ?? $selected_mode));
+        $connection_status = sanitize_key((string) ($connections['connection_status'] ?? ''));
+        $current_step = sanitize_key((string) ($connections['connection_current_step'] ?? ''));
+        $last_verified = trim((string) ($connections['connection_last_verified_at'] ?? ''));
+        $last_error = trim((string) ($connections['connection_last_error'] ?? ''));
+        $status = 'needs_setup';
+        $primary_action = 'sync_codex';
+        $message = __('Connect Codex to this WordPress site.', 'livecanvas-forge-ai');
+        $checks = [];
+        $manual_fallback = [];
+        $should_invalidate_ready = false;
+
+        if ($mode === 'remote') {
+            $remote_prerequisites = $this->get_remote_codex_prerequisites($connections, $remote_status);
+            $remote_ready = !empty($remote_prerequisites['ready']);
+            $smoke_passed = $connection_status === 'ready' && $last_verified !== '';
+            $restart_required = $remote_ready && !$smoke_passed && $current_step === 'smoke_test' && $connection_status !== 'needs_attention';
+
+            if (!$remote_ready) {
+                $status = 'needs_setup';
+                $primary_action = 'none';
+                $message = __('Complete the remote Codex prerequisites before generating the remote MCP Adapter shortcut.', 'livecanvas-forge-ai');
+            } elseif ($smoke_passed) {
+                $status = 'ready';
+                $primary_action = 'none';
+                $message = __('Codex remote MCP Adapter is verified for this site.', 'livecanvas-forge-ai');
+            } elseif ($connection_status === 'needs_attention') {
+                $status = 'test_failed';
+                $primary_action = 'run_smoke';
+                $message = $last_error !== '' ? $last_error : __('The last Codex remote smoke test failed.', 'livecanvas-forge-ai');
+            } elseif ($restart_required) {
+                $status = 'restart_required';
+                $primary_action = 'run_smoke';
+                $message = __('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
+            } else {
+                $status = 'needs_setup';
+                $primary_action = 'sync_codex';
+                $message = __('Generate the Codex remote MCP Adapter shortcut, then restart or reload Codex before testing.', 'livecanvas-forge-ai');
+            }
+
+            $checks = [
+                'wp_root_ok' => [
+                    'label' => __('Local WordPress root', 'livecanvas-forge-ai'),
+                    'ok' => true,
+                    'skipped' => true,
+                    'message' => __('Not required for remote Codex.', 'livecanvas-forge-ai'),
+                ],
+                'mcp_script_ok' => [
+                    'label' => __('Remote MCP Adapter', 'livecanvas-forge-ai'),
+                    'ok' => $remote_ready,
+                    'message' => $remote_ready ? __('Adapter command can be generated.', 'livecanvas-forge-ai') : __('Remote credentials are incomplete.', 'livecanvas-forge-ai'),
+                ],
+                'codex_config_synced' => [
+                    'label' => __('Codex shortcut', 'livecanvas-forge-ai'),
+                    'ok' => $remote_ready && $current_step === 'smoke_test',
+                    'message' => $remote_ready ? __('Ready to copy and run in Codex.', 'livecanvas-forge-ai') : __('Waiting for remote credentials.', 'livecanvas-forge-ai'),
+                ],
+                'hash_matches' => [
+                    'label' => __('Fingerprint', 'livecanvas-forge-ai'),
+                    'ok' => trim((string) ($connections['connection_last_bundle_hash'] ?? '')) !== '',
+                    'message' => trim((string) ($connections['connection_last_bundle_hash'] ?? '')) !== '' ? __('Generated.', 'livecanvas-forge-ai') : __('Pending.', 'livecanvas-forge-ai'),
+                ],
+                'restart_required' => [
+                    'label' => __('Restart/reload', 'livecanvas-forge-ai'),
+                    'ok' => $restart_required,
+                    'message' => $restart_required ? __('Required before smoke test.', 'livecanvas-forge-ai') : __('Not required right now.', 'livecanvas-forge-ai'),
+                ],
+                'smoke_passed' => [
+                    'label' => __('Smoke test', 'livecanvas-forge-ai'),
+                    'ok' => $smoke_passed,
+                    'message' => $smoke_passed ? __('Passed.', 'livecanvas-forge-ai') : __('Pending.', 'livecanvas-forge-ai'),
+                ],
+            ];
+            $manual_fallback = [
+                'shortcut_command' => (string) ($bundle['copy_command_string'] ?? ($bundle['shortcut_command'] ?? '')),
+                'command' => (string) ($bundle['command_string'] ?? ''),
+                'start_tool' => (string) ($bundle['agent_start_tool'] ?? 'livecanvas-forge-ai/get-connection-handoff'),
+                'prerequisites' => $remote_prerequisites,
+            ];
+
+            return [
+                'mode' => 'remote',
+                'status' => $status,
+                'primary_action' => $primary_action,
+                'checks' => $checks,
+                'message' => $message,
+                'manual_fallback' => $manual_fallback,
+                'last_smoke' => [
+                    'verified_at' => $last_verified,
+                    'error' => $last_error,
+                ],
+                'should_invalidate_ready' => false,
+            ];
+        }
+
+        if (!class_exists('LCFA_Codex_Config_Manager', false)) {
+            return [
+                'mode' => 'local',
+                'status' => 'needs_setup',
+                'primary_action' => 'none',
+                'checks' => [
+                    'wp_root_ok' => ['label' => __('WordPress root', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Codex config manager is unavailable.', 'livecanvas-forge-ai')],
+                    'mcp_script_ok' => ['label' => __('MCP script', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Codex config manager is unavailable.', 'livecanvas-forge-ai')],
+                    'codex_config_synced' => ['label' => __('Codex config', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Codex config manager is unavailable.', 'livecanvas-forge-ai')],
+                    'hash_matches' => ['label' => __('Fingerprint', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Pending.', 'livecanvas-forge-ai')],
+                    'restart_required' => ['label' => __('Restart/reload', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Pending.', 'livecanvas-forge-ai')],
+                    'smoke_passed' => ['label' => __('Smoke test', 'livecanvas-forge-ai'), 'ok' => false, 'message' => __('Pending.', 'livecanvas-forge-ai')],
+                ],
+                'message' => __('Codex config manager is not available in this runtime.', 'livecanvas-forge-ai'),
+                'manual_fallback' => [],
+                'last_smoke' => ['verified_at' => $last_verified, 'error' => $last_error],
+                'should_invalidate_ready' => false,
+            ];
+        }
+
+        $manager = $this->get_codex_config_manager();
+        $expected = $manager->get_expected_config($connections);
+        $inspection = $manager->inspect($connections);
+        $stored_hash = trim((string) ($connections['connection_last_bundle_hash'] ?? ''));
+        $hash_matches = $stored_hash !== '' && hash_equals((string) ($expected['hash'] ?? ''), $stored_hash);
+        $synced = !empty($inspection['synced']);
+        $script_path = (string) ($expected['script_path'] ?? '');
+        $script_ok = $script_path !== '' && is_readable($script_path);
+        $wp_root = untrailingslashit((string) ($expected['wp_root'] ?? ''));
+        $wp_root_ok = $wp_root !== '' && is_file($wp_root . '/wp-load.php');
+        $smoke_passed = $connection_status === 'ready' && $last_verified !== '' && $synced && $hash_matches;
+        $restart_required = $synced && $hash_matches && !$smoke_passed && ($current_step === 'smoke_test' || strpos($last_error, 'Restart Codex') !== false);
+        $should_invalidate_ready = $connection_status === 'ready' && (!$synced || !$hash_matches);
+
+        if ($smoke_passed) {
+            $status = 'ready';
+            $primary_action = 'none';
+            $message = __('Codex is connected and the smoke test passed.', 'livecanvas-forge-ai');
+        } elseif (!$synced || !$hash_matches || !$script_ok || !$wp_root_ok) {
+            $status = trim((string) ($connections['preferred_client'] ?? '')) === '' && (string) ($inspection['status'] ?? '') === 'missing'
+                ? 'needs_setup'
+                : 'stale';
+            $primary_action = 'sync_codex';
+            $message = !$synced
+                ? (string) ($inspection['message'] ?? __('Codex config is stale. Sync the Codex MCP config.', 'livecanvas-forge-ai'))
+                : (!$hash_matches ? __('Codex config changed since the last smoke test. Repair Codex and rerun the smoke test.', 'livecanvas-forge-ai') : __('Codex local prerequisites need attention before testing.', 'livecanvas-forge-ai'));
+        } elseif ($connection_status === 'needs_attention') {
+            $status = 'test_failed';
+            $primary_action = 'run_smoke';
+            $message = $last_error !== '' ? $last_error : __('The last Codex smoke test failed.', 'livecanvas-forge-ai');
+        } elseif ($restart_required) {
+            $status = 'restart_required';
+            $primary_action = 'run_smoke';
+            $message = __('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
+        } else {
+            $status = 'restart_required';
+            $primary_action = 'run_smoke';
+            $message = __('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
+        }
+
+        $checks = [
+            'wp_root_ok' => [
+                'label' => __('WordPress root', 'livecanvas-forge-ai'),
+                'ok' => $wp_root_ok,
+                'message' => $wp_root_ok ? __('Current local site path detected.', 'livecanvas-forge-ai') : __('Current WordPress root is missing or stale.', 'livecanvas-forge-ai'),
+            ],
+            'mcp_script_ok' => [
+                'label' => __('MCP script', 'livecanvas-forge-ai'),
+                'ok' => $script_ok,
+                'message' => $script_ok ? __('Readable.', 'livecanvas-forge-ai') : __('Missing or not readable.', 'livecanvas-forge-ai'),
+            ],
+            'codex_config_synced' => [
+                'label' => __('Codex config', 'livecanvas-forge-ai'),
+                'ok' => $synced,
+                'message' => $synced ? __('Synced.', 'livecanvas-forge-ai') : __('Missing or stale.', 'livecanvas-forge-ai'),
+            ],
+            'hash_matches' => [
+                'label' => __('Fingerprint', 'livecanvas-forge-ai'),
+                'ok' => $hash_matches,
+                'message' => $hash_matches ? __('Matches current token and paths.', 'livecanvas-forge-ai') : __('Needs a fresh sync and smoke test.', 'livecanvas-forge-ai'),
+            ],
+            'restart_required' => [
+                'label' => __('Restart/reload', 'livecanvas-forge-ai'),
+                'ok' => $restart_required,
+                'message' => $restart_required ? __('Required before smoke test.', 'livecanvas-forge-ai') : __('Not required right now.', 'livecanvas-forge-ai'),
+            ],
+            'smoke_passed' => [
+                'label' => __('Smoke test', 'livecanvas-forge-ai'),
+                'ok' => $smoke_passed,
+                'message' => $smoke_passed ? __('Passed.', 'livecanvas-forge-ai') : __('Pending.', 'livecanvas-forge-ai'),
+            ],
+        ];
+
+        return [
+            'mode' => 'local',
+            'status' => $status,
+            'primary_action' => $primary_action,
+            'checks' => $checks,
+            'message' => $message,
+            'manual_fallback' => [
+                'remove_command' => (string) ($expected['remove_command'] ?? ''),
+                'add_command' => (string) ($expected['add_command'] ?? ''),
+                'snippet' => (string) ($expected['snippet'] ?? ''),
+            ],
+            'last_smoke' => [
+                'verified_at' => $last_verified,
+                'error' => $last_error,
+            ],
+            'should_invalidate_ready' => $should_invalidate_ready,
+        ];
+    }
+
+    private function get_remote_codex_prerequisites(array $connections, array $remote_status): array {
+        $remote_site_url = trim((string) ($connections['remote_site_url'] ?? ''));
+        $username = trim((string) ($connections['remote_username'] ?? ''));
+        $application_password = trim((string) ($connections['remote_application_password'] ?? ''));
+        $mcp_adapter_url = $this->get_remote_mcp_adapter_url($remote_site_url, $remote_status);
+        $items = [
+            'remote_site_url' => [
+                'label' => __('Remote site URL', 'livecanvas-forge-ai'),
+                'ok' => $remote_site_url !== '',
+            ],
+            'remote_username' => [
+                'label' => __('Remote username', 'livecanvas-forge-ai'),
+                'ok' => $username !== '',
+            ],
+            'remote_application_password' => [
+                'label' => __('Application Password', 'livecanvas-forge-ai'),
+                'ok' => $application_password !== '',
+            ],
+            'mcp_adapter_url' => [
+                'label' => __('MCP Adapter URL', 'livecanvas-forge-ai'),
+                'ok' => $mcp_adapter_url !== '',
+            ],
+        ];
+        $ready = true;
+        foreach ($items as $item) {
+            if (empty($item['ok'])) {
+                $ready = false;
+                break;
+            }
+        }
+
+        return [
+            'ready' => $ready,
+            'items' => $items,
+            'mcp_adapter_url' => $mcp_adapter_url,
+        ];
+    }
+
+    private function render_codex_fast_path_panel(array $state, array $bundle, array $connections, string $selected_mode, array $workspace_write_state): void {
+        $mode = $this->normalize_connection_mode((string) ($state['mode'] ?? $selected_mode));
+        $status = sanitize_key((string) ($state['status'] ?? 'needs_setup'));
+        $primary_action = sanitize_key((string) ($state['primary_action'] ?? 'sync_codex'));
+        $status_labels = [
+            'needs_setup' => __('Needs setup', 'livecanvas-forge-ai'),
+            'stale' => __('Config stale', 'livecanvas-forge-ai'),
+            'restart_required' => __('Restart required', 'livecanvas-forge-ai'),
+            'test_failed' => __('Test failed', 'livecanvas-forge-ai'),
+            'ready' => __('Ready', 'livecanvas-forge-ai'),
+        ];
+        $status_label = (string) ($status_labels[$status] ?? $status_labels['needs_setup']);
+        $checks = is_array($state['checks'] ?? null) ? $state['checks'] : [];
+        $last_smoke = is_array($state['last_smoke'] ?? null) ? $state['last_smoke'] : [];
+
+        echo '<section class="lcfa-card lcfa-ready-card lcfa-codex-fast-path">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('command');
+        echo '<div><h2>' . esc_html__('Connect Codex', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Fast path for Codex: detect, sync config, restart or reload, smoke test, ready.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+
+        $this->render_codex_mode_switch($mode, (string) ($bundle['workspace_root'] ?? ''));
+
+        echo '<div class="lcfa-chip-row">';
+        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup('codex', 'stars') . '<span>' . esc_html__('Codex', 'livecanvas-forge-ai') . '</span></span>';
+        echo '<span class="lcfa-chip' . ($status === 'ready' ? ' is-positive' : ($status === 'test_failed' ? ' is-negative' : '')) . '">' . esc_html($status_label) . '</span>';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), $mode === 'remote' ? __('Remote site', 'livecanvas-forge-ai') : __('Local site', 'livecanvas-forge-ai'))) . '</span>';
+        echo '</div>';
+
+        if (!empty($state['message'])) {
+            echo '<div class="lcfa-connection-now-alert">';
+            echo '<span class="lcfa-connection-now-alert__eyebrow">' . esc_html__('Current status', 'livecanvas-forge-ai') . '</span>';
+            echo '<strong>' . esc_html((string) $state['message']) . '</strong>';
+            if ($status === 'restart_required') {
+                echo '<p>' . esc_html__('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai') . '</p>';
+            }
+            echo '</div>';
+        }
+
+        if ($mode === 'remote') {
+            $manual_fallback = is_array($state['manual_fallback'] ?? null) ? $state['manual_fallback'] : [];
+            $prerequisites = is_array($manual_fallback['prerequisites'] ?? null) ? $manual_fallback['prerequisites'] : [];
+            if (empty($prerequisites['ready'])) {
+                $this->render_remote_codex_prerequisites($prerequisites);
+            }
+        }
+
+        echo '<div class="lcfa-chip-row">';
+        foreach ($checks as $check_key => $check) {
+            if (!is_array($check)) {
+                continue;
+            }
+            $ok = !empty($check['ok']);
+            $skipped = !empty($check['skipped']);
+            $chip_class = $ok && !$skipped ? ' is-positive' : (!$ok && !$skipped ? ' is-negative' : '');
+            $check_value = $ok ? __('OK', 'livecanvas-forge-ai') : __('Pending', 'livecanvas-forge-ai');
+            if ($skipped) {
+                $check_value = __('N/A', 'livecanvas-forge-ai');
+            } elseif ($check_key === 'restart_required') {
+                $chip_class = $ok ? ' is-negative' : ' is-positive';
+                $check_value = $ok ? __('Required', 'livecanvas-forge-ai') : __('No', 'livecanvas-forge-ai');
+            }
+            echo '<span class="lcfa-chip' . esc_attr($chip_class) . '" title="' . esc_attr((string) ($check['message'] ?? '')) . '">' . esc_html((string) ($check['label'] ?? $check_key)) . ': ' . esc_html($check_value) . '</span>';
+        }
+        echo '</div>';
+
+        echo '<div class="lcfa-cta-row">';
+        if ($status === 'ready') {
+            $this->render_codex_fast_path_smoke_form($mode, __('Re-test', 'livecanvas-forge-ai'));
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+            wp_nonce_field('lcfa_reconfigure_connection');
+            echo '<input type="hidden" name="action" value="lcfa_reconfigure_connection">';
+            echo '<button class="button" type="submit">' . esc_html__('Change client', 'livecanvas-forge-ai') . '</button>';
+            echo '</form>';
+        } elseif ($primary_action === 'run_smoke') {
+            $this->render_codex_fast_path_smoke_form($mode, __('Run Codex smoke test', 'livecanvas-forge-ai'));
+        } elseif ($primary_action === 'sync_codex') {
+            $button_label = $status === 'stale' ? __('Repair Codex', 'livecanvas-forge-ai') : __('Connect Codex', 'livecanvas-forge-ai');
+            $this->render_codex_fast_path_action_form('connect_codex', $mode, $button_label, true);
+        } else {
+            echo '<a class="button" href="#lcfa-connections-secondary">' . esc_html__('Open settings', 'livecanvas-forge-ai') . '</a>';
+        }
+        echo '</div>';
+
+        if (!empty($last_smoke['verified_at']) || !empty($last_smoke['error'])) {
+            echo '<div class="lcfa-workspace-note">';
+            echo '<strong>' . esc_html__('Last smoke test', 'livecanvas-forge-ai') . '</strong>';
+            if (!empty($last_smoke['verified_at'])) {
+                echo '<p>' . esc_html(sprintf(__('Verified at: %s', 'livecanvas-forge-ai'), (string) $last_smoke['verified_at'])) . '</p>';
+            }
+            if (!empty($last_smoke['error'])) {
+                echo '<p>' . esc_html((string) $last_smoke['error']) . '</p>';
+            }
+            echo '</div>';
+        }
+
+        $this->render_codex_manual_fallback($mode, is_array($state['manual_fallback'] ?? null) ? $state['manual_fallback'] : [], $bundle);
+
+        if ($mode === 'local' && !empty($bundle['workspace_files']) && empty($workspace_write_state['available'])) {
+            echo '<div class="lcfa-workspace-note">';
+            echo '<strong>' . esc_html__('Workspace write fallback available', 'livecanvas-forge-ai') . '</strong>';
+            echo '<p>' . esc_html($this->get_workspace_write_notice($workspace_write_state)) . '</p>';
+            echo '</div>';
+        }
+
+        echo '</section>';
+    }
+
+    private function render_codex_mode_switch(string $selected_mode, string $workspace_root): void {
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-wizard lcfa-codex-mode-switch">';
+        wp_nonce_field('lcfa_connections');
+        echo '<input type="hidden" name="action" value="lcfa_connections">';
+        echo '<input type="hidden" name="connection_current_step" value="choose_mode">';
+        echo '<input type="hidden" name="preferred_client" value="codex">';
+        echo '<input type="hidden" name="workspace_root" value="' . esc_attr($workspace_root) . '">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
+        $this->render_radio('connection_mode', 'local', __('Local site', 'livecanvas-forge-ai'), $selected_mode, 'command');
+        $this->render_radio('connection_mode', 'remote', __('Remote site', 'livecanvas-forge-ai'), $selected_mode, 'cloud');
+        echo '</div>';
+        echo '<div class="lcfa-cta-row">';
+        echo '<button class="button" type="submit">' . esc_html__('Switch mode', 'livecanvas-forge-ai') . '</button>';
+        echo '</div>';
+        echo '</form>';
+    }
+
+    private function render_remote_codex_prerequisites(array $prerequisites): void {
+        $items = is_array($prerequisites['items'] ?? null) ? $prerequisites['items'] : [];
+        echo '<div class="lcfa-connection-now-alert">';
+        echo '<span class="lcfa-connection-now-alert__eyebrow">' . esc_html__('Remote Codex prerequisites', 'livecanvas-forge-ai') . '</span>';
+        echo '<strong>' . esc_html__('Complete these fields before Forge generates a remote Codex config.', 'livecanvas-forge-ai') . '</strong>';
+        echo '<ul class="lcfa-plain-list">';
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            echo '<li>' . esc_html((!empty($item['ok']) ? 'OK: ' : 'Missing: ') . (string) ($item['label'] ?? '')) . '</li>';
+        }
+        echo '</ul>';
+        echo '<p>' . esc_html__('Remote Codex uses npx -y @automattic/mcp-wordpress-remote@latest with WP_API_URL, WP_API_USERNAME, WP_API_PASSWORD, and LOG_FILE. It does not use LCFA_WP_ROOT.', 'livecanvas-forge-ai') . '</p>';
+        echo '</div>';
+    }
+
+    private function render_codex_fast_path_action_form(string $action, string $mode, string $button_label, bool $primary = false): void {
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
+        wp_nonce_field('lcfa_repair_codex_connection');
+        echo '<input type="hidden" name="action" value="lcfa_repair_codex_connection">';
+        echo '<input type="hidden" name="codex_repair_action" value="' . esc_attr($action) . '">';
+        echo '<input type="hidden" name="connection_mode" value="' . esc_attr($mode) . '">';
+        echo '<button class="button ' . ($primary ? 'button-primary ' : '') . 'lcfa-button--wide" type="submit">' . esc_html($button_label) . '</button>';
+        echo '</form>';
+    }
+
+    private function render_codex_fast_path_smoke_form(string $mode, string $button_label): void {
+        $this->render_codex_fast_path_action_form('smoke', $mode, $button_label, true);
+    }
+
+    private function render_codex_manual_fallback(string $mode, array $manual_fallback, array $bundle): void {
+        echo '<details class="lcfa-advanced-settings">';
+        echo '<summary>' . esc_html__('Advanced/manual fallback', 'livecanvas-forge-ai') . '</summary>';
+        if ($mode === 'remote') {
+            $shortcut = (string) ($manual_fallback['shortcut_command'] ?? ($bundle['copy_command_string'] ?? ''));
+            $command = (string) ($manual_fallback['command'] ?? ($bundle['command_string'] ?? ''));
+            echo '<p class="lcfa-guide-copy">' . esc_html__('Use this when you want to copy the remote Codex MCP Adapter setup manually.', 'livecanvas-forge-ai') . '</p>';
+            if ($shortcut !== '') {
+                $this->render_code_block($shortcut, [
+                    'language' => 'bash',
+                    'label' => __('Codex remote shortcut', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy Codex remote shortcut', 'livecanvas-forge-ai'),
+                ]);
+            }
+            if ($command !== '' && $command !== $shortcut) {
+                $this->render_code_block($command, [
+                    'language' => 'bash',
+                    'label' => __('Command', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy command', 'livecanvas-forge-ai'),
+                ]);
+            }
+            echo '<p class="lcfa-guide-copy">' . esc_html(sprintf(__('Start tool: %s', 'livecanvas-forge-ai'), (string) ($manual_fallback['start_tool'] ?? 'livecanvas-forge-ai/get-connection-handoff'))) . '</p>';
+        } else {
+            echo '<p class="lcfa-guide-copy">' . esc_html__('Use these commands if PHP cannot write ~/.codex/config.toml for this local machine.', 'livecanvas-forge-ai') . '</p>';
+            $this->render_code_block((string) ($manual_fallback['remove_command'] ?? ''), [
+                'language' => 'bash',
+                'label' => __('Remove', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy remove command', 'livecanvas-forge-ai'),
+            ]);
+            $this->render_code_block((string) ($manual_fallback['add_command'] ?? ''), [
+                'language' => 'bash',
+                'label' => __('Add', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy add command', 'livecanvas-forge-ai'),
+            ]);
+            $this->render_code_block((string) ($manual_fallback['snippet'] ?? ''), [
+                'language' => 'toml',
+                'label' => __('TOML', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy config snippet', 'livecanvas-forge-ai'),
+            ]);
+        }
+        echo '</details>';
+    }
+
+    private function render_codex_other_clients_panel(array $connections, string $selected_mode): void {
+        echo '<section class="lcfa-card">';
+        echo '<div class="lcfa-card-head">';
+        echo $this->get_icon_svg('plug');
+        echo '<div><h2>' . esc_html__('Other clients', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('OpenCode, Claude, Cursor, and Generic MCP still use the full connection wizard.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '</div>';
+        echo '<details class="lcfa-advanced-settings">';
+        echo '<summary>' . esc_html__('Choose another MCP client', 'livecanvas-forge-ai') . '</summary>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-wizard">';
+        wp_nonce_field('lcfa_connections');
+        echo '<input type="hidden" name="action" value="lcfa_connections">';
+        echo '<input type="hidden" name="connection_current_step" value="choose_client">';
+        echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
+        echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($connections['workspace_root'] ?? '')) . '">';
+        echo '<div class="lcfa-radio-group lcfa-radio-group--agents">';
+        $this->render_radio('preferred_client', 'opencode', __('OpenCode', 'livecanvas-forge-ai'), '', 'braces');
+        $this->render_radio('preferred_client', 'claude', __('Claude', 'livecanvas-forge-ai'), '', 'cpu');
+        $this->render_radio('preferred_client', 'cursor', __('Cursor', 'livecanvas-forge-ai'), '', 'cursor');
+        $this->render_radio('preferred_client', 'generic', __('Generic MCP client', 'livecanvas-forge-ai'), '', 'plug');
+        echo '</div>';
+        echo '<div class="lcfa-cta-row">';
+        echo '<button class="button" type="submit">' . esc_html__('Open client wizard', 'livecanvas-forge-ai') . '</button>';
+        echo '</div>';
+        echo '</form>';
+        echo '</details>';
         echo '</section>';
     }
 
@@ -2747,7 +3283,7 @@ final class LCFA_Admin {
     }
 
     private function render_connections_secondary_panels(): void {
-        echo '<div class="lcfa-connections-secondary" data-lcfa-connections-secondary-root>';
+        echo '<div id="lcfa-connections-secondary" class="lcfa-connections-secondary" data-lcfa-connections-secondary-root>';
         echo '<section class="lcfa-card lcfa-connections-secondary__panel is-loading" data-lcfa-connections-panel="remote" aria-busy="true">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('cloud');
@@ -6779,6 +7315,12 @@ final class LCFA_Admin {
                 }
                 break;
 
+            case 'update_partial':
+                if (!empty($context['target_id'])) {
+                    $target = $this->inventory->get_target_content('partial', (int) $context['target_id']);
+                }
+                break;
+
             case 'update_header':
                 $target = $this->inventory->get_target_content('header', 0, (string) ($context['variant'] ?? '1'));
                 break;
@@ -6964,6 +7506,7 @@ final class LCFA_Admin {
                 return $context;
             }
 
+            $context['action'] = 'update_partial';
             return $context;
         }
 
@@ -7164,6 +7707,10 @@ final class LCFA_Admin {
 
         if ($action === 'update_footer') {
             return __('Footer partial', 'livecanvas-forge-ai');
+        }
+
+        if ($action === 'update_partial') {
+            return __('Generic partial', 'livecanvas-forge-ai');
         }
 
         if ($post->post_type === 'lc_partial') {

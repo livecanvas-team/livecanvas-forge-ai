@@ -75,6 +75,10 @@ final class LCFA_Command_Deck {
                 'label'       => __('Update page', 'livecanvas-forge-ai'),
                 'description' => __('Updates an existing page with new HTML content.', 'livecanvas-forge-ai'),
             ],
+            'update_partial' => [
+                'label'       => __('Update generic partial', 'livecanvas-forge-ai'),
+                'description' => __('Updates an existing LiveCanvas partial by target ID when it is not a header, footer, or dynamic template.', 'livecanvas-forge-ai'),
+            ],
             'update_header' => [
                 'label'       => __('Update header partial', 'livecanvas-forge-ai'),
                 'description' => __('Writes content into the LiveCanvas header partial.', 'livecanvas-forge-ai'),
@@ -423,6 +427,51 @@ final class LCFA_Command_Deck {
                 }
 
                 $result = array_merge($result, $shell);
+                break;
+
+            case 'update_partial':
+                if (!$target_id) {
+                    return $this->error_result(__('A generic partial ID is required.', 'livecanvas-forge-ai'));
+                }
+
+                if (trim($content) === '') {
+                    return $this->error_result(__('Forge AI did not generate partial HTML for this request, so the current partial was left unchanged.', 'livecanvas-forge-ai'));
+                }
+
+                $existing = $this->inventory->get_target_content('partial', $target_id);
+
+                if (!$existing['post'] || (string) ($existing['post']['post_type'] ?? '') !== 'lc_partial') {
+                    return $this->error_result(__('The requested LiveCanvas partial target was not found.', 'livecanvas-forge-ai'));
+                }
+
+                if ((string) ($existing['post']['partial_type'] ?? 'partial') !== 'partial') {
+                    return $this->error_result(__('Use update_header or update_footer for global shell partials.', 'livecanvas-forge-ai'));
+                }
+
+                $result['target_type']   = 'partial';
+                $result['target_id']     = $target_id;
+                $result['target_title']  = (string) ($existing['post']['title'] ?? '');
+                $result['existing_html'] = (string) ($existing['content'] ?? '');
+                $result['diff_html']     = $this->build_diff((string) ($existing['content'] ?? ''), $content);
+                $result['data']['operation'] = 'update';
+                $result['summary']       = sprintf(__('Update partial #%d.', 'livecanvas-forge-ai'), $target_id);
+                $result['frontend_url']  = (string) ($existing['post']['view_url'] ?? '');
+                $result['edit_url']      = (string) ($existing['post']['edit_url'] ?? '');
+
+                if (!$dry_run) {
+                    $updated = $this->with_unfiltered_post_content(static function () use ($target_id, $content) {
+                        return wp_update_post([
+                            'ID'           => $target_id,
+                            'post_content' => $content,
+                        ], true);
+                    });
+
+                    if (is_wp_error($updated)) {
+                        return $this->error_result($updated->get_error_message());
+                    }
+
+                    $result['message'] = __('Partial updated.', 'livecanvas-forge-ai');
+                }
                 break;
 
             case 'update_header':
@@ -3260,7 +3309,7 @@ HTML;
     }
 
     private function supports_structured_page_content(string $action): bool {
-        return in_array($action, ['validate_markup_for_framework', 'page_upsert', 'create_page', 'update_page'], true);
+        return in_array($action, ['validate_markup_for_framework', 'page_upsert', 'create_page', 'update_page', 'update_partial'], true);
     }
 
     private function resolve_livecanvas_page_template(): string {
@@ -3539,6 +3588,7 @@ HTML;
         return in_array($action, [
             'site_foundation_run',
             'global_shell_apply',
+            'update_partial',
             'update_header',
             'update_footer',
             'create_dynamic_template',

@@ -605,6 +605,10 @@ $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_
 $connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
 $framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
 $remote_codex_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
+$codex_onboarding_state_method = new ReflectionMethod('LCFA_Admin', 'get_codex_onboarding_state');
+$remote_codex_prerequisites_method = new ReflectionMethod('LCFA_Admin', 'get_remote_codex_prerequisites');
+$codex_fast_path_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_fast_path_panel');
+$codex_other_clients_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_other_clients_panel');
 $secondary_panels_method = new ReflectionMethod('LCFA_Admin', 'render_connections_secondary_panels');
 $ability_diagnostics_card_method = new ReflectionMethod('LCFA_Admin', 'render_ability_diagnostics_card');
 
@@ -658,6 +662,94 @@ lcfa_assert_same('npx -y @automattic/mcp-wordpress-remote@latest', $admin_remote
 lcfa_assert_true(in_array('WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point WP_API_URL at the Forge MCP Adapter route');
 lcfa_assert_true(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve Application Password spacing');
 lcfa_assert_same('remote-mcp-adapter', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the MCP Adapter strategy');
+
+$missing_remote_prerequisites = $remote_codex_prerequisites_method->invoke($admin_instance, [
+    'remote_site_url'             => '',
+    'remote_username'             => '',
+    'remote_application_password' => '',
+], []);
+lcfa_assert_false(!empty($missing_remote_prerequisites['ready']), 'remote Codex prerequisites should fail when URL, username, and Application Password are missing');
+
+$missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
+    'preferred_client'            => 'codex',
+    'connection_mode'             => 'remote',
+    'remote_site_url'             => '',
+    'remote_username'             => '',
+    'remote_application_password' => '',
+    'connection_status'           => '',
+    'connection_last_verified_at' => '',
+    'connection_last_error'       => '',
+    'connection_current_step'     => '',
+    'connection_last_bundle_hash' => '',
+], [
+    'client'              => 'codex',
+    'mode'                => 'remote',
+    'connection_strategy' => 'remote-mcp-adapter',
+    'copy_command_string' => '',
+    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+], 'remote', []);
+lcfa_assert_same('needs_setup', $missing_remote_state['status'] ?? '', 'remote Codex state should stay in needs_setup while prerequisites are incomplete');
+lcfa_assert_same('none', $missing_remote_state['primary_action'] ?? '', 'remote Codex should not generate partial config when prerequisites are incomplete');
+
+$complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
+    'preferred_client'            => 'codex',
+    'connection_mode'             => 'remote',
+    'remote_site_url'             => 'https://remote.example',
+    'remote_username'             => 'admin',
+    'remote_application_password' => 'abcd efgh ijkl mnop',
+    'connection_status'           => '',
+    'connection_last_verified_at' => '',
+    'connection_last_error'       => 'Codex remote shortcut generated. Run it where Codex runs, then run the smoke test.',
+    'connection_current_step'     => 'smoke_test',
+    'connection_last_bundle_hash' => 'remote-hash',
+], [
+    'client'              => 'codex',
+    'mode'                => 'remote',
+    'connection_strategy' => 'remote-mcp-adapter',
+    'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+], 'remote', []);
+lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
+lcfa_assert_same('run_smoke', $complete_remote_state['primary_action'] ?? '', 'remote Codex should move directly to smoke test after shortcut generation');
+
+ob_start();
+$codex_fast_path_panel_method->invoke(
+    $admin_instance,
+    $missing_remote_state,
+    [
+        'client'              => 'codex',
+        'mode'                => 'remote',
+        'connection_strategy' => 'remote-mcp-adapter',
+        'workspace_root'      => '',
+        'copy_command_string' => '',
+        'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+    ],
+    [
+        'workspace_root' => '',
+    ],
+    'remote',
+    [
+        'available' => false,
+        'reason'    => 'missing',
+        'path'      => '',
+    ]
+);
+$codex_fast_path_markup = (string) ob_get_clean();
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Connect Codex') !== false, 'Codex fast path should render Connect Codex as the main panel');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Local site') !== false && strpos($codex_fast_path_markup, 'Remote site') !== false, 'Codex fast path should expose a Local/Remote switch');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Remote Codex prerequisites') !== false, 'remote Codex fast path should render the prerequisite checklist instead of a partial config');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'does not use LCFA_WP_ROOT') !== false, 'remote Codex fast path should state that local WordPress root is not used');
+
+ob_start();
+$codex_other_clients_panel_method->invoke($admin_instance, [
+    'workspace_root' => '/Users/commander/Studio/consultala',
+], 'local');
+$other_clients_markup = (string) ob_get_clean();
+lcfa_assert_true(strpos($other_clients_markup, 'Other clients') !== false, 'Codex fast path should keep a secondary Other clients entry');
+lcfa_assert_true(strpos($other_clients_markup, 'OpenCode') !== false && strpos($other_clients_markup, 'Claude') !== false && strpos($other_clients_markup, 'Cursor') !== false, 'Other clients should keep the existing wizard choices available');
+lcfa_assert_false(strpos($other_clients_markup, 'value="codex"') !== false, 'Other clients should not duplicate the primary Codex fast path');
 
 ob_start();
 $visual_help_method->invoke($admin_instance, $opencode_fast_path);
