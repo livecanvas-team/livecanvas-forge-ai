@@ -1037,6 +1037,9 @@ final class LCFA_Admin {
             : $stored_connections;
         $connections['preferred_client'] = 'codex';
         $connections['connection_mode'] = $requested_mode;
+        if ($requested_mode === 'local' && empty($connections['codex_config_scope'])) {
+            $connections['codex_config_scope'] = 'project';
+        }
 
         if (($repair_action === 'connect_codex' || $repair_action === 'sync_codex') && $requested_mode === 'remote') {
             $remote_prerequisites = $this->get_remote_codex_prerequisites($connections, $this->remote_client->get_status());
@@ -1405,11 +1408,13 @@ final class LCFA_Admin {
         $mcp_endpoint = LCFA_Settings::get_mcp_endpoint();
         $mcp_token = (string) ($connections['mcp_token'] ?? '');
         $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
+        $site_fingerprint = method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '';
         $filesystem_mode = ($snapshot['site_mode'] ?? 'local') === 'local' ? 'local-theme-access' : 'remote-rest-primary';
         $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
         $common = [
             'site_url'       => $site_url,
             'rest_base'      => $rest_base,
+            'site_fingerprint' => $site_fingerprint,
             'mcp_endpoint'   => $mcp_endpoint,
             'mcp_token'      => $mcp_token,
             'wp_root'        => $wp_root,
@@ -1431,6 +1436,7 @@ final class LCFA_Admin {
                     'env'     => array_merge([
                         'LCFA_SITE_URL=' . $site_url,
                         'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
                     ], $filesystem_env),
@@ -1440,6 +1446,7 @@ final class LCFA_Admin {
                     'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
                     ], $filesystem_env),
                 ],
@@ -1448,6 +1455,7 @@ final class LCFA_Admin {
                     'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
                     ], $filesystem_env),
@@ -1457,6 +1465,7 @@ final class LCFA_Admin {
                     'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
+                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
                     ], $filesystem_env),
                 ],
@@ -1485,6 +1494,7 @@ final class LCFA_Admin {
         $environment = array_values(array_filter([
             !empty($common['site_url']) ? 'LCFA_SITE_URL=' . (string) $common['site_url'] : '',
             !empty($common['rest_base']) ? 'LCFA_REST_BASE=' . (string) $common['rest_base'] : '',
+            !empty($common['site_fingerprint']) ? 'LCFA_SITE_FINGERPRINT=' . (string) $common['site_fingerprint'] : '',
             !empty($common['mcp_endpoint']) ? 'LCFA_MCP_ENDPOINT=' . (string) $common['mcp_endpoint'] : '',
             !empty($common['mcp_token']) ? 'LCFA_MCP_TOKEN=' . (string) $common['mcp_token'] : '',
             !empty($common['framework']) ? 'LCFA_FRAMEWORK=' . (string) $common['framework'] : '',
@@ -2708,6 +2718,9 @@ final class LCFA_Admin {
         $stored_hash = trim((string) ($connections['connection_last_bundle_hash'] ?? ''));
         $hash_matches = $stored_hash !== '' && hash_equals((string) ($expected['hash'] ?? ''), $stored_hash);
         $synced = !empty($inspection['synced']);
+        $config_scope = sanitize_key((string) ($expected['config_scope'] ?? 'project'));
+        $config_path = (string) ($expected['config_path'] ?? '');
+        $site_fingerprint = (string) ($expected['site_fingerprint'] ?? '');
         $script_path = (string) ($expected['script_path'] ?? '');
         $script_ok = $script_path !== '' && is_readable($script_path);
         $wp_root = untrailingslashit((string) ($expected['wp_root'] ?? ''));
@@ -2743,6 +2756,13 @@ final class LCFA_Admin {
         }
 
         $checks = [
+            'codex_config_scope' => [
+                'label' => __('Codex scope', 'livecanvas-forge-ai'),
+                'ok' => $config_scope === 'project',
+                'message' => $config_scope === 'project'
+                    ? __('Project-scoped config keeps this Codex project tied to this WordPress site.', 'livecanvas-forge-ai')
+                    : __('Global config is advanced and can be shared across Codex projects.', 'livecanvas-forge-ai'),
+            ],
             'wp_root_ok' => [
                 'label' => __('WordPress root', 'livecanvas-forge-ai'),
                 'ok' => $wp_root_ok,
@@ -2781,10 +2801,17 @@ final class LCFA_Admin {
             'primary_action' => $primary_action,
             'checks' => $checks,
             'message' => $message,
+            'config_scope' => $config_scope,
+            'config_path' => $config_path,
+            'site_fingerprint' => $site_fingerprint,
             'manual_fallback' => [
                 'remove_command' => (string) ($expected['remove_command'] ?? ''),
                 'add_command' => (string) ($expected['add_command'] ?? ''),
                 'snippet' => (string) ($expected['snippet'] ?? ''),
+                'config_scope' => $config_scope,
+                'config_path' => $config_path,
+                'global_config_path' => (string) ($expected['global_config_path'] ?? ''),
+                'site_fingerprint' => $site_fingerprint,
             ],
             'last_smoke' => [
                 'verified_at' => $last_verified,
@@ -2832,6 +2859,14 @@ final class LCFA_Admin {
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Target: %s', 'livecanvas-forge-ai'), $target_label)) . '</span>';
         if (!empty($state['strategy'])) {
             echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Strategy: %s', 'livecanvas-forge-ai'), (string) $state['strategy'])) . '</span>';
+        }
+        if ($mode === 'local') {
+            $config_scope = sanitize_key((string) ($state['config_scope'] ?? 'project'));
+            $config_scope_label = $config_scope === 'global' ? __('Global config', 'livecanvas-forge-ai') : __('Project config', 'livecanvas-forge-ai');
+            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Codex scope: %s', 'livecanvas-forge-ai'), $config_scope_label)) . '</span>';
+            if (!empty($state['site_fingerprint'])) {
+                echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Site ID: %s', 'livecanvas-forge-ai'), (string) $state['site_fingerprint'])) . '</span>';
+            }
         }
         echo '</div>';
 
@@ -2935,7 +2970,8 @@ final class LCFA_Admin {
                         'title' => __('Reload Codex, then test', 'livecanvas-forge-ai'),
                         'description' => __('The Codex setup has been generated. Codex must reload the MCP server before WordPress can verify it.', 'livecanvas-forge-ai'),
                         'steps' => [
-                            __('Copy and run the Codex setup command below if it is not already registered.', 'livecanvas-forge-ai'),
+                            __('Prefer copying the Project TOML below into the .codex/config.toml of the Codex project for this site.', 'livecanvas-forge-ai'),
+                            __('Use the global shell shortcut only as an advanced fallback.', 'livecanvas-forge-ai'),
                             __('Restart Codex or reload the livecanvas-forge MCP server.', 'livecanvas-forge-ai'),
                             __('Come back here and run the Codex smoke test.', 'livecanvas-forge-ai'),
                         ],
@@ -2969,7 +3005,7 @@ final class LCFA_Admin {
                         'description' => __('Credentials are present. Now generate the WordPress MCP Adapter setup for Codex.', 'livecanvas-forge-ai'),
                         'steps' => [
                             __('Click Connect Codex.', 'livecanvas-forge-ai'),
-                            __('Copy the Codex setup command when it appears.', 'livecanvas-forge-ai'),
+                            __('Copy the Project TOML into the Codex project .codex/config.toml when it appears.', 'livecanvas-forge-ai'),
                             __('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai'),
                         ],
                     ];
@@ -2984,6 +3020,7 @@ final class LCFA_Admin {
                     'description' => __('This is the advanced local runtime path. If you wanted the easier setup, select Direct Mode above and click Use selected mode.', 'livecanvas-forge-ai'),
                     'steps' => [
                         __('Continue local runtime only if Codex must access this machine files or local build tools.', 'livecanvas-forge-ai'),
+                        __('AI Bridge now writes a project-scoped .codex/config.toml inside this WordPress folder by default.', 'livecanvas-forge-ai'),
                         __('Restart Codex or reload the livecanvas-forge MCP server.', 'livecanvas-forge-ai'),
                         __('Return here and run the Codex smoke test.', 'livecanvas-forge-ai'),
                     ],
@@ -3016,7 +3053,7 @@ final class LCFA_Admin {
                     'description' => __('For plug-and-play setup, select Direct Mode above and click Use selected mode. Local runtime is only for filesystem access, LocalWP path detection, or local build tools.', 'livecanvas-forge-ai'),
                     'steps' => [
                         __('Recommended: switch to Direct Mode and use WordPress URL plus Application Password.', 'livecanvas-forge-ai'),
-                        __('Advanced only: click Connect Codex or Repair Codex to write ~/.codex/config.toml.', 'livecanvas-forge-ai'),
+                        __('Advanced only: click Connect Codex or Repair Codex to write this project .codex/config.toml.', 'livecanvas-forge-ai'),
                         __('If you continue local runtime, restart Codex before testing.', 'livecanvas-forge-ai'),
                     ],
                 ];
@@ -3131,11 +3168,27 @@ final class LCFA_Admin {
         if ($mode === 'remote') {
             $shortcut = (string) ($manual_fallback['shortcut_command'] ?? ($bundle['copy_command_string'] ?? ''));
             $command = (string) ($manual_fallback['command'] ?? ($bundle['command_string'] ?? ''));
-            echo '<p class="lcfa-guide-copy">' . esc_html__('Use this when you want to copy the remote Codex MCP Adapter setup manually.', 'livecanvas-forge-ai') . '</p>';
+            $snippet = (string) ($manual_fallback['codex_config_snippet'] ?? ($bundle['codex_config_snippet'] ?? ''));
+            $project_config_path = (string) ($manual_fallback['codex_project_config_path'] ?? ($bundle['codex_project_config_path'] ?? '.codex/config.toml'));
+            echo '<p class="lcfa-guide-copy">' . esc_html__('Use the project .codex/config.toml snippet when you manage multiple WordPress sites from Codex. The shell shortcut below writes a global MCP entry and is advanced fallback.', 'livecanvas-forge-ai') . '</p>';
+            if ($project_config_path !== '') {
+                $this->render_code_block($project_config_path, [
+                    'language' => 'text',
+                    'label' => __('Codex project config', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy config path', 'livecanvas-forge-ai'),
+                ]);
+            }
+            if ($snippet !== '') {
+                $this->render_code_block($snippet, [
+                    'language' => 'toml',
+                    'label' => __('Project TOML', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy project TOML', 'livecanvas-forge-ai'),
+                ]);
+            }
             if ($shortcut !== '') {
                 $this->render_code_block($shortcut, [
                     'language' => 'bash',
-                    'label' => __('Codex remote shortcut', 'livecanvas-forge-ai'),
+                    'label' => __('Advanced global shortcut', 'livecanvas-forge-ai'),
                     'copy_label' => __('Copy Codex remote shortcut', 'livecanvas-forge-ai'),
                 ]);
             }
@@ -3148,22 +3201,38 @@ final class LCFA_Admin {
             }
             echo '<p class="lcfa-guide-copy">' . esc_html(sprintf(__('Start tool: %s', 'livecanvas-forge-ai'), (string) ($manual_fallback['start_tool'] ?? 'livecanvas-forge-ai/get-connection-handoff'))) . '</p>';
         } else {
-            echo '<p class="lcfa-guide-copy">' . esc_html__('Use these commands if PHP cannot write ~/.codex/config.toml for this local machine.', 'livecanvas-forge-ai') . '</p>';
-            $this->render_code_block((string) ($manual_fallback['remove_command'] ?? ''), [
-                'language' => 'bash',
-                'label' => __('Remove', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy remove command', 'livecanvas-forge-ai'),
-            ]);
-            $this->render_code_block((string) ($manual_fallback['add_command'] ?? ''), [
-                'language' => 'bash',
-                'label' => __('Add', 'livecanvas-forge-ai'),
-                'copy_label' => __('Copy add command', 'livecanvas-forge-ai'),
-            ]);
-            $this->render_code_block((string) ($manual_fallback['snippet'] ?? ''), [
+            $config_path = (string) ($manual_fallback['config_path'] ?? '');
+            $config_scope = sanitize_key((string) ($manual_fallback['config_scope'] ?? 'project'));
+            echo '<p class="lcfa-guide-copy">' . esc_html($config_scope === 'global'
+                ? __('Use this if PHP cannot write the global Codex config for this local machine.', 'livecanvas-forge-ai')
+                : __('Use this if PHP cannot write the project Codex config inside this WordPress folder.', 'livecanvas-forge-ai')) . '</p>';
+            if ($config_path !== '') {
+                $this->render_code_block($config_path, [
+                    'language' => 'text',
+                    'label' => __('Config file', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy config path', 'livecanvas-forge-ai'),
+                ]);
+            }
+            $snippet = (string) ($manual_fallback['snippet'] ?? '');
+            if ($snippet !== '') {
+                $this->render_code_block($snippet, [
                 'language' => 'toml',
                 'label' => __('TOML', 'livecanvas-forge-ai'),
                 'copy_label' => __('Copy config snippet', 'livecanvas-forge-ai'),
-            ]);
+                ]);
+            }
+            if ($config_scope === 'global') {
+                $this->render_code_block((string) ($manual_fallback['remove_command'] ?? ''), [
+                    'language' => 'bash',
+                    'label' => __('Remove', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy remove command', 'livecanvas-forge-ai'),
+                ]);
+                $this->render_code_block((string) ($manual_fallback['add_command'] ?? ''), [
+                    'language' => 'bash',
+                    'label' => __('Add', 'livecanvas-forge-ai'),
+                    'copy_label' => __('Copy add command', 'livecanvas-forge-ai'),
+                ]);
+            }
         }
         echo '</details>';
     }
@@ -3265,7 +3334,7 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card lcfa-ready-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
-        echo '<div><h2>' . esc_html__('Repair Codex Connection', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this when Codex has an old MCP token, an old plugin path, or a stale WordPress root in ~/.codex/config.toml.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Repair Codex Connection', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this when Codex has an old MCP token, an old plugin path, or a stale WordPress root in the project .codex/config.toml.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
         echo '<div class="lcfa-chip-row">';
         echo '<span class="lcfa-chip' . ($wp_root_ok ? ' is-positive' : ' is-negative') . '">' . esc_html(sprintf(__('WordPress root: %s', 'livecanvas-forge-ai'), $wp_root_ok ? 'OK' : 'check')) . '</span>';
@@ -3277,33 +3346,42 @@ final class LCFA_Admin {
         echo '<div class="lcfa-connection-now-alert">';
         echo '<span class="lcfa-connection-now-alert__eyebrow">' . esc_html__('Codex repair status', 'livecanvas-forge-ai') . '</span>';
         echo '<strong>' . esc_html((string) ($state['message'] ?? __('Codex config should be checked.', 'livecanvas-forge-ai'))) . '</strong>';
-        echo '<p>' . esc_html__('After updating ~/.codex/config.toml, Codex must be restarted or the current MCP server must be reloaded before the new config is used.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p>' . esc_html__('After updating the Codex project config, Codex must be restarted or the current MCP server must be reloaded before the new config is used.', 'livecanvas-forge-ai') . '</p>';
         echo '</div>';
 
         echo '<div class="lcfa-choice-grid lcfa-choice-grid--actions">';
         $this->render_codex_repair_action('sync_wp', __('Detect current WordPress path', 'livecanvas-forge-ai'), __('Sync WordPress connection settings', 'livecanvas-forge-ai'), __('Stores the current local ABSPATH as the active workspace root when the saved root is stale.', 'livecanvas-forge-ai'));
-        $this->render_codex_repair_action('sync_codex', __('Update Codex config', 'livecanvas-forge-ai'), __('Write ~/.codex/config.toml', 'livecanvas-forge-ai'), __('Updates only mcp_servers.livecanvas-forge and creates a backup first.', 'livecanvas-forge-ai'), true);
+        $this->render_codex_repair_action('sync_codex', __('Update Codex config', 'livecanvas-forge-ai'), __('Write project .codex/config.toml', 'livecanvas-forge-ai'), __('Updates only mcp_servers.livecanvas-forge and creates a backup first.', 'livecanvas-forge-ai'), true);
         $this->render_codex_repair_action('smoke', __('Run smoke test', 'livecanvas-forge-ai'), __('Verify Codex MCP locally', 'livecanvas-forge-ai'), __('Runs REST health, Node, script, and get_mcp_status checks with the current token.', 'livecanvas-forge-ai'));
         echo '</div>';
 
         echo '<details class="lcfa-advanced-settings">';
         echo '<summary>' . esc_html__('Manual fallback', 'livecanvas-forge-ai') . '</summary>';
-        echo '<p class="lcfa-guide-copy">' . esc_html__('Use these commands if PHP cannot write ~/.codex/config.toml for this local machine.', 'livecanvas-forge-ai') . '</p>';
-        $this->render_code_block((string) ($expected['remove_command'] ?? ''), [
-            'language' => 'bash',
-            'label' => __('Remove', 'livecanvas-forge-ai'),
-            'copy_label' => __('Copy remove command', 'livecanvas-forge-ai'),
-        ]);
-        $this->render_code_block((string) ($expected['add_command'] ?? ''), [
-            'language' => 'bash',
-            'label' => __('Add', 'livecanvas-forge-ai'),
-            'copy_label' => __('Copy add command', 'livecanvas-forge-ai'),
-        ]);
+        echo '<p class="lcfa-guide-copy">' . esc_html__('Use this snippet if PHP cannot write the project Codex config for this local machine.', 'livecanvas-forge-ai') . '</p>';
+        if (!empty($expected['config_path'])) {
+            $this->render_code_block((string) $expected['config_path'], [
+                'language' => 'text',
+                'label' => __('Config file', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy config path', 'livecanvas-forge-ai'),
+            ]);
+        }
         $this->render_code_block((string) ($expected['snippet'] ?? ''), [
             'language' => 'toml',
             'label' => __('TOML', 'livecanvas-forge-ai'),
             'copy_label' => __('Copy config snippet', 'livecanvas-forge-ai'),
         ]);
+        if (sanitize_key((string) ($expected['config_scope'] ?? 'project')) === 'global') {
+            $this->render_code_block((string) ($expected['remove_command'] ?? ''), [
+                'language' => 'bash',
+                'label' => __('Remove', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy remove command', 'livecanvas-forge-ai'),
+            ]);
+            $this->render_code_block((string) ($expected['add_command'] ?? ''), [
+                'language' => 'bash',
+                'label' => __('Add', 'livecanvas-forge-ai'),
+                'copy_label' => __('Copy add command', 'livecanvas-forge-ai'),
+            ]);
+        }
         echo '</details>';
         echo '</section>';
     }
@@ -4530,7 +4608,7 @@ final class LCFA_Admin {
                 'intro'          => __('Use this if Codex is your main coding agent. The easiest path is to register the MCP server once, then let Codex call the plugin tools from the current workspace.', 'livecanvas-forge-ai'),
                 'steps'          => [
                     __('Open a terminal in the same workspace as your WordPress project.', 'livecanvas-forge-ai'),
-                    __('Run the Codex shortcut below. It auto-detects the embedded CLI in Codex.app, then falls back to a ~/.codex/config.toml snippet if needed.', 'livecanvas-forge-ai'),
+                    __('Prefer a project .codex/config.toml for each WordPress project. The shortcut below can still register a global fallback.', 'livecanvas-forge-ai'),
                     __('Keep the server name as livecanvas-forge so it is easy to recognize later.', 'livecanvas-forge-ai'),
                     __('Restart Codex if needed, verify with codex mcp list or the embedded Codex CLI path, then call get_snapshot as your first tool check.', 'livecanvas-forge-ai'),
                 ],
@@ -4672,7 +4750,7 @@ final class LCFA_Admin {
         $lines[] = 'else';
         $lines[] = "  cat <<'EOF'";
         $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';
-        $lines[] = 'Add this MCP server to ~/.codex/config.toml, then reopen Codex:';
+        $lines[] = 'Add this MCP server to the project .codex/config.toml, then reopen Codex:';
         $lines[] = '';
         $lines[] = $this->build_codex_config_snippet($client);
         $lines[] = 'EOF';

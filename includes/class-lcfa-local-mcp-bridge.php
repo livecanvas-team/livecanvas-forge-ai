@@ -235,6 +235,7 @@ final class LCFA_Local_MCP_Bridge {
         return array_merge($this->collect_base_environment(), [
             'LCFA_SITE_URL'  => home_url('/'),
             'LCFA_REST_BASE' => rest_url('lcfa/v1/'),
+            'LCFA_SITE_FINGERPRINT' => method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '',
             'LCFA_MCP_TOKEN' => (string) $connections['mcp_token'],
             'LCFA_WP_ROOT'   => untrailingslashit(ABSPATH),
         ]);

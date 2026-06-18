@@ -83,6 +83,8 @@ final class LCFA_Direct_Agent_Onboarding {
             'manual_fallback' => [
                 'shortcut_command' => (string) ($bundle['copy_command_string'] ?? ($bundle['shortcut_command'] ?? '')),
                 'command' => (string) ($bundle['command_string'] ?? ''),
+                'codex_config_snippet' => (string) ($bundle['codex_config_snippet'] ?? ''),
+                'codex_project_config_path' => (string) ($bundle['codex_project_config_path'] ?? '.codex/config.toml'),
                 'start_tool' => (string) ($bundle['agent_start_tool'] ?? 'livecanvas-forge-ai/get-connection-handoff'),
                 'prerequisites' => $remote_prerequisites,
             ],

@@ -121,7 +121,8 @@ class WPClient {
       _lcfa_origin: 'mcp_agent',
       _lcfa_transport: transport,
       _lcfa_agent: agent,
-      _lcfa_processed_by: processedBy
+      _lcfa_processed_by: processedBy,
+      _lcfa_site_fingerprint: this.config && this.config.siteFingerprint ? String(this.config.siteFingerprint) : ''
     }
   }
 
@@ -338,6 +339,10 @@ class WPClient {
     const headers = {
       Accept: 'application/json',
       'X-LCFA-MCP-Token': this.config.token
+    }
+
+    if (this.config.siteFingerprint) {
+      headers['X-LCFA-Site-Fingerprint'] = String(this.config.siteFingerprint)
     }
 
     if (options.query && typeof options.query === 'object') {

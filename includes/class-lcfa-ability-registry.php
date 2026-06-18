@@ -1761,6 +1761,7 @@ final class LCFA_Ability_Registry {
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
             __('Then call livecanvas-forge-ai/get-agent-handoff-package with {"limit":5} only if you need the full runbook, smoke tests, ability diagnostics, MCP status, AI status, or recent run summary.', 'livecanvas-forge-ai'),
             __('Then run read-only checks starting with livecanvas-forge-ai/get-snapshot, livecanvas-forge-ai/get-ability-diagnostics, and livecanvas-forge-ai/get-runs when available.', 'livecanvas-forge-ai'),
+            __('Verify the returned site_identity before running any write ability; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
             __('Do not modify files or raw post content directly when a dedicated LiveCanvas preview/apply ability exists for the request.', 'livecanvas-forge-ai'),
@@ -1783,6 +1784,13 @@ final class LCFA_Ability_Registry {
             'mode'           => $mode,
             'status'         => $status,
             'transport'      => 'wordpress_ability',
+            'site_identity'  => [
+                'site_url' => function_exists('home_url') ? home_url('/') : '',
+                'rest_base' => function_exists('rest_url') ? rest_url('lcfa/v1/') : '',
+                'wp_root' => defined('ABSPATH') ? rtrim((string) ABSPATH, '/\\') : '',
+                'fingerprint' => $this->get_site_fingerprint(),
+                'codex_config_scope' => sanitize_key((string) ($connections['codex_config_scope'] ?? 'project')),
+            ],
             'agent_start_tool' => 'livecanvas-forge-ai/get-connection-handoff',
             'connection_handoff_tool' => 'livecanvas-forge-ai/get-connection-handoff',
             'handoff_package_tool' => 'livecanvas-forge-ai/get-agent-handoff-package',
@@ -1816,6 +1824,24 @@ final class LCFA_Ability_Registry {
                 'run_errors'       => (int) ($summary['run_errors'] ?? 0),
             ],
         ];
+    }
+
+    private function get_site_fingerprint(): string {
+        if (method_exists('LCFA_Settings', 'get_site_fingerprint')) {
+            return LCFA_Settings::get_site_fingerprint();
+        }
+
+        $payload = [
+            'site_url'  => function_exists('home_url') ? rtrim(home_url('/'), '/') . '/' : '',
+            'rest_base' => function_exists('rest_url') ? rtrim(rest_url('lcfa/v1/'), '/') . '/' : '',
+            'wp_root'   => defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '',
+        ];
+
+        $encoded = function_exists('wp_json_encode')
+            ? wp_json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return substr(hash('sha256', (string) $encoded), 0, 16);
     }
 
     private function build_agent_handoff_runbook(array $summary, array $smoke_tests, array $connection_handoff): string {

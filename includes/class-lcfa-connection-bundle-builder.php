@@ -15,6 +15,7 @@ final class LCFA_Connection_Bundle_Builder {
         $claude_connection_target = $this->normalize_claude_target($payload, $client);
         $agent_start_tool = $this->build_connection_handoff_tool($environment, $command);
         $handoff_package_tool = $this->build_handoff_package_tool($environment, $command);
+        $codex_config_snippet = $client === 'codex' ? $this->build_codex_config_snippet($command, $environment) : '';
 
         $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment);
 
@@ -32,6 +33,8 @@ final class LCFA_Connection_Bundle_Builder {
             'copy_command_string' => $shortcut['command'] ?: $command_string,
             'shortcut_title'      => $shortcut['title'],
             'shortcut_command'    => $shortcut['command'],
+            'codex_config_snippet' => $codex_config_snippet,
+            'codex_project_config_path' => $client === 'codex' ? ($workspace_root !== '' ? $workspace_root . '/.codex/config.toml' : '.codex/config.toml') : '',
             'environment'         => $environment,
             'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment),
             'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment),
@@ -570,7 +573,7 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = 'else';
         $lines[] = "  cat <<'EOF'";
         $lines[] = 'Codex CLI not found in PATH and the embedded desktop CLI was not found at /Applications/Codex.app/Contents/Resources/codex.';
-        $lines[] = 'Add this MCP server to ~/.codex/config.toml, then reopen Codex:';
+        $lines[] = 'Add this MCP server to the project .codex/config.toml, then reopen Codex:';
         $lines[] = '';
         $lines[] = $this->build_codex_config_snippet($command, $environment);
         $lines[] = 'EOF';

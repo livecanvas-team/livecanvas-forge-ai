@@ -396,6 +396,7 @@ final class LCFA_Context_Builder {
         $common = [
             'site_url'       => home_url('/'),
             'rest_base'      => rest_url('lcfa/v1/'),
+            'site_fingerprint' => method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '',
             'mcp_endpoint'   => $mcp_status['endpoint'],
             'mcp_token'      => $mcp_status['token'],
             'wp_root'        => untrailingslashit(ABSPATH),
@@ -419,6 +420,7 @@ final class LCFA_Context_Builder {
                     'env'     => array_merge([
                         'LCFA_SITE_URL=' . $common['site_url'],
                         'LCFA_REST_BASE=' . $common['rest_base'],
+                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_ENDPOINT=' . $common['mcp_endpoint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
                     ], $filesystem_env),
@@ -428,6 +430,7 @@ final class LCFA_Context_Builder {
                     'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode'),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
+                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
                     ], $filesystem_env),
                 ],
@@ -436,6 +439,7 @@ final class LCFA_Context_Builder {
                     'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude'),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
+                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_ENDPOINT=' . $common['mcp_endpoint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
                     ], $filesystem_env),
@@ -445,6 +449,7 @@ final class LCFA_Context_Builder {
                     'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor'),
                     'env'     => array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
+                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
                     ], $filesystem_env),
                 ],

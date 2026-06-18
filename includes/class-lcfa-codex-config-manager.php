@@ -14,33 +14,41 @@ final class LCFA_Codex_Config_Manager {
     public function get_expected_config(array $connections = []): array {
         $connections = $connections !== [] ? $connections : LCFA_Settings::get_connections();
         $wp_root = $this->resolve_wp_root($connections);
+        $config_scope = $this->resolve_config_scope($connections);
+        $site_fingerprint = $this->get_site_fingerprint();
         $script_path = LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js';
         $environment = [
             'LCFA_MCP_ENDPOINT' => LCFA_Settings::get_mcp_endpoint(),
             'LCFA_MCP_TOKEN'    => (string) ($connections['mcp_token'] ?? ''),
             'LCFA_REST_BASE'    => trailingslashit(rest_url('lcfa/v1/')),
             'LCFA_SITE_URL'     => trailingslashit(home_url('/')),
+            'LCFA_SITE_FINGERPRINT' => $site_fingerprint,
             'LCFA_WP_ROOT'      => $wp_root,
         ];
         $command = $this->resolve_node_command();
         $args = [$script_path, '--transport=stdio'];
         $fingerprint = [
             'node_command' => $command,
+            'config_scope' => $config_scope,
             'script_path' => $script_path,
             'rest_base'   => $environment['LCFA_REST_BASE'],
             'site_url'    => $environment['LCFA_SITE_URL'],
+            'site_fingerprint' => $site_fingerprint,
             'wp_root'     => $environment['LCFA_WP_ROOT'],
             'mcp_token'   => $environment['LCFA_MCP_TOKEN'],
         ];
 
         return [
             'server_name'    => self::SERVER_NAME,
-            'config_path'    => $this->get_config_path(),
+            'config_scope'   => $config_scope,
+            'config_path'    => $this->get_config_path($config_scope, $wp_root),
+            'global_config_path' => $this->get_global_config_path(),
             'command'        => $command,
             'args'           => $args,
             'environment'    => $environment,
             'script_path'    => $script_path,
             'wp_root'        => $wp_root,
+            'site_fingerprint' => $site_fingerprint,
             'hash'           => md5((string) wp_json_encode($fingerprint, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)),
             'snippet'        => $this->build_toml_snippet($command, $args, $environment),
             'remove_command' => 'codex mcp remove ' . self::SERVER_NAME,
@@ -61,7 +69,7 @@ final class LCFA_Codex_Config_Manager {
                 'ok'       => false,
                 'synced'   => false,
                 'status'   => 'missing_home',
-                'message'  => __('Codex config path could not be resolved from HOME.', 'livecanvas-forge-ai'),
+                'message'  => __('Codex config path could not be resolved for this project.', 'livecanvas-forge-ai'),
                 'expected' => $expected,
                 'writable' => false,
             ];
@@ -101,7 +109,7 @@ final class LCFA_Codex_Config_Manager {
         if ($config_path === '') {
             return [
                 'ok'      => false,
-                'message' => __('Codex config path could not be resolved from HOME.', 'livecanvas-forge-ai'),
+                'message' => __('Codex config path could not be resolved for this project.', 'livecanvas-forge-ai'),
                 'expected'=> $expected,
             ];
         }
@@ -313,6 +321,7 @@ final class LCFA_Codex_Config_Manager {
             'script'    => strpos($contents, (string) $expected['script_path']) !== false,
             'rest_base' => strpos($contents, (string) $expected['environment']['LCFA_REST_BASE']) !== false,
             'site_url'  => strpos($contents, (string) $expected['environment']['LCFA_SITE_URL']) !== false,
+            'site_fingerprint' => strpos($contents, (string) $expected['environment']['LCFA_SITE_FINGERPRINT']) !== false,
             'wp_root'   => strpos($contents, (string) $expected['environment']['LCFA_WP_ROOT']) !== false,
             'token'     => strpos($contents, (string) $expected['environment']['LCFA_MCP_TOKEN']) !== false,
         ];
@@ -417,13 +426,49 @@ final class LCFA_Codex_Config_Manager {
         return array_values(array_unique(array_map('strval', $candidates)));
     }
 
-    private function get_config_path(): string {
+    private function get_config_path(string $scope, string $wp_root): string {
+        if ($scope === 'project' && $wp_root !== '') {
+            return rtrim($wp_root, '/\\') . '/.codex/config.toml';
+        }
+
+        return $this->get_global_config_path();
+    }
+
+    private function get_global_config_path(): string {
         $home = (string) getenv('HOME');
         if ($home === '') {
             return '';
         }
 
         return rtrim($home, '/\\') . '/.codex/config.toml';
+    }
+
+    private function resolve_config_scope(array $connections): string {
+        if (method_exists('LCFA_Settings', 'sanitize_codex_config_scope')) {
+            return LCFA_Settings::sanitize_codex_config_scope((string) ($connections['codex_config_scope'] ?? 'project'));
+        }
+
+        $scope = (string) ($connections['codex_config_scope'] ?? 'project');
+
+        return in_array($scope, ['project', 'global'], true) ? $scope : 'project';
+    }
+
+    private function get_site_fingerprint(): string {
+        if (method_exists('LCFA_Settings', 'get_site_fingerprint')) {
+            return LCFA_Settings::get_site_fingerprint();
+        }
+
+        $payload = [
+            'site_url'  => function_exists('home_url') ? rtrim(home_url('/'), '/') . '/' : '',
+            'rest_base' => function_exists('rest_url') ? rtrim(rest_url('lcfa/v1/'), '/') . '/' : '',
+            'wp_root'   => defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '',
+        ];
+
+        $encoded = function_exists('wp_json_encode')
+            ? wp_json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return substr(hash('sha256', (string) $encoded), 0, 16);
     }
 
     private function resolve_wp_root(array $connections): string {

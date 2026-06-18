@@ -130,7 +130,7 @@ final class LCFA_Settings {
     }
 
     public static function normalize_local_workspace_root(array $connections, bool $force = false): array {
-        $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
+        $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '';
         if ($wp_root === '' || !self::looks_like_wordpress_root($wp_root)) {
             return $connections;
         }
@@ -184,6 +184,7 @@ final class LCFA_Settings {
             'preferred_client'            => '',
             'claude_connection_target'    => '',
             'workspace_root'              => '',
+            'codex_config_scope'          => 'project',
             'codex_model'                 => 'gpt-5.3-codex-spark',
             'codex_speed'                 => 'balanced',
             'codex_reasoning_effort'      => 'medium',
@@ -275,6 +276,7 @@ final class LCFA_Settings {
             'preferred_client'            => $preferred_client,
             'claude_connection_target'    => $claude_connection_target,
             'workspace_root'              => sanitize_text_field($connections['workspace_root'] ?? ''),
+            'codex_config_scope'          => self::sanitize_codex_config_scope((string) ($connections['codex_config_scope'] ?? ($current['codex_config_scope'] ?? 'project'))),
             'codex_model'                 => $codex_options['model'],
             'codex_speed'                 => $codex_options['speed'],
             'codex_reasoning_effort'      => $codex_options['reasoning_effort'],
@@ -290,6 +292,27 @@ final class LCFA_Settings {
             'framework_change_previous'   => $framework_change_previous,
             'framework_change_next'       => $framework_change_next,
         ];
+    }
+
+    public static function sanitize_codex_config_scope(string $scope): string {
+        $scope = sanitize_key($scope);
+
+        return in_array($scope, ['project', 'global'], true) ? $scope : 'project';
+    }
+
+    public static function get_site_fingerprint(): string {
+        $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '';
+        $payload = [
+            'site_url'  => function_exists('home_url') ? rtrim(home_url('/'), '/') . '/' : '',
+            'rest_base' => function_exists('rest_url') ? rtrim(rest_url('lcfa/v1/'), '/') . '/' : '',
+            'wp_root'   => $wp_root,
+        ];
+
+        $encoded = function_exists('wp_json_encode')
+            ? wp_json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return substr(hash('sha256', (string) $encoded), 0, 16);
     }
 
     public static function get_codex_model_options(): array {

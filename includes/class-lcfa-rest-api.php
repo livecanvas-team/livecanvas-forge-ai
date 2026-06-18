@@ -1240,6 +1240,7 @@ final class LCFA_Rest_Api {
             'site_url'      => home_url('/'),
             'rest_base'     => rest_url('lcfa/v1/'),
             'wp_root'       => untrailingslashit(ABSPATH),
+            'site_fingerprint' => $this->get_site_fingerprint(),
             'mcp_script'    => LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js',
             'script_exists' => is_readable(LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js'),
             'stylesheet'    => method_exists($theme, 'get_stylesheet') ? (string) $theme->get_stylesheet() : '',
@@ -1315,6 +1316,13 @@ final class LCFA_Rest_Api {
     public function run_command(WP_REST_Request $request): WP_REST_Response {
         $payload = $this->get_request_payload($request);
         $payload = $this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules'));
+        $fingerprint_error = $this->validate_mcp_site_fingerprint($request, $payload);
+
+        if (is_array($fingerprint_error)) {
+            return new WP_REST_Response([
+                'result' => $fingerprint_error,
+            ], 409);
+        }
 
         $append_thread = array_key_exists('thread_id', $payload);
         $thread_id = $append_thread
@@ -1638,6 +1646,66 @@ final class LCFA_Rest_Api {
             'agent'        => $client,
             'processed_by' => $processed_by,
         ];
+    }
+
+    private function validate_mcp_site_fingerprint(WP_REST_Request $request, array $payload): ?array {
+        $origin = sanitize_key((string) ($payload['_lcfa_origin'] ?? $payload['origin'] ?? ''));
+        if ($origin !== 'mcp_agent') {
+            return null;
+        }
+
+        $header_fingerprint = trim((string) $request->get_header('x_lcfa_site_fingerprint'));
+        $payload_fingerprint = trim((string) ($payload['_lcfa_site_fingerprint'] ?? $payload['site_fingerprint'] ?? ''));
+        $provided = sanitize_text_field($header_fingerprint !== '' ? $header_fingerprint : $payload_fingerprint);
+        $expected = $this->get_site_fingerprint();
+
+        if ($provided === '') {
+            return [
+                'ok' => false,
+                'action' => sanitize_key((string) ($payload['action'] ?? '')),
+                'message' => __('This Codex MCP config is missing the site fingerprint. Repair Codex for this project before running write commands.', 'livecanvas-forge-ai'),
+                'summary' => __('Site safety check failed before execution.', 'livecanvas-forge-ai'),
+                'site_fingerprint' => [
+                    'expected' => $expected,
+                    'provided' => '',
+                    'status' => 'missing',
+                ],
+            ];
+        }
+
+        if (!hash_equals($expected, $provided)) {
+            return [
+                'ok' => false,
+                'action' => sanitize_key((string) ($payload['action'] ?? '')),
+                'message' => __('This Codex chat is connected to a different WordPress site. Open the matching Codex project or repair the MCP config before running write commands.', 'livecanvas-forge-ai'),
+                'summary' => __('Site safety check failed before execution.', 'livecanvas-forge-ai'),
+                'site_fingerprint' => [
+                    'expected' => $expected,
+                    'provided' => $provided,
+                    'status' => 'mismatch',
+                ],
+            ];
+        }
+
+        return null;
+    }
+
+    private function get_site_fingerprint(): string {
+        if (method_exists('LCFA_Settings', 'get_site_fingerprint')) {
+            return LCFA_Settings::get_site_fingerprint();
+        }
+
+        $payload = [
+            'site_url'  => function_exists('home_url') ? rtrim(home_url('/'), '/') . '/' : '',
+            'rest_base' => function_exists('rest_url') ? rtrim(rest_url('lcfa/v1/'), '/') . '/' : '',
+            'wp_root'   => defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '',
+        ];
+
+        $encoded = function_exists('wp_json_encode')
+            ? wp_json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return substr(hash('sha256', (string) $encoded), 0, 16);
     }
 
     private function add_payload_provenance(array $payload, array $provenance): array {
@@ -2506,6 +2574,7 @@ final class LCFA_Rest_Api {
                 $handoff_package_tool
             ),
             __('Run the read-only checks from the package, starting with get_snapshot, get_ability_diagnostics, and get_runs when available.', 'livecanvas-forge-ai'),
+            __('Verify the returned site_identity before running any write command; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, available tools, active risks, and whether write abilities are exposed.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
         ];
@@ -2523,6 +2592,13 @@ final class LCFA_Rest_Api {
             'last_verified_at' => sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? '')),
             'transport'      => $transport,
             'mcp_adapter_url' => sanitize_text_field((string) ($custom_server['url'] ?? '')),
+            'site_identity'  => [
+                'site_url' => function_exists('home_url') ? home_url('/') : '',
+                'rest_base' => function_exists('rest_url') ? rest_url('lcfa/v1/') : '',
+                'wp_root' => defined('ABSPATH') ? rtrim((string) ABSPATH, '/\\') : '',
+                'fingerprint' => $this->get_site_fingerprint(),
+                'codex_config_scope' => sanitize_key((string) ($connections['codex_config_scope'] ?? 'project')),
+            ],
             'agent_start_tool' => $connection_handoff_tool,
             'connection_handoff_tool' => $connection_handoff_tool,
             'handoff_package_tool' => $handoff_package_tool,

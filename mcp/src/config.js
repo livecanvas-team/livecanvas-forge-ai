@@ -3,6 +3,7 @@ const DEFAULTS = {
   agent: 'codex',
   restBase: '',
   siteUrl: '',
+  siteFingerprint: '',
   token: '',
   wpRoot: '',
   host: '127.0.0.1',
@@ -19,6 +20,7 @@ function loadConfig(argv = []) {
     agent: process.env.LCFA_AGENT || DEFAULTS.agent,
     restBase: process.env.LCFA_REST_BASE || DEFAULTS.restBase,
     siteUrl: process.env.LCFA_SITE_URL || DEFAULTS.siteUrl,
+    siteFingerprint: process.env.LCFA_SITE_FINGERPRINT || DEFAULTS.siteFingerprint,
     token: process.env.LCFA_MCP_TOKEN || DEFAULTS.token,
     wpRoot: process.env.LCFA_WP_ROOT || DEFAULTS.wpRoot,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
@@ -56,6 +58,9 @@ function loadConfig(argv = []) {
         break
       case 'site-url':
         config.siteUrl = value || config.siteUrl
+        break
+      case 'site-fingerprint':
+        config.siteFingerprint = value || config.siteFingerprint
         break
       case 'token':
         config.token = value || config.token

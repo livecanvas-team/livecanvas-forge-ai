@@ -21,6 +21,7 @@ class CaptureClient extends WPClient {
 
 (async () => {
   const client = new CaptureClient()
+  client.config.siteFingerprint = 'site-fp-test'
 
   await client.suggestCommand({ action: 'page_upsert', title: 'Pricing' })
   await client.runCommand({ action: 'page_upsert', title: 'Pricing' })
@@ -51,6 +52,7 @@ class CaptureClient extends WPClient {
   assert.strictEqual(suggestBody._lcfa_transport, 'mcp_stdio', 'MCP suggestions should declare stdio transport')
   assert.strictEqual(suggestBody._lcfa_agent, 'codex', 'MCP suggestions should declare the configured Codex agent')
   assert.strictEqual(suggestBody._lcfa_processed_by, 'forge_local_rules', 'MCP suggestions are still prepared by AI Bridge local rules')
+  assert.strictEqual(suggestBody._lcfa_site_fingerprint, 'site-fp-test', 'MCP suggestions should carry the configured WordPress site fingerprint')
 
   const runBody = client.calls[1].options.body
   assert.strictEqual(client.calls[1].route, 'command', 'runCommand should call command')
@@ -58,6 +60,7 @@ class CaptureClient extends WPClient {
   assert.strictEqual(runBody._lcfa_transport, 'mcp_stdio', 'MCP command executions should declare stdio transport')
   assert.strictEqual(runBody._lcfa_agent, 'codex', 'MCP command executions should declare the configured Codex agent')
   assert.strictEqual(runBody._lcfa_processed_by, 'codex_mcp', 'MCP command executions should declare Codex as the processor')
+  assert.strictEqual(runBody._lcfa_site_fingerprint, 'site-fp-test', 'MCP command executions should carry the configured WordPress site fingerprint')
 
   assert.strictEqual(client.calls[2].method, 'GET', 'getNextAgentRequest should read from the agent queue')
   assert.strictEqual(client.calls[2].route, 'agent/request', 'getNextAgentRequest should call agent/request')

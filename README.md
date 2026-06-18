@@ -12,6 +12,7 @@ Usable today:
 
 - connect coding agents through the local MCP bridge or REST contract
 - use Codex Direct Mode through WordPress MCP Adapter, Application Password auth, and the remote MCP proxy package
+- keep Codex connections site-bound with project-scoped `.codex/config.toml` files and a Site ID fingerprint
 - expose WordPress 7 Abilities and a custom WordPress MCP Adapter server when available
 - inspect WordPress, LiveCanvas, Picostrap, Picowind, WindPress, WooCommerce, and ACF context
 - run preview/apply operations from the Command Deck
@@ -114,6 +115,12 @@ You can also upload a ZIP from:
 WordPress Admin > Plugins > Add New > Upload Plugin
 ```
 
+The current build artifact is committed at:
+
+```text
+dist/livecanvas-forge-ai.zip
+```
+
 The plugin folder should be named:
 
 ```text
@@ -136,12 +143,51 @@ If LiveCanvas is active, AI Bridge also appears inside the LiveCanvas admin area
 4. Open `Connections`.
 5. Use the default `Connect Codex` Direct Mode path, or open `Other clients`.
 6. For Direct Mode, add the site URL, WordPress username, and Application Password if missing.
-7. Generate the Codex setup, restart/reload the MCP server, then run the smoke test.
-8. Send the generated first prompt to the coding agent; Direct Mode starts with `livecanvas-forge-ai/get-connection-handoff`.
-9. Start with preview abilities or `dry_run: true`.
-10. Apply only after the preview result looks correct.
+7. Generate the Codex setup.
+8. Prefer the Project TOML snippet and save it in the `.codex/config.toml` file of the Codex project for this WordPress site.
+9. Restart/reload the MCP server, then run the smoke test.
+10. Send the generated first prompt to the coding agent; Direct Mode starts with `livecanvas-forge-ai/get-connection-handoff`.
+11. Check the returned `site_identity.fingerprint` before write requests when you work across multiple sites.
+12. Start with preview abilities or `dry_run: true`.
+13. Apply only after the preview result looks correct.
 
 For detailed MCP setup, see [`mcp/README.md`](./mcp/README.md). The preferred setup path is the in-plugin `Connections` wizard.
+
+## Codex Multi-Site Safety
+
+Codex can read MCP configuration from a project-level `.codex/config.toml`. AI Bridge now uses that as the preferred path for local Codex runtime setup and shows a Project TOML snippet for Direct Mode remote setup.
+
+Recommended structure when you manage multiple sites:
+
+```text
+site-a/.codex/config.toml -> livecanvas-forge points to Site A
+site-b/.codex/config.toml -> livecanvas-forge points to Site B
+remote-client/.codex/config.toml -> livecanvas-forge points to the remote WordPress MCP Adapter
+```
+
+Each MCP config includes `LCFA_SITE_FINGERPRINT`. MCP requests also send that fingerprint to WordPress. If a Codex chat is connected to a different site, AI Bridge rejects MCP write commands before they reach the Command Deck.
+
+When you start a Codex session, first call:
+
+```text
+livecanvas-forge-ai/get-connection-handoff
+```
+
+or, for the legacy local bridge:
+
+```text
+get_connection_handoff
+```
+
+Then confirm:
+
+```text
+status: ready
+site_identity.fingerprint: matches the Site ID shown in Connections
+guardrail: read_only_first
+```
+
+Use the global Codex MCP entry only as an advanced fallback. A global `~/.codex/config.toml` entry is convenient, but it is easier to point the wrong Codex project at the wrong WordPress site.
 
 ## How To Test This Build
 
