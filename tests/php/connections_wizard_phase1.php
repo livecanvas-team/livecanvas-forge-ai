@@ -132,6 +132,8 @@ function lcfa_assert_false(bool $condition, string $message): void {
 
 require LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
+require LCFA_DIR . 'includes/class-lcfa-direct-agent-onboarding.php';
+require LCFA_DIR . 'includes/class-lcfa-power-mode.php';
 require LCFA_DIR . 'includes/class-lcfa-connection-wizard-presenter.php';
 require LCFA_DIR . 'includes/class-lcfa-admin-hero-presenter.php';
 require LCFA_DIR . 'includes/class-lcfa-workspace-access.php';
@@ -611,6 +613,7 @@ $codex_fast_path_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex
 $codex_other_clients_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_other_clients_panel');
 $secondary_panels_method = new ReflectionMethod('LCFA_Admin', 'render_connections_secondary_panels');
 $ability_diagnostics_card_method = new ReflectionMethod('LCFA_Admin', 'render_ability_diagnostics_card');
+$power_mode_status_card_method = new ReflectionMethod('LCFA_Admin', 'render_power_mode_status_card');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -689,7 +692,7 @@ $missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, 
     'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
     'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
 ], 'remote', []);
-lcfa_assert_same('needs_setup', $missing_remote_state['status'] ?? '', 'remote Codex state should stay in needs_setup while prerequisites are incomplete');
+lcfa_assert_same('missing_credentials', $missing_remote_state['status'] ?? '', 'remote Codex state should report missing_credentials while prerequisites are incomplete');
 lcfa_assert_same('none', $missing_remote_state['primary_action'] ?? '', 'remote Codex should not generate partial config when prerequisites are incomplete');
 
 $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
@@ -713,6 +716,30 @@ $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance,
 ], 'remote', []);
 lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
 lcfa_assert_same('run_smoke', $complete_remote_state['primary_action'] ?? '', 'remote Codex should move directly to smoke test after shortcut generation');
+lcfa_assert_same('direct', $complete_remote_state['mode'] ?? '', 'remote Codex state should identify Direct Mode');
+lcfa_assert_same('wordpress-mcp-adapter', $complete_remote_state['strategy'] ?? '', 'remote Codex state should identify the WordPress MCP Adapter strategy');
+
+$ready_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
+    'preferred_client'            => 'codex',
+    'connection_mode'             => 'remote',
+    'remote_site_url'             => 'https://remote.example',
+    'remote_username'             => 'admin',
+    'remote_application_password' => 'abcd efgh ijkl mnop',
+    'connection_status'           => 'ready',
+    'connection_last_verified_at' => '2026-06-17 10:00:00',
+    'connection_last_error'       => '',
+    'connection_current_step'     => 'ready',
+    'connection_last_bundle_hash' => 'remote-hash',
+], [
+    'client'              => 'codex',
+    'mode'                => 'remote',
+    'connection_strategy' => 'remote-mcp-adapter',
+    'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+], 'remote', []);
+lcfa_assert_same('ready', $ready_remote_state['status'] ?? '', 'remote Codex state should become ready only after a passed smoke test timestamp exists');
+lcfa_assert_same('none', $ready_remote_state['primary_action'] ?? '', 'remote Codex ready state should not ask for another primary setup action');
 
 ob_start();
 $codex_fast_path_panel_method->invoke(
@@ -741,6 +768,24 @@ lcfa_assert_true(strpos($codex_fast_path_markup, 'Connect Codex') !== false, 'Co
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Local site') !== false && strpos($codex_fast_path_markup, 'Remote site') !== false, 'Codex fast path should expose a Local/Remote switch');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Remote Codex prerequisites') !== false, 'remote Codex fast path should render the prerequisite checklist instead of a partial config');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'does not use LCFA_WP_ROOT') !== false, 'remote Codex fast path should state that local WordPress root is not used');
+
+ob_start();
+$power_mode_status_card_method->invoke($admin_instance, [
+    'power_mode' => 'auto',
+], [
+    'site_mode' => 'local',
+]);
+$power_mode_markup = (string) ob_get_clean();
+lcfa_assert_true(strpos($power_mode_markup, 'Power Mode status') !== false, 'Connections should render the Power Mode status foundation');
+lcfa_assert_true(strpos($power_mode_markup, 'Policy: enabled') !== false, 'Power Mode auto policy should enable on local/development sites');
+
+$power_mode = new LCFA_Power_Mode();
+$remote_power_state = $power_mode->get_state([
+    'power_mode' => 'auto',
+], [
+    'site_mode' => 'remote',
+]);
+lcfa_assert_false(!empty($remote_power_state['enabled']), 'Power Mode auto policy should stay off for remote sites');
 
 ob_start();
 $codex_other_clients_panel_method->invoke($admin_instance, [

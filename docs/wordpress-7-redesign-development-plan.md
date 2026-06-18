@@ -539,7 +539,7 @@ The preview ability parity block now includes:
   - `livecanvas-forge-ai/preview-global-shell`
   - `livecanvas-forge-ai/preview-design-system`
 - `livecanvas-forge-ai/get-ability-diagnostics` for ability inventory, MCP exposure, preview exposure, and MCP Adapter status
-- the generic `preview-command` remains non-public to avoid exposing the full Command Deck surface by default
+- the generic `preview-command` is MCP-public as a forced dry-run preview; `apply-command` remains private
 - `apply-command` and arbitrary AI text generation remain non-public
 - preview results now carry `required_next_actions` when the command succeeds
 - WordPress Ability provenance is preserved in Command Deck results instead of being normalized back to admin/browser origin

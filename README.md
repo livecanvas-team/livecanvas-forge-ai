@@ -11,6 +11,7 @@ Status: `alpha`
 Usable today:
 
 - connect coding agents through the local MCP bridge or REST contract
+- use Codex Direct Mode through WordPress MCP Adapter, Application Password auth, and the remote MCP proxy package
 - expose WordPress 7 Abilities and a custom WordPress MCP Adapter server when available
 - inspect WordPress, LiveCanvas, Picostrap, Picowind, WindPress, WooCommerce, and ACF context
 - run preview/apply operations from the Command Deck
@@ -48,6 +49,7 @@ Usable today:
 - see handoff readiness ratios for read-only, preview, and guarded-write smoke tests
 - use `forge-handoff-summary.json` inside handoff packages for quick agent decisions
 - run the Forge Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
+- review the Power Mode policy foundation; advanced filesystem, WP-CLI, upload, admin-link, and sandbox tools are prepared but not exposed in this release
 
 Still in progress:
 
@@ -64,7 +66,7 @@ Still in progress:
 The plugin acts as a WordPress execution engine for coding agents.
 
 ```text
-Coding Agent -> MCP or REST -> LiveCanvas Forge AI -> WordPress / LiveCanvas / WindPress
+Coding Agent -> WordPress MCP Adapter or local MCP -> LiveCanvas Forge AI -> WordPress / LiveCanvas / WindPress
 ```
 
 Main areas:
@@ -84,7 +86,7 @@ Recommended:
 - WordPress
 - LiveCanvas
 - PHP compatible with your WordPress install
-- Node.js for MCP/coding-agent integrations
+- Node.js for local MCP/coding-agent integrations and the WordPress MCP remote proxy
 - Picostrap, Picowind/WindPress, or another active WordPress theme
 
 ## Installation
@@ -127,11 +129,11 @@ If LiveCanvas is active, Forge AI also appears inside the LiveCanvas admin area.
 2. Open `WordPress Admin > Forge AI`.
 3. Complete the setup wizard.
 4. Open `Connections`.
-5. Choose your coding agent and local/remote mode.
-6. Generate or install the client config.
-7. Send the generated first prompt to the coding agent; it starts with `get_connection_handoff`.
-8. Open `Command Deck`.
-9. Start with `dry_run: true`.
+5. Use the default `Connect Codex` Direct Mode path, or open `Other clients`.
+6. For Direct Mode, add the site URL, WordPress username, and Application Password if missing.
+7. Generate the Codex setup, restart/reload the MCP server, then run the smoke test.
+8. Send the generated first prompt to the coding agent; Direct Mode starts with `livecanvas-forge-ai/get-connection-handoff`.
+9. Start with preview abilities or `dry_run: true`.
 10. Apply only after the preview result looks correct.
 
 For detailed MCP setup, see [`mcp/README.md`](./mcp/README.md). The preferred setup path is the in-plugin `Connections` wizard.
@@ -184,12 +186,13 @@ WordPress 7 ability highlights:
 | `livecanvas-forge-ai/apply-page-upsert` | Apply page create/update with audit metadata. |
 | `livecanvas-forge-ai/preview-global-shell` | Preview header/footer shell changes. |
 | `livecanvas-forge-ai/apply-global-shell` | Apply header/footer shell changes. |
+| `livecanvas-forge-ai/preview-command` | Run any supported Forge command as a forced dry-run preview. |
 | `livecanvas-forge-ai/preview-block-pattern` | Convert supplied HTML into a native block pattern preview. |
 | `livecanvas-forge-ai/preview-native-pattern-page` | Compose a native block page preview from Forge patterns. |
 | `livecanvas-forge-ai/apply-native-pattern-page` | Create a new draft native WordPress page from Forge patterns. |
 | `livecanvas-forge-ai/restore-audit-rollback` | Restore a stored rollback by audit ID. |
 
-Write abilities are not MCP-public by default. Under `Forge AI > Connections > Advanced settings`, enable the master write opt-in only for trusted MCP clients, then select the specific write abilities to expose in the allowlist.
+Read and preview abilities are MCP-public by default. Write abilities are not MCP-public by default. Under `Forge AI > Connections > Advanced settings`, enable the master write opt-in only for trusted MCP clients, then select the specific write abilities to expose in the allowlist.
 
 The backend also exposes `GET /wp-json/lcfa/v1/studio`, `GET /wp-json/lcfa/v1/studio/connection-handoff`, `GET /wp-json/lcfa/v1/studio/handoff-summary`, `GET /wp-json/lcfa/v1/studio/block-pattern-library`, `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`, and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, connection handoff, handoff summary, block pattern library, native page blueprints, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The connection-handoff endpoint returns only the first-prompt bootstrap. The handoff-summary endpoint returns only compact status, score, blocker, warning, missing-test, write-guard, and next-action metadata. The block-pattern-library endpoint returns only export-ready native patterns. The native-pattern-page-blueprints endpoint returns page recipes plus copy-ready preview/apply requests. The native-pattern-page preview endpoint composes block content from registered patterns without writing. The native-pattern-page apply endpoint creates a new draft native page and records a rollback reference. Forge Studio can run the preview, create the draft from the blueprint panel, refresh audit state, and open the rollback flow for the created draft. MCP clients can also call `get_connection_handoff`, `get_handoff_summary`, `get_block_pattern_library`, `get_native_pattern_page_blueprints`, `preview_native_pattern_page`, `apply_native_pattern_page`, and `get_agent_handoff_package`.
 

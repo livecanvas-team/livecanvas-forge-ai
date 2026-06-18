@@ -46,6 +46,48 @@ final class LCFA_Design_System_Fallback_Executor {
                 'dry_run'    => $effective_dry_run,
             ]);
         } catch (Throwable $throwable) {
+            if ($effective_dry_run) {
+                $warnings[] = $throwable->getMessage();
+
+                return [
+                    'ok'               => true,
+                    'action'           => 'design_system_apply',
+                    'mode'             => 'preview',
+                    'execution_target' => 'local',
+                    'message'          => __('Fallback design-system asset preview prepared.', 'livecanvas-forge-ai'),
+                    'target_stack'     => 'fallback_theme',
+                    'source_of_truth'  => 'theme_file_assets',
+                    'summary'          => __('Preview portable design-system assets for the active theme.', 'livecanvas-forge-ai'),
+                    'changed_keys'     => array_values(array_filter(array_keys($tokens), static function (string $key) use ($tokens): bool {
+                        return (string) $tokens[$key] !== '';
+                    })),
+                    'build_required'   => false,
+                    'build_executed'   => false,
+                    'build_strategy'   => 'theme_asset_fallback',
+                    'warnings'         => array_values(array_unique(array_filter($warnings))),
+                    'data'             => [
+                        'requested_framework' => $framework,
+                        'asset_paths'         => [
+                            'css'      => self::CSS_PATH,
+                            'manifest' => self::JSON_PATH,
+                        ],
+                        'writes'              => [
+                            'css' => [
+                                'dry_run' => true,
+                                'path'    => self::CSS_PATH,
+                                'bytes'   => strlen($css),
+                            ],
+                            'manifest' => [
+                                'dry_run' => true,
+                                'path'    => self::JSON_PATH,
+                                'bytes'   => strlen(wp_json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)),
+                            ],
+                        ],
+                        'tokens'              => $tokens,
+                    ],
+                ];
+            }
+
             return [
                 'ok'               => false,
                 'action'           => 'design_system_apply',

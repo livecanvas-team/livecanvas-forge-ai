@@ -188,6 +188,7 @@ final class LCFA_Settings {
             'codex_speed'                 => 'balanced',
             'codex_reasoning_effort'      => 'medium',
             'codex_sandbox'               => '',
+            'power_mode'                  => 'auto',
             'connection_status'           => '',
             'connection_mode'             => '',
             'connection_last_verified_at' => '',
@@ -278,6 +279,7 @@ final class LCFA_Settings {
             'codex_speed'                 => $codex_options['speed'],
             'codex_reasoning_effort'      => $codex_options['reasoning_effort'],
             'codex_sandbox'               => $codex_options['sandbox'],
+            'power_mode'                  => self::sanitize_power_mode((string) ($connections['power_mode'] ?? ($current['power_mode'] ?? 'auto'))),
             'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
             'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
             'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
@@ -368,6 +370,20 @@ final class LCFA_Settings {
         ];
     }
 
+    public static function get_power_mode_options(): array {
+        return [
+            'auto'     => self::translate('Auto: local/development only'),
+            'enabled'  => self::translate('Enabled by administrator'),
+            'disabled' => self::translate('Disabled'),
+        ];
+    }
+
+    public static function sanitize_power_mode(string $mode): string {
+        $mode = sanitize_key($mode);
+
+        return array_key_exists($mode, self::get_power_mode_options()) ? $mode : 'auto';
+    }
+
     public static function sanitize_codex_options(array $options): array {
         $nested = is_array($options['codex_options'] ?? null) ? $options['codex_options'] : [];
         $model = sanitize_text_field((string) ($options['model'] ?? $options['codex_model'] ?? $nested['model'] ?? ''));
@@ -419,6 +435,7 @@ final class LCFA_Settings {
         $connections['codex_speed'] = $codex_options['speed'] !== '' ? $codex_options['speed'] : 'balanced';
         $connections['codex_reasoning_effort'] = $codex_options['reasoning_effort'] !== '' ? $codex_options['reasoning_effort'] : 'medium';
         $connections['codex_sandbox'] = $codex_options['sandbox'];
+        $connections['power_mode'] = self::sanitize_power_mode((string) ($connections['power_mode'] ?? 'auto'));
 
         return $connections;
     }

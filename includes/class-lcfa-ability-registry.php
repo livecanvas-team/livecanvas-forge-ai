@@ -382,7 +382,7 @@ final class LCFA_Ability_Registry {
                 [$this, 'preview_command'],
                 [$this, 'can_read'],
                 $preview_annotations,
-                false
+                true
             ),
             'livecanvas-forge-ai/apply-command' => $this->ability(
                 __('Apply Forge command', 'livecanvas-forge-ai'),
@@ -652,12 +652,23 @@ final class LCFA_Ability_Registry {
         $items = [];
         $write_public = [];
         $preview_public = [];
+        $groups = [
+            'read' => 0,
+            'preview' => 0,
+            'apply' => 0,
+            'power' => 0,
+        ];
 
         foreach ($manifest as $name => $definition) {
             $annotations = is_array($definition['meta']['annotations'] ?? null) ? $definition['meta']['annotations'] : [];
             $is_public = !empty($definition['meta']['mcp']['public']);
             $is_preview = strpos($name, '/preview-') !== false || strpos($name, '/validate-') !== false;
             $is_write = empty($annotations['readonly']) || !empty($annotations['destructive']);
+            $group = $this->infer_ability_group($name, $annotations);
+            if (!isset($groups[$group])) {
+                $groups[$group] = 0;
+            }
+            $groups[$group]++;
 
             if ($is_public && $is_preview) {
                 $preview_public[] = $name;
@@ -672,6 +683,7 @@ final class LCFA_Ability_Registry {
                 'label'       => (string) ($definition['label'] ?? ''),
                 'category'    => (string) ($definition['category'] ?? ''),
                 'mcp_public'  => $is_public,
+                'group'       => $group,
                 'readonly'    => !empty($annotations['readonly']),
                 'destructive' => !empty($annotations['destructive']),
                 'idempotent'  => !empty($annotations['idempotent']),
@@ -689,6 +701,7 @@ final class LCFA_Ability_Registry {
                 'mcp_write_opt_in_enabled' => $this->write_abilities_are_mcp_public(),
                 'mcp_write_allowlist' => $this->get_public_write_ability_allowlist(),
                 'mcp_write_available' => array_keys(LCFA_Settings::get_mcp_write_ability_options()),
+                'groups'              => $groups,
                 'items'               => $items,
             ],
             'mcp_adapter' => method_exists($this->environment, 'get_mcp_adapter_status')
@@ -1227,6 +1240,26 @@ final class LCFA_Ability_Registry {
         return LCFA_Settings::sanitize_mcp_write_abilities($connections['mcp_public_write_abilities'] ?? []);
     }
 
+    private function infer_ability_group(string $name, array $annotations): string {
+        if (strpos($name, '/power-') !== false || strpos($name, '/run-wp-cli') !== false || strpos($name, '/write-file') !== false || strpos($name, '/execute-php') !== false) {
+            return 'power';
+        }
+
+        if (strpos($name, '/preview-') !== false || strpos($name, '/validate-') !== false) {
+            return 'preview';
+        }
+
+        if (strpos($name, '/apply-') !== false || strpos($name, '/restore-') !== false) {
+            return 'apply';
+        }
+
+        if (empty($annotations['readonly']) || !empty($annotations['destructive'])) {
+            return 'apply';
+        }
+
+        return 'read';
+    }
+
     private function target_context_schema(): array {
         return [
             'type'                 => 'object',
@@ -1729,9 +1762,19 @@ final class LCFA_Ability_Registry {
             __('Then call livecanvas-forge-ai/get-agent-handoff-package with {"limit":5} only if you need the full runbook, smoke tests, ability diagnostics, MCP status, AI status, or recent run summary.', 'livecanvas-forge-ai'),
             __('Then run read-only checks starting with livecanvas-forge-ai/get-snapshot, livecanvas-forge-ai/get-ability-diagnostics, and livecanvas-forge-ai/get-runs when available.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
+            __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
+            __('Do not modify files or raw post content directly when a dedicated LiveCanvas preview/apply ability exists for the request.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
         ];
         $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
+        $quick_prompts = [
+            'audit_site' => __('Audit this WordPress + LiveCanvas site. Summarize the framework, pages, partials, templates, public abilities, risks, and next safe preview action. Do not change anything.', 'livecanvas-forge-ai'),
+            'edit_partial' => __('Inspect the selected LiveCanvas partial, preview a small focused improvement, and apply it only after the preview is reviewed.', 'livecanvas-forge-ai'),
+            'generate_page' => __('Create a draft LiveCanvas page from this brief. Use preview-page-upsert first, then apply-page-upsert only after confirmation.', 'livecanvas-forge-ai'),
+            'design_system_from_logo' => __('Build a design-system direction from the uploaded logo: colors, typography feel, buttons, spacing, and radius. Preview before applying.', 'livecanvas-forge-ai'),
+            'bootstrap_tailwind_conversion' => __('Convert this LiveCanvas page from Bootstrap-style markup to the active Tailwind/DaisyUI or stack-native framework. Preview and validate before applying.', 'livecanvas-forge-ai'),
+            'dynamic_template' => __('Create or update a LiveCanvas dynamic template with a large featured image, clear content hierarchy, and stack-native classes. Preview before applying.', 'livecanvas-forge-ai'),
+        ];
 
         return [
             'schema_version' => 'connection-handoff.v1',
@@ -1746,6 +1789,25 @@ final class LCFA_Ability_Registry {
             'agent_start_prompt' => implode("\n", $prompt_lines),
             'agent_start_prompt_lines' => $prompt_lines,
             'guardrail'      => 'read_only_first',
+            'preferred_abilities' => [
+                'read' => [
+                    'livecanvas-forge-ai/get-context',
+                    'livecanvas-forge-ai/get-theme-context',
+                    'livecanvas-forge-ai/get-page-html',
+                ],
+                'preview' => [
+                    'livecanvas-forge-ai/preview-page-upsert',
+                    'livecanvas-forge-ai/preview-global-shell',
+                    'livecanvas-forge-ai/preview-design-system',
+                    'livecanvas-forge-ai/preview-command',
+                ],
+                'apply' => [
+                    'livecanvas-forge-ai/apply-page-upsert',
+                    'livecanvas-forge-ai/apply-global-shell',
+                    'livecanvas-forge-ai/apply-design-system',
+                ],
+            ],
+            'quick_prompts' => array_map('sanitize_text_field', $quick_prompts),
             'summary'        => [
                 'framework'        => sanitize_key((string) ($summary['framework'] ?? '')),
                 'abilities'        => (int) ($summary['abilities'] ?? 0),

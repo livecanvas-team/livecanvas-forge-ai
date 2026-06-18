@@ -184,7 +184,7 @@ lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-block-pattern']['meta']['mcp']['public']), 'block pattern preview should be public to MCP because it never writes');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-native-pattern-page']['meta']['mcp']['public']), 'native pattern page preview should be public to MCP because it never writes');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/generate-ai-text']['meta']['mcp']['public']), 'AI text generation should not be public on MCP by default');
-lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-command']['meta']['mcp']['public']), 'generic command preview should not be public on MCP by default');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-command']['meta']['mcp']['public']), 'generic command preview should be public on MCP because it is forced dry-run');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-command']['meta']['mcp']['public']), 'apply command should not be public on MCP by default');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-page-upsert']['meta']['mcp']['public']), 'page apply should not be public on MCP by default');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-native-pattern-page']['meta']['mcp']['public']), 'native pattern page apply should not be public on MCP by default');
@@ -206,10 +206,13 @@ lcfa_wp7_assert_true(empty($ai_status['ai_client']['available']), 'AI Client sta
 
 $diagnostics = $registry->get_ability_diagnostics();
 lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['total'] ?? 0) === 32, 'ability diagnostics should expose the full ability count');
-lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['mcp_public_total'] ?? 0) === 23, 'ability diagnostics should expose the MCP-public ability count');
+lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['mcp_public_total'] ?? 0) === 24, 'ability diagnostics should expose the MCP-public ability count');
 lcfa_wp7_assert_true(empty($diagnostics['ability_diagnostics']['has_mcp_public_write']), 'ability diagnostics should confirm no write ability is MCP-public');
 lcfa_wp7_assert_true(empty($diagnostics['ability_diagnostics']['mcp_write_opt_in_enabled']), 'ability diagnostics should report disabled write opt-in by default');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-page-upsert', $diagnostics['ability_diagnostics']['mcp_public_preview'] ?? [], true), 'ability diagnostics should list dedicated preview abilities');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-command', $diagnostics['ability_diagnostics']['mcp_public_preview'] ?? [], true), 'ability diagnostics should list the generic dry-run preview ability');
+lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['groups']['preview'] ?? 0) >= 1, 'ability diagnostics should expose logical preview group counts');
+lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['groups']['apply'] ?? 0) >= 1, 'ability diagnostics should expose logical apply group counts');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-connection-handoff', $diagnostics['ability_diagnostics']['mcp_public'] ?? [], true), 'ability diagnostics should list the connection handoff ability as MCP-public');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-handoff-summary', $diagnostics['ability_diagnostics']['mcp_public'] ?? [], true), 'ability diagnostics should list the handoff summary ability as MCP-public');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-block-pattern-library', $diagnostics['ability_diagnostics']['mcp_public'] ?? [], true), 'ability diagnostics should list the block pattern library ability as MCP-public');
@@ -221,13 +224,13 @@ $GLOBALS['lcfa_test_connections']['mcp_public_write_abilities'] = [
     'livecanvas-forge-ai/apply-page-upsert',
 ];
 $write_public = $registry->get_public_mcp_abilities();
-lcfa_wp7_assert_true(count($write_public) === 24, 'write opt-in should expose only the selected dedicated write abilities and no generic apply command');
+lcfa_wp7_assert_true(count($write_public) === 25, 'write opt-in should expose only the selected dedicated write abilities and no generic apply command');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/apply-page-upsert', array_keys($write_public), true), 'write opt-in should expose page apply ability');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/restore-audit-rollback', array_keys($write_public), true), 'write opt-in should not expose unselected rollback restore ability');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', array_keys($write_public), true), 'write opt-in should not expose the generic apply command');
 $GLOBALS['lcfa_test_connections']['mcp_public_write_abilities'] = array_keys(LCFA_Settings::get_mcp_write_ability_options());
 $all_write_public = $registry->get_public_mcp_abilities();
-lcfa_wp7_assert_true(count($all_write_public) === 29, 'selecting all write abilities should expose the full dedicated write surface');
+lcfa_wp7_assert_true(count($all_write_public) === 30, 'selecting all write abilities should expose the full dedicated write surface');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/apply-native-pattern-page', array_keys($all_write_public), true), 'selecting native page apply should expose the native page apply ability');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/restore-audit-rollback', array_keys($all_write_public), true), 'selecting rollback should expose audit rollback restore ability');
 $GLOBALS['lcfa_test_connections']['mcp_write_abilities_enabled'] = false;
@@ -351,7 +354,7 @@ $adapter = new class {
 $registry->register_mcp_server($adapter);
 lcfa_wp7_assert_true(($adapter->args[0] ?? '') === 'livecanvas-forge-ai', 'registry should create a custom Forge MCP server when the adapter is available');
 lcfa_wp7_assert_true(($adapter->args[1] ?? '') === 'livecanvas-forge-ai', 'Forge MCP server should use the Forge REST namespace');
-lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 23, 'Forge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and dedicated preview abilities');
+lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 24, 'Forge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and preview abilities');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose apply-command by default');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-native-pattern-page', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose native pattern page apply by default');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/generate-ai-text', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose arbitrary AI generation by default');

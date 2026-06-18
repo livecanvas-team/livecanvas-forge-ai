@@ -3301,7 +3301,7 @@ HTML;
     private function resolve_framework(array $payload): string {
         $explicit = sanitize_key((string) ($payload['framework'] ?? ''));
 
-        if (in_array($explicit, ['picostrap', 'picowind'], true)) {
+        if (in_array($explicit, ['picostrap', 'picowind', 'fallback_theme', 'custom', 'unknown'], true)) {
             return $explicit;
         }
 
