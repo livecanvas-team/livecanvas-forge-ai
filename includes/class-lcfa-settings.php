@@ -312,7 +312,7 @@ final class LCFA_Settings {
             ],
             'livecanvas-forge-ai/apply-native-pattern-page' => [
                 'label'       => self::translate('Apply native pattern page'),
-                'description' => self::translate('Create a draft WordPress-native page from Forge block patterns.'),
+                'description' => self::translate('Create a draft WordPress-native page from AI Bridge block patterns.'),
             ],
             'livecanvas-forge-ai/apply-global-shell' => [
                 'label'       => self::translate('Apply global shell'),
@@ -354,7 +354,7 @@ final class LCFA_Settings {
 
     public static function get_codex_speed_options(): array {
         return [
-            ''         => 'Use Forge default',
+            ''         => 'Use AI Bridge default',
             'fast'     => 'Fast',
             'balanced' => 'Balanced',
             'thorough' => 'Thorough',

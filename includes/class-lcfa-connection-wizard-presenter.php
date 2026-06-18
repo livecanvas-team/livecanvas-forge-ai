@@ -76,7 +76,7 @@ final class LCFA_Connection_Wizard_Presenter {
                         ? __('Codex needs a one-time registration command. Copy the shortcut below and run it on the machine where Codex runs; it starts the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai')
                         : __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, and let it auto-detect the embedded Codex desktop CLI if codex is not in your PATH.', 'livecanvas-forge-ai'))
                     : ($local_writable
-                    ? __('Forge AI can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
+                    ? __('AI Bridge can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
                     : __('This browser runtime cannot write to the selected host workspace directly. Download the bundle, open the project in your coding agent, then return here for the smoke test.', 'livecanvas-forge-ai')),
                 'next'    => $is_codex
                     ? __('After running the Codex shortcut, verify with codex mcp list or /Applications/Codex.app/Contents/Resources/codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai')
@@ -89,8 +89,8 @@ final class LCFA_Connection_Wizard_Presenter {
                 'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
                 'title'   => $is_codex ? __('Verify the Codex registration', 'livecanvas-forge-ai') : __('Run the smoke test', 'livecanvas-forge-ai'),
                 'body'    => $is_codex
-                    ? __('Run the Codex shortcut first. Once codex mcp list, or the embedded Codex desktop CLI path, shows livecanvas-forge, use the smoke test to verify that Forge AI is reachable from Codex.', 'livecanvas-forge-ai')
-                    : __('Use the generated bundle to verify that Forge AI can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
+                    ? __('Run the Codex shortcut first. Once codex mcp list, or the embedded Codex desktop CLI path, shows livecanvas-forge, use the smoke test to verify that AI Bridge is reachable from Codex.', 'livecanvas-forge-ai')
+                    : __('Use the generated bundle to verify that AI Bridge can reach the plugin through the selected coding agent flow.', 'livecanvas-forge-ai'),
                 'next'    => $is_codex
                     ? __('A passing smoke test confirms that Codex can now call the livecanvas-forge tools.', 'livecanvas-forge-ai')
                     : __('A passing smoke test will move this connection to Ready.', 'livecanvas-forge-ai'),
@@ -172,7 +172,7 @@ final class LCFA_Connection_Wizard_Presenter {
                     'title'       => __('How do you want to continue?', 'livecanvas-forge-ai'),
                     'description' => $is_codex
                         ? ($local_writable
-                            ? __('Choose one path below. Recommended: let Forge write the Codex helper directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
+                            ? __('Choose one path below. Recommended: let AI Bridge write the Codex helper directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
                             : ($is_codex_remote_adapter
                                 ? __('Choose one path below. Recommended: copy and run the Codex remote shortcut on the machine where Codex runs. Use the manual option only if you want to save the helper script.', 'livecanvas-forge-ai')
                                 : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai')))
@@ -234,7 +234,7 @@ final class LCFA_Connection_Wizard_Presenter {
             'body'    => $mode === 'remote'
                 ? __('This bundle will be downloaded and used on your machine. The remote WordPress server cannot write the client configuration directly.', 'livecanvas-forge-ai')
                 : __('Make sure the local workspace root matches the real project path on your machine before you generate the bundle.', 'livecanvas-forge-ai'),
-            'next'    => __('Once confirmed, Forge AI will generate the correct client bundle for the selected agent.', 'livecanvas-forge-ai'),
+            'next'    => __('Once confirmed, AI Bridge will generate the correct client bundle for the selected agent.', 'livecanvas-forge-ai'),
         ];
     }
 
@@ -357,7 +357,7 @@ final class LCFA_Connection_Wizard_Presenter {
                     ],
                     [
                         'title' => sprintf(__('Open Codex and call %s', 'livecanvas-forge-ai'), $handoff_tool),
-                        'caption' => __('Once Codex sees the MCP server, ask it to fetch the Forge connection handoff, then return here and run the smoke test.', 'livecanvas-forge-ai'),
+                        'caption' => __('Once Codex sees the MCP server, ask it to fetch the AI Bridge connection handoff, then return here and run the smoke test.', 'livecanvas-forge-ai'),
                         'tone' => 'verify',
                     ],
                 ],

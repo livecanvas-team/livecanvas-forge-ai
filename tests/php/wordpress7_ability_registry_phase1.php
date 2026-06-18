@@ -156,13 +156,13 @@ lcfa_wp7_assert_true(isset($GLOBALS['lcfa_test_actions']['wp_abilities_api_init'
 lcfa_wp7_assert_true(isset($GLOBALS['lcfa_test_actions']['mcp_adapter_init']), 'registry should hook MCP Adapter registration');
 
 $registry->register_categories();
-lcfa_wp7_assert_true(isset($GLOBALS['lcfa_test_ability_categories']['livecanvas-forge-ai']), 'registry should register the Forge ability category');
+lcfa_wp7_assert_true(isset($GLOBALS['lcfa_test_ability_categories']['livecanvas-forge-ai']), 'registry should register the AI Bridge ability category');
 
 $registry->register_abilities();
 lcfa_wp7_assert_true(count($GLOBALS['lcfa_test_abilities']) === 32, 'registry should register read, runs, connection handoff, handoff summary, handoff package, preview, dedicated apply, rollback, diagnostics, block pattern, native pattern page, blueprint, native page apply, and AI Client abilities');
 
 foreach ($GLOBALS['lcfa_test_abilities'] as $name => $definition) {
-    lcfa_wp7_assert_true(strpos($name, 'livecanvas-forge-ai/') === 0, 'ability names should use the Forge namespace');
+    lcfa_wp7_assert_true(strpos($name, 'livecanvas-forge-ai/') === 0, 'ability names should use the AI Bridge namespace');
     lcfa_wp7_assert_true(is_callable($definition['execute_callback']), 'ability execute callback should be callable');
     lcfa_wp7_assert_true(is_callable($definition['permission_callback']), 'ability permission callback should be callable');
 }
@@ -352,18 +352,18 @@ $adapter = new class {
 };
 
 $registry->register_mcp_server($adapter);
-lcfa_wp7_assert_true(($adapter->args[0] ?? '') === 'livecanvas-forge-ai', 'registry should create a custom Forge MCP server when the adapter is available');
-lcfa_wp7_assert_true(($adapter->args[1] ?? '') === 'livecanvas-forge-ai', 'Forge MCP server should use the Forge REST namespace');
-lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 24, 'Forge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and preview abilities');
-lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose apply-command by default');
-lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-native-pattern-page', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose native pattern page apply by default');
-lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/generate-ai-text', $adapter->args[9] ?? [], true), 'Forge MCP server must not expose arbitrary AI generation by default');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-connection-handoff', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the read-only connection handoff ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-handoff-summary', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the read-only handoff summary ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-block-pattern-library', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the read-only block pattern library ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-native-pattern-page-blueprints', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the read-only native page blueprints ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-agent-handoff-package', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the read-only agent handoff package ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-native-pattern-page', $adapter->args[9] ?? [], true), 'Forge MCP server should expose the native pattern page preview ability');
-lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-global-shell', $adapter->args[9] ?? [], true), 'Forge MCP server should expose dedicated preview abilities');
+lcfa_wp7_assert_true(($adapter->args[0] ?? '') === 'livecanvas-forge-ai', 'registry should create a custom AI Bridge MCP server when the adapter is available');
+lcfa_wp7_assert_true(($adapter->args[1] ?? '') === 'livecanvas-forge-ai', 'AI Bridge MCP server should use the AI Bridge REST namespace');
+lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 24, 'AI Bridge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and preview abilities');
+lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose apply-command by default');
+lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-native-pattern-page', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose native pattern page apply by default');
+lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/generate-ai-text', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose arbitrary AI generation by default');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-connection-handoff', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only connection handoff ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-handoff-summary', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only handoff summary ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-block-pattern-library', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only block pattern library ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-native-pattern-page-blueprints', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only native page blueprints ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-agent-handoff-package', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only agent handoff package ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-native-pattern-page', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the native pattern page preview ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-global-shell', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose dedicated preview abilities');
 
 echo "PASS\n";

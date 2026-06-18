@@ -106,7 +106,7 @@ $diagnostics = [
         'items' => [
             [
                 'name' => 'livecanvas-forge-ai/get-snapshot',
-                'label' => 'Get Forge snapshot',
+                'label' => 'Get AI Bridge snapshot',
                 'mcp_public' => true,
                 'readonly' => true,
                 'destructive' => false,
@@ -128,7 +128,7 @@ $abilities_method = new ReflectionMethod('LCFA_Admin', 'render_studio_abilities_
 ob_start();
 $abilities_method->invoke($admin, $diagnostics);
 $abilities_markup = (string) ob_get_clean();
-lcfa_assert_true(strpos($abilities_markup, 'Get Forge snapshot') !== false, 'studio abilities panel should list read abilities');
+lcfa_assert_true(strpos($abilities_markup, 'Get AI Bridge snapshot') !== false, 'studio abilities panel should list read abilities');
 lcfa_assert_true(strpos($abilities_markup, 'Apply page upsert') !== false, 'studio abilities panel should list write abilities');
 lcfa_assert_true(strpos($abilities_markup, 'MCP public') !== false, 'studio abilities panel should expose MCP state');
 lcfa_assert_true(strpos($abilities_markup, 'Destructive') !== false, 'studio abilities panel should expose destructive state');

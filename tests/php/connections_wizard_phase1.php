@@ -628,14 +628,14 @@ lcfa_assert_same('Project Brief & Build Plan', $genesis_hero['title'] ?? '', 'ge
 lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'after your coding agent connection is ready') !== false, 'genesis hero subtitle should position Genesis after Connections');
 
 $studio_hero = $hero_content_method->invoke($admin_instance, 'studio');
-lcfa_assert_same('Forge Studio', $studio_hero['title'] ?? '', 'studio hero should expose the operational Studio tab');
+lcfa_assert_same('AI Studio', $studio_hero['title'] ?? '', 'studio hero should expose the operational Studio tab');
 lcfa_assert_true(strpos((string) ($studio_hero['subtitle'] ?? ''), 'MCP exposure') !== false, 'studio hero subtitle should mention MCP exposure');
 
 ob_start();
 $internal_tabs_method->invoke($admin_instance, 'studio', ['completed' => true]);
 $internal_tabs_markup = (string) ob_get_clean();
-lcfa_assert_true(strpos($internal_tabs_markup, 'tab=studio') !== false, 'internal tabs should include the Forge Studio tab');
-lcfa_assert_true(strpos($internal_tabs_markup, 'Forge Studio') !== false, 'internal tabs should label the Forge Studio tab');
+lcfa_assert_true(strpos($internal_tabs_markup, 'tab=studio') !== false, 'internal tabs should include the AI Studio tab');
+lcfa_assert_true(strpos($internal_tabs_markup, 'AI Studio') !== false, 'internal tabs should label the AI Studio tab');
 
 $admin_codex_command = (string) $admin_codex_command_method->invoke($admin_instance, [
     'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
@@ -662,7 +662,7 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
 ]);
 
 lcfa_assert_same('npx -y @automattic/mcp-wordpress-remote@latest', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the WordPress MCP remote proxy command');
-lcfa_assert_true(in_array('WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point WP_API_URL at the Forge MCP Adapter route');
+lcfa_assert_true(in_array('WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point WP_API_URL at the AI Bridge MCP Adapter route');
 lcfa_assert_true(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve Application Password spacing');
 lcfa_assert_same('remote-mcp-adapter', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the MCP Adapter strategy');
 
@@ -765,9 +765,46 @@ $codex_fast_path_panel_method->invoke(
 );
 $codex_fast_path_markup = (string) ob_get_clean();
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Connect Codex') !== false, 'Codex fast path should render Connect Codex as the main panel');
-lcfa_assert_true(strpos($codex_fast_path_markup, 'Local site') !== false && strpos($codex_fast_path_markup, 'Remote site') !== false, 'Codex fast path should expose a Local/Remote switch');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Direct Mode (recommended)') !== false && strpos($codex_fast_path_markup, 'Local runtime (advanced)') !== false, 'Codex fast path should expose Direct Mode as recommended and local runtime as advanced');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'data-lcfa-mode-switch') !== false, 'Codex mode switch should expose JS state for change-aware submit behavior');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'data-lcfa-mode-switch-submit') !== false, 'Codex mode switch submit button should be managed by JS');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'disabled') !== false, 'Codex mode switch submit should start disabled until the selected mode changes');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Step 1: WordPress credentials') !== false, 'missing remote Codex credentials should render a first-step credentials form in the main path');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Save credentials') !== false, 'missing remote Codex credentials should offer a direct save action');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Technical checks') !== false, 'Codex fast path should collapse technical checks behind details');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Remote Codex prerequisites') !== false, 'remote Codex fast path should render the prerequisite checklist instead of a partial config');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'does not use LCFA_WP_ROOT') !== false, 'remote Codex fast path should state that local WordPress root is not used');
+
+ob_start();
+$codex_fast_path_panel_method->invoke(
+    $admin_instance,
+    $complete_remote_state,
+    [
+        'client'              => 'codex',
+        'mode'                => 'remote',
+        'connection_strategy' => 'remote-mcp-adapter',
+        'workspace_root'      => '',
+        'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+        'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+    ],
+    [
+        'remote_site_url'             => 'https://remote.example',
+        'remote_username'             => 'admin',
+        'remote_application_password' => 'abcd efgh ijkl mnop',
+        'workspace_root'              => '',
+    ],
+    'remote',
+    [
+        'available' => false,
+        'reason'    => 'missing',
+        'path'      => '',
+    ]
+);
+$codex_restart_markup = (string) ob_get_clean();
+lcfa_assert_true(strpos($codex_restart_markup, 'Reload Codex, then test') !== false, 'remote Codex restart state should say exactly what to do next');
+lcfa_assert_true(strpos($codex_restart_markup, 'Codex setup command') !== false, 'remote Codex restart state should expose the setup command as the only necessary manual block');
+lcfa_assert_true(strpos($codex_restart_markup, 'livecanvas-forge-ai/get-connection-handoff') !== false, 'remote Codex restart fallback should still show the first handoff tool');
 
 ob_start();
 $power_mode_status_card_method->invoke($admin_instance, [

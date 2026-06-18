@@ -130,7 +130,7 @@ lcfa_assert_same(
     'installer should pass the Picowind release zip asset to Theme_Upgrader'
 );
 lcfa_assert_true(
-    stripos((string) (($GLOBALS['lcfa_remote_get_args']['headers']['User-Agent'] ?? '')), 'LiveCanvas Forge AI/') !== false,
+    stripos((string) (($GLOBALS['lcfa_remote_get_args']['headers']['User-Agent'] ?? '')), 'LiveCanvas AI Bridge/') !== false,
     'installer should identify the plugin in the GitHub request user agent'
 );
 

@@ -1105,7 +1105,7 @@ final class LCFA_Rest_Api {
 
         if (($connections['connection_status'] ?? '') !== 'ready' || $agent === '') {
             return new WP_REST_Response([
-                'error' => __('No verified coding agent is connected yet. Finish the Connections smoke test or use the local Forge fallback.', 'livecanvas-forge-ai'),
+                'error' => __('No verified coding agent is connected yet. Finish the Connections smoke test or use the local AI Bridge fallback.', 'livecanvas-forge-ai'),
             ], 409);
         }
 
@@ -1578,7 +1578,7 @@ final class LCFA_Rest_Api {
         LCFA_Settings::update_agent_request_runner($request_id, $runner);
 
         $agent_request = LCFA_Settings::get_agent_request($request_id) ?: $agent_request;
-        $message = __('Codex was started, but it did not claim the frontend request before the timeout. Re-send the prompt; Forge will launch Codex with local MCP network access.', 'livecanvas-forge-ai');
+        $message = __('Codex was started, but it did not claim the frontend request before the timeout. Re-send the prompt; AI Bridge will launch Codex with local MCP network access.', 'livecanvas-forge-ai');
         $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
         $result = $this->normalize_agent_result_payload([
             'ok'      => false,
@@ -2338,7 +2338,7 @@ final class LCFA_Rest_Api {
             __('Setup complete', 'livecanvas-forge-ai'),
             !empty($summary['setup_complete']) ? 'pass' : 'fail',
             !empty($summary['setup_complete'])
-                ? __('Forge setup is complete.', 'livecanvas-forge-ai')
+                ? __('AI Bridge setup is complete.', 'livecanvas-forge-ai')
                 : __('Complete the setup wizard before agent handoff.', 'livecanvas-forge-ai'),
             20
         );
@@ -2492,7 +2492,7 @@ final class LCFA_Rest_Api {
             ? 'wordpress_mcp_adapter'
             : ($mode === 'remote' ? 'remote_rest_bridge' : 'local_mcp_bridge');
         $prompt_lines = [
-            __('Use the LiveCanvas Forge AI MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
+            __('Use the LiveCanvas AI Bridge MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
             sprintf(
                 /* translators: %s: MCP tool or WordPress Ability name. */
                 __('First call %s with {"limit":5}.', 'livecanvas-forge-ai'),
@@ -2867,7 +2867,7 @@ final class LCFA_Rest_Api {
             __('Review public write exposure and rollback availability before applying changes.', 'livecanvas-forge-ai'),
         ];
         $lines = [
-            '# LiveCanvas Forge AI Agent Runbook',
+            '# LiveCanvas AI Bridge Agent Runbook',
             '',
             '## Current State',
         ];
@@ -2961,7 +2961,7 @@ final class LCFA_Rest_Api {
         $markdown = implode("\n", $sanitized_lines);
 
         return [
-            'title'      => __('LiveCanvas Forge AI Agent Runbook', 'livecanvas-forge-ai'),
+            'title'      => __('LiveCanvas AI Bridge Agent Runbook', 'livecanvas-forge-ai'),
             'format'     => 'markdown',
             'line_count' => count($sanitized_lines),
             'checklist'  => array_values(array_map('sanitize_text_field', $checklist)),
@@ -3015,7 +3015,7 @@ final class LCFA_Rest_Api {
             'phase'    => 'read_only',
             'label'    => __('Snapshot handshake', 'livecanvas-forge-ai'),
             'ability'  => 'livecanvas-forge-ai/get-snapshot',
-            'intent'   => __('Confirm the agent can read Forge and WordPress runtime context.', 'livecanvas-forge-ai'),
+            'intent'   => __('Confirm the agent can read AI Bridge and WordPress runtime context.', 'livecanvas-forge-ai'),
             'payload'  => new stdClass(),
             'expected' => __('Returns snapshot, public connection metadata, and MCP status without writing.', 'livecanvas-forge-ai'),
             'risk'     => 'low',
@@ -3067,7 +3067,7 @@ final class LCFA_Rest_Api {
             'ability'  => 'livecanvas-forge-ai/validate-markup-for-framework',
             'intent'   => __('Confirm generated markup can be preflighted against the active framework.', 'livecanvas-forge-ai'),
             'payload'  => [
-                'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1></div></section>',
+                'content' => '<section class="py-12"><div class="container mx-auto"><h1>AI Bridge smoke test</h1></div></section>',
                 'framework' => (string) ($summary['framework'] ?: 'auto'),
             ],
             'expected' => __('Returns validation result and framework warnings without writing.', 'livecanvas-forge-ai'),
@@ -3078,9 +3078,9 @@ final class LCFA_Rest_Api {
             'phase'    => 'preview',
             'label'    => __('Native pattern page preview', 'livecanvas-forge-ai'),
             'ability'  => 'livecanvas-forge-ai/preview-native-pattern-page',
-            'intent'   => __('Confirm native WordPress block page composition can be previewed from registered Forge patterns.', 'livecanvas-forge-ai'),
+            'intent'   => __('Confirm native WordPress block page composition can be previewed from registered AI Bridge patterns.', 'livecanvas-forge-ai'),
             'payload'  => [
-                'title' => __('Forge native page smoke test', 'livecanvas-forge-ai'),
+                'title' => __('AI Bridge native page smoke test', 'livecanvas-forge-ai'),
                 'pattern_names' => ['conversion-hero', 'feature-grid'],
             ],
             'expected' => __('Returns composed WordPress block content and checksums without writing.', 'livecanvas-forge-ai'),
@@ -3094,10 +3094,10 @@ final class LCFA_Rest_Api {
             'intent'   => __('Confirm page generation can be previewed before content is created or updated.', 'livecanvas-forge-ai'),
             'payload'  => [
                 'payload' => [
-                    'title' => 'Forge Smoke Test',
+                    'title' => 'AI Bridge Smoke Test',
                     'slug' => 'forge-smoke-test',
                     'status' => 'draft',
-                    'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1><p>Preview only.</p></div></section>',
+                    'content' => '<section class="py-12"><div class="container mx-auto"><h1>AI Bridge smoke test</h1><p>Preview only.</p></div></section>',
                     'dry_run' => true,
                 ],
             ],
@@ -3173,7 +3173,7 @@ final class LCFA_Rest_Api {
                 'warning',
                 'setup_incomplete',
                 __('Setup incomplete', 'livecanvas-forge-ai'),
-                __('Finish Forge Setup before using automated workflows.', 'livecanvas-forge-ai')
+                __('Finish Bridge Setup before using automated workflows.', 'livecanvas-forge-ai')
             );
         }
 
@@ -3182,7 +3182,7 @@ final class LCFA_Rest_Api {
                 'warning',
                 'abilities_empty',
                 __('No abilities registered', 'livecanvas-forge-ai'),
-                __('The WordPress Abilities API is not exposing Forge abilities in this runtime.', 'livecanvas-forge-ai')
+                __('The WordPress Abilities API is not exposing AI Bridge abilities in this runtime.', 'livecanvas-forge-ai')
             );
         }
 
@@ -3275,7 +3275,7 @@ final class LCFA_Rest_Api {
         if (empty($summary['setup_complete'])) {
             $add_action(
                 'finish_setup',
-                __('Finish Forge setup', 'livecanvas-forge-ai'),
+                __('Finish AI Bridge setup', 'livecanvas-forge-ai'),
                 __('Complete the Setup wizard before asking agents to apply changes.', 'livecanvas-forge-ai')
             );
         }
@@ -3371,7 +3371,7 @@ final class LCFA_Rest_Api {
         if (trim($agent_prompt) === '') {
             $agent_prompt = sprintf(
                 /* translators: 1: framework, 2: public abilities, 3: public writes, 4: run errors, 5: risk sentence. */
-                __('Inspect this WordPress site through LiveCanvas Forge AI. Start read-only: call get_snapshot, get_ability_diagnostics, and get_runs. Do not apply write abilities until dry-run previews are reviewed. Current framework: %1$s. MCP-public abilities: %2$d. MCP-public writes: %3$d. Recent run errors: %4$d. Readiness notes: %5$s.', 'livecanvas-forge-ai'),
+                __('Inspect this WordPress site through LiveCanvas AI Bridge. Start read-only: call get_snapshot, get_ability_diagnostics, and get_runs. Do not apply write abilities until dry-run previews are reviewed. Current framework: %1$s. MCP-public abilities: %2$d. MCP-public writes: %3$d. Recent run errors: %4$d. Readiness notes: %5$s.', 'livecanvas-forge-ai'),
                 (string) ($summary['framework'] ?: 'auto'),
                 (int) ($mcp_counts['public'] ?? $summary['mcp_public'] ?? 0),
                 (int) ($summary['public_writes'] ?? 0),
@@ -3389,7 +3389,7 @@ final class LCFA_Rest_Api {
         $agent_prompt = implode("\n", $agent_prompt_lines);
 
         return [
-            'title'        => __('Forge Studio operator briefing', 'livecanvas-forge-ai'),
+            'title'        => __('AI Studio operator briefing', 'livecanvas-forge-ai'),
             'summary'      => array_values(array_map('sanitize_text_field', $summary_lines)),
             'risks'        => $risks,
             'next_actions' => $next_actions,

@@ -22,7 +22,7 @@ const requiredTokens = [
 
 for (const token of requiredTokens) {
   if (!script.includes(token)) {
-    console.error(`admin.js should include Forge Studio filter support for ${token}`);
+    console.error(`admin.js should include AI Studio filter support for ${token}`);
     process.exit(1);
   }
 }

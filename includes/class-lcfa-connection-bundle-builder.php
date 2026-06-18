@@ -679,7 +679,7 @@ final class LCFA_Connection_Bundle_Builder {
         $package_tool = $package_tool !== '' ? $package_tool : 'get_agent_handoff_package';
 
         return implode("\n", [
-            'Use the LiveCanvas Forge AI MCP connection for this WordPress project.',
+            'Use the LiveCanvas AI Bridge MCP connection for this WordPress project.',
             'First call ' . $connection_tool . ' with {"limit":5}.',
             'If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.',
             'Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.',

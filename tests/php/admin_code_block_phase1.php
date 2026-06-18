@@ -126,7 +126,7 @@ $render_bundle_details->invoke($admin, [
     'command_string'      => "node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio",
     'environment'         => ['LCFA_REST_BASE' => 'http://localhost:8887/wp-json/lcfa/v1/'],
     'smoke_test_command'  => 'codex mcp list',
-    'agent_start_prompt'  => "Use the LiveCanvas Forge AI MCP connection for this WordPress project.\nFirst call get_connection_handoff with {\"limit\":5}.\nThen call get_agent_handoff_package only if you need the full runbook.",
+    'agent_start_prompt'  => "Use the LiveCanvas AI Bridge MCP connection for this WordPress project.\nFirst call get_connection_handoff with {\"limit\":5}.\nThen call get_agent_handoff_package only if you need the full runbook.",
     'workspace_files'     => [['path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh']],
 ]);
 $bundle_markup = (string) ob_get_clean();

@@ -634,6 +634,24 @@
     color: #fff;
 }
 
+.lcfa-admin .lcfa-inline-form .button:disabled,
+.lcfa-admin .lcfa-cta-row .button:disabled,
+.lcfa-admin .button:disabled {
+    border-color: rgba(169, 171, 203, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.48);
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+.lcfa-admin .lcfa-codex-mode-switch.is-dirty .lcfa-mode-switch-submit:not(:disabled) {
+    border-color: rgba(38, 198, 218, 0.38);
+    background: linear-gradient(90deg, rgba(38, 198, 218, 0.18), rgba(232, 62, 140, 0.14));
+    color: #fff;
+    box-shadow: 0 12px 26px rgba(38, 198, 218, 0.14);
+}
+
 .lcfa-admin .lcfa-inline-form .button:not(.button-primary):hover,
 .lcfa-admin .lcfa-inline-form .button:not(.button-primary):focus,
 .lcfa-admin .lcfa-cta-row .button:not(.button-primary):hover,
@@ -945,6 +963,13 @@
     font-weight: 600;
 }
 
+.lcfa-admin .lcfa-radio-copy small {
+    max-width: 62ch;
+    color: var(--lcfa-text-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
 .lcfa-admin .lcfa-guide {
     margin-top: 20px;
     padding-top: 18px;
@@ -1004,6 +1029,29 @@
     background: linear-gradient(135deg, rgba(38, 198, 218, 0.14), rgba(232, 62, 140, 0.08));
 }
 
+.lcfa-admin .lcfa-connection-now-alert--missing_credentials,
+.lcfa-admin .lcfa-connection-now-alert--test_failed {
+    border-color: rgba(244, 63, 94, 0.36);
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.16), rgba(232, 62, 140, 0.08));
+}
+
+.lcfa-admin .lcfa-connection-now-alert--ready {
+    border-color: rgba(34, 197, 94, 0.32);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(38, 198, 218, 0.08));
+}
+
+.lcfa-admin .lcfa-step-list {
+    display: grid;
+    gap: 6px;
+    margin: 6px 0 0 20px;
+    color: var(--lcfa-text);
+}
+
+.lcfa-admin .lcfa-step-list li {
+    padding-left: 4px;
+    line-height: 1.5;
+}
+
 .lcfa-admin .lcfa-connection-now-alert__eyebrow {
     color: var(--color1);
     font-size: 11px;
@@ -1022,6 +1070,23 @@
     margin: 0;
     color: var(--lcfa-text-muted);
     line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-direct-credentials {
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-direct-credentials h3 {
+    margin: 0;
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-direct-credentials p {
+    margin: 0;
+    color: var(--lcfa-text-muted);
 }
 
 .lcfa-admin .lcfa-wizard {

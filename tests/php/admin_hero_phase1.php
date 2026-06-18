@@ -125,8 +125,8 @@ $setup_hero = $presenter->build('setup', [
     'preferred_client' => 'codex',
 ]);
 
-lcfa_assert_same('Forge Setup', $setup_hero['title'] ?? '', 'setup hero should keep the approved tab title');
-lcfa_assert_same('LiveCanvas Forge AI prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', $setup_hero['subtitle'] ?? '', 'setup hero subtitle should explain what Forge AI actually does');
+lcfa_assert_same('Bridge Setup', $setup_hero['title'] ?? '', 'setup hero should keep the approved tab title');
+lcfa_assert_same('LiveCanvas AI Bridge prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', $setup_hero['subtitle'] ?? '', 'setup hero subtitle should explain what AI Bridge actually does');
 
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();

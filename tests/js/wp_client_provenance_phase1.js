@@ -50,7 +50,7 @@ class CaptureClient extends WPClient {
   assert.strictEqual(suggestBody._lcfa_origin, 'mcp_agent', 'MCP suggestions should declare MCP agent origin')
   assert.strictEqual(suggestBody._lcfa_transport, 'mcp_stdio', 'MCP suggestions should declare stdio transport')
   assert.strictEqual(suggestBody._lcfa_agent, 'codex', 'MCP suggestions should declare the configured Codex agent')
-  assert.strictEqual(suggestBody._lcfa_processed_by, 'forge_local_rules', 'MCP suggestions are still prepared by Forge local rules')
+  assert.strictEqual(suggestBody._lcfa_processed_by, 'forge_local_rules', 'MCP suggestions are still prepared by AI Bridge local rules')
 
   const runBody = client.calls[1].options.body
   assert.strictEqual(client.calls[1].route, 'command', 'runCommand should call command')

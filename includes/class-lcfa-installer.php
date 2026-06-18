@@ -177,7 +177,7 @@ final class LCFA_Installer {
                 'timeout' => 20,
                 'headers' => [
                     'Accept'     => 'application/vnd.github+json',
-                    'User-Agent' => 'LiveCanvas Forge AI/' . (defined('LCFA_VERSION') ? LCFA_VERSION : 'unknown'),
+                    'User-Agent' => 'LiveCanvas AI Bridge/' . (defined('LCFA_VERSION') ? LCFA_VERSION : 'unknown'),
                 ],
             ]
         );

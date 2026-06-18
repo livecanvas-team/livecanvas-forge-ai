@@ -123,7 +123,7 @@ const supportFlags = JSON.parse(
 );
 
 assert.strictEqual(resultSummary, 'Update page #137.');
-assert.ok(/lcfa-section--hero|Forge AI starter|hero/i.test(proposedMarkup));
+assert.ok(/lcfa-section--hero|AI Bridge starter|hero/i.test(proposedMarkup));
 assert.strictEqual(supportFlags.diff, true);
 assert.strictEqual(supportFlags.proposed, true);
 assert.strictEqual(supportFlags.existing, true);

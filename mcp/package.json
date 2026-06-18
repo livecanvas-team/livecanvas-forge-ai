@@ -1,7 +1,7 @@
 {
   "name": "@livecanvas/forge-mcp",
   "version": "0.1.0",
-  "description": "Local MCP bridge for LiveCanvas Forge AI",
+  "description": "Local MCP bridge for LiveCanvas AI Bridge",
   "bin": {
     "livecanvas-forge-mcp": "bin/livecanvas-forge-mcp.js"
   },

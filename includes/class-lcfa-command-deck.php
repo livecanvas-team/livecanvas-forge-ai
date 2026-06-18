@@ -149,7 +149,7 @@ final class LCFA_Command_Deck {
             ],
             'restore_audit_rollback' => [
                 'label'       => __('Restore audit rollback', 'livecanvas-forge-ai'),
-                'description' => __('Restores the previous WordPress content stored for a Forge audit ID, or trashes posts created by that run.', 'livecanvas-forge-ai'),
+                'description' => __('Restores the previous WordPress content stored for an AI Bridge audit ID, or trashes posts created by that run.', 'livecanvas-forge-ai'),
             ],
         ];
     }
@@ -309,7 +309,7 @@ final class LCFA_Command_Deck {
             case 'create_page':
             case 'update_page':
                 if (trim($content) === '') {
-                    return $this->error_result(__('Forge AI did not generate page HTML for this request, so the current page was left unchanged.', 'livecanvas-forge-ai'));
+                    return $this->error_result(__('AI Bridge did not generate page HTML for this request, so the current page was left unchanged.', 'livecanvas-forge-ai'));
                 }
 
                 $framework_error = $this->validate_page_markup_for_framework($framework, $content);
@@ -435,7 +435,7 @@ final class LCFA_Command_Deck {
                 }
 
                 if (trim($content) === '') {
-                    return $this->error_result(__('Forge AI did not generate partial HTML for this request, so the current partial was left unchanged.', 'livecanvas-forge-ai'));
+                    return $this->error_result(__('AI Bridge did not generate partial HTML for this request, so the current partial was left unchanged.', 'livecanvas-forge-ai'));
                 }
 
                 $existing = $this->inventory->get_target_content('partial', $target_id);
@@ -485,8 +485,8 @@ final class LCFA_Command_Deck {
 
                 if (trim($content) === '') {
                     return $this->error_result($action === 'update_header'
-                        ? __('Forge AI did not generate header HTML for this request, so the current header was left unchanged.', 'livecanvas-forge-ai')
-                        : __('Forge AI did not generate footer HTML for this request, so the current footer was left unchanged.', 'livecanvas-forge-ai'));
+                        ? __('AI Bridge did not generate header HTML for this request, so the current header was left unchanged.', 'livecanvas-forge-ai')
+                        : __('AI Bridge did not generate footer HTML for this request, so the current footer was left unchanged.', 'livecanvas-forge-ai'));
                 }
 
                 $existing = $this->inventory->get_target_content($action === 'update_header' ? 'header' : 'footer', $target_id, $variant);
@@ -2518,7 +2518,7 @@ HTML,
         $sector_phrase = $sector !== '' ? strtolower($sector) . ' teams' : __('modern teams', 'livecanvas-forge-ai');
         $tone = sanitize_text_field((string) ($brief['tone'] ?? ''));
         $tone_phrase = $tone !== '' ? strtolower($tone) : __('clear', 'livecanvas-forge-ai');
-        $eyebrow = sprintf(__('Forge AI starter · %s', 'livecanvas-forge-ai'), $brand_name);
+        $eyebrow = sprintf(__('AI Bridge starter · %s', 'livecanvas-forge-ai'), $brand_name);
         $layout_profile = $this->resolve_section_layout_profile($section_intent, $payload);
         $layout_class = $layout_profile !== '' ? ' lcfa-layout--' . $layout_profile : '';
         $visual_reference = $this->get_visual_reference_context($payload);

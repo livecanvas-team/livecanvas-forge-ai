@@ -87,7 +87,7 @@ final class LCFA_Design_System_Preview {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LiveCanvas Forge AI Design Preview</title>
+  <title>LiveCanvas AI Bridge Design Preview</title>
   <style>
     :root{color-scheme:light;}
     *{box-sizing:border-box}
@@ -118,7 +118,7 @@ final class LCFA_Design_System_Preview {
 <body>
   <main class="lcfa-shell">
     <section class="lcfa-card lcfa-hero">
-      <span class="lcfa-badge">LiveCanvas Forge AI preview</span>
+      <span class="lcfa-badge">LiveCanvas AI Bridge preview</span>
       <h1>' . $this->escape_html($summary) . '</h1>
       <p>' . $this->escape_html($mood !== '' ? $mood : 'Preview the generated palette, typography, and button feel before compiling Picostrap.') . '</p>
       <div class="lcfa-cta">

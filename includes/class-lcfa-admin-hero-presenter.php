@@ -19,8 +19,8 @@ final class LCFA_Admin_Hero_Presenter {
     private function get_tab_content(string $tab): array {
         $map = [
             'setup' => [
-                'title' => __('Forge Setup', 'livecanvas-forge-ai'),
-                'subtitle' => __('LiveCanvas Forge AI prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', 'livecanvas-forge-ai'),
+                'title' => __('Bridge Setup', 'livecanvas-forge-ai'),
+                'subtitle' => __('LiveCanvas AI Bridge prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', 'livecanvas-forge-ai'),
             ],
             'connections' => [
                 'title' => __('Connections', 'livecanvas-forge-ai'),
@@ -32,7 +32,7 @@ final class LCFA_Admin_Hero_Presenter {
             ],
             'command' => [
                 'title' => __('Command Deck', 'livecanvas-forge-ai'),
-                'subtitle' => __('Run concrete site operations through Forge AI.', 'livecanvas-forge-ai'),
+                'subtitle' => __('Run concrete site operations through AI Bridge.', 'livecanvas-forge-ai'),
             ],
         ];
 

@@ -133,7 +133,7 @@ final class LCFA_Codex_Autorunner {
         $speed_instruction = self::get_speed_instruction($speed);
 
         return implode("\n", [
-            'You are Codex running as the LiveCanvas Forge AI frontend worker.',
+            'You are Codex running as the LiveCanvas AI Bridge frontend worker.',
             '',
             'Process exactly one queued frontend request.',
             '',

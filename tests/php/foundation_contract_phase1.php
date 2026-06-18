@@ -824,7 +824,7 @@ if (method_exists($rest_api, 'enqueue_agent_request')) {
     lcfa_assert_true($agent_request_id !== '', 'enqueue_agent_request should return a request id');
     lcfa_assert_same('queued', (string) ($queued_agent_request['status'] ?? ''), 'enqueue_agent_request should start in queued status');
     lcfa_assert_same('codex', (string) ($queued_agent_request['agent'] ?? ''), 'enqueue_agent_request should preserve the selected Codex agent');
-    lcfa_assert_same('agent_queue', (string) ($queued_agent_request['provenance']['processed_by'] ?? ''), 'enqueue_agent_request should mark browser submissions as agent_queue, not local Forge');
+    lcfa_assert_same('agent_queue', (string) ($queued_agent_request['provenance']['processed_by'] ?? ''), 'enqueue_agent_request should mark browser submissions as agent_queue, not local AI Bridge');
 
     $agent_claim_response = $rest_api->get_agent_request_status(new WP_REST_Request([
         'agent' => 'codex',
@@ -1349,7 +1349,7 @@ lcfa_assert_true($dynamic_taxonomy_assignment_result['ok'] === true, 'update_dyn
 lcfa_assert_same('is_archive_for_tax_category__news', (string) ($dynamic_taxonomy_assignment_result['data']['native_template_keys'][0] ?? ''), 'taxonomy assignments should expose the native LiveCanvas taxonomy archive meta key');
 lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_archive_for_tax_category__news'] ?? null, 'taxonomy assignments should sync to native LiveCanvas archive meta');
 lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['is_single_service']), 'changing dynamic template assignment should remove stale native LiveCanvas meta keys');
-lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type']), 'changing dynamic template assignment should remove stale Forge scalar assignment metadata');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type']), 'changing dynamic template assignment should remove stale AI Bridge scalar assignment metadata');
 
 $dynamic_shop_preview = $command_deck->execute([
     'action'          => 'create_dynamic_template',
@@ -1675,7 +1675,7 @@ $section_preview_result = $command_deck->execute([
 
 lcfa_assert_true($section_preview_result['ok'] === true, 'page_upsert should generate a preview for section starter payloads without explicit content');
 lcfa_assert_contains('Existing page', $section_preview_result['existing_html'] ?? '', 'section starter previews should keep the current page HTML as the diff baseline');
-lcfa_assert_contains('Forge AI starter', $section_preview_result['proposed_html'] ?? '', 'section starter previews should synthesize starter HTML when the payload only carries section intent');
+lcfa_assert_contains('AI Bridge starter', $section_preview_result['proposed_html'] ?? '', 'section starter previews should synthesize starter HTML when the payload only carries section intent');
 lcfa_assert_contains('lcfa-section--hero', $section_preview_result['proposed_html'] ?? '', 'section starter previews should mark the generated hero section');
 lcfa_assert_contains('Consultala', $section_preview_result['proposed_html'] ?? '', 'section starter previews should use the project brief brand name in generated section copy');
 lcfa_assert_contains('consulting', strtolower((string) ($section_preview_result['proposed_html'] ?? '')), 'section starter previews should use the project brief sector in generated section copy');
@@ -1693,7 +1693,7 @@ $section_apply_result = $command_deck->execute([
 lcfa_assert_true($section_apply_result['ok'] === true, 'page_upsert should apply section starter payloads without explicit content');
 lcfa_assert_contains('Existing page', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should preserve the existing page markup');
 lcfa_assert_contains('lcfa-section--pricing', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should append the generated pricing section markup');
-lcfa_assert_contains('Forge AI starter', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should persist the generated starter copy');
+lcfa_assert_contains('AI Bridge starter', $GLOBALS['lcfa_test_posts'][$audit_page_id]->post_content, 'section starter applies should persist the generated starter copy');
 
 $faq_apply_result = $command_deck->execute([
     'action'            => 'page_upsert',

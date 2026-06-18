@@ -1,6 +1,6 @@
-# LiveCanvas Forge MCP
+# LiveCanvas AI Bridge MCP
 
-Local MCP package for `LiveCanvas Forge AI`.
+Local MCP package for `LiveCanvas AI Bridge`.
 
 ## Modes
 

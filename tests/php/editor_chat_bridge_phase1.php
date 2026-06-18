@@ -363,7 +363,7 @@ lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card', $editor_cha
 lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card[hidden]{display:none!important}', $editor_chat_css, 'editor bridge stylesheet asset should force-hide the upload preview card until an image is attached');
 lcfa_assert_contains('.lcfa-editor-bridge__connection', $editor_chat_css, 'editor bridge stylesheet asset should style the connection status badge in the drawer header');
 lcfa_assert_contains('var shell=document.querySelector("[data-lcfa-editor-shell]")', $editor_chat_js, 'editor bridge script asset should bootstrap the drawer runtime');
-lcfa_assert_contains('waitForLauncherReady', $editor_chat_js, 'editor bridge runtime asset should delay showing the Forge launcher until load readiness checks finish');
+lcfa_assert_contains('waitForLauncherReady', $editor_chat_js, 'editor bridge runtime asset should delay showing the AI Bridge launcher until load readiness checks finish');
 lcfa_assert_contains('getElementById("loader")', $editor_chat_js, 'editor bridge runtime asset should use the LiveCanvas #loader as the primary readiness signal');
 lcfa_assert_contains('isPrimaryLiveCanvasLoaderActive', $editor_chat_js, 'editor bridge runtime asset should wait for the primary LiveCanvas loader to be hidden instead of only faded');
 lcfa_assert_contains('MutationObserver', $editor_chat_js, 'editor bridge runtime asset should observe the LiveCanvas loader until it is hidden');

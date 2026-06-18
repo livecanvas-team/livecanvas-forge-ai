@@ -52,17 +52,17 @@ $GLOBALS['lcfa_removed_actions'] = [];
 
 $method->invoke($admin, (object) ['id' => 'livecanvas_page_lcfa-dashboard']);
 
-lcfa_assert_true(in_array('network_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'Forge dashboard should suppress network admin notices');
-lcfa_assert_true(in_array('user_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'Forge dashboard should suppress user admin notices');
-lcfa_assert_true(in_array('admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'Forge dashboard should suppress global admin notices');
-lcfa_assert_true(in_array('all_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'Forge dashboard should suppress all admin notices');
-lcfa_assert_true(in_array('livecanvas_page_lcfa-dashboard_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'Forge dashboard should suppress screen-specific admin notices');
+lcfa_assert_true(in_array('network_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'AI Bridge dashboard should suppress network admin notices');
+lcfa_assert_true(in_array('user_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'AI Bridge dashboard should suppress user admin notices');
+lcfa_assert_true(in_array('admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'AI Bridge dashboard should suppress global admin notices');
+lcfa_assert_true(in_array('all_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'AI Bridge dashboard should suppress all admin notices');
+lcfa_assert_true(in_array('livecanvas_page_lcfa-dashboard_admin_notices', $GLOBALS['lcfa_removed_actions'], true), 'AI Bridge dashboard should suppress screen-specific admin notices');
 
 $_GET['page'] = 'plugins';
 $GLOBALS['lcfa_removed_actions'] = [];
 
 $method->invoke($admin, (object) ['id' => 'plugins']);
 
-lcfa_assert_false($GLOBALS['lcfa_removed_actions'] !== [], 'Non-Forge screens should not suppress admin notices');
+lcfa_assert_false($GLOBALS['lcfa_removed_actions'] !== [], 'Non-AI Bridge screens should not suppress admin notices');
 
 echo "PASS\n";

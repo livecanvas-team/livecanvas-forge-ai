@@ -680,8 +680,8 @@ async function flush() {
   assert.strictEqual(analyzeBodies[0].thread_id, 'default', 'analyze flow should preserve the selected thread id');
   assert.strictEqual(analyzeBodies[0]._lcfa_origin, 'frontend_bridge', 'frontend chat requests should declare the browser bridge origin');
   assert.strictEqual(analyzeBodies[0]._lcfa_transport, 'browser_rest', 'frontend chat requests should declare browser REST transport');
-  assert.strictEqual(analyzeBodies[0]._lcfa_agent, 'forge', 'frontend chat requests should declare Forge as the browser agent');
-  assert.strictEqual(analyzeBodies[0]._lcfa_processed_by, 'forge_local_rules', 'frontend chat requests should declare the local Forge processor');
+  assert.strictEqual(analyzeBodies[0]._lcfa_agent, 'forge', 'frontend chat requests should declare AI Bridge as the browser agent');
+  assert.strictEqual(analyzeBodies[0]._lcfa_processed_by, 'forge_local_rules', 'frontend chat requests should declare the local AI Bridge processor');
   assert.strictEqual(analyzeBodies[0].context_post_id, 42, 'analyze flow should send the current post as context');
   assert.strictEqual(analyzeBodies[0].selected_section_anchor.id, 'selected-pricing', 'analyze flow should send the last clicked section anchor');
   assert.strictEqual(analyzeBodies[0].selected_section_anchor.class_token, 'lcfa-section--pricing', 'selected section anchors should preserve semantic section classes');
@@ -690,8 +690,8 @@ async function flush() {
   assert.strictEqual(Object.prototype.hasOwnProperty.call(executionBodies[0], 'dry_run'), false, 'send flow should execute the inline apply payload directly');
   assert.strictEqual(executionBodies[0]._lcfa_origin, 'frontend_bridge', 'inline execution requests should preserve the browser bridge origin');
   assert.strictEqual(executionBodies[0]._lcfa_transport, 'browser_rest', 'inline execution requests should preserve browser REST transport');
-  assert.strictEqual(executionBodies[0]._lcfa_agent, 'forge', 'inline execution requests should preserve Forge as the browser agent');
-  assert.strictEqual(executionBodies[0]._lcfa_processed_by, 'forge_local_rules', 'inline execution requests should preserve the local Forge processor');
+  assert.strictEqual(executionBodies[0]._lcfa_agent, 'forge', 'inline execution requests should preserve AI Bridge as the browser agent');
+  assert.strictEqual(executionBodies[0]._lcfa_processed_by, 'forge_local_rules', 'inline execution requests should preserve the local AI Bridge processor');
   assert.strictEqual(executionBodies[0].context_post_id, 42, 'send flow should restore the current post context');
   assert.strictEqual(executionBodies[0].selected_section_anchor.id, 'selected-pricing', 'send flow should carry selected section anchors into inline execution');
   assert.strictEqual(executionBodies[0].post_id, 42, 'send flow should preserve the current post id');

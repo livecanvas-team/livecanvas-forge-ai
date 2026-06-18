@@ -259,6 +259,36 @@
         });
     }
 
+    function updateModeSwitch(form) {
+        var current = form.getAttribute('data-lcfa-current-mode') || '';
+        var selected = form.querySelector('input[name="connection_mode"]:checked');
+        var submit = form.querySelector('[data-lcfa-mode-switch-submit]');
+        var hasChanged = !!selected && selected.value !== current;
+
+        if (!submit) {
+            return;
+        }
+
+        submit.disabled = !hasChanged;
+        submit.textContent = hasChanged
+            ? (submit.getAttribute('data-lcfa-active-label') || 'Use selected mode')
+            : (submit.getAttribute('data-lcfa-idle-label') || 'Current mode selected');
+        form.classList.toggle('is-dirty', hasChanged);
+    }
+
+    function bootstrapModeSwitches() {
+        document.querySelectorAll('[data-lcfa-mode-switch]').forEach(function (form) {
+            updateModeSwitch(form);
+            form.addEventListener('change', function (event) {
+                var target = event.target;
+
+                if (target && target.matches && target.matches('input[name="connection_mode"]')) {
+                    updateModeSwitch(form);
+                }
+            });
+        });
+    }
+
     function setActiveFilter(button, selector) {
         var root = button.closest('[data-lcfa-studio-root]');
 
@@ -412,11 +442,13 @@
             bootstrapReadMore(document);
             bootstrapConnectionsSecondaryPanels();
             bootstrapStudioRoots();
+            bootstrapModeSwitches();
         });
     } else {
         highlightBlocks(document);
         bootstrapReadMore(document);
         bootstrapConnectionsSecondaryPanels();
         bootstrapStudioRoots();
+        bootstrapModeSwitches();
     }
 })();

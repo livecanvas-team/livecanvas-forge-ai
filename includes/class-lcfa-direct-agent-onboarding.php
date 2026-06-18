@@ -57,7 +57,7 @@ final class LCFA_Direct_Agent_Onboarding {
             'abilities_registered' => [
                 'label' => __('Abilities', 'livecanvas-forge-ai'),
                 'ok' => function_exists('wp_register_ability') || !empty($remote_status['mcp_adapter']['available']) || trim((string) ($remote_prerequisites['mcp_adapter_url'] ?? '')) !== '',
-                'message' => __('Forge WordPress Abilities are the Direct Mode contract.', 'livecanvas-forge-ai'),
+                'message' => __('AI Bridge WordPress Abilities are the Direct Mode contract.', 'livecanvas-forge-ai'),
             ],
             'handoff_available' => [
                 'label' => __('Handoff', 'livecanvas-forge-ai'),

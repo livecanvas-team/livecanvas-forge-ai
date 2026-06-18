@@ -38,8 +38,8 @@ final class LCFA_Ability_Registry {
         }
 
         wp_register_ability_category(self::CATEGORY, [
-            'label'       => __('LiveCanvas Forge AI', 'livecanvas-forge-ai'),
-            'description' => __('WordPress-native abilities exposed by LiveCanvas Forge AI.', 'livecanvas-forge-ai'),
+            'label'       => __('LiveCanvas AI Bridge', 'livecanvas-forge-ai'),
+            'description' => __('WordPress-native abilities exposed by LiveCanvas AI Bridge.', 'livecanvas-forge-ai'),
         ]);
     }
 
@@ -70,8 +70,8 @@ final class LCFA_Ability_Registry {
             self::MCP_SERVER_ID,
             self::MCP_NAMESPACE,
             self::MCP_ROUTE,
-            'LiveCanvas Forge AI',
-            'WordPress-native MCP server for safe LiveCanvas Forge AI abilities.',
+            'LiveCanvas AI Bridge',
+            'WordPress-native MCP server for safe LiveCanvas AI Bridge abilities.',
             LCFA_VERSION,
             [$http_transport],
             $error_handler,
@@ -101,7 +101,7 @@ final class LCFA_Ability_Registry {
         ];
         return [
             'livecanvas-forge-ai/get-snapshot' => $this->ability(
-                __('Get Forge snapshot', 'livecanvas-forge-ai'),
+                __('Get AI Bridge snapshot', 'livecanvas-forge-ai'),
                 __('Returns the current WordPress, LiveCanvas, connection, and MCP snapshot without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'get_snapshot'],
@@ -110,7 +110,7 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-inventory' => $this->ability(
-                __('Get Forge inventory', 'livecanvas-forge-ai'),
+                __('Get AI Bridge inventory', 'livecanvas-forge-ai'),
                 __('Returns the LiveCanvas-aware inventory of pages, partials, templates, blocks, and sections without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'get_inventory'],
@@ -119,8 +119,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-context' => $this->ability(
-                __('Get Forge context', 'livecanvas-forge-ai'),
-                __('Returns the full Forge context for the site and optional target post without writing.', 'livecanvas-forge-ai'),
+                __('Get AI Bridge context', 'livecanvas-forge-ai'),
+                __('Returns the full AI Bridge context for the site and optional target post without writing.', 'livecanvas-forge-ai'),
                 $this->target_context_schema(),
                 [$this, 'get_context'],
                 [$this, 'can_read'],
@@ -128,7 +128,7 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-theme-context' => $this->ability(
-                __('Get Forge theme context', 'livecanvas-forge-ai'),
+                __('Get AI Bridge theme context', 'livecanvas-forge-ai'),
                 __('Returns stack, theme, output rules, ACF, MCP, WindPress, and target context without writing.', 'livecanvas-forge-ai'),
                 $this->target_context_schema(),
                 [$this, 'get_theme_context'],
@@ -146,8 +146,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/list-command-actions' => $this->ability(
-                __('List Forge command actions', 'livecanvas-forge-ai'),
-                __('Returns the supported Forge Command Deck actions and descriptions without writing.', 'livecanvas-forge-ai'),
+                __('List AI Bridge command actions', 'livecanvas-forge-ai'),
+                __('Returns the supported AI Bridge Command Deck actions and descriptions without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'list_command_actions'],
                 [$this, 'can_read'],
@@ -155,7 +155,7 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-mcp-status' => $this->ability(
-                __('Get Forge MCP status', 'livecanvas-forge-ai'),
+                __('Get AI Bridge MCP status', 'livecanvas-forge-ai'),
                 __('Returns MCP bridge, client, filesystem mode, and capability status without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'get_mcp_status'],
@@ -182,8 +182,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-ability-diagnostics' => $this->ability(
-                __('Get Forge ability diagnostics', 'livecanvas-forge-ai'),
-                __('Returns the registered Forge ability inventory, MCP exposure flags, and MCP Adapter status without writing.', 'livecanvas-forge-ai'),
+                __('Get AI Bridge ability diagnostics', 'livecanvas-forge-ai'),
+                __('Returns the registered AI Bridge ability inventory, MCP exposure flags, and MCP Adapter status without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'get_ability_diagnostics'],
                 [$this, 'can_read'],
@@ -191,8 +191,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-block-patterns' => $this->ability(
-                __('Get Forge block patterns', 'livecanvas-forge-ai'),
-                __('Returns the WordPress-native block and pattern manifest registered by LiveCanvas Forge AI without writing.', 'livecanvas-forge-ai'),
+                __('Get AI Bridge block patterns', 'livecanvas-forge-ai'),
+                __('Returns the WordPress-native block and pattern manifest registered by LiveCanvas AI Bridge without writing.', 'livecanvas-forge-ai'),
                 $this->empty_object_schema(),
                 [$this, 'get_block_patterns'],
                 [$this, 'can_read'],
@@ -200,8 +200,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-block-pattern-library' => $this->ability(
-                __('Get Forge block pattern library', 'livecanvas-forge-ai'),
-                __('Returns export-ready WordPress-native Forge block patterns with checksums for connected agents without writing.', 'livecanvas-forge-ai'),
+                __('Get AI Bridge block pattern library', 'livecanvas-forge-ai'),
+                __('Returns export-ready WordPress-native AI Bridge block patterns with checksums for connected agents without writing.', 'livecanvas-forge-ai'),
                 $this->block_pattern_library_schema(),
                 [$this, 'get_block_pattern_library'],
                 [$this, 'can_read'],
@@ -210,7 +210,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/get-native-pattern-page-blueprints' => $this->ability(
                 __('Get native pattern page blueprints', 'livecanvas-forge-ai'),
-                __('Returns no-write WordPress-native page blueprints composed from registered Forge patterns.', 'livecanvas-forge-ai'),
+                __('Returns no-write WordPress-native page blueprints composed from registered AI Bridge patterns.', 'livecanvas-forge-ai'),
                 $this->native_pattern_page_blueprints_schema(),
                 [$this, 'get_native_pattern_page_blueprints'],
                 [$this, 'can_read'],
@@ -218,8 +218,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/get-runs' => $this->ability(
-                __('Get Forge runs', 'livecanvas-forge-ai'),
-                __('Returns recent Forge command history and rollback availability without exposing stored rollback content.', 'livecanvas-forge-ai'),
+                __('Get AI Bridge runs', 'livecanvas-forge-ai'),
+                __('Returns recent AI Bridge command history and rollback availability without exposing stored rollback content.', 'livecanvas-forge-ai'),
                 $this->runs_schema(),
                 [$this, 'get_runs'],
                 [$this, 'can_read'],
@@ -314,7 +314,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/preview-native-pattern-page' => $this->ability(
                 __('Preview native pattern page', 'livecanvas-forge-ai'),
-                __('Composes a WordPress-native block page preview from registered Forge patterns without creating or updating a page.', 'livecanvas-forge-ai'),
+                __('Composes a WordPress-native block page preview from registered AI Bridge patterns without creating or updating a page.', 'livecanvas-forge-ai'),
                 $this->native_pattern_page_preview_schema(),
                 [$this, 'preview_native_pattern_page'],
                 [$this, 'can_read'],
@@ -332,7 +332,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/apply-native-pattern-page' => $this->ability(
                 __('Apply native pattern page', 'livecanvas-forge-ai'),
-                __('Creates a new WordPress-native draft page from registered Forge patterns. This dedicated write ability never updates existing content.', 'livecanvas-forge-ai'),
+                __('Creates a new WordPress-native draft page from registered AI Bridge patterns. This dedicated write ability never updates existing content.', 'livecanvas-forge-ai'),
                 $this->native_pattern_page_apply_schema(),
                 [$this, 'apply_native_pattern_page'],
                 [$this, 'can_write'],
@@ -368,7 +368,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/restore-audit-rollback' => $this->ability(
                 __('Restore audit rollback', 'livecanvas-forge-ai'),
-                __('Restores the previous WordPress content stored for a Forge audit ID, or trashes posts created by that audited run.', 'livecanvas-forge-ai'),
+                __('Restores the previous WordPress content stored for an AI Bridge audit ID, or trashes posts created by that audited run.', 'livecanvas-forge-ai'),
                 $this->audit_rollback_schema(),
                 [$this, 'restore_audit_rollback'],
                 [$this, 'can_write'],
@@ -376,8 +376,8 @@ final class LCFA_Ability_Registry {
                 $this->write_ability_is_mcp_public('livecanvas-forge-ai/restore-audit-rollback')
             ),
             'livecanvas-forge-ai/preview-command' => $this->ability(
-                __('Preview Forge command', 'livecanvas-forge-ai'),
-                __('Runs any supported Forge command in dry-run mode and returns the preview result without writing.', 'livecanvas-forge-ai'),
+                __('Preview AI Bridge command', 'livecanvas-forge-ai'),
+                __('Runs any supported AI Bridge command in dry-run mode and returns the preview result without writing.', 'livecanvas-forge-ai'),
                 $this->command_payload_schema(['action'], true),
                 [$this, 'preview_command'],
                 [$this, 'can_read'],
@@ -385,8 +385,8 @@ final class LCFA_Ability_Registry {
                 true
             ),
             'livecanvas-forge-ai/apply-command' => $this->ability(
-                __('Apply Forge command', 'livecanvas-forge-ai'),
-                __('Runs a supported Forge command in apply mode. This can modify WordPress content or theme/runtime assets.', 'livecanvas-forge-ai'),
+                __('Apply AI Bridge command', 'livecanvas-forge-ai'),
+                __('Runs a supported AI Bridge command in apply mode. This can modify WordPress content or theme/runtime assets.', 'livecanvas-forge-ai'),
                 $this->command_payload_schema(['action'], true),
                 [$this, 'apply_command'],
                 [$this, 'can_write'],
@@ -965,9 +965,9 @@ final class LCFA_Ability_Registry {
         }
 
         $preview_page = $preview['page'];
-        $title = sanitize_text_field((string) ($input['title'] ?? $preview_page['title'] ?? __('Forge native page', 'livecanvas-forge-ai')));
+        $title = sanitize_text_field((string) ($input['title'] ?? $preview_page['title'] ?? __('AI Bridge native page', 'livecanvas-forge-ai')));
         if ($title === '') {
-            $title = __('Forge native page', 'livecanvas-forge-ai');
+            $title = __('AI Bridge native page', 'livecanvas-forge-ai');
         }
 
         $status = sanitize_key((string) ($input['status'] ?? 'draft'));
@@ -1342,7 +1342,7 @@ final class LCFA_Ability_Registry {
             'properties'           => [
                 'action' => [
                     'type'        => 'string',
-                    'description' => __('Forge Command Deck action.', 'livecanvas-forge-ai'),
+                    'description' => __('AI Bridge Command Deck action.', 'livecanvas-forge-ai'),
                 ],
                 'dry_run' => [
                     'type'        => 'boolean',
@@ -1434,7 +1434,7 @@ final class LCFA_Ability_Registry {
             'operation' => [
                 'type'        => 'string',
                 'enum'        => ['create', 'update'],
-                'description' => __('Optional operation hint. Forge updates when target_id exists, otherwise creates.', 'livecanvas-forge-ai'),
+                'description' => __('Optional operation hint. AI Bridge updates when target_id exists, otherwise creates.', 'livecanvas-forge-ai'),
             ],
             'title' => [
                 'type'        => 'string',
@@ -1521,7 +1521,7 @@ final class LCFA_Ability_Registry {
                 ],
                 'pattern_name' => [
                     'type'        => 'string',
-                    'description' => __('Optional single Forge pattern name or slug to include.', 'livecanvas-forge-ai'),
+                    'description' => __('Optional single AI Bridge pattern name or slug to include.', 'livecanvas-forge-ai'),
                 ],
                 'blueprint' => [
                     'type'        => 'string',
@@ -1534,7 +1534,7 @@ final class LCFA_Ability_Registry {
                 'pattern_names' => [
                     'type'        => 'array',
                     'items'       => ['type' => 'string'],
-                    'description' => __('Optional ordered Forge pattern names or slugs to compose.', 'livecanvas-forge-ai'),
+                    'description' => __('Optional ordered AI Bridge pattern names or slugs to compose.', 'livecanvas-forge-ai'),
                 ],
                 'patterns' => [
                     'type'        => 'array',
@@ -1568,7 +1568,7 @@ final class LCFA_Ability_Registry {
             'properties'           => [
                 'audit_id' => [
                     'type'        => 'string',
-                    'description' => __('Forge audit ID returned by a previous apply run.', 'livecanvas-forge-ai'),
+                    'description' => __('AI Bridge audit ID returned by a previous apply run.', 'livecanvas-forge-ai'),
                 ],
                 'dry_run' => [
                     'type'        => 'boolean',
@@ -1665,7 +1665,7 @@ final class LCFA_Ability_Registry {
             __('Framework validation preview', 'livecanvas-forge-ai'),
             'livecanvas-forge-ai/validate-markup-for-framework',
             [
-                'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1></div></section>',
+                'content' => '<section class="py-12"><div class="container mx-auto"><h1>AI Bridge smoke test</h1></div></section>',
                 'framework' => (string) (($summary['framework'] ?? '') ?: 'auto'),
             ],
             __('Returns validation output without writing.', 'livecanvas-forge-ai'),
@@ -1677,7 +1677,7 @@ final class LCFA_Ability_Registry {
             __('Native pattern page preview', 'livecanvas-forge-ai'),
             'livecanvas-forge-ai/preview-native-pattern-page',
             [
-                'title' => __('Forge native page smoke test', 'livecanvas-forge-ai'),
+                'title' => __('AI Bridge native page smoke test', 'livecanvas-forge-ai'),
                 'pattern_names' => ['conversion-hero', 'feature-grid'],
             ],
             __('Returns a composed WordPress block page preview without writing.', 'livecanvas-forge-ai'),
@@ -1689,10 +1689,10 @@ final class LCFA_Ability_Registry {
             __('Page upsert preview', 'livecanvas-forge-ai'),
             'livecanvas-forge-ai/preview-page-upsert',
             [
-                'title' => 'Forge Smoke Test',
+                'title' => 'AI Bridge Smoke Test',
                 'slug' => 'forge-smoke-test',
                 'status' => 'draft',
-                'content' => '<section class="py-12"><div class="container mx-auto"><h1>Forge smoke test</h1><p>Preview only.</p></div></section>',
+                'content' => '<section class="py-12"><div class="container mx-auto"><h1>AI Bridge smoke test</h1><p>Preview only.</p></div></section>',
             ],
             __('Returns preview metadata without creating or updating content.', 'livecanvas-forge-ai'),
             'low'
@@ -1755,7 +1755,7 @@ final class LCFA_Ability_Registry {
         }
 
         $prompt_lines = [
-            __('Use the LiveCanvas Forge AI WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
+            __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
             __('First call livecanvas-forge-ai/get-connection-handoff with {"limit":5}.', 'livecanvas-forge-ai'),
             __('If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.', 'livecanvas-forge-ai'),
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
@@ -1820,7 +1820,7 @@ final class LCFA_Ability_Registry {
 
     private function build_agent_handoff_runbook(array $summary, array $smoke_tests, array $connection_handoff): string {
         $lines = [
-            '# LiveCanvas Forge AI Agent Handoff',
+            '# LiveCanvas AI Bridge Agent Handoff',
             '',
             '## Current State',
             '- Source: WordPress Ability',
@@ -2067,7 +2067,7 @@ final class LCFA_Ability_Registry {
             ],
             'content' => [
                 'type'        => 'string',
-                'description' => __('Optional combined header/footer markup. Forge will extract the parts when possible.', 'livecanvas-forge-ai'),
+                'description' => __('Optional combined header/footer markup. AI Bridge will extract the parts when possible.', 'livecanvas-forge-ai'),
             ],
             'framework' => [
                 'type'        => 'string',

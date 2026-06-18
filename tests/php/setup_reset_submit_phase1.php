@@ -101,7 +101,7 @@ function lcfa_shutdown_assertions(): void {
     $notice = LCFA_Settings::$notice;
     $redirect = $GLOBALS['lcfa_test_redirect'] ?? '';
 
-    if (($notice['message'] ?? '') !== 'Forge state reset. Setup and connection status were cleared, a new MCP token was generated, and existing workspace files were left untouched.') {
+    if (($notice['message'] ?? '') !== 'AI Bridge state reset. Setup and connection status were cleared, a new MCP token was generated, and existing workspace files were left untouched.') {
         fwrite(STDERR, "reset submit should set the updated reset notice\n");
         exit(1);
     }

@@ -115,7 +115,7 @@ final class LCFA_Genesis_Planner {
 
     private function build_ai_plan_prompt(array $brief, array $snapshot, array $summary, array $pages, array $tasks): string {
         return implode("\n\n", [
-            'Create a concise enhancement pass for this LiveCanvas Forge Genesis build plan.',
+            'Create a concise enhancement pass for this LiveCanvas AI Bridge Genesis build plan.',
             'Return JSON only. Keep page slugs and task IDs stable. Do not add executable payload actions.',
             'Project brief:',
             $this->encode_json($brief),

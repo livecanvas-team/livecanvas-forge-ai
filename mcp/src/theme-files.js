@@ -62,7 +62,7 @@ class ThemeFilesystem {
     const template = snapshot.current_theme_template || stylesheet
 
     if (!stylesheet) {
-      throw new Error('Unable to resolve the active stylesheet from the LiveCanvas Forge plugin.')
+      throw new Error('Unable to resolve the active stylesheet from the LiveCanvas AI Bridge plugin.')
     }
 
     const stylesheetRoot = path.join(themesRoot, stylesheet)

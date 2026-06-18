@@ -39,7 +39,7 @@
 
     function fetchStudioJson(config, url, errorMessage) {
         if (!url) {
-            return Promise.reject(new Error(errorMessage || 'Forge Studio REST endpoint is missing.'));
+            return Promise.reject(new Error(errorMessage || 'AI Studio REST endpoint is missing.'));
         }
 
         if (apiFetch && typeof apiFetch === 'function') {
@@ -51,7 +51,7 @@
             headers: config && config.nonce ? { 'X-WP-Nonce': config.nonce } : {}
         }).then(function (response) {
             if (!response.ok) {
-                throw new Error(errorMessage || 'Forge Studio REST request failed.');
+                throw new Error(errorMessage || 'AI Studio REST request failed.');
             }
 
             return response.json();
@@ -59,7 +59,7 @@
     }
 
     function fetchStudioState(config) {
-        return fetchStudioJson(config, config.endpoint, 'Forge Studio REST request failed.');
+        return fetchStudioJson(config, config.endpoint, 'AI Studio REST request failed.');
     }
 
     function postStudioJson(config, url, payload) {
@@ -68,7 +68,7 @@
         };
 
         if (!url) {
-            return Promise.reject(new Error('Forge Studio action endpoint is missing.'));
+            return Promise.reject(new Error('AI Studio action endpoint is missing.'));
         }
 
         if (apiFetch && typeof apiFetch === 'function') {
@@ -90,7 +90,7 @@
             body: JSON.stringify(payload || {})
         }).then(function (response) {
             if (!response.ok) {
-                throw new Error('Forge Studio action request failed.');
+                throw new Error('AI Studio action request failed.');
             }
 
             return response.json();
@@ -325,7 +325,7 @@
         var summary = props.summary || {};
 
         return h(Card, {
-            title: 'Forge Studio app',
+            title: 'AI Studio app',
             description: 'WordPress-native Studio state loaded through the REST endpoint.'
         },
             h('div', { className: 'lcfa-studio-actions' },
@@ -389,7 +389,7 @@
             native_page_apply: String(studio.native_pattern_page_apply_route || '')
         };
         var codexPrompt = [
-            'Test LiveCanvas Forge AI without changing existing content.',
+            'Test LiveCanvas AI Bridge without changing existing content.',
             'First call get_connection_handoff, then get_handoff_summary.',
             'Read the native page blueprints and run a native page preview only.',
             'If the preview is valid, report the exact apply request but do not create a draft until I confirm.'
@@ -471,7 +471,7 @@
         return h(Card, {
             className: 'lcfa-studio-integration-test-plan',
             title: 'Integration test plan',
-            description: 'Copy-ready smoke path for validating the current Forge Studio, REST, and MCP integration.'
+            description: 'Copy-ready smoke path for validating the current AI Studio, REST, and MCP integration.'
         },
             h('div', { className: 'lcfa-studio-actions' },
                 h('button', {
@@ -750,11 +750,11 @@
             setEndpointLoading(true);
             setEndpointError('');
 
-            fetchStudioJson({ nonce: props.nonce || '' }, endpoint, 'Forge Studio handoff summary request failed.').then(function (payload) {
+            fetchStudioJson({ nonce: props.nonce || '' }, endpoint, 'AI Studio handoff summary request failed.').then(function (payload) {
                 setEndpointResponse(payload || {});
                 setEndpointLoading(false);
             }).catch(function (fetchError) {
-                setEndpointError(fetchError && fetchError.message ? fetchError.message : 'Forge Studio handoff summary request failed.');
+                setEndpointError(fetchError && fetchError.message ? fetchError.message : 'AI Studio handoff summary request failed.');
                 setEndpointLoading(false);
             });
         }
@@ -2260,7 +2260,7 @@
                 setRefreshedAt(String(payload && payload.studio && payload.studio.generated_at ? payload.studio.generated_at : ''));
                 setFallbackHidden(true);
             }).catch(function (loadError) {
-                setError(loadError && loadError.message ? loadError.message : (labels.loadFailed || 'Forge Studio app could not load.'));
+                setError(loadError && loadError.message ? loadError.message : (labels.loadFailed || 'AI Studio app could not load.'));
                 setFallbackHidden(false);
             }).finally(function () {
                 setLoading(false);
@@ -2284,13 +2284,13 @@
         }
 
         if (loading && !data) {
-            return h(Card, { className: 'lcfa-studio-react', title: 'Forge Studio app' },
-                h('p', { className: 'lcfa-empty' }, labels.loading || 'Loading Forge Studio...')
+            return h(Card, { className: 'lcfa-studio-react', title: 'AI Studio app' },
+                h('p', { className: 'lcfa-empty' }, labels.loading || 'Loading AI Studio...')
             );
         }
 
         if (error && !data) {
-            return h(Card, { className: 'lcfa-studio-react', title: 'Forge Studio app' },
+            return h(Card, { className: 'lcfa-studio-react', title: 'AI Studio app' },
                 h('p', { className: 'lcfa-empty' }, labels.loadFailed || error),
                 h('button', { className: 'button', type: 'button', onClick: load }, labels.retry || 'Retry')
             );

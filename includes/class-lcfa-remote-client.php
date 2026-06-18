@@ -174,7 +174,7 @@ final class LCFA_Remote_Client {
             case 403:
                 return __('Remote authentication worked, but the user does not have enough permissions for the companion routes.', 'livecanvas-forge-ai');
             case 404:
-                return __('Remote companion routes were not found. Install and activate LiveCanvas Forge AI on the remote site.', 'livecanvas-forge-ai');
+                return __('Remote companion routes were not found. Install and activate LiveCanvas AI Bridge on the remote site.', 'livecanvas-forge-ai');
             default:
                 return sprintf(__('Unexpected remote HTTP %d response.', 'livecanvas-forge-ai'), $status_code);
         }

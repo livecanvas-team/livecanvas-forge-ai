@@ -149,7 +149,7 @@ final class LCFA_Ability_Registry {
                 'items' => [
                     [
                         'name' => 'livecanvas-forge-ai/get-snapshot',
-                        'label' => 'Get Forge snapshot',
+                        'label' => 'Get AI Bridge snapshot',
                         'mcp_public' => true,
                         'readonly' => true,
                         'destructive' => false,
@@ -157,7 +157,7 @@ final class LCFA_Ability_Registry {
                     ],
                     [
                         'name' => 'livecanvas-forge-ai/get-block-pattern-library',
-                        'label' => 'Get Forge block pattern library',
+                        'label' => 'Get AI Bridge block pattern library',
                         'mcp_public' => true,
                         'readonly' => true,
                         'destructive' => false,
@@ -494,7 +494,7 @@ lcfa_assert_same(1, $data['mcp_write_policy']['counts']['exposed'] ?? 0, 'studio
 $alert_codes = array_column($data['alerts'] ?? [], 'code');
 lcfa_assert_true(in_array('mcp_write_exposed', $alert_codes, true), 'studio alerts should flag MCP write exposure');
 lcfa_assert_true(in_array('recent_run_errors', $alert_codes, true), 'studio alerts should flag recent run errors');
-lcfa_assert_same('Forge Studio operator briefing', $data['operator_briefing']['title'] ?? '', 'studio briefing should expose a title');
+lcfa_assert_same('AI Studio operator briefing', $data['operator_briefing']['title'] ?? '', 'studio briefing should expose a title');
 lcfa_assert_true(str_contains($data['operator_briefing']['agent_prompt'] ?? '', 'get_snapshot'), 'studio briefing should include a read-only agent prompt');
 $briefing_risk_codes = array_column($data['operator_briefing']['risks'] ?? [], 'code');
 lcfa_assert_true(in_array('mcp_write_exposed', $briefing_risk_codes, true), 'studio briefing should include write exposure risks');
@@ -514,7 +514,7 @@ lcfa_assert_same('livecanvas-forge-ai/apply-native-pattern-page', $smoke_tests['
 lcfa_assert_true(empty($smoke_tests['native_pattern_page_apply_guard']['public_write_exposed']), 'studio native apply guard should not be marked public when it is not exposed');
 lcfa_assert_true(str_contains($smoke_tests['native_pattern_page_apply_guard']['expected'] ?? '', 'Do not execute automatically'), 'studio native apply guard should warn agents not to execute automatically');
 lcfa_assert_true(!str_contains(json_encode($data['agent_smoke_tests']), 'secret rollback HTML'), 'studio smoke tests should not expose rollback payload content');
-lcfa_assert_same('LiveCanvas Forge AI Agent Runbook', $data['agent_runbook']['title'] ?? '', 'studio agent runbook should expose a title');
+lcfa_assert_same('LiveCanvas AI Bridge Agent Runbook', $data['agent_runbook']['title'] ?? '', 'studio agent runbook should expose a title');
 lcfa_assert_same('markdown', $data['agent_runbook']['format'] ?? '', 'studio agent runbook should expose markdown format');
 lcfa_assert_true(($data['agent_runbook']['line_count'] ?? 0) > 10, 'studio agent runbook should expose a non-empty markdown document');
 lcfa_assert_true(str_contains($data['agent_runbook']['markdown'] ?? '', 'Smoke Test Order'), 'studio agent runbook should include smoke test order');

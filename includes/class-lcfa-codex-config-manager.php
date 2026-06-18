@@ -166,6 +166,7 @@ final class LCFA_Codex_Config_Manager {
             return $this->summarize_smoke($expected, $checks);
         }
 
+        $this->clear_local_mcp_status_cache();
         $checks['mcp_tool'] = $this->run_mcp_status_tool($expected);
 
         return $this->summarize_smoke($expected, $checks);
@@ -259,13 +260,34 @@ final class LCFA_Codex_Config_Manager {
         $available = is_array($payload)
             && !empty($payload['ok'])
             && !empty($payload['result']['mcp']['local_bridge']['available']);
+        $local_bridge = is_array($payload['result']['mcp']['local_bridge'] ?? null)
+            ? $payload['result']['mcp']['local_bridge']
+            : [];
 
         return [
             'ok'      => $available,
             'message' => $available
                 ? __('Local MCP tool returned available=true.', 'livecanvas-forge-ai')
                 : __('Local MCP tool did not report an available bridge.', 'livecanvas-forge-ai'),
+            'details' => $available || $local_bridge === [] ? [] : [
+                'local_bridge' => [
+                    'available'      => !empty($local_bridge['available']),
+                    'local_site'     => !empty($local_bridge['local_site']),
+                    'node_available' => !empty($local_bridge['node_available']),
+                    'rest_reachable' => !empty($local_bridge['rest_reachable']),
+                    'script_exists'  => !empty($local_bridge['script_exists']),
+                    'message'        => (string) ($local_bridge['message'] ?? ''),
+                ],
+            ],
         ];
+    }
+
+    private function clear_local_mcp_status_cache(): void {
+        if (!function_exists('delete_transient')) {
+            return;
+        }
+
+        delete_transient('lcfa_local_mcp_status_' . md5(home_url('/') . '|' . LCFA_VERSION));
     }
 
     private function get_process_failure_message(string $stderr): string {

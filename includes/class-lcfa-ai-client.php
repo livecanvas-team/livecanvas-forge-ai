@@ -15,7 +15,7 @@ final class LCFA_AI_Client {
             ];
         }
 
-        $builder = wp_ai_client_prompt('LiveCanvas Forge AI capability check.');
+        $builder = wp_ai_client_prompt('LiveCanvas AI Bridge capability check.');
         $supported = is_object($builder)
             && method_exists($builder, 'is_supported_for_text_generation')
             && $builder->is_supported_for_text_generation();

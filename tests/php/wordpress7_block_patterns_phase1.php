@@ -59,10 +59,10 @@ $patterns->register_blocks_and_patterns();
 
 lcfa_patterns_assert_true(isset($GLOBALS['lcfa_test_blocks']['livecanvas-forge-ai/section-shell']), 'section-shell block should be registered');
 lcfa_patterns_assert_true(is_callable($GLOBALS['lcfa_test_blocks']['livecanvas-forge-ai/section-shell']['render_callback'] ?? null), 'section-shell block should expose a render callback');
-lcfa_patterns_assert_true(isset($GLOBALS['lcfa_test_pattern_categories']['livecanvas-forge-ai']), 'Forge pattern category should be registered');
+lcfa_patterns_assert_true(isset($GLOBALS['lcfa_test_pattern_categories']['livecanvas-forge-ai']), 'AI Bridge pattern category should be registered');
 lcfa_patterns_assert_true(isset($GLOBALS['lcfa_test_patterns']['livecanvas-forge-ai/conversion-hero']), 'conversion hero pattern should be registered');
 lcfa_patterns_assert_true(isset($GLOBALS['lcfa_test_patterns']['livecanvas-forge-ai/feature-grid']), 'feature grid pattern should be registered');
-lcfa_patterns_assert_true(strpos((string) ($GLOBALS['lcfa_test_patterns']['livecanvas-forge-ai/conversion-hero']['content'] ?? ''), 'wp:livecanvas-forge-ai/section-shell') !== false, 'patterns should use the Forge section shell block');
+lcfa_patterns_assert_true(strpos((string) ($GLOBALS['lcfa_test_patterns']['livecanvas-forge-ai/conversion-hero']['content'] ?? ''), 'wp:livecanvas-forge-ai/section-shell') !== false, 'patterns should use the AI Bridge section shell block');
 
 $rendered = $patterns->render_section_shell_block([
     'eyebrow' => 'Small',

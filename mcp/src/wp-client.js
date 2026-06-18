@@ -409,7 +409,7 @@ function getHttpErrorMessage(status, payload) {
   const code = payload && typeof payload === 'object' ? String(payload.code || '') : ''
 
   if ((status === 401 || status === 403) && (code === 'rest_forbidden' || /not allowed|forbidden|unauthorized/i.test(message))) {
-    return 'WordPress rejected the LiveCanvas Forge MCP token. Sync Codex config or rotate the token and regenerate.'
+    return 'WordPress rejected the LiveCanvas AI Bridge MCP token. Sync Codex config or rotate the token and regenerate.'
   }
 
   return message || `WordPress request failed (${status})`

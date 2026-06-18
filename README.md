@@ -1,6 +1,6 @@
-# LiveCanvas Forge AI
+# LiveCanvas AI Bridge
 
-`LiveCanvas Forge AI` is a companion plugin for [LiveCanvas](https://livecanvas.com/) that lets coding agents work inside a real WordPress + LiveCanvas site.
+`LiveCanvas AI Bridge` is a companion plugin for [LiveCanvas](https://livecanvas.com/) that lets coding agents work inside a real WordPress + LiveCanvas site.
 
 It does not replace LiveCanvas. It handles structural work, agent integration, previews, page/template operations, and foundation setup while LiveCanvas remains the visual and code-level editing layer.
 
@@ -21,12 +21,12 @@ Usable today:
 - apply design-system tokens for Picostrap, Picowind/WindPress, or a custom-theme fallback
 - run first-pass site foundation workflows with `site_foundation_run`
 - create/update LiveCanvas dynamic templates and sync supported assignments to native `is_*` meta
-- use the Forge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references
+- use the AI Bridge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references
 - queue LiveCanvas editor prompts with a preferred WordPress Ability contract for the connected coding agent
 - inspect recent runs with audit IDs and restore stored rollback records for local apply operations
-- use the PHP-rendered `Forge Studio` tab to inspect abilities, MCP write exposure, AI readiness, and audited runs
+- use the PHP-rendered `AI Studio` tab to inspect abilities, MCP write exposure, AI readiness, and audited runs
 - consume the read-only `/wp-json/lcfa/v1/studio` state endpoint for a future React/DataViews Studio UI
-- load a first progressive React `Forge Studio` shell that consumes the Studio endpoint and falls back to the PHP view if REST or WordPress admin JS dependencies are unavailable
+- load a first progressive React `AI Studio` shell that consumes the Studio endpoint and falls back to the PHP view if REST or WordPress admin JS dependencies are unavailable
 - use the React Studio shell with search, filters, sorting, configurable columns, copy actions, and rollback shortcuts for abilities and runs
 - persist Studio view preferences locally and provide refresh/reset/copy-state controls for the REST-backed Studio shell
 - inspect selected abilities and runs from the React Studio sidebar, with copy JSON and rollback/deck shortcuts
@@ -41,14 +41,14 @@ Usable today:
 - copy a virtual agent handoff package with runbook, smoke tests, briefing, readiness, ability manifest, write policy, and checksums
 - fetch the same handoff package from the dedicated read-only `/wp-json/lcfa/v1/studio/handoff-package` endpoint
 - copy a first agent prompt from `Connections` that starts Codex/MCP clients with the connection handoff
-- inspect the same first-prompt connection handoff inside `Forge Studio` and the agent handoff package
+- inspect the same first-prompt connection handoff inside `AI Studio` and the agent handoff package
 - fetch only the connection handoff from `/wp-json/lcfa/v1/studio/connection-handoff` or the MCP `get_connection_handoff` tool
-- export native WordPress Forge block patterns with content, byte counts, and SHA-256 checksums for agent handoff
-- read, run, inspect, and copy native page blueprint previews in Forge Studio before composing WordPress block page previews
+- export native WordPress AI Bridge block patterns with content, byte counts, and SHA-256 checksums for agent handoff
+- read, run, inspect, and copy native page blueprint previews in AI Studio before composing WordPress block page previews
 - review guarded agent smoke tests for native draft creation before exposing `apply-native-pattern-page`
 - see handoff readiness ratios for read-only, preview, and guarded-write smoke tests
 - use `forge-handoff-summary.json` inside handoff packages for quick agent decisions
-- run the Forge Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
+- run the AI Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
 - review the Power Mode policy foundation; advanced filesystem, WP-CLI, upload, admin-link, and sandbox tools are prepared but not exposed in this release
 
 Still in progress:
@@ -59,14 +59,14 @@ Still in progress:
 - more creative screenshot-aware generation
 - stronger remote/local parity testing for complex write workflows
 - more complete fallback enqueue behavior for custom themes
-- a complete DataViews-based Forge Studio UI; the first progressive React shell is now available
+- a complete DataViews-based AI Studio UI; the first progressive React shell is now available
 
 ## What It Does
 
 The plugin acts as a WordPress execution engine for coding agents.
 
 ```text
-Coding Agent -> WordPress MCP Adapter or local MCP -> LiveCanvas Forge AI -> WordPress / LiveCanvas / WindPress
+Coding Agent -> WordPress MCP Adapter or local MCP -> LiveCanvas AI Bridge -> WordPress / LiveCanvas / WindPress
 ```
 
 Main areas:
@@ -74,10 +74,15 @@ Main areas:
 - `Setup`: project profile, framework, site mode, policy
 - `Connections`: agent bootstrap for Codex, Cursor, Claude Code, OpenCode, and generic MCP clients
 - `Genesis`: project brief and executable site plan
-- `Forge Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
+- `AI Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
 - `Command Deck`: preview/apply console for structured operations
 - `LiveCanvas editor drawer`: in-editor prompt surface for contextual page edits
 - `MCP package`: local Node bridge in [`mcp/`](./mcp/)
+
+## Product Family
+
+- `LiveCanvas AI Bridge`: this plugin. It connects WordPress, LiveCanvas, Picostrap, Picowind, WindPress, and coding agents through safe read/preview/apply workflows.
+- `LiveCanvas AI Vision`: planned premium extension for screenshot-to-code and URL-to-page rebuilds. It will analyze long screenshots or URLs, split pages into sections, extract a reusable design system, generate or map missing assets, and create editable Picowind/Tailwind pages through AI Bridge.
 
 ## Requirements
 
@@ -100,7 +105,7 @@ git clone https://github.com/livecanvas-team/livecanvas-forge-ai.git
 Then activate:
 
 ```text
-WordPress Admin > Plugins > LiveCanvas Forge AI > Activate
+WordPress Admin > Plugins > LiveCanvas AI Bridge > Activate
 ```
 
 You can also upload a ZIP from:
@@ -118,15 +123,15 @@ livecanvas-forge-ai
 After activation, open:
 
 ```text
-WordPress Admin > Forge AI
+WordPress Admin > AI Bridge
 ```
 
-If LiveCanvas is active, Forge AI also appears inside the LiveCanvas admin area.
+If LiveCanvas is active, AI Bridge also appears inside the LiveCanvas admin area.
 
 ## Quick Start
 
 1. Activate the plugin.
-2. Open `WordPress Admin > Forge AI`.
+2. Open `WordPress Admin > AI Bridge`.
 3. Complete the setup wizard.
 4. Open `Connections`.
 5. Use the default `Connect Codex` Direct Mode path, or open `Other clients`.
@@ -140,7 +145,7 @@ For detailed MCP setup, see [`mcp/README.md`](./mcp/README.md). The preferred se
 
 ## How To Test This Build
 
-1. Activate the plugin and open `WordPress Admin > Forge AI > Forge Studio`.
+1. Activate the plugin and open `WordPress Admin > AI Bridge > AI Studio`.
 2. Click `Refresh`, then open the `Integration test plan` panel.
 3. Copy the REST endpoint checklist and verify the read-only endpoints return `200 OK`.
 4. Click `Refresh summary` in `Handoff summary`; parity should become `verified` unless the backend state changed between requests.
@@ -175,7 +180,7 @@ WordPress 7 ability highlights:
 
 | Ability | Purpose |
 | --- | --- |
-| `livecanvas-forge-ai/get-snapshot` | Read site and Forge runtime context. |
+| `livecanvas-forge-ai/get-snapshot` | Read site and AI Bridge runtime context. |
 | `livecanvas-forge-ai/get-runs` | Read recent runs and rollback availability. |
 | `livecanvas-forge-ai/get-connection-handoff` | Read the first agent prompt and connection guardrails. |
 | `livecanvas-forge-ai/get-handoff-summary` | Read compact readiness, blocker, warning, and next-action metadata. |
@@ -186,15 +191,15 @@ WordPress 7 ability highlights:
 | `livecanvas-forge-ai/apply-page-upsert` | Apply page create/update with audit metadata. |
 | `livecanvas-forge-ai/preview-global-shell` | Preview header/footer shell changes. |
 | `livecanvas-forge-ai/apply-global-shell` | Apply header/footer shell changes. |
-| `livecanvas-forge-ai/preview-command` | Run any supported Forge command as a forced dry-run preview. |
+| `livecanvas-forge-ai/preview-command` | Run any supported AI Bridge command as a forced dry-run preview. |
 | `livecanvas-forge-ai/preview-block-pattern` | Convert supplied HTML into a native block pattern preview. |
-| `livecanvas-forge-ai/preview-native-pattern-page` | Compose a native block page preview from Forge patterns. |
-| `livecanvas-forge-ai/apply-native-pattern-page` | Create a new draft native WordPress page from Forge patterns. |
+| `livecanvas-forge-ai/preview-native-pattern-page` | Compose a native block page preview from AI Bridge patterns. |
+| `livecanvas-forge-ai/apply-native-pattern-page` | Create a new draft native WordPress page from AI Bridge patterns. |
 | `livecanvas-forge-ai/restore-audit-rollback` | Restore a stored rollback by audit ID. |
 
-Read and preview abilities are MCP-public by default. Write abilities are not MCP-public by default. Under `Forge AI > Connections > Advanced settings`, enable the master write opt-in only for trusted MCP clients, then select the specific write abilities to expose in the allowlist.
+Read and preview abilities are MCP-public by default. Write abilities are not MCP-public by default. Under `AI Bridge > Connections > Advanced settings`, enable the master write opt-in only for trusted MCP clients, then select the specific write abilities to expose in the allowlist.
 
-The backend also exposes `GET /wp-json/lcfa/v1/studio`, `GET /wp-json/lcfa/v1/studio/connection-handoff`, `GET /wp-json/lcfa/v1/studio/handoff-summary`, `GET /wp-json/lcfa/v1/studio/block-pattern-library`, `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`, and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, connection handoff, handoff summary, block pattern library, native page blueprints, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The connection-handoff endpoint returns only the first-prompt bootstrap. The handoff-summary endpoint returns only compact status, score, blocker, warning, missing-test, write-guard, and next-action metadata. The block-pattern-library endpoint returns only export-ready native patterns. The native-pattern-page-blueprints endpoint returns page recipes plus copy-ready preview/apply requests. The native-pattern-page preview endpoint composes block content from registered patterns without writing. The native-pattern-page apply endpoint creates a new draft native page and records a rollback reference. Forge Studio can run the preview, create the draft from the blueprint panel, refresh audit state, and open the rollback flow for the created draft. MCP clients can also call `get_connection_handoff`, `get_handoff_summary`, `get_block_pattern_library`, `get_native_pattern_page_blueprints`, `preview_native_pattern_page`, `apply_native_pattern_page`, and `get_agent_handoff_package`.
+The backend also exposes `GET /wp-json/lcfa/v1/studio`, `GET /wp-json/lcfa/v1/studio/connection-handoff`, `GET /wp-json/lcfa/v1/studio/handoff-summary`, `GET /wp-json/lcfa/v1/studio/block-pattern-library`, `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`, and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, connection handoff, handoff summary, block pattern library, native page blueprints, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The connection-handoff endpoint returns only the first-prompt bootstrap. The handoff-summary endpoint returns only compact status, score, blocker, warning, missing-test, write-guard, and next-action metadata. The block-pattern-library endpoint returns only export-ready native patterns. The native-pattern-page-blueprints endpoint returns page recipes plus copy-ready preview/apply requests. The native-pattern-page preview endpoint composes block content from registered patterns without writing. The native-pattern-page apply endpoint creates a new draft native page and records a rollback reference. AI Studio can run the preview, create the draft from the blueprint panel, refresh audit state, and open the rollback flow for the created draft. MCP clients can also call `get_connection_handoff`, `get_handoff_summary`, `get_block_pattern_library`, `get_native_pattern_page_blueprints`, `preview_native_pattern_page`, `apply_native_pattern_page`, and `get_agent_handoff_package`.
 
 ## Example User Prompts For Coding Agents
 
@@ -203,7 +208,7 @@ Use these from Codex, OpenCode, Cursor, Claude Code, or another MCP-connected cl
 ### 1. Check The Integration
 
 ```text
-Check that LiveCanvas Forge AI is connected correctly. Inspect the site context and tell me which WordPress theme, LiveCanvas stack, framework, and Forge capabilities are available. Do not change anything.
+Check that LiveCanvas AI Bridge is connected correctly. Inspect the site context and tell me which WordPress theme, LiveCanvas stack, framework, and AI Bridge capabilities are available. Do not change anything.
 ```
 
 ### 2. Audit Before Editing
@@ -215,7 +220,7 @@ Audit this WordPress + LiveCanvas site before we make changes. Summarize the exi
 ### 3. Create A Test Page
 
 ```text
-Create a draft LiveCanvas page called "Forge Integration Test". Add a clean hero section, one short content section, and a final call-to-action. Keep it simple and return the frontend URL and editor URL.
+Create a draft LiveCanvas page called "AI Bridge Integration Test". Add a clean hero section, one short content section, and a final call-to-action. Keep it simple and return the frontend URL and editor URL.
 ```
 
 ### 4. Create A Page From A Short Brief
@@ -262,7 +267,7 @@ Build the first site foundation for a boutique architecture studio. Use the uplo
 
 ## Example User Prompts In The LiveCanvas Editor
 
-Use these inside the Forge drawer while editing a page in LiveCanvas. They are scoped to the current page or selected section.
+Use these inside the AI Bridge drawer while editing a page in LiveCanvas. They are scoped to the current page or selected section.
 
 ### 1. Small Text Improvement
 
@@ -298,7 +303,7 @@ Add a pricing section with three plans: Starter, Pro, and Team. Make Pro the rec
 
 ### 6. Match An Uploaded Screenshot
 
-Attach a screenshot in the Forge drawer, then send:
+Attach a screenshot in the AI Bridge drawer, then send:
 
 ```text
 Use the uploaded screenshot as a visual reference for this section. Match the hierarchy, spacing, and CTA structure, but keep this site's colors, typography, and framework classes.

@@ -1077,7 +1077,7 @@
     if(!promptInput){return;}
     var prompt=promptInput.value.trim();
     if(prompt===""){
-      renderSuggestion({message:(config.labels&&config.labels.requestRequired)||"Write a request first so Forge AI can suggest an action."},true);
+      renderSuggestion({message:(config.labels&&config.labels.requestRequired)||"Write a request first so AI Bridge can suggest an action."},true);
       return;
     }
     setBusy(true);
