@@ -2995,7 +2995,7 @@ final class LCFA_Admin {
         $pending = LCFA_MCP_Session_Manager::get_pending_pairings();
         $sessions = LCFA_MCP_Session_Manager::get_public_sessions();
 
-        echo '<div class="lcfa-workspace-note lcfa-mcp-session-panel">';
+        echo '<div id="lcfa-secure-codex-pairing-sessions" class="lcfa-workspace-note lcfa-mcp-session-panel">';
         echo '<strong>' . esc_html__('Secure Codex pairing sessions', 'livecanvas-forge-ai') . '</strong>';
         echo '<p>' . esc_html__('Approve only the Codex project you are using now. Revoked or expired sessions cannot access this site.', 'livecanvas-forge-ai') . '</p>';
 

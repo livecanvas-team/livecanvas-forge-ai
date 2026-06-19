@@ -7,6 +7,7 @@ final class LCFA_MCP_Session_Manager {
     private const PAIRING_INDEX_OPTION_KEY = 'lcfa_mcp_pairing_index';
     private const PAIRING_TRANSIENT_PREFIX = 'lcfa_mcp_pairing_';
     private const PAIRING_RATE_PREFIX = 'lcfa_mcp_pairing_rate_';
+    private const PAIRING_ADMIN_ANCHOR = 'lcfa-secure-codex-pairing-sessions';
     private const PAIRING_TTL = 600;
     private const SESSION_TTL = 2592000;
 
@@ -358,7 +359,7 @@ final class LCFA_MCP_Session_Manager {
 
     private static function get_verification_url(): string {
         return function_exists('admin_url')
-            ? admin_url('admin.php?page=lcfa-dashboard&tab=connections')
+            ? admin_url('admin.php?page=lcfa-dashboard&tab=connections#' . self::PAIRING_ADMIN_ANCHOR)
             : '';
     }
 

@@ -1003,6 +1003,10 @@
     background: rgba(232, 62, 140, 0.08);
 }
 
+.lcfa-admin #lcfa-secure-codex-pairing-sessions {
+    scroll-margin-top: 96px;
+}
+
 .lcfa-admin .lcfa-workspace-note strong {
     color: #fff;
     font-size: 14px;
