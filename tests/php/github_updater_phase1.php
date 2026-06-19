@@ -161,6 +161,7 @@ lcfa_updater_assert_true((bool) ($state['update_available'] ?? false), 'newer Gi
 
 $update = $updater->filter_update_uri_response(false, [], $plugin_file);
 lcfa_updater_assert_true(is_object($update), 'licensed newer release should produce a WordPress update object');
+lcfa_updater_assert_same('0.1.8', $update->version ?? '', 'update object should expose the core-required version field');
 lcfa_updater_assert_same('0.1.8', $update->new_version ?? '', 'update object should expose the newer version');
 lcfa_updater_assert_same('https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.1.8/livecanvas-forge-ai.zip', $update->package ?? '', 'update package should point to the release zip asset');
 lcfa_updater_assert_same(21600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_github_latest_release'] ?? 0, 'available updates should use the long GitHub cache TTL');

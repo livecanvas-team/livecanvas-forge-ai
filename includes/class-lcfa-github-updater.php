@@ -129,6 +129,7 @@ final class LCFA_GitHub_Updater {
             'id'            => self::UPDATE_URI,
             'slug'          => self::SLUG,
             'plugin'        => $plugin_file,
+            'version'       => (string) ($release['version'] ?? ''),
             'new_version'   => (string) ($release['version'] ?? ''),
             'url'           => (string) ($release['release_url'] ?? self::UPDATE_URI),
             'package'       => (string) ($release['download_url'] ?? ''),
