@@ -576,6 +576,42 @@
     color: var(--lcfa-text);
 }
 
+.lcfa-admin .lcfa-form label.lcfa-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    color: var(--lcfa-text-muted);
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-form label.lcfa-checkbox input[type="checkbox"] {
+    flex: 0 0 18px;
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    margin: 2px 0 0;
+}
+
+.lcfa-admin .lcfa-form label.lcfa-checkbox > span {
+    display: block;
+    min-width: 0;
+    font-weight: 400;
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-form label.lcfa-checkbox > span strong {
+    color: var(--lcfa-text);
+    font-weight: 800;
+}
+
+.lcfa-admin .lcfa-form label.lcfa-checkbox > span code {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+}
+
 .lcfa-admin .lcfa-form input[type="text"],
 .lcfa-admin .lcfa-form input[type="password"],
 .lcfa-admin .lcfa-form select,

@@ -9,6 +9,7 @@ $settings = (string) file_get_contents($root . '/includes/class-lcfa-settings.ph
 $bundle_builder = (string) file_get_contents($root . '/includes/class-lcfa-connection-bundle-builder.php');
 $direct_onboarding = (string) file_get_contents($root . '/includes/class-lcfa-direct-agent-onboarding.php');
 $power_mode = (string) file_get_contents($root . '/includes/class-lcfa-power-mode.php');
+$admin_css = (string) file_get_contents($root . '/assets/admin.css');
 
 function lcfa_repair_assert_contains(string $needle, string $haystack, string $message): void {
     if (strpos($haystack, $needle) === false) {
@@ -38,6 +39,7 @@ lcfa_repair_assert_contains("WP_API_PASSWORD", $admin, 'admin should keep the le
 lcfa_repair_assert_contains("Remote Codex prerequisites", $admin, 'remote Codex should block setup behind a prerequisite checklist');
 lcfa_repair_assert_contains("does not use LCFA_WP_ROOT", $admin, 'remote Codex UI should make clear that no local WordPress root is used');
 lcfa_repair_assert_contains("Power Mode status", $admin, 'Connections UI should show the Power Mode policy foundation');
+lcfa_repair_assert_contains(".lcfa-form label.lcfa-checkbox", $admin_css, 'admin CSS should keep checkbox labels aligned inside forms');
 lcfa_repair_assert_contains("missing_credentials", $direct_onboarding, 'Direct Mode should expose a missing_credentials state');
 lcfa_repair_assert_contains("ai-bridge-session", $direct_onboarding, 'Direct Mode should identify the secure AI Bridge session strategy');
 lcfa_repair_assert_contains("read-file", $power_mode, 'Power Mode foundation should list future file tools without exposing them yet');
