@@ -1014,6 +1014,29 @@
     line-height: 1.6;
 }
 
+.lcfa-admin .lcfa-stack-list {
+    display: grid;
+    gap: 10px;
+}
+
+.lcfa-admin .lcfa-stack-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lcfa-admin .lcfa-stack-item h3,
+.lcfa-admin .lcfa-mcp-session-panel h3 {
+    margin: 8px 0 0;
+    color: #fff;
+    font-size: 14px;
+}
+
 .lcfa-admin .lcfa-onboarding-hero,
 .lcfa-admin .lcfa-ready-card {
     display: grid;

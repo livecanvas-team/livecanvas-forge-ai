@@ -9,55 +9,67 @@ final class LCFA_Direct_Agent_Onboarding {
         $last_verified = trim((string) ($connections['connection_last_verified_at'] ?? ''));
         $last_error = trim((string) ($connections['connection_last_error'] ?? ''));
         $remote_prerequisites = $this->get_remote_codex_prerequisites($connections, $remote_status);
-        $credentials_ready = !empty($remote_prerequisites['ready']);
+        $target_ready = !empty($remote_prerequisites['ready']);
+        $has_active_session = class_exists('LCFA_MCP_Session_Manager', false) && LCFA_MCP_Session_Manager::has_active_session();
         $smoke_passed = $connection_status === 'ready' && $last_verified !== '';
-        $restart_required = $credentials_ready && !$smoke_passed && $current_step === 'smoke_test' && $connection_status !== 'needs_attention';
+        $restart_required = $target_ready && !$smoke_passed && $current_step === 'smoke_test' && $connection_status !== 'needs_attention';
         $has_fingerprint = trim((string) ($connections['connection_last_bundle_hash'] ?? '')) !== '';
         $status = 'needs_setup';
         $primary_action = 'connect';
-        $message = __('Connect Codex through the WordPress MCP Adapter direct path.', 'livecanvas-forge-ai');
+        $message = __('Connect Codex through the secure AI Bridge pairing flow.', 'livecanvas-forge-ai');
 
-        if (!$credentials_ready) {
+        if (!$target_ready) {
             $status = 'missing_credentials';
             $primary_action = 'none';
-            $message = __('Add the site URL, WordPress username, and Application Password before generating the Direct Mode Codex setup.', 'livecanvas-forge-ai');
+            $message = __('Confirm the WordPress site URL before generating the secure Direct Mode Codex setup.', 'livecanvas-forge-ai');
         } elseif ($smoke_passed) {
             $status = 'ready';
             $primary_action = 'none';
-            $message = __('Direct Mode is ready. Codex can reach the WordPress Ability server.', 'livecanvas-forge-ai');
+            $message = __('Direct Mode is ready. Codex can reach this WordPress site through a scoped AI Bridge session.', 'livecanvas-forge-ai');
         } elseif ($connection_status === 'needs_attention') {
             $status = 'test_failed';
             $primary_action = 'run_smoke';
             $message = $last_error !== '' ? $last_error : __('The last Direct Mode smoke test failed.', 'livecanvas-forge-ai');
+        } elseif ($has_active_session) {
+            $status = 'restart_required';
+            $primary_action = 'run_smoke';
+            $message = __('A Codex session is paired. Run the smoke test to mark the connection ready.', 'livecanvas-forge-ai');
         } elseif ($restart_required) {
             $status = 'restart_required';
             $primary_action = 'run_smoke';
-            $message = __('Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
+            $message = __('Restart Codex or reload the MCP server, then approve the pairing request before testing.', 'livecanvas-forge-ai');
         } elseif ($has_fingerprint) {
             $status = 'restart_required';
             $primary_action = 'run_smoke';
-            $message = __('Direct Mode setup was generated. Restart Codex or reload the MCP server before testing.', 'livecanvas-forge-ai');
+            $message = __('Direct Mode setup was generated. Restart Codex or reload the MCP server, then approve the pairing request.', 'livecanvas-forge-ai');
         }
 
         $checks = [
             'mcp_adapter_available' => [
-                'label' => __('MCP Adapter', 'livecanvas-forge-ai'),
+                'label' => __('AI Bridge endpoint', 'livecanvas-forge-ai'),
                 'ok' => trim((string) ($remote_prerequisites['mcp_adapter_url'] ?? '')) !== '',
                 'message' => trim((string) ($remote_prerequisites['mcp_adapter_url'] ?? '')) !== ''
-                    ? __('WordPress MCP Adapter URL is available.', 'livecanvas-forge-ai')
-                    : __('WordPress MCP Adapter URL is missing.', 'livecanvas-forge-ai'),
+                    ? __('AI Bridge REST endpoint is available.', 'livecanvas-forge-ai')
+                    : __('AI Bridge REST endpoint is missing.', 'livecanvas-forge-ai'),
             ],
-            'application_password_present' => [
-                'label' => __('Application Password', 'livecanvas-forge-ai'),
-                'ok' => $credentials_ready,
-                'message' => $credentials_ready
-                    ? __('Remote username and Application Password are present.', 'livecanvas-forge-ai')
-                    : __('Remote username or Application Password is missing.', 'livecanvas-forge-ai'),
+            'secure_pairing_available' => [
+                'label' => __('Secure pairing', 'livecanvas-forge-ai'),
+                'ok' => $target_ready,
+                'message' => $target_ready
+                    ? __('Secure pairing can start without a WordPress Application Password.', 'livecanvas-forge-ai')
+                    : __('Site URL is required before secure pairing can start.', 'livecanvas-forge-ai'),
+            ],
+            'session_active' => [
+                'label' => __('AI Bridge session', 'livecanvas-forge-ai'),
+                'ok' => $has_active_session,
+                'message' => $has_active_session
+                    ? __('At least one Codex session is active.', 'livecanvas-forge-ai')
+                    : __('No Codex session has been approved yet.', 'livecanvas-forge-ai'),
             ],
             'abilities_registered' => [
                 'label' => __('Abilities', 'livecanvas-forge-ai'),
                 'ok' => function_exists('wp_register_ability') || !empty($remote_status['mcp_adapter']['available']) || trim((string) ($remote_prerequisites['mcp_adapter_url'] ?? '')) !== '',
-                'message' => __('AI Bridge WordPress Abilities are the Direct Mode contract.', 'livecanvas-forge-ai'),
+                'message' => __('AI Bridge REST and WordPress Abilities are the Direct Mode contract.', 'livecanvas-forge-ai'),
             ],
             'handoff_available' => [
                 'label' => __('Handoff', 'livecanvas-forge-ai'),
@@ -76,7 +88,7 @@ final class LCFA_Direct_Agent_Onboarding {
             'connection_mode' => 'remote',
             'client' => 'codex',
             'status' => $status,
-            'strategy' => 'wordpress-mcp-adapter',
+            'strategy' => 'ai-bridge-session',
             'primary_action' => $primary_action,
             'checks' => $checks,
             'message' => $message,
@@ -98,24 +110,17 @@ final class LCFA_Direct_Agent_Onboarding {
 
     public function get_remote_codex_prerequisites(array $connections, array $remote_status = []): array {
         $remote_site_url = trim((string) ($connections['remote_site_url'] ?? ''));
-        $username = trim((string) ($connections['remote_username'] ?? ''));
-        $application_password = trim((string) ($connections['remote_application_password'] ?? ''));
+        if ($remote_site_url === '' && function_exists('home_url')) {
+            $remote_site_url = home_url('/');
+        }
         $mcp_adapter_url = $this->get_remote_mcp_adapter_url($remote_site_url, $remote_status);
         $items = [
             'remote_site_url' => [
                 'label' => __('Remote site URL', 'livecanvas-forge-ai'),
                 'ok' => $remote_site_url !== '',
             ],
-            'remote_username' => [
-                'label' => __('Remote username', 'livecanvas-forge-ai'),
-                'ok' => $username !== '',
-            ],
-            'remote_application_password' => [
-                'label' => __('Application Password', 'livecanvas-forge-ai'),
-                'ok' => $application_password !== '',
-            ],
             'mcp_adapter_url' => [
-                'label' => __('MCP Adapter URL', 'livecanvas-forge-ai'),
+                'label' => __('AI Bridge REST URL', 'livecanvas-forge-ai'),
                 'ok' => $mcp_adapter_url !== '',
             ],
         ];
@@ -148,6 +153,6 @@ final class LCFA_Direct_Agent_Onboarding {
             return '';
         }
 
-        return trailingslashit(untrailingslashit($remote_site_url)) . 'wp-json/livecanvas-forge-ai/mcp';
+        return trailingslashit(untrailingslashit($remote_site_url)) . 'wp-json/lcfa/v1/';
     }
 }

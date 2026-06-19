@@ -345,6 +345,36 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_manage'],
         ]);
 
+        register_rest_route('lcfa/v1', '/mcp/pairing/start', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'start_mcp_pairing'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/pairing/status', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_mcp_pairing_status'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/pairing/approve', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'approve_mcp_pairing'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/sessions', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'list_mcp_sessions'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/sessions/revoke', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'revoke_mcp_session'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
         register_rest_route('lcfa/v1', '/picostrap/compile-manifest', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_picostrap_compile_manifest'],
@@ -755,7 +785,7 @@ final class LCFA_Rest_Api {
             $limit = 20;
         }
 
-        return new WP_REST_Response($this->build_studio_state($limit));
+        return new WP_REST_Response($this->build_studio_state($limit, $request));
     }
 
     public function get_studio_handoff_package(WP_REST_Request $request): WP_REST_Response {
@@ -764,7 +794,7 @@ final class LCFA_Rest_Api {
             $limit = 20;
         }
 
-        $state = $this->build_studio_state($limit);
+        $state = $this->build_studio_state($limit, $request);
         $package = is_array($state['agent_handoff_package'] ?? null) ? $state['agent_handoff_package'] : [];
         $encoded = json_encode($package, JSON_UNESCAPED_SLASHES);
         if (!is_string($encoded)) {
@@ -797,7 +827,7 @@ final class LCFA_Rest_Api {
             $limit = 20;
         }
 
-        $state = $this->build_studio_state($limit);
+        $state = $this->build_studio_state($limit, $request);
         $summary = is_array($state['handoff_summary'] ?? null) ? $state['handoff_summary'] : [];
         $encoded = json_encode($summary, JSON_UNESCAPED_SLASHES);
         if (!is_string($encoded)) {
@@ -830,7 +860,7 @@ final class LCFA_Rest_Api {
             $limit = 20;
         }
 
-        $state = $this->build_studio_state($limit);
+        $state = $this->build_studio_state($limit, $request);
         $handoff = is_array($state['connection_handoff'] ?? null) ? $state['connection_handoff'] : [];
         $encoded = json_encode($handoff, JSON_UNESCAPED_SLASHES);
         if (!is_string($encoded)) {
@@ -1247,6 +1277,90 @@ final class LCFA_Rest_Api {
             'template'      => method_exists($theme, 'get_template') ? (string) $theme->get_template() : '',
             'timestamp'     => current_time('mysql', true),
         ]);
+    }
+
+    public function start_mcp_pairing(WP_REST_Request $request): WP_REST_Response {
+        if (!class_exists('LCFA_MCP_Session_Manager', false)) {
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => __('AI Bridge session manager is not available.', 'livecanvas-forge-ai'),
+            ], 500);
+        }
+
+        $payload = $request->get_json_params();
+        if (!is_array($payload)) {
+            $payload = $request->get_params();
+        }
+
+        $result = LCFA_MCP_Session_Manager::start_pairing($payload, $request);
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data();
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => $result->get_error_message(),
+                'code'    => $result->get_error_code(),
+            ], is_array($data) ? (int) ($data['status'] ?? 400) : 400);
+        }
+
+        return new WP_REST_Response($result);
+    }
+
+    public function get_mcp_pairing_status(WP_REST_Request $request): WP_REST_Response {
+        if (!class_exists('LCFA_MCP_Session_Manager', false)) {
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => __('AI Bridge session manager is not available.', 'livecanvas-forge-ai'),
+            ], 500);
+        }
+
+        $result = LCFA_MCP_Session_Manager::get_pairing_status(
+            sanitize_key((string) $request->get_param('pairing_id')),
+            sanitize_text_field((string) $request->get_param('device_secret'))
+        );
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data();
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => $result->get_error_message(),
+                'code'    => $result->get_error_code(),
+            ], is_array($data) ? (int) ($data['status'] ?? 400) : 400);
+        }
+
+        return new WP_REST_Response($result);
+    }
+
+    public function approve_mcp_pairing(WP_REST_Request $request): WP_REST_Response {
+        if (!class_exists('LCFA_MCP_Session_Manager', false)) {
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => __('AI Bridge session manager is not available.', 'livecanvas-forge-ai'),
+            ], 500);
+        }
+
+        return new WP_REST_Response(LCFA_MCP_Session_Manager::approve_pairing(
+            sanitize_key((string) $request->get_param('pairing_id'))
+        ));
+    }
+
+    public function list_mcp_sessions(): WP_REST_Response {
+        return new WP_REST_Response([
+            'ok'       => true,
+            'pending'  => class_exists('LCFA_MCP_Session_Manager', false) ? LCFA_MCP_Session_Manager::get_pending_pairings() : [],
+            'sessions' => class_exists('LCFA_MCP_Session_Manager', false) ? LCFA_MCP_Session_Manager::get_public_sessions() : [],
+        ]);
+    }
+
+    public function revoke_mcp_session(WP_REST_Request $request): WP_REST_Response {
+        if (!class_exists('LCFA_MCP_Session_Manager', false)) {
+            return new WP_REST_Response([
+                'ok'      => false,
+                'message' => __('AI Bridge session manager is not available.', 'livecanvas-forge-ai'),
+            ], 500);
+        }
+
+        return new WP_REST_Response(LCFA_MCP_Session_Manager::revoke_session(
+            sanitize_key((string) $request->get_param('session_id'))
+        ));
     }
 
     public function get_mcp_local_status(): WP_REST_Response {
@@ -2188,11 +2302,11 @@ final class LCFA_Rest_Api {
     }
 
     public function can_read(?WP_REST_Request $request = null): bool {
-        return current_user_can('edit_pages') || $this->has_valid_mcp_token($request);
+        return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'read');
     }
 
     public function can_write(?WP_REST_Request $request = null): bool {
-        return current_user_can('edit_pages') || $this->has_valid_mcp_token($request);
+        return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'write');
     }
 
     public function can_manage(?WP_REST_Request $request = null): bool {
@@ -2200,10 +2314,10 @@ final class LCFA_Rest_Api {
     }
 
     public function can_mcp_health(?WP_REST_Request $request = null): bool {
-        return $this->has_valid_mcp_token($request);
+        return $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'read');
     }
 
-    private function build_studio_state(int $limit): array {
+    private function build_studio_state(int $limit, ?WP_REST_Request $request = null): array {
         $settings      = LCFA_Settings::get();
         $connections   = LCFA_Settings::get_connections();
         $snapshot      = $this->environment->get_snapshot();
@@ -2260,7 +2374,10 @@ final class LCFA_Rest_Api {
                 'exposed' => count($public_write),
             ],
         ];
-        $connection_handoff = $this->build_studio_connection_handoff($connections, $summary, $adapter);
+        $current_session = class_exists('LCFA_MCP_Session_Manager', false)
+            ? LCFA_MCP_Session_Manager::get_session_from_request($request, 'read')
+            : false;
+        $connection_handoff = $this->build_studio_connection_handoff($connections, $summary, $adapter, is_array($current_session) ? $current_session : []);
         $agent_smoke_tests = $this->build_studio_agent_smoke_tests($summary, $ability_manifest, $mcp_write_policy);
         $operator_briefing = $this->build_studio_operator_briefing($summary, $alerts, $ability_manifest, $mcp_write_policy, $run_analysis, $connection_handoff);
         $agent_runbook = $this->build_studio_agent_runbook($summary, $operator_briefing, $agent_smoke_tests, $ability_manifest, $mcp_write_policy, $connection_handoff);
@@ -2525,7 +2642,7 @@ final class LCFA_Rest_Api {
         ];
     }
 
-    private function build_studio_connection_handoff(array $connections, array $summary, array $adapter): array {
+    private function build_studio_connection_handoff(array $connections, array $summary, array $adapter, array $session = []): array {
         $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
         if ($client === 'claude-code') {
             $client = 'claude';
@@ -2549,7 +2666,9 @@ final class LCFA_Rest_Api {
             $current_step = $client === '' ? 'choose_client' : ($mode === '' ? 'choose_mode' : 'confirm_details');
         }
 
+        $connection_strategy = sanitize_key((string) ($connections['connection_strategy'] ?? ''));
         $is_remote_adapter = $client === 'codex' && $mode === 'remote' && !empty($adapter['available']);
+        $is_ai_bridge_session = $client === 'codex' && $mode === 'remote' && $connection_strategy === 'ai-bridge-session';
         $connection_handoff_tool = $is_remote_adapter
             ? 'livecanvas-forge-ai/get-connection-handoff'
             : 'get_connection_handoff';
@@ -2559,6 +2678,12 @@ final class LCFA_Rest_Api {
         $transport = $is_remote_adapter
             ? 'wordpress_mcp_adapter'
             : ($mode === 'remote' ? 'remote_rest_bridge' : 'local_mcp_bridge');
+        if ($session !== []) {
+            $transport = 'ai_bridge_session';
+        }
+        $auth_method = ($session !== [] || $is_ai_bridge_session)
+            ? 'ai_bridge_session'
+            : ($is_remote_adapter ? 'wordpress_application_password_legacy' : ($mode === 'local' ? 'legacy_mcp_token' : 'unknown'));
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
             sprintf(
@@ -2591,6 +2716,10 @@ final class LCFA_Rest_Api {
             'current_step'   => $current_step,
             'last_verified_at' => sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? '')),
             'transport'      => $transport,
+            'auth_method'    => $auth_method,
+            'session_id'     => sanitize_key((string) ($session['session_id'] ?? '')),
+            'project_label'  => sanitize_text_field((string) ($session['project_label'] ?? ($connections['remote_project_label'] ?? ''))),
+            'scopes'         => array_values(array_map('sanitize_key', (array) ($session['scopes'] ?? []))),
             'mcp_adapter_url' => sanitize_text_field((string) ($custom_server['url'] ?? '')),
             'site_identity'  => [
                 'site_url' => function_exists('home_url') ? home_url('/') : '',
@@ -3808,6 +3937,14 @@ final class LCFA_Rest_Api {
         $connections = LCFA_Settings::get_connections();
 
         return $connections['mcp_token'] !== '' && hash_equals($connections['mcp_token'], $token);
+    }
+
+    private function has_valid_mcp_session(?WP_REST_Request $request = null, string $required_scope = 'read'): bool {
+        if (!class_exists('LCFA_MCP_Session_Manager', false)) {
+            return false;
+        }
+
+        return (bool) LCFA_MCP_Session_Manager::get_session_from_request($request, $required_scope);
     }
 
     private function looks_like_absolute_path(string $path): bool {

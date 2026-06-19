@@ -65,12 +65,14 @@ final class LCFA_Environment {
                 'url'       => $this->build_rest_url('livecanvas-forge-ai/mcp'),
             ],
             'remote_proxy' => [
-                'package' => '@automattic/mcp-wordpress-remote',
+                'package' => '@livecanvas/ai-bridge-mcp',
                 'env'     => [
-                    'WP_API_URL',
-                    'WP_API_USERNAME',
-                    'WP_API_PASSWORD',
+                    'LCFA_SITE_URL',
+                    'LCFA_SITE_FINGERPRINT',
+                    'LCFA_PROJECT_LABEL',
                 ],
+                'auth'    => 'ai_bridge_pairing',
+                'legacy_package' => '@automattic/mcp-wordpress-remote',
             ],
         ];
     }

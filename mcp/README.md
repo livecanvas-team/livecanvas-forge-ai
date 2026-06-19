@@ -1,6 +1,11 @@
 # LiveCanvas AI Bridge MCP
 
-Local MCP package for `LiveCanvas AI Bridge`.
+MCP package for `LiveCanvas AI Bridge`.
+
+It supports two paths:
+
+- secure remote Direct Mode with AI Bridge pairing;
+- legacy/local runtime with an MCP token and optional filesystem access.
 
 ## Modes
 
@@ -9,6 +14,19 @@ Local MCP package for `LiveCanvas AI Bridge`.
 - `--tool`: one-shot CLI mode for local orchestration from WordPress or shell scripts.
 
 ## Minimal usage
+
+Secure remote Direct Mode:
+
+```bash
+LCFA_SITE_URL="https://example.test/" \
+LCFA_SITE_FINGERPRINT="site-fingerprint" \
+LCFA_PROJECT_LABEL="Example Site" \
+npx -y @livecanvas/ai-bridge-mcp@latest
+```
+
+On first use, the MCP asks WordPress for a short-lived pairing request. Approve the pending Codex session in `AI Bridge > Connections`; the MCP receives a plugin-scoped session token once and caches it locally with restricted file permissions.
+
+Legacy/local runtime:
 
 ```bash
 LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
@@ -141,5 +159,6 @@ WindPress tools:
 
 Notes:
 
+- Secure remote Direct Mode does not use `WP_API_USERNAME` or `WP_API_PASSWORD`.
 - Tailwind v4 local compilation now works by shimming `file://` fetch only for the MCP process, so the WindPress WASM parser can initialize under Node without patching the WindPress plugin.
 - Local filesystem and local WindPress compilation require `LCFA_WP_ROOT` to point at the WordPress root when auto-detection is not sufficient.

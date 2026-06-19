@@ -40,7 +40,7 @@ lcfa_codex_health_assert_contains('public function get_mcp_health()', $rest_api,
 lcfa_codex_health_assert_not_contains('get_status()', $health_body, 'MCP health must not call local bridge get_status');
 lcfa_codex_health_assert_not_contains('get_mcp_status()', $health_body, 'MCP health must not call the aggregate MCP status builder');
 lcfa_codex_health_assert_contains("'permission_callback' => [\$this, 'can_mcp_health']", $rest_api, 'MCP health endpoint should require the MCP token instead of admin readiness');
-lcfa_codex_health_assert_contains('return $this->has_valid_mcp_token($request);', $rest_api, 'MCP health permission should validate the current MCP token');
+lcfa_codex_health_assert_contains('has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, \'read\')', $rest_api, 'MCP health permission should validate the current MCP token or AI Bridge session');
 lcfa_codex_health_assert_contains("'mcp_script'", $rest_api, 'MCP health should report the expected local script path');
 lcfa_codex_health_assert_contains("'script_exists'", $rest_api, 'MCP health should report whether the local MCP script is readable');
 lcfa_codex_health_assert_contains("trailingslashit(\$url) . 'mcp/health'", $connection_tester, 'local REST smoke test should probe the atomic health endpoint');

@@ -25,6 +25,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-theme-files-bridge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-local-mcp-bridge.php';
+require_once LCFA_DIR . 'includes/class-lcfa-mcp-session-manager.php';
 require_once LCFA_DIR . 'includes/class-lcfa-codex-config-manager.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-tester.php';
 require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';

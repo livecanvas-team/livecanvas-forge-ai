@@ -118,12 +118,47 @@ final class LCFA_Connection_Tester {
     }
 
     private function test_remote_rest(array $connections): array {
+        if (class_exists('LCFA_MCP_Session_Manager', false)) {
+            $sessions = LCFA_MCP_Session_Manager::get_public_sessions();
+            $active = array_values(array_filter($sessions, static function (array $session): bool {
+                return empty($session['revoked']) && empty($session['expired']) && trim((string) ($session['last_seen_at'] ?? '')) !== '';
+            }));
+
+            if ($active !== []) {
+                $session = $active[0];
+                return [
+                    'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
+                    'ok'      => true,
+                    'skipped' => false,
+                    'message' => __('A scoped AI Bridge session has connected to this site.', 'livecanvas-forge-ai'),
+                    'details' => [
+                        'session_id'    => (string) ($session['session_id'] ?? ''),
+                        'project_label' => (string) ($session['project_label'] ?? ''),
+                        'last_seen_at'  => (string) ($session['last_seen_at'] ?? ''),
+                        'auth_method'   => 'ai_bridge_session',
+                    ],
+                ];
+            }
+
+            if (LCFA_MCP_Session_Manager::has_active_session()) {
+                return [
+                    'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
+                    'ok'      => false,
+                    'skipped' => false,
+                    'message' => __('A Codex session is approved but has not connected yet. Ask Codex to call get_connection_handoff, then run the smoke test again.', 'livecanvas-forge-ai'),
+                    'details' => [
+                        'auth_method' => 'ai_bridge_session',
+                    ],
+                ];
+            }
+        }
+
         if (!$this->remote_client->is_configured()) {
             return [
-                'label'   => __('Remote WordPress bridge', 'livecanvas-forge-ai'),
+                'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
                 'ok'      => false,
-                'skipped' => true,
-                'message' => __('Remote credentials are not configured yet.', 'livecanvas-forge-ai'),
+                'skipped' => false,
+                'message' => __('No approved Codex session has connected yet. Copy the secure setup prompt into Codex, call get_connection_handoff, approve the pairing request, then retry.', 'livecanvas-forge-ai'),
                 'details' => [],
             ];
         }

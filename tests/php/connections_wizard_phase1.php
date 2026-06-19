@@ -320,35 +320,34 @@ $remote_codex_bundle = $builder->build([
     'mode'           => 'remote',
     'workspace_root' => '',
     'common'         => [
-        'connection_strategy' => 'remote-mcp-adapter',
-        'mcp_adapter_url'     => 'https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+        'connection_strategy' => 'ai-bridge-session',
+        'mcp_adapter_url'     => 'https://remote.example/wp-json/lcfa/v1/',
         'remote_site_url'     => 'https://remote.example/',
     ],
     'client_payload' => [
-        'command' => 'npx -y @automattic/mcp-wordpress-remote@latest',
+        'command' => 'npx -y @livecanvas/ai-bridge-mcp@latest',
         'env'     => [
-            'WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp',
-            'WP_API_USERNAME=admin',
-            'WP_API_PASSWORD=abcd efgh ijkl mnop',
-            'LOG_FILE=/tmp/livecanvas-forge-codex-remote.log',
+            'LCFA_SITE_URL=https://remote.example/',
+            'LCFA_SITE_FINGERPRINT=test-fingerprint',
+            'LCFA_PROJECT_LABEL=Remote Example',
             'LCFA_WP_ROOT=/wordpress',
         ],
     ],
 ]);
 
-lcfa_assert_same('remote-mcp-adapter', $remote_codex_bundle['connection_strategy'] ?? '', 'remote Codex bundle should declare the MCP Adapter strategy');
-lcfa_assert_same('https://remote.example/wp-json/livecanvas-forge-ai/mcp', $remote_codex_bundle['mcp_adapter_url'] ?? '', 'remote Codex bundle should expose the MCP Adapter URL');
+lcfa_assert_same('ai-bridge-session', $remote_codex_bundle['connection_strategy'] ?? '', 'remote Codex bundle should declare the secure AI Bridge session strategy');
+lcfa_assert_same('https://remote.example/wp-json/lcfa/v1/', $remote_codex_bundle['mcp_adapter_url'] ?? '', 'remote Codex bundle should expose the AI Bridge REST URL');
 lcfa_assert_true(empty($remote_codex_bundle['workspace_files']), 'remote Codex bundle should not propose local workspace writes');
 lcfa_assert_false(isset($remote_codex_bundle['environment']['LCFA_WP_ROOT']), 'remote Codex bundle should strip local filesystem environment');
-lcfa_assert_same('@automattic/mcp-wordpress-remote@latest', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the WordPress MCP remote proxy package');
-lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_URL=') !== false, 'remote Codex shortcut should register WP_API_URL with Codex');
-lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_PASSWORD=') !== false, 'remote Codex shortcut should register the Application Password with Codex');
-lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'remote WordPress MCP Adapter') !== false, 'remote Codex shortcut should explain the remote MCP Adapter target');
-lcfa_assert_true(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), 'codex mcp get livecanvas-forge') !== false, 'remote Codex smoke command should verify the Codex MCP registration');
+lcfa_assert_same('@livecanvas/ai-bridge-mcp@latest', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the secure AI Bridge MCP package');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env LCFA_SITE_URL=') !== false, 'remote Codex shortcut should register LCFA_SITE_URL with Codex');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_PASSWORD=') === false, 'remote Codex shortcut should not register an Application Password with Codex');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'secure LiveCanvas AI Bridge pairing') !== false, 'remote Codex shortcut should explain secure pairing');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), 'codex mcp get livecanvas-ai-bridge') !== false, 'remote Codex smoke command should verify the Codex MCP registration');
 lcfa_assert_false(strpos((string) ($remote_codex_bundle['smoke_test_command'] ?? ''), '--tool') !== false, 'remote Codex smoke command should not append local bridge CLI flags to the proxy package');
-lcfa_assert_same('livecanvas-forge-ai/get-connection-handoff', $remote_codex_bundle['agent_start_tool'] ?? '', 'remote Codex bundles should start with the WordPress Ability connection handoff name');
-lcfa_assert_same('livecanvas-forge-ai/get-agent-handoff-package', $remote_codex_bundle['handoff_package_tool'] ?? '', 'remote Codex bundles should still expose the WordPress Ability package name');
-lcfa_assert_true(strpos((string) ($remote_codex_bundle['agent_start_prompt'] ?? ''), 'livecanvas-forge-ai/get-connection-handoff') !== false, 'remote Codex first prompt should use the WordPress Ability connection handoff name');
+lcfa_assert_same('get_connection_handoff', $remote_codex_bundle['agent_start_tool'] ?? '', 'remote Codex bundles should start with the AI Bridge connection handoff tool');
+lcfa_assert_same('get_agent_handoff_package', $remote_codex_bundle['handoff_package_tool'] ?? '', 'remote Codex bundles should expose the AI Bridge package tool');
+lcfa_assert_true(strpos((string) ($remote_codex_bundle['agent_start_prompt'] ?? ''), 'get_connection_handoff') !== false, 'remote Codex first prompt should use the AI Bridge connection handoff tool');
 
 $onboarding = new LCFA_Connection_Onboarding($builder);
 
@@ -549,13 +548,13 @@ $codex_remote_bundle_view = $presenter->build([
     'bundle' => [
         'client'              => 'codex',
         'mode'                => 'remote',
-        'connection_strategy' => 'remote-mcp-adapter',
-        'mcp_adapter_url'     => 'https://remote.example/wp-json/livecanvas-forge-ai/mcp',
+        'connection_strategy' => 'ai-bridge-session',
+        'mcp_adapter_url'     => 'https://remote.example/wp-json/lcfa/v1/',
         'workspace_root'      => '',
-        'command_string'      => "'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
-        'copy_command_string' => "codex mcp add livecanvas-forge \\\n  --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' \\\n  --env WP_API_USERNAME='admin' \\\n  --env WP_API_PASSWORD='abcd efgh ijkl mnop' \\\n  -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'command_string'      => "'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
         'shortcut_title'      => 'Codex shortcut',
-        'shortcut_command'    => "codex mcp add livecanvas-forge \\\n  --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' \\\n  --env WP_API_USERNAME='admin' \\\n  --env WP_API_PASSWORD='abcd efgh ijkl mnop' \\\n  -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
+        'shortcut_command'    => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
         'workspace_files'     => [],
         'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
     ],
@@ -567,9 +566,9 @@ $codex_remote_bundle_view = $presenter->build([
 ]);
 
 lcfa_assert_same('Copy Codex shortcut', $codex_remote_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex remote flow should elevate the remote registration shortcut to the primary action');
-lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['active_panel']['description'] ?? ''), 'remote shortcut') !== false, 'Codex remote flow should explain that the shortcut is remote-safe');
-lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'remote proxy') !== false, 'Codex remote visual help should mention the WordPress MCP Adapter remote proxy');
-lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'livecanvas-forge-ai/get-connection-handoff') !== false, 'Codex remote visual help should use the WordPress Ability connection handoff name');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['active_panel']['description'] ?? ''), 'secure Codex remote shortcut') !== false, 'Codex remote flow should explain that the shortcut is secure');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'secure AI Bridge pairing proxy') !== false, 'Codex remote visual help should mention the secure pairing proxy');
+lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex remote visual help should use the AI Bridge connection handoff tool');
 
 $codex_smoke = $presenter->build([
     'state' => [
@@ -650,8 +649,7 @@ lcfa_assert_true(strpos($admin_codex_command, '[mcp_servers.livecanvas-forge]') 
 
 $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instance, [
     'remote_site_url' => 'https://remote.example',
-    'remote_username' => 'admin',
-    'remote_application_password' => 'abcd efgh ijkl mnop',
+    'remote_project_label' => 'Remote Example',
 ], [
     'mcp_adapter' => [
         'available' => true,
@@ -661,24 +659,23 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
     ],
 ]);
 
-lcfa_assert_same('npx -y @automattic/mcp-wordpress-remote@latest', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the WordPress MCP remote proxy command');
-lcfa_assert_true(in_array('WP_API_URL=https://remote.example/wp-json/livecanvas-forge-ai/mcp', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point WP_API_URL at the AI Bridge MCP Adapter route');
-lcfa_assert_true(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve Application Password spacing');
-lcfa_assert_same('remote-mcp-adapter', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the MCP Adapter strategy');
+lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@latest', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
+lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point LCFA_SITE_URL at the target site');
+lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
+lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
+lcfa_assert_same('ai-bridge-session', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the secure AI Bridge session strategy');
 
 $missing_remote_prerequisites = $remote_codex_prerequisites_method->invoke($admin_instance, [
     'remote_site_url'             => '',
     'remote_username'             => '',
     'remote_application_password' => '',
 ], []);
-lcfa_assert_false(!empty($missing_remote_prerequisites['ready']), 'remote Codex prerequisites should fail when URL, username, and Application Password are missing');
+lcfa_assert_false(!empty($missing_remote_prerequisites['ready']), 'remote Codex prerequisites should fail when the target site URL is missing');
 
 $missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
     'preferred_client'            => 'codex',
     'connection_mode'             => 'remote',
     'remote_site_url'             => '',
-    'remote_username'             => '',
-    'remote_application_password' => '',
     'connection_status'           => '',
     'connection_last_verified_at' => '',
     'connection_last_error'       => '',
@@ -687,10 +684,10 @@ $missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, 
 ], [
     'client'              => 'codex',
     'mode'                => 'remote',
-    'connection_strategy' => 'remote-mcp-adapter',
+    'connection_strategy' => 'ai-bridge-session',
     'copy_command_string' => '',
-    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
-    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('missing_credentials', $missing_remote_state['status'] ?? '', 'remote Codex state should report missing_credentials while prerequisites are incomplete');
 lcfa_assert_same('none', $missing_remote_state['primary_action'] ?? '', 'remote Codex should not generate partial config when prerequisites are incomplete');
@@ -699,34 +696,30 @@ $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance,
     'preferred_client'            => 'codex',
     'connection_mode'             => 'remote',
     'remote_site_url'             => 'https://remote.example',
-    'remote_username'             => 'admin',
-    'remote_application_password' => 'abcd efgh ijkl mnop',
     'connection_status'           => '',
     'connection_last_verified_at' => '',
-    'connection_last_error'       => 'Codex remote shortcut generated. Run it where Codex runs, then run the smoke test.',
+    'connection_last_error'       => 'Secure Codex setup generated. Restart Codex, call get_connection_handoff, approve the pairing request, then run the smoke test.',
     'connection_current_step'     => 'smoke_test',
     'connection_last_bundle_hash' => 'remote-hash',
 ], [
     'client'              => 'codex',
     'mode'                => 'remote',
-    'connection_strategy' => 'remote-mcp-adapter',
-    'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
-    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
-    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
-    'codex_config_snippet' => "[mcp_servers.livecanvas-forge]\ncommand = \"npx\"\nargs = [\"-y\", \"@automattic/mcp-wordpress-remote@latest\"]\n\n[mcp_servers.livecanvas-forge.env]\nWP_API_URL = \"https://remote.example/wp-json/livecanvas-forge-ai/mcp\"",
+    'connection_strategy' => 'ai-bridge-session',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'agent_start_tool'    => 'get_connection_handoff',
+    'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@latest\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
     'codex_project_config_path' => '.codex/config.toml',
 ], 'remote', []);
 lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
 lcfa_assert_same('run_smoke', $complete_remote_state['primary_action'] ?? '', 'remote Codex should move directly to smoke test after shortcut generation');
 lcfa_assert_same('direct', $complete_remote_state['mode'] ?? '', 'remote Codex state should identify Direct Mode');
-lcfa_assert_same('wordpress-mcp-adapter', $complete_remote_state['strategy'] ?? '', 'remote Codex state should identify the WordPress MCP Adapter strategy');
+lcfa_assert_same('ai-bridge-session', $complete_remote_state['strategy'] ?? '', 'remote Codex state should identify the secure AI Bridge session strategy');
 
 $ready_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
     'preferred_client'            => 'codex',
     'connection_mode'             => 'remote',
     'remote_site_url'             => 'https://remote.example',
-    'remote_username'             => 'admin',
-    'remote_application_password' => 'abcd efgh ijkl mnop',
     'connection_status'           => 'ready',
     'connection_last_verified_at' => '2026-06-17 10:00:00',
     'connection_last_error'       => '',
@@ -735,10 +728,10 @@ $ready_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
 ], [
     'client'              => 'codex',
     'mode'                => 'remote',
-    'connection_strategy' => 'remote-mcp-adapter',
-    'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
-    'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
-    'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+    'connection_strategy' => 'ai-bridge-session',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('ready', $ready_remote_state['status'] ?? '', 'remote Codex state should become ready only after a passed smoke test timestamp exists');
 lcfa_assert_same('none', $ready_remote_state['primary_action'] ?? '', 'remote Codex ready state should not ask for another primary setup action');
@@ -750,10 +743,10 @@ $codex_fast_path_panel_method->invoke(
     [
         'client'              => 'codex',
         'mode'                => 'remote',
-        'connection_strategy' => 'remote-mcp-adapter',
+        'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '',
         'copy_command_string' => '',
-        'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
     ],
     [
         'workspace_root' => '',
@@ -771,8 +764,8 @@ lcfa_assert_true(strpos($codex_fast_path_markup, 'Direct Mode (recommended)') !=
 lcfa_assert_true(strpos($codex_fast_path_markup, 'data-lcfa-mode-switch') !== false, 'Codex mode switch should expose JS state for change-aware submit behavior');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'data-lcfa-mode-switch-submit') !== false, 'Codex mode switch submit button should be managed by JS');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'disabled') !== false, 'Codex mode switch submit should start disabled until the selected mode changes');
-lcfa_assert_true(strpos($codex_fast_path_markup, 'Step 1: WordPress credentials') !== false, 'missing remote Codex credentials should render a first-step credentials form in the main path');
-lcfa_assert_true(strpos($codex_fast_path_markup, 'Save credentials') !== false, 'missing remote Codex credentials should offer a direct save action');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Step 1: Target site') !== false, 'missing remote Codex target should render a first-step target form in the main path');
+lcfa_assert_true(strpos($codex_fast_path_markup, 'Save target site') !== false, 'missing remote Codex target should offer a direct save action');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Technical checks') !== false, 'Codex fast path should collapse technical checks behind details');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'Remote Codex prerequisites') !== false, 'remote Codex fast path should render the prerequisite checklist instead of a partial config');
 lcfa_assert_true(strpos($codex_fast_path_markup, 'does not use LCFA_WP_ROOT') !== false, 'remote Codex fast path should state that local WordPress root is not used');
@@ -784,18 +777,17 @@ $codex_fast_path_panel_method->invoke(
     [
         'client'              => 'codex',
         'mode'                => 'remote',
-        'connection_strategy' => 'remote-mcp-adapter',
+        'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '/var/www/example.com',
-        'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
-        'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
-        'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
-        'codex_config_snippet' => "[mcp_servers.livecanvas-forge]\ncommand = \"npx\"\nargs = [\"-y\", \"@automattic/mcp-wordpress-remote@latest\"]\n\n[mcp_servers.livecanvas-forge.env]\nWP_API_URL = \"https://remote.example/wp-json/livecanvas-forge-ai/mcp\"",
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+        'agent_start_tool'    => 'get_connection_handoff',
+        'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@latest\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
         'codex_project_config_path' => '.codex/config.toml',
     ],
     [
         'remote_site_url'             => 'https://remote.example',
-        'remote_username'             => 'admin',
-        'remote_application_password' => 'abcd efgh ijkl mnop',
+        'remote_project_label'        => 'Remote Example',
         'workspace_root'              => '',
     ],
     'remote',
@@ -806,12 +798,12 @@ $codex_fast_path_panel_method->invoke(
     ]
 );
 $codex_restart_markup = (string) ob_get_clean();
-lcfa_assert_true(strpos($codex_restart_markup, 'Reload Codex, then test') !== false, 'remote Codex restart state should say exactly what to do next');
+lcfa_assert_true(strpos($codex_restart_markup, 'Reload Codex, approve pairing, then test') !== false, 'remote Codex restart state should say exactly what to do next');
 lcfa_assert_true(strpos($codex_restart_markup, 'Codex setup command') !== false, 'remote Codex restart state should expose the setup command as the only necessary manual block');
 lcfa_assert_true(strpos($codex_restart_markup, 'Copy Codex setup prompt') !== false, 'remote Codex setup should provide a single copy-ready prompt for Codex');
 lcfa_assert_true(strpos($codex_restart_markup, 'Create or update `.codex/config.toml`') !== false, 'remote Codex setup prompt should tell Codex to write the local project config');
 lcfa_assert_true(strpos($codex_restart_markup, '/var/www/example.com/.codex/config.toml') === false, 'remote Codex setup should not show the remote server path as the Codex project config');
-lcfa_assert_true(strpos($codex_restart_markup, 'livecanvas-forge-ai/get-connection-handoff') !== false, 'remote Codex restart fallback should still show the first handoff tool');
+lcfa_assert_true(strpos($codex_restart_markup, 'get_connection_handoff') !== false, 'remote Codex restart fallback should still show the first handoff tool');
 
 ob_start();
 $power_mode_status_card_method->invoke($admin_instance, [

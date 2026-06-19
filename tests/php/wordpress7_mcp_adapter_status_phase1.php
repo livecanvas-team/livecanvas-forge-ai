@@ -51,7 +51,8 @@ lcfa_wp7_mcp_assert_same('livecanvas-forge-ai', $status['custom_server']['id'] ?
 lcfa_wp7_mcp_assert_same('livecanvas-forge-ai', $status['custom_server']['namespace'] ?? '', 'MCP Adapter status should expose the AI Bridge custom server namespace');
 lcfa_wp7_mcp_assert_same('mcp', $status['custom_server']['route'] ?? '', 'MCP Adapter status should expose the AI Bridge custom server route');
 lcfa_wp7_mcp_assert_same('https://example.test/wp-json/livecanvas-forge-ai/mcp', $status['custom_server']['url'] ?? '', 'MCP Adapter status should expose the remote-connectable AI Bridge MCP URL');
-lcfa_wp7_mcp_assert_same('@automattic/mcp-wordpress-remote', $status['remote_proxy']['package'] ?? '', 'MCP Adapter status should document the remote proxy package');
-lcfa_wp7_mcp_assert_true(in_array('WP_API_PASSWORD', $status['remote_proxy']['env'] ?? [], true), 'MCP Adapter status should document the Application Password environment variable');
+lcfa_wp7_mcp_assert_same('@livecanvas/ai-bridge-mcp', $status['remote_proxy']['package'] ?? '', 'MCP Adapter status should document the secure AI Bridge remote proxy package');
+lcfa_wp7_mcp_assert_true(in_array('LCFA_SITE_FINGERPRINT', $status['remote_proxy']['env'] ?? [], true), 'MCP Adapter status should document the site fingerprint environment variable');
+lcfa_wp7_mcp_assert_same('ai_bridge_pairing', $status['remote_proxy']['auth'] ?? '', 'MCP Adapter status should document secure pairing auth');
 
 echo "PASS\n";

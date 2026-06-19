@@ -5,6 +5,8 @@ const DEFAULTS = {
   siteUrl: '',
   siteFingerprint: '',
   token: '',
+  sessionToken: '',
+  projectLabel: '',
   wpRoot: '',
   host: '127.0.0.1',
   port: 7681,
@@ -22,6 +24,8 @@ function loadConfig(argv = []) {
     siteUrl: process.env.LCFA_SITE_URL || DEFAULTS.siteUrl,
     siteFingerprint: process.env.LCFA_SITE_FINGERPRINT || DEFAULTS.siteFingerprint,
     token: process.env.LCFA_MCP_TOKEN || DEFAULTS.token,
+    sessionToken: process.env.LCFA_MCP_SESSION || process.env.LCFA_MCP_SESSION_TOKEN || DEFAULTS.sessionToken,
+    projectLabel: process.env.LCFA_PROJECT_LABEL || DEFAULTS.projectLabel,
     wpRoot: process.env.LCFA_WP_ROOT || DEFAULTS.wpRoot,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
     port: parsePort(process.env.LCFA_MCP_PORT || DEFAULTS.port),
@@ -65,6 +69,13 @@ function loadConfig(argv = []) {
       case 'token':
         config.token = value || config.token
         break
+      case 'session':
+      case 'session-token':
+        config.sessionToken = value || config.sessionToken
+        break
+      case 'project-label':
+        config.projectLabel = value || config.projectLabel
+        break
       case 'wp-root':
         config.wpRoot = value || config.wpRoot
         break
@@ -103,10 +114,6 @@ function loadConfig(argv = []) {
 
   if (!config.restBase) {
     throw new Error('Missing REST base. Set LCFA_REST_BASE or pass --rest-base.')
-  }
-
-  if (!config.token) {
-    throw new Error('Missing MCP token. Set LCFA_MCP_TOKEN or pass --token.')
   }
 
   return config

@@ -73,7 +73,7 @@ final class LCFA_Connection_Wizard_Presenter {
                     : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download the client bundle', 'livecanvas-forge-ai'))),
                 'body'    => $is_codex && !$local_writable
                     ? ($is_codex_remote_adapter
-                        ? __('Codex needs a one-time registration command. Copy the shortcut below and run it on the machine where Codex runs; it starts the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai')
+                        ? __('Codex needs a one-time registration command. Copy the shortcut below and run it on the machine where Codex runs; it starts the secure AI Bridge pairing proxy.', 'livecanvas-forge-ai')
                         : __('Codex needs a one-time registration command. Copy the shortcut below, run it in this workspace, and let it auto-detect the embedded Codex desktop CLI if codex is not in your PATH.', 'livecanvas-forge-ai'))
                     : ($local_writable
                     ? __('AI Bridge can write the client artifact directly inside this workspace.', 'livecanvas-forge-ai')
@@ -174,7 +174,7 @@ final class LCFA_Connection_Wizard_Presenter {
                         ? ($local_writable
                             ? __('Choose one path below. Recommended: let AI Bridge write the Codex helper directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
                             : ($is_codex_remote_adapter
-                                ? __('Choose one path below. Recommended: copy and run the Codex remote shortcut on the machine where Codex runs. Use the manual option only if you want to save the helper script.', 'livecanvas-forge-ai')
+                                ? __('Choose one path below. Recommended: copy and run the secure Codex remote shortcut on the machine where Codex runs. Use the manual option only if you want to save the helper script.', 'livecanvas-forge-ai')
                                 : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai')))
                         : ($is_opencode_local
                         ? __('Choose one path below. Recommended: download the OpenCode config and place it in the project root before switching to OpenCode.', 'livecanvas-forge-ai')
@@ -334,9 +334,10 @@ final class LCFA_Connection_Wizard_Presenter {
 
         if ($this->is_codex($bundle)) {
             $is_remote_adapter = $this->is_codex_remote_adapter($bundle);
+            $is_secure_remote = (string) ($bundle['connection_strategy'] ?? '') === 'ai-bridge-session';
             $handoff_tool = (string) ($bundle['agent_start_tool'] ?? '');
             if ($handoff_tool === '') {
-                $handoff_tool = $is_remote_adapter ? 'livecanvas-forge-ai/get-connection-handoff' : 'get_connection_handoff';
+                $handoff_tool = $is_remote_adapter && !$is_secure_remote ? 'livecanvas-forge-ai/get-connection-handoff' : 'get_connection_handoff';
             }
 
             return [
@@ -346,13 +347,15 @@ final class LCFA_Connection_Wizard_Presenter {
                     [
                         'title' => __('Copy and run the Codex shortcut', 'livecanvas-forge-ai'),
                         'caption' => $is_remote_adapter
-                            ? __('Execute the generated install command once on the machine where Codex runs. It registers the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai')
+                            ? __('Execute the generated install command once on the machine where Codex runs. It registers the secure AI Bridge pairing proxy.', 'livecanvas-forge-ai')
                             : __('Execute the generated install command once from this same project root. It auto-detects the embedded Codex desktop CLI.', 'livecanvas-forge-ai'),
                         'tone' => 'project',
                     ],
                     [
                         'title' => __('Check codex mcp list', 'livecanvas-forge-ai'),
-                        'caption' => __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
+                        'caption' => $is_secure_remote
+                            ? __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-ai-bridge appears before you continue.', 'livecanvas-forge-ai')
+                            : __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
                         'tone' => 'mcp',
                     ],
                     [
@@ -398,7 +401,7 @@ final class LCFA_Connection_Wizard_Presenter {
 
     private function is_codex_remote_adapter(array $bundle): bool {
         return $this->is_codex($bundle)
-            && (string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter';
+            && in_array((string) ($bundle['connection_strategy'] ?? ''), ['ai-bridge-session', 'remote-mcp-adapter'], true);
     }
 
     private function is_codex(array $bundle): bool {

@@ -1,7 +1,10 @@
+const { SessionAuth } = require('./session-auth')
+
 class WPClient {
   constructor(config) {
     this.config = config
     this.restBase = config.restBase
+    this.sessionAuth = new SessionAuth(config)
   }
 
   async getSnapshot() {
@@ -335,10 +338,20 @@ class WPClient {
   }
 
   async request(method, path, options = {}) {
+    const auth = await this.sessionAuth.resolve()
+    if (!auth.ok) {
+      return auth
+    }
+
     const url = new URL(path.replace(/^\//, ''), this.restBase)
     const headers = {
-      Accept: 'application/json',
-      'X-LCFA-MCP-Token': this.config.token
+      Accept: 'application/json'
+    }
+
+    if (auth.type === 'legacy_mcp_token') {
+      headers['X-LCFA-MCP-Token'] = auth.token
+    } else {
+      headers['X-LCFA-MCP-Session'] = auth.token
     }
 
     if (this.config.siteFingerprint) {

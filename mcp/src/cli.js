@@ -17,18 +17,24 @@ async function runCli(argv = []) {
   const tools = createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler)
 
   if (config.tool) {
-    await syncWorkspaceRoot({ client, config })
+    if (config.wpRoot) {
+      await syncWorkspaceRoot({ client, config })
+    }
     await runToolMode({ config, tools })
     return
   }
 
   if (config.transport === 'bridge') {
-    await syncWorkspaceRoot({ client, config })
+    if (config.wpRoot) {
+      await syncWorkspaceRoot({ client, config })
+    }
     await startBridgeServer({ client, tools, themeFiles, windpressCompiler, config })
     return
   }
 
-  void syncWorkspaceRoot({ client, config })
+  if (config.wpRoot) {
+    void syncWorkspaceRoot({ client, config })
+  }
   await runStdioServer({ client, tools, config })
 }
 
