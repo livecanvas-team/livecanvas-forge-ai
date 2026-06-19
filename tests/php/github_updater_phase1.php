@@ -11,6 +11,7 @@ define('LCFA_FILE', dirname(__DIR__, 2) . '/livecanvas-forge-ai.php');
 $GLOBALS['lcfa_test_active_livecanvas'] = true;
 $GLOBALS['lcfa_test_lc_apikey'] = '';
 $GLOBALS['lcfa_test_transients'] = [];
+$GLOBALS['lcfa_test_transient_expirations'] = [];
 $GLOBALS['lcfa_test_remote_calls'] = 0;
 $GLOBALS['lcfa_test_release_payload'] = [];
 $GLOBALS['lcfa_test_response_code'] = 200;
@@ -48,6 +49,7 @@ function get_transient(string $key) {
 
 function set_transient(string $key, $value, int $expiration = 0): bool {
     $GLOBALS['lcfa_test_transients'][$key] = $value;
+    $GLOBALS['lcfa_test_transient_expirations'][$key] = $expiration;
 
     return true;
 }
@@ -110,7 +112,9 @@ function lcfa_updater_reset(array $release_payload = [], string $api_key = '', b
     $GLOBALS['lcfa_test_active_livecanvas'] = $active_livecanvas;
     $GLOBALS['lcfa_test_response_code'] = $response_code;
     $GLOBALS['lcfa_test_transients'] = [];
+    $GLOBALS['lcfa_test_transient_expirations'] = [];
     $GLOBALS['lcfa_test_remote_calls'] = 0;
+    unset($_GET['force-check'], $_GET['lcfa-refresh-updates']);
 }
 
 function lcfa_updater_release(string $tag = 'v0.1.8', bool $draft = false, bool $prerelease = false, ?array $assets = null): array {
@@ -159,11 +163,38 @@ $update = $updater->filter_update_uri_response(false, [], $plugin_file);
 lcfa_updater_assert_true(is_object($update), 'licensed newer release should produce a WordPress update object');
 lcfa_updater_assert_same('0.1.8', $update->new_version ?? '', 'update object should expose the newer version');
 lcfa_updater_assert_same('https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.1.8/livecanvas-forge-ai.zip', $update->package ?? '', 'update package should point to the release zip asset');
+lcfa_updater_assert_same(21600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_github_latest_release'] ?? 0, 'available updates should use the long GitHub cache TTL');
 
 $info = $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'livecanvas-forge-ai']);
 lcfa_updater_assert_true(is_object($info), 'plugins_api should return details for the AI Bridge slug');
 lcfa_updater_assert_same('0.1.8', $info->version ?? '', 'plugins_api details should use the latest release version');
 lcfa_updater_assert_same(false, $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'other-plugin']), 'plugins_api should ignore other slugs');
+
+lcfa_updater_reset(lcfa_updater_release('v0.1.7'), 'valid-api-key', true);
+$state = $updater->get_update_state();
+lcfa_updater_assert_false((bool) ($state['update_available'] ?? true), 'same-version releases should not expose an update');
+lcfa_updater_assert_same(600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_github_latest_release'] ?? 0, 'no-update checks should use a short cache TTL');
+
+lcfa_updater_reset(lcfa_updater_release('v0.1.8'), 'valid-api-key', true);
+$GLOBALS['lcfa_test_transients']['lcfa_github_latest_release'] = [
+    'ok'      => true,
+    'version' => '0.1.7',
+];
+$state = $updater->get_update_state();
+lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_remote_calls'], 'legacy cache entries without schema should be ignored');
+lcfa_updater_assert_same('0.1.8', $state['latest_version'] ?? '', 'legacy stale cache should refresh to the latest release');
+
+lcfa_updater_reset(lcfa_updater_release('v0.1.8'), 'valid-api-key', true);
+$GLOBALS['lcfa_test_transients']['lcfa_github_latest_release'] = [
+    'ok'                     => true,
+    'version'                => '0.1.7',
+    'cache_schema'           => 2,
+    'checked_plugin_version' => LCFA_VERSION,
+];
+$_GET['force-check'] = '1';
+$state = $updater->get_update_state();
+lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_remote_calls'], 'forced WordPress update checks should bypass the cached release');
+lcfa_updater_assert_same('0.1.8', $state['latest_version'] ?? '', 'forced update check should refresh stale cached release metadata');
 
 lcfa_updater_reset(lcfa_updater_release('v0.1.8', false, false, []), 'valid-api-key', true);
 $state = $updater->get_update_state();

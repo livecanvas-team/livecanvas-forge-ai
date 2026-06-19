@@ -9,6 +9,8 @@ final class LCFA_GitHub_Updater {
     private const UPDATE_URI = 'https://github.com/livecanvas-team/livecanvas-forge-ai';
     private const CACHE_KEY = 'lcfa_github_latest_release';
     private const CACHE_TTL = 21600;
+    private const NO_UPDATE_CACHE_TTL = 600;
+    private const CACHE_SCHEMA = 2;
 
     private ?LCFA_Environment $environment;
 
@@ -37,7 +39,7 @@ final class LCFA_GitHub_Updater {
             return $state;
         }
 
-        $release = $this->get_latest_release();
+        $release = $this->get_latest_release($this->is_forced_update_check());
         if (empty($release['ok'])) {
             $state['blocked_reason'] = 'release_unavailable';
 
@@ -89,7 +91,7 @@ final class LCFA_GitHub_Updater {
             return $result;
         }
 
-        $release = $this->get_latest_release();
+        $release = $this->get_latest_release($this->is_forced_update_check());
         if (empty($release['ok'])) {
             return $result;
         }
@@ -118,7 +120,7 @@ final class LCFA_GitHub_Updater {
             return null;
         }
 
-        $release = $this->get_latest_release();
+        $release = $this->get_latest_release($this->is_forced_update_check());
         if (empty($release['ok']) || !$this->is_version_newer((string) ($release['version'] ?? ''))) {
             return null;
         }
@@ -139,9 +141,9 @@ final class LCFA_GitHub_Updater {
         ];
     }
 
-    private function get_latest_release(): array {
+    private function get_latest_release(bool $force = false): array {
         $cached = get_transient(self::CACHE_KEY);
-        if (is_array($cached)) {
+        if (!$force && $this->is_valid_cached_release($cached)) {
             return $cached;
         }
 
@@ -237,9 +239,39 @@ final class LCFA_GitHub_Updater {
     }
 
     private function cache_release_result(array $result): array {
-        set_transient(self::CACHE_KEY, $result, self::CACHE_TTL);
+        $result['cache_schema'] = self::CACHE_SCHEMA;
+        $result['checked_plugin_version'] = $this->get_current_version();
+        $result['checked_at'] = function_exists('time') ? time() : 0;
+
+        set_transient(self::CACHE_KEY, $result, $this->get_release_cache_ttl($result));
 
         return $result;
+    }
+
+    private function is_valid_cached_release($cached): bool {
+        return is_array($cached)
+            && (int) ($cached['cache_schema'] ?? 0) === self::CACHE_SCHEMA
+            && (string) ($cached['checked_plugin_version'] ?? '') === $this->get_current_version();
+    }
+
+    private function get_release_cache_ttl(array $result): int {
+        if (!empty($result['ok']) && $this->is_version_newer((string) ($result['version'] ?? ''))) {
+            return self::CACHE_TTL;
+        }
+
+        return self::NO_UPDATE_CACHE_TTL;
+    }
+
+    private function is_forced_update_check(): bool {
+        if (defined('WP_CLI') && WP_CLI) {
+            return true;
+        }
+
+        if (isset($_GET['force-check']) || isset($_GET['lcfa-refresh-updates'])) {
+            return true;
+        }
+
+        return false;
     }
 
     private function is_livecanvas_update_eligible(): bool {
