@@ -6,6 +6,14 @@
     "livecanvas-ai-bridge-mcp": "bin/livecanvas-forge-mcp.js",
     "livecanvas-forge-mcp": "bin/livecanvas-forge-mcp.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "commonjs",
   "engines": {
     "node": ">=18.17"
