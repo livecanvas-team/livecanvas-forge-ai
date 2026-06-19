@@ -20,6 +20,7 @@ function lcfa_repair_assert_contains(string $needle, string $haystack, string $m
 
 lcfa_repair_assert_contains("class-lcfa-codex-config-manager.php", $plugin, 'plugin bootstrap should load the Codex config manager');
 lcfa_repair_assert_contains("class-lcfa-mcp-session-manager.php", $plugin, 'plugin bootstrap should load the secure MCP session manager');
+lcfa_repair_assert_contains("class-lcfa-github-updater.php", $plugin, 'plugin bootstrap should load the GitHub updater');
 lcfa_repair_assert_contains("class-lcfa-direct-agent-onboarding.php", $plugin, 'plugin bootstrap should load the Direct Agent onboarding service');
 lcfa_repair_assert_contains("class-lcfa-power-mode.php", $plugin, 'plugin bootstrap should load the Power Mode service');
 lcfa_repair_assert_contains("admin_post_lcfa_repair_codex_connection", $admin, 'admin should register the Codex repair post action');
@@ -39,6 +40,7 @@ lcfa_repair_assert_contains("WP_API_PASSWORD", $admin, 'admin should keep the le
 lcfa_repair_assert_contains("Remote Codex prerequisites", $admin, 'remote Codex should block setup behind a prerequisite checklist');
 lcfa_repair_assert_contains("does not use LCFA_WP_ROOT", $admin, 'remote Codex UI should make clear that no local WordPress root is used');
 lcfa_repair_assert_contains("Power Mode status", $admin, 'Connections UI should show the Power Mode policy foundation');
+lcfa_repair_assert_contains("AI Bridge auto updates are paused", $admin, 'dashboard should explain that auto updates require an active LiveCanvas license');
 lcfa_repair_assert_contains(".lcfa-form label.lcfa-checkbox", $admin_css, 'admin CSS should keep checkbox labels aligned inside forms');
 lcfa_repair_assert_contains("missing_credentials", $direct_onboarding, 'Direct Mode should expose a missing_credentials state');
 lcfa_repair_assert_contains("ai-bridge-session", $direct_onboarding, 'Direct Mode should identify the secure AI Bridge session strategy');

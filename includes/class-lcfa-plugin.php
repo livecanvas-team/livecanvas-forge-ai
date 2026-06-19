@@ -5,6 +5,7 @@ defined('ABSPATH') || exit;
 final class LCFA_Plugin {
     private static ?LCFA_Plugin $instance = null;
     private LCFA_Environment $environment;
+    private LCFA_GitHub_Updater $github_updater;
     private LCFA_Installer $installer;
     private LCFA_Inventory $inventory;
     private LCFA_Genesis_Planner $genesis_planner;
@@ -52,6 +53,7 @@ final class LCFA_Plugin {
 
     private function __construct() {
         $this->environment = new LCFA_Environment();
+        $this->github_updater = new LCFA_GitHub_Updater($this->environment);
         $this->installer   = new LCFA_Installer($this->environment);
         $this->inventory   = new LCFA_Inventory($this->environment);
         $this->ai_client = new LCFA_AI_Client();
@@ -98,6 +100,7 @@ final class LCFA_Plugin {
     }
 
     public function boot(): void {
+        $this->github_updater->hooks();
         $this->design_system_preview->hooks();
         $this->admin->hooks();
         $this->rest_api->hooks();

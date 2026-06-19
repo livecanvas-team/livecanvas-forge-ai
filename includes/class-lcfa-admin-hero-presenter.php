@@ -146,6 +146,16 @@ final class LCFA_Admin_Hero_Presenter {
             ];
         }
 
+        $updates = is_array($snapshot['ai_bridge_updates'] ?? null) ? $snapshot['ai_bridge_updates'] : [];
+        if (!empty($updates)) {
+            $details[] = [
+                'label' => __('AI Bridge updates', 'livecanvas-forge-ai'),
+                'value' => !empty($updates['eligible'])
+                    ? (!empty($updates['update_available']) ? __('Update available', 'livecanvas-forge-ai') : __('Enabled', 'livecanvas-forge-ai'))
+                    : __('Requires LiveCanvas license', 'livecanvas-forge-ai'),
+            ];
+        }
+
         return $details;
     }
 

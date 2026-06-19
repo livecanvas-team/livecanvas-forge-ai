@@ -37,6 +37,9 @@ final class LCFA_Environment {
             'picostrap_candidates'    => $this->find_theme_candidates('picostrap'),
             'picowind_candidates'     => $this->find_theme_candidates('picowind'),
             'mcp_adapter'             => $this->get_mcp_adapter_status(),
+            'ai_bridge_updates'       => class_exists('LCFA_GitHub_Updater')
+                ? (new LCFA_GitHub_Updater($this))->get_update_state()
+                : [],
         ];
 
         return $this->snapshot_cache;

@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.1.7
+ * Version: 0.1.8
  * Update URI: https://github.com/livecanvas-team/livecanvas-forge-ai
  * Author: The LiveCanvas Team
  * Author URI: https://livecanvas.com/
@@ -12,13 +12,14 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.1.7');
+define('LCFA_VERSION', '0.1.8');
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
 
 require_once LCFA_DIR . 'includes/class-lcfa-settings.php';
 require_once LCFA_DIR . 'includes/class-lcfa-environment.php';
+require_once LCFA_DIR . 'includes/class-lcfa-github-updater.php';
 require_once LCFA_DIR . 'includes/class-lcfa-installer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require_once LCFA_DIR . 'includes/class-lcfa-genesis-planner.php';

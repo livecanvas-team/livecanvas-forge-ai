@@ -2177,6 +2177,7 @@ final class LCFA_Admin {
 
         $this->render_notice($notice);
         $this->render_internal_tabs($tab, $settings);
+        $this->render_ai_bridge_update_notice($snapshot);
 
         if (!$settings['completed'] && $tab !== 'setup') {
             echo '<div class="notice notice-warning"><p>';
@@ -2214,6 +2215,29 @@ final class LCFA_Admin {
         }
 
         echo '</div>';
+    }
+
+    private function render_ai_bridge_update_notice(array $snapshot): void {
+        $updates = is_array($snapshot['ai_bridge_updates'] ?? null) ? $snapshot['ai_bridge_updates'] : [];
+        if (empty($updates)) {
+            return;
+        }
+
+        if (empty($updates['eligible'])) {
+            echo '<div class="notice notice-warning inline lcfa-update-notice"><p>';
+            echo '<strong>' . esc_html__('AI Bridge auto updates are paused.', 'livecanvas-forge-ai') . '</strong> ';
+            echo esc_html__('Auto updates require an active LiveCanvas license. Activate LiveCanvas to receive AI Bridge releases through the native WordPress update screen.', 'livecanvas-forge-ai');
+            echo '</p></div>';
+
+            return;
+        }
+
+        if (!empty($updates['update_available'])) {
+            echo '<div class="notice notice-info inline lcfa-update-notice"><p>';
+            echo '<strong>' . esc_html__('AI Bridge update available.', 'livecanvas-forge-ai') . '</strong> ';
+            echo esc_html__('Open the WordPress Plugins screen to install the latest GitHub release.', 'livecanvas-forge-ai');
+            echo '</p></div>';
+        }
     }
 
     public function render_connections_page(): void {
