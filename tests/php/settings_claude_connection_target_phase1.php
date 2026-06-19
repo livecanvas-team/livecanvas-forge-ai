@@ -83,9 +83,9 @@ lcfa_assert_true(array_key_exists('codex_model', $defaults), 'connection default
 lcfa_assert_true(array_key_exists('codex_speed', $defaults), 'connection defaults should expose a Codex speed default');
 lcfa_assert_true(array_key_exists('codex_reasoning_effort', $defaults), 'connection defaults should expose a Codex intelligence default');
 lcfa_assert_true(array_key_exists('mcp_write_abilities_enabled', $defaults), 'connection defaults should expose the MCP write ability opt-in flag');
-lcfa_assert_same(false, $defaults['mcp_write_abilities_enabled'], 'MCP write abilities should default to private');
+lcfa_assert_same(true, $defaults['mcp_write_abilities_enabled'], 'MCP write abilities should default to enabled for paired agents');
 lcfa_assert_true(array_key_exists('mcp_public_write_abilities', $defaults), 'connection defaults should expose the MCP write ability allowlist');
-lcfa_assert_same([], $defaults['mcp_public_write_abilities'], 'MCP write ability allowlist should default to empty until configured');
+lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $defaults['mcp_public_write_abilities'], 'MCP write ability allowlist should default to curated write abilities');
 lcfa_assert_same('gpt-5.3-codex-spark', $defaults['codex_model'], 'Codex model should default to the fast frontend model');
 lcfa_assert_same('balanced', $defaults['codex_speed'], 'Codex speed should default to balanced');
 lcfa_assert_same('medium', $defaults['codex_reasoning_effort'], 'Codex intelligence should default to medium');
@@ -141,6 +141,7 @@ $sanitized_empty_write_allowlist = LCFA_Settings::sanitize_connections([
     'mcp_public_write_abilities_submitted' => '1',
 ]);
 lcfa_assert_same([], $sanitized_empty_write_allowlist['mcp_public_write_abilities'] ?? ['not-empty'], 'submitted empty write allowlist should expose no write abilities');
+lcfa_assert_same(true, $sanitized_empty_write_allowlist['mcp_public_write_abilities_configured'] ?? null, 'submitted empty write allowlist should be preserved as an explicit admin configuration');
 
 $GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
     LCFA_Settings::connection_defaults(),
@@ -154,5 +155,21 @@ $normalized = LCFA_Settings::get_connections();
 
 lcfa_assert_same('claude', $normalized['preferred_client'] ?? '', 'get_connections should normalize legacy claude-code values on read');
 lcfa_assert_same('cli', $normalized['claude_connection_target'] ?? '', 'get_connections should infer the cli target for legacy claude-code values');
+lcfa_assert_same(true, $normalized['mcp_write_abilities_enabled'] ?? null, 'get_connections should keep default write abilities enabled');
+lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $normalized['mcp_public_write_abilities'] ?? [], 'get_connections should keep the default write allowlist');
+
+$GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
+    LCFA_Settings::connection_defaults(),
+    [
+        'mcp_write_abilities_enabled' => false,
+        'mcp_public_write_abilities' => [],
+        'mcp_public_write_abilities_configured' => false,
+    ]
+);
+
+$migrated_write_defaults = LCFA_Settings::get_connections();
+
+lcfa_assert_same(true, $migrated_write_defaults['mcp_write_abilities_enabled'] ?? null, 'get_connections should migrate unconfigured legacy write settings to enabled');
+lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $migrated_write_defaults['mcp_public_write_abilities'] ?? [], 'get_connections should migrate unconfigured legacy write allowlist to defaults');
 
 echo "PASS\n";

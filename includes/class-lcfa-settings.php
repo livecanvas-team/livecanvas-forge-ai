@@ -171,8 +171,8 @@ final class LCFA_Settings {
             'picostrap_package_url'       => '',
             'local_bridge_url'            => rest_url('lcfa/v1/'),
             'mcp_enabled'                 => true,
-            'mcp_write_abilities_enabled' => false,
-            'mcp_public_write_abilities'  => [],
+            'mcp_write_abilities_enabled' => true,
+            'mcp_public_write_abilities'  => self::get_default_mcp_write_abilities(),
             'mcp_public_write_abilities_configured' => false,
             'mcp_host'                    => '127.0.0.1',
             'mcp_port'                    => '7681',
@@ -251,12 +251,17 @@ final class LCFA_Settings {
             $public_write_abilities = self::sanitize_mcp_write_abilities($current['mcp_public_write_abilities'] ?? []);
         }
 
-        if (!empty($connections['mcp_write_abilities_enabled']) && !$write_abilities_submitted && $public_write_abilities === [] && empty($current['mcp_public_write_abilities'])) {
-            $public_write_abilities = array_keys(self::get_mcp_write_ability_options());
+        $current_write_configured = !empty($current['mcp_public_write_abilities_configured']);
+        $write_enabled = !empty($connections['mcp_write_abilities_enabled']);
+        if (!$write_abilities_submitted && !$current_write_configured && empty($connections['mcp_public_write_abilities'])) {
+            $write_enabled = true;
+            $public_write_abilities = self::get_default_mcp_write_abilities();
+        } elseif ($write_enabled && !$write_abilities_submitted && $public_write_abilities === [] && empty($current['mcp_public_write_abilities'])) {
+            $public_write_abilities = self::get_default_mcp_write_abilities();
         }
         $public_write_abilities_configured = $write_abilities_submitted
             ? true
-            : !empty($current['mcp_public_write_abilities_configured']);
+            : $current_write_configured;
 
         return [
             'transport'                   => in_array($connections['transport'] ?? '', ['rest', 'mcp', 'hybrid'], true) ? $connections['transport'] : 'rest',
@@ -264,7 +269,7 @@ final class LCFA_Settings {
             'picostrap_package_url'       => esc_url_raw($connections['picostrap_package_url'] ?? ''),
             'local_bridge_url'            => esc_url_raw($connections['local_bridge_url'] ?? rest_url('lcfa/v1/')),
             'mcp_enabled'                 => !empty($connections['mcp_enabled']),
-            'mcp_write_abilities_enabled' => !empty($connections['mcp_write_abilities_enabled']),
+            'mcp_write_abilities_enabled' => $write_enabled,
             'mcp_public_write_abilities'  => $public_write_abilities,
             'mcp_public_write_abilities_configured' => $public_write_abilities_configured,
             'mcp_host'                    => sanitize_text_field($connections['mcp_host'] ?? '127.0.0.1'),
@@ -358,6 +363,10 @@ final class LCFA_Settings {
         ];
     }
 
+    public static function get_default_mcp_write_abilities(): array {
+        return array_keys(self::get_mcp_write_ability_options());
+    }
+
     public static function sanitize_mcp_write_abilities($abilities): array {
         $allowed = array_keys(self::get_mcp_write_ability_options());
         $abilities = is_array($abilities) ? $abilities : [];
@@ -444,11 +453,15 @@ final class LCFA_Settings {
             $preferred_client,
             $raw_client
         );
+        $connections['mcp_public_write_abilities_configured'] = !empty($connections['mcp_public_write_abilities_configured']);
+        if (empty($connections['mcp_public_write_abilities_configured']) && empty($connections['mcp_write_abilities_enabled']) && empty($connections['mcp_public_write_abilities'])) {
+            $connections['mcp_write_abilities_enabled'] = true;
+            $connections['mcp_public_write_abilities'] = self::get_default_mcp_write_abilities();
+        }
         $connections['mcp_write_abilities_enabled'] = !empty($connections['mcp_write_abilities_enabled']);
         $connections['mcp_public_write_abilities'] = self::sanitize_mcp_write_abilities($connections['mcp_public_write_abilities'] ?? []);
-        $connections['mcp_public_write_abilities_configured'] = !empty($connections['mcp_public_write_abilities_configured']);
         if (!empty($connections['mcp_write_abilities_enabled']) && empty($connections['mcp_public_write_abilities_configured']) && $connections['mcp_public_write_abilities'] === []) {
-            $connections['mcp_public_write_abilities'] = array_keys(self::get_mcp_write_ability_options());
+            $connections['mcp_public_write_abilities'] = self::get_default_mcp_write_abilities();
         }
         $codex_options = self::sanitize_codex_options([
             'model'            => $connections['codex_model'] ?? '',

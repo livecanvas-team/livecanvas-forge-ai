@@ -4494,7 +4494,7 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('sparkles');
-        echo '<div><h2>' . esc_html__('Ability diagnostics', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Shows the WordPress-native ability surface exposed to MCP-capable agents. Preview abilities are safe dry-run entry points; write abilities stay private by default.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Ability diagnostics', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Shows the WordPress-native ability surface exposed to MCP-capable agents. Preview abilities are safe dry-run entry points; curated write abilities are enabled by default and should be reviewed before trusting an agent.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
         echo '<div class="lcfa-chip-row">';
@@ -4570,8 +4570,12 @@ final class LCFA_Admin {
         echo '<label><span>' . esc_html__('Picostrap package URL', 'livecanvas-forge-ai') . '</span><input type="text" name="picostrap_package_url" value="' . esc_attr($connections['picostrap_package_url']) . '" placeholder="https://...zip"></label>';
         echo '<label><span>' . esc_html__('Local bridge URL', 'livecanvas-forge-ai') . '</span><input type="text" name="local_bridge_url" value="' . esc_attr($connections['local_bridge_url']) . '"></label>';
         echo '<label class="lcfa-checkbox"><input type="checkbox" name="mcp_enabled" value="1"' . checked((bool) $connections['mcp_enabled'], true, false) . '> ' . esc_html__('Enable the built-in MCP bridge profile for local tooling.', 'livecanvas-forge-ai') . '</label>';
-        echo '<label class="lcfa-checkbox"><input type="checkbox" name="mcp_write_abilities_enabled" value="1"' . checked(!empty($connections['mcp_write_abilities_enabled']), true, false) . '> ' . esc_html__('Expose curated write abilities through the AI Bridge MCP server after admin opt-in.', 'livecanvas-forge-ai') . '</label>';
-        echo '<p class="description">' . esc_html__('Keep this disabled unless the connected MCP client is trusted. Preview abilities remain available without this opt-in.', 'livecanvas-forge-ai') . '</p>';
+        echo '<div class="lcfa-notice lcfa-notice--warning">';
+        echo '<strong>' . esc_html__('Write abilities are enabled by default', 'livecanvas-forge-ai') . '</strong>';
+        echo '<p>' . esc_html__('AI Bridge exposes the curated write allowlist so a paired agent can create and update LiveCanvas content after previews. Disable the master switch or uncheck individual abilities when you want read/preview-only access.', 'livecanvas-forge-ai') . '</p>';
+        echo '</div>';
+        echo '<label class="lcfa-checkbox"><input type="checkbox" name="mcp_write_abilities_enabled" value="1"' . checked(!empty($connections['mcp_write_abilities_enabled']), true, false) . '> ' . esc_html__('Expose curated write abilities through the AI Bridge MCP server.', 'livecanvas-forge-ai') . '</label>';
+        echo '<p class="description">' . esc_html__('Leave enabled for trusted paired agents. Turn it off when the connected MCP client should only inspect and preview.', 'livecanvas-forge-ai') . '</p>';
         echo '<input type="hidden" name="mcp_public_write_abilities_submitted" value="1">';
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('MCP write ability allowlist', 'livecanvas-forge-ai') . '</h3>';
