@@ -1214,14 +1214,14 @@
   if(attachmentClearButton){
     attachmentClearButton.addEventListener("click",function(){
       attachmentState=null;
-      if(attachmentInput){attachmentInput.value="";attachmentInput.files=[];}
+      if(attachmentInput){attachmentInput.value="";}
       renderAttachmentPreview();
     });
   }
   if(attachmentPreviewImage){
     attachmentPreviewImage.addEventListener("error",function(){
       attachmentState=null;
-      if(attachmentInput){attachmentInput.value="";attachmentInput.files=[];}
+      if(attachmentInput){attachmentInput.value="";}
       attachmentPreviewImage.hidden=true;
       attachmentPreviewImage.src="";
       attachmentPreview.hidden=true;

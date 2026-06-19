@@ -2235,7 +2235,7 @@ final class LCFA_Admin {
         if (!empty($updates['update_available'])) {
             echo '<div class="notice notice-info inline lcfa-update-notice"><p>';
             echo '<strong>' . esc_html__('AI Bridge update available.', 'livecanvas-forge-ai') . '</strong> ';
-            echo esc_html__('Open the WordPress Plugins screen to install the latest GitHub release.', 'livecanvas-forge-ai');
+            echo esc_html__('Open the WordPress Plugins screen to install the latest licensed LiveCanvas release.', 'livecanvas-forge-ai');
             echo '</p></div>';
         }
     }

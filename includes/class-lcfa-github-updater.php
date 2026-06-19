@@ -6,11 +6,12 @@ final class LCFA_GitHub_Updater {
     private const SLUG = 'livecanvas-forge-ai';
     private const ASSET_NAME = 'livecanvas-forge-ai.zip';
     private const REPO_API = 'https://api.github.com/repos/livecanvas-team/livecanvas-forge-ai/releases/latest';
-    private const UPDATE_URI = 'https://github.com/livecanvas-team/livecanvas-forge-ai';
-    private const CACHE_KEY = 'lcfa_github_latest_release';
+    private const UPDATE_API = 'https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/update';
+    private const UPDATE_URI = 'https://livecanvas.com/ai-bridge';
+    private const CACHE_KEY = 'lcfa_livecanvas_update_release';
     private const CACHE_TTL = 21600;
     private const NO_UPDATE_CACHE_TTL = 600;
-    private const CACHE_SCHEMA = 2;
+    private const CACHE_SCHEMA = 3;
 
     private ?LCFA_Environment $environment;
 
@@ -19,6 +20,7 @@ final class LCFA_GitHub_Updater {
     }
 
     public function hooks(): void {
+        add_filter('update_plugins_livecanvas.com', [$this, 'filter_update_uri_response'], 10, 4);
         add_filter('update_plugins_github.com', [$this, 'filter_update_uri_response'], 10, 4);
         add_filter('pre_set_site_transient_update_plugins', [$this, 'filter_update_transient']);
         add_filter('plugins_api', [$this, 'filter_plugins_api'], 10, 3);
@@ -33,6 +35,7 @@ final class LCFA_GitHub_Updater {
             'update_available' => false,
             'blocked_reason'   => $eligible ? '' : $this->get_livecanvas_blocked_reason(),
             'release_url'      => '',
+            'source'           => 'livecanvas_license_endpoint',
         ];
 
         if (!$eligible) {
@@ -49,6 +52,7 @@ final class LCFA_GitHub_Updater {
         $state['latest_version'] = (string) ($release['version'] ?? '');
         $state['release_url'] = (string) ($release['release_url'] ?? '');
         $state['update_available'] = $this->is_version_newer($state['latest_version']);
+        $state['message'] = (string) ($release['message'] ?? '');
 
         return $state;
     }
@@ -103,9 +107,9 @@ final class LCFA_GitHub_Updater {
             'author'        => '<a href="https://livecanvas.com/">The LiveCanvas Team</a>',
             'author_profile'=> 'https://livecanvas.com/',
             'homepage'      => self::UPDATE_URI,
-            'requires'      => '6.0',
-            'tested'        => '',
-            'requires_php'  => '7.4',
+            'requires'      => (string) ($release['requires'] ?? '6.0'),
+            'tested'        => (string) ($release['tested'] ?? ''),
+            'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
             'download_link' => (string) ($release['download_url'] ?? ''),
             'last_updated'  => (string) ($release['published_at'] ?? ''),
             'sections'      => [
@@ -133,9 +137,9 @@ final class LCFA_GitHub_Updater {
             'new_version'   => (string) ($release['version'] ?? ''),
             'url'           => (string) ($release['release_url'] ?? self::UPDATE_URI),
             'package'       => (string) ($release['download_url'] ?? ''),
-            'tested'        => '',
-            'requires'      => '6.0',
-            'requires_php'  => '7.4',
+            'tested'        => (string) ($release['tested'] ?? ''),
+            'requires'      => (string) ($release['requires'] ?? '6.0'),
+            'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
             'icons'         => [],
             'banners'       => [],
             'compatibility' => new stdClass(),
@@ -148,11 +152,85 @@ final class LCFA_GitHub_Updater {
             return $cached;
         }
 
+        $release = $this->request_livecanvas_release();
+        if (!empty($release['ok']) || !$this->allow_github_fallback()) {
+            return $this->cache_release_result($release);
+        }
+
+        return $this->cache_release_result($this->request_github_release());
+    }
+
+    private function request_livecanvas_release(): array {
+        if (!function_exists('wp_remote_post')) {
+            return [
+                'ok'      => false,
+                'message' => 'wp_remote_post unavailable',
+            ];
+        }
+
+        $license_key = $this->get_livecanvas_license_key();
+        if ($license_key === '') {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas license unavailable',
+            ];
+        }
+
+        $response = wp_remote_post($this->get_update_endpoint(), [
+            'timeout' => 12,
+            'headers' => [
+                'Accept'     => 'application/json',
+                'User-Agent' => 'LiveCanvas AI Bridge/' . $this->get_current_version(),
+            ],
+            'body' => $this->build_update_request_body($license_key),
+        ]);
+
+        if (function_exists('is_wp_error') && is_wp_error($response)) {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas update request failed',
+            ];
+        }
+
+        $status = function_exists('wp_remote_retrieve_response_code')
+            ? (int) wp_remote_retrieve_response_code($response)
+            : (int) ($response['response']['code'] ?? 0);
+        $body = function_exists('wp_remote_retrieve_body')
+            ? (string) wp_remote_retrieve_body($response)
+            : (string) ($response['body'] ?? '');
+
+        if ($status === 401 || $status === 403) {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas license rejected by update endpoint',
+                'code'    => 'license_rejected',
+            ];
+        }
+
+        if ($status !== 200 || $body === '') {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas update endpoint unavailable',
+            ];
+        }
+
+        $payload = json_decode($body, true);
+        if (!is_array($payload)) {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas update payload invalid',
+            ];
+        }
+
+        return $this->normalize_livecanvas_payload($payload);
+    }
+
+    private function request_github_release(): array {
         if (!function_exists('wp_remote_get')) {
-            return $this->cache_release_result([
+            return [
                 'ok'      => false,
                 'message' => 'wp_remote_get unavailable',
-            ]);
+            ];
         }
 
         $response = wp_remote_get(self::REPO_API, [
@@ -164,10 +242,10 @@ final class LCFA_GitHub_Updater {
         ]);
 
         if (function_exists('is_wp_error') && is_wp_error($response)) {
-            return $this->cache_release_result([
+            return [
                 'ok'      => false,
                 'message' => 'GitHub request failed',
-            ]);
+            ];
         }
 
         $status = function_exists('wp_remote_retrieve_response_code')
@@ -178,24 +256,68 @@ final class LCFA_GitHub_Updater {
             : (string) ($response['body'] ?? '');
 
         if ($status !== 200 || $body === '') {
-            return $this->cache_release_result([
+            return [
                 'ok'      => false,
                 'message' => 'GitHub release unavailable',
-            ]);
+            ];
         }
 
         $payload = json_decode($body, true);
         if (!is_array($payload)) {
-            return $this->cache_release_result([
+            return [
                 'ok'      => false,
                 'message' => 'GitHub release payload invalid',
-            ]);
+            ];
         }
 
-        return $this->cache_release_result($this->normalize_release_payload($payload));
+        return $this->normalize_github_payload($payload);
     }
 
-    private function normalize_release_payload(array $payload): array {
+    private function normalize_livecanvas_payload(array $payload): array {
+        if (isset($payload['release']) && is_array($payload['release'])) {
+            $payload = $payload['release'];
+        }
+
+        if (isset($payload['ok']) && empty($payload['ok'])) {
+            return [
+                'ok'      => false,
+                'message' => (string) ($payload['message'] ?? 'LiveCanvas update unavailable'),
+                'code'    => (string) ($payload['code'] ?? ''),
+            ];
+        }
+
+        $version = $this->normalize_version_string((string) ($payload['version'] ?? $payload['tag_name'] ?? ''));
+        if ($version === '') {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas update version is invalid',
+            ];
+        }
+
+        $download_url = (string) ($payload['download_url'] ?? $payload['package_url'] ?? $payload['package'] ?? '');
+        if (!$this->is_valid_package_url($download_url)) {
+            return [
+                'ok'      => false,
+                'message' => 'LiveCanvas update package URL missing',
+            ];
+        }
+
+        return [
+            'ok'           => true,
+            'version'      => $version,
+            'tag'          => (string) ($payload['tag'] ?? 'v' . $version),
+            'download_url' => $download_url,
+            'release_url'  => (string) ($payload['release_url'] ?? $payload['url'] ?? self::UPDATE_URI),
+            'published_at' => (string) ($payload['published_at'] ?? $payload['last_updated'] ?? ''),
+            'body'         => (string) ($payload['body'] ?? $payload['changelog'] ?? ''),
+            'requires'     => (string) ($payload['requires'] ?? '6.0'),
+            'tested'       => (string) ($payload['tested'] ?? ''),
+            'requires_php' => (string) ($payload['requires_php'] ?? '7.4'),
+            'message'      => (string) ($payload['message'] ?? ''),
+        ];
+    }
+
+    private function normalize_github_payload(array $payload): array {
         if (!empty($payload['draft']) || !empty($payload['prerelease'])) {
             return [
                 'ok'      => false,
@@ -204,7 +326,8 @@ final class LCFA_GitHub_Updater {
         }
 
         $tag = (string) ($payload['tag_name'] ?? '');
-        if (!preg_match('/^v?(\d+\.\d+\.\d+)$/', $tag, $matches)) {
+        $version = $this->normalize_version_string($tag);
+        if ($version === '') {
             return [
                 'ok'      => false,
                 'message' => 'Release tag is not a stable plugin version',
@@ -230,7 +353,7 @@ final class LCFA_GitHub_Updater {
 
         return [
             'ok'           => true,
-            'version'      => $matches[1],
+            'version'      => $version,
             'tag'          => $tag,
             'download_url' => $download_url,
             'release_url'  => (string) ($payload['html_url'] ?? self::UPDATE_URI),
@@ -261,6 +384,51 @@ final class LCFA_GitHub_Updater {
         }
 
         return self::NO_UPDATE_CACHE_TTL;
+    }
+
+    private function get_update_endpoint(): string {
+        $endpoint = defined('LCFA_UPDATE_ENDPOINT') ? (string) LCFA_UPDATE_ENDPOINT : self::UPDATE_API;
+
+        if (function_exists('apply_filters')) {
+            $endpoint = (string) apply_filters('lcfa_update_endpoint', $endpoint);
+        }
+
+        return trim($endpoint);
+    }
+
+    private function build_update_request_body(string $license_key): array {
+        return [
+            'license_key'    => $license_key,
+            'plugin_slug'    => self::SLUG,
+            'plugin_version' => $this->get_current_version(),
+            'site_url'       => function_exists('home_url') ? home_url('/') : '',
+            'wp_version'     => function_exists('get_bloginfo') ? (string) get_bloginfo('version') : '',
+            'php_version'    => PHP_VERSION,
+        ];
+    }
+
+    private function allow_github_fallback(): bool {
+        $allowed = defined('LCFA_ALLOW_GITHUB_UPDATE_FALLBACK') && LCFA_ALLOW_GITHUB_UPDATE_FALLBACK;
+
+        if (function_exists('apply_filters')) {
+            $allowed = (bool) apply_filters('lcfa_allow_github_update_fallback', $allowed);
+        }
+
+        return $allowed;
+    }
+
+    private function normalize_version_string(string $version): string {
+        $version = trim($version);
+
+        return preg_match('/^v?(\d+\.\d+\.\d+)$/', $version, $matches) ? $matches[1] : '';
+    }
+
+    private function is_valid_package_url(string $url): bool {
+        if ($url === '') {
+            return false;
+        }
+
+        return (bool) preg_match('#^https?://#i', $url);
     }
 
     private function is_forced_update_check(): bool {
@@ -311,19 +479,23 @@ final class LCFA_GitHub_Updater {
     }
 
     private function has_livecanvas_license(): bool {
+        return $this->get_livecanvas_license_key() !== '';
+    }
+
+    private function get_livecanvas_license_key(): string {
         if (function_exists('lc_get_apikey')) {
             $api_key = lc_get_apikey();
 
-            return is_scalar($api_key) && trim((string) $api_key) !== '';
+            return is_scalar($api_key) ? trim((string) $api_key) : '';
         }
 
         if (function_exists('get_site_option')) {
             $api_key = get_site_option('lc_apikey');
 
-            return is_scalar($api_key) && trim((string) $api_key) !== '';
+            return is_scalar($api_key) ? trim((string) $api_key) : '';
         }
 
-        return false;
+        return '';
     }
 
     private function is_version_newer(string $version): bool {
@@ -350,6 +522,6 @@ final class LCFA_GitHub_Updater {
     private function format_release_notes(string $body): string {
         $body = trim($body);
 
-        return $body !== '' ? nl2br(esc_html($body)) : 'See the GitHub release for changes.';
+        return $body !== '' ? nl2br(esc_html($body)) : 'See the LiveCanvas release notes for changes.';
     }
 }

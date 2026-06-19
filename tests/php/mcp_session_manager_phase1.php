@@ -94,8 +94,10 @@ final class LCFA_Settings {
     }
 
     public static function get_connections(): array {
-        return [
+        return $GLOBALS['lcfa_test_connections'] ?? [
             'connection_status' => '',
+            'connection_current_step' => 'smoke_test',
+            'connection_last_verified_at' => '',
         ];
     }
 
@@ -157,7 +159,10 @@ lcfa_assert_false(isset($session['session_token']), 'session option should not s
 
 $validated = LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'read');
 lcfa_assert_true(is_array($validated), 'session token should validate for read scope');
-lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'write'), 'default session token should not validate for write scope');
+lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'write'), 'default session token should validate for write scope');
+lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'valid session usage should mark the connection ready');
+lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_current_step'] ?? '', 'valid session usage should move the connection to ready');
+lcfa_assert_same('ai-bridge-session', $GLOBALS['lcfa_test_connections']['connection_strategy'] ?? '', 'valid session usage should store the secure strategy');
 
 $second_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $pairing['pairing_id'], (string) $pairing['device_secret']);
 lcfa_assert_same('consumed', $second_status['status'] ?? '', 'pairing status should not return the session token twice');
@@ -165,5 +170,17 @@ lcfa_assert_same('consumed', $second_status['status'] ?? '', 'pairing status sho
 $revoke = LCFA_MCP_Session_Manager::revoke_session((string) ($validated['session_id'] ?? ''));
 lcfa_assert_true(!empty($revoke['ok']), 'session revoke should succeed');
 lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'read'), 'revoked session token should not validate');
+
+$read_only_pairing = LCFA_MCP_Session_Manager::start_pairing([
+    'client' => 'codex',
+    'project_label' => 'Read Only',
+    'site_fingerprint' => 'site-fp',
+    'scopes' => ['read', 'preview'],
+]);
+$read_only_approve = LCFA_MCP_Session_Manager::approve_pairing((string) $read_only_pairing['pairing_id']);
+lcfa_assert_true(!empty($read_only_approve['ok']), 'read-only pairing approval should create a session');
+$read_only_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $read_only_pairing['pairing_id'], (string) $read_only_pairing['device_secret']);
+lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'preview'), 'read-only session should validate for preview scope');
+lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'write'), 'explicit read-only session should not validate for write scope');
 
 echo "PASS\n";

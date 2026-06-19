@@ -26,6 +26,12 @@ npx -y @livecanvas/ai-bridge-mcp@latest
 
 On first use, the MCP asks WordPress for a short-lived pairing request. Approve the pending Codex session in `AI Bridge > Connections`; the MCP receives a plugin-scoped session token once and caches it locally with restricted file permissions.
 
+By default the pairing requests `read`, `preview`, and `write` scopes, because AI Bridge exposes curated write tools only after WordPress admin approval and the plugin write policy allowlist. To force a read/preview-only session, set:
+
+```bash
+LCFA_PAIRING_SCOPES="read,preview"
+```
+
 Legacy/local runtime:
 
 ```bash

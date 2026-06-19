@@ -49,7 +49,7 @@ class SessionAuth {
       client: this.config.agent || 'codex',
       project_label: this.config.projectLabel || 'Codex project',
       site_fingerprint: this.config.siteFingerprint || '',
-      scopes: ['read', 'preview']
+      scopes: normalizePairingScopes(this.config.pairingScopes)
     })
 
     if (!response.ok) {
@@ -225,6 +225,21 @@ function isExpired(value) {
   return Number.isFinite(timestamp) && timestamp <= Date.now()
 }
 
+function normalizePairingScopes(value) {
+  const allowed = new Set(['read', 'preview', 'write'])
+  const scopes = String(value || 'read,preview,write')
+    .split(',')
+    .map((scope) => scope.trim().toLowerCase())
+    .filter((scope) => allowed.has(scope))
+
+  if (!scopes.includes('read')) {
+    scopes.unshift('read')
+  }
+
+  return Array.from(new Set(scopes))
+}
+
 module.exports = {
-  SessionAuth
+  SessionAuth,
+  normalizePairingScopes
 }

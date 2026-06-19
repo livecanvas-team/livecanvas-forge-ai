@@ -45,7 +45,7 @@ sort($root_entries);
 
 package_assert_same(['livecanvas-forge-ai'], $root_entries, 'distribution zip should expose a single top-level plugin directory');
 package_assert_true(in_array('livecanvas-forge-ai/livecanvas-forge-ai.php', $entries, true), 'distribution zip should include the main plugin file inside the plugin directory');
-package_assert_true(strpos($plugin_bootstrap, 'Update URI: https://github.com/livecanvas-team/livecanvas-forge-ai') !== false, 'distribution zip should preserve the GitHub Update URI header');
+package_assert_true(strpos($plugin_bootstrap, 'Update URI: https://livecanvas.com/ai-bridge') !== false, 'distribution zip should preserve the LiveCanvas Update URI header');
 package_assert_true(!in_array('livecanvas-forge-ai.php', $entries, true), 'distribution zip should not leak the plugin bootstrap at the archive root');
 package_assert_true(!in_array('.git/', $entries, true), 'distribution zip should not include git metadata');
 package_assert_true(!in_array('.claude/', $entries, true), 'distribution zip should not include local assistant metadata');

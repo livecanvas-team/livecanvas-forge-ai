@@ -191,6 +191,94 @@ guardrail: read_only_first
 
 Use the global Codex MCP entry only as an advanced fallback. A global `~/.codex/config.toml` entry is convenient, but it is easier to point the wrong Codex project at the wrong WordPress site.
 
+## Re-Pair Codex And Verify Write Authorization
+
+Use this procedure when Codex was previously connected in read-only mode, when a session looks stale, or when you need to re-check that the current Codex project is authorized for the right WordPress site.
+
+### 1. Revoke The Old Session
+
+Open:
+
+```text
+WordPress Admin > AI Bridge > Connections > Secure Codex pairing sessions
+```
+
+or go directly to:
+
+```text
+/wp-admin/admin.php?page=lcfa-dashboard&tab=connections#lcfa-secure-codex-pairing-sessions
+```
+
+Find the active Codex session for the project you are using and click `Revoke`.
+
+### 2. Clear The Local AI Bridge Session Cache
+
+In the Codex project chat, ask Codex:
+
+```text
+Clear only the LiveCanvas AI Bridge cached session for this WordPress site from ~/.livecanvas-ai-bridge, then stop. Do not edit project files or WordPress files.
+```
+
+If Codex cannot identify the exact cache file, use:
+
+```text
+Delete the local ~/.livecanvas-ai-bridge cache folder, then stop. Do not edit project files or WordPress files.
+```
+
+The cache stores plugin-scoped AI Bridge session tokens only. It does not store a WordPress Application Password.
+
+### 3. Reload The MCP Server
+
+Reload the `livecanvas-ai-bridge` MCP server in Codex, or restart Codex.
+
+Then ask Codex:
+
+```text
+Call livecanvas-forge-ai/get-connection-handoff with {"limit":5}. If pairing is pending, show me the user code and verification URL. Do not modify the site.
+```
+
+### 4. Approve The New Pairing
+
+Return to:
+
+```text
+WordPress Admin > AI Bridge > Connections > Secure Codex pairing sessions
+```
+
+Approve only the pending request whose user code matches the code shown by Codex.
+
+### 5. Verify Authorization
+
+After approval, ask Codex:
+
+```text
+Retry livecanvas-forge-ai/get-connection-handoff and call livecanvas-forge-ai/get-ability-diagnostics. Report auth_method, session scopes, public write abilities, write allowlist, and connection status. Do not modify content.
+```
+
+Expected result for a write-capable project:
+
+```text
+auth_method: ai_bridge_session
+scopes: read, preview, write
+connection status: ready
+public write abilities: at least apply-page-upsert when the write policy allows it
+```
+
+If the result is still:
+
+```text
+scopes: read, preview
+public write abilities: 0
+```
+
+then the session is still preview-only. Review `Connections > Advanced settings`, enable `Expose curated write abilities through the AI Bridge MCP server`, select the required write abilities in the allowlist, save, revoke the old session, and pair again.
+
+The current MCP package requests `read, preview, write` by default. To force a read/preview-only Codex session, add this environment variable to the MCP config before pairing:
+
+```text
+LCFA_PAIRING_SCOPES="read,preview"
+```
+
 ## How To Test This Build
 
 1. Activate the plugin and open `WordPress Admin > AI Bridge > AI Studio`.

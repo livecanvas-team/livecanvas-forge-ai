@@ -4,8 +4,12 @@ const os = require('node:os')
 const path = require('node:path')
 const fs = require('node:fs')
 const { WPClient } = require('../src/wp-client')
+const { normalizePairingScopes } = require('../src/session-auth')
 
 async function main() {
+  assert.deepStrictEqual(normalizePairingScopes('read,preview'), ['read', 'preview'], 'pairing scopes should support read-only override')
+  assert.deepStrictEqual(normalizePairingScopes('preview,write'), ['read', 'preview', 'write'], 'pairing scopes should always include read')
+
   const requests = []
   let approved = false
 
@@ -23,6 +27,8 @@ async function main() {
       })
 
       if (req.url === '/wp-json/lcfa/v1/mcp/pairing/start' && req.method === 'POST') {
+        const payload = JSON.parse(body || '{}')
+        assert.deepStrictEqual(payload.scopes, ['read', 'preview', 'write'], 'default pairing should request read, preview, and write scopes')
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true,

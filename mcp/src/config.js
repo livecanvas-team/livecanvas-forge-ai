@@ -6,6 +6,7 @@ const DEFAULTS = {
   siteFingerprint: '',
   token: '',
   sessionToken: '',
+  pairingScopes: 'read,preview,write',
   projectLabel: '',
   wpRoot: '',
   host: '127.0.0.1',
@@ -25,6 +26,7 @@ function loadConfig(argv = []) {
     siteFingerprint: process.env.LCFA_SITE_FINGERPRINT || DEFAULTS.siteFingerprint,
     token: process.env.LCFA_MCP_TOKEN || DEFAULTS.token,
     sessionToken: process.env.LCFA_MCP_SESSION || process.env.LCFA_MCP_SESSION_TOKEN || DEFAULTS.sessionToken,
+    pairingScopes: process.env.LCFA_PAIRING_SCOPES || DEFAULTS.pairingScopes,
     projectLabel: process.env.LCFA_PROJECT_LABEL || DEFAULTS.projectLabel,
     wpRoot: process.env.LCFA_WP_ROOT || DEFAULTS.wpRoot,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
@@ -72,6 +74,9 @@ function loadConfig(argv = []) {
       case 'session':
       case 'session-token':
         config.sessionToken = value || config.sessionToken
+        break
+      case 'pairing-scopes':
+        config.pairingScopes = value || config.pairingScopes
         break
       case 'project-label':
         config.projectLabel = value || config.projectLabel

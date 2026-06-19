@@ -193,6 +193,7 @@ final class LCFA_Settings {
             'power_mode'                  => 'auto',
             'connection_status'           => '',
             'connection_mode'             => '',
+            'connection_strategy'         => '',
             'connection_last_verified_at' => '',
             'connection_last_error'       => '',
             'connection_last_bundle_hash' => '',
@@ -291,6 +292,7 @@ final class LCFA_Settings {
             'power_mode'                  => self::sanitize_power_mode((string) ($connections['power_mode'] ?? ($current['power_mode'] ?? 'auto'))),
             'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
             'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
+            'connection_strategy'         => self::sanitize_connection_strategy((string) ($connections['connection_strategy'] ?? ($current['connection_strategy'] ?? ''))),
             'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
             'connection_last_error'       => sanitize_text_field($connections['connection_last_error'] ?? ''),
             'connection_last_bundle_hash' => sanitize_text_field($connections['connection_last_bundle_hash'] ?? ''),
@@ -305,6 +307,12 @@ final class LCFA_Settings {
         $scope = sanitize_key($scope);
 
         return in_array($scope, ['project', 'global'], true) ? $scope : 'project';
+    }
+
+    public static function sanitize_connection_strategy(string $strategy): string {
+        $strategy = sanitize_key($strategy);
+
+        return in_array($strategy, ['ai-bridge-session', 'remote-mcp-adapter', 'wordpress-mcp-adapter', 'remote-rest', 'local-mcp-bridge'], true) ? $strategy : '';
     }
 
     public static function get_site_fingerprint(): string {
