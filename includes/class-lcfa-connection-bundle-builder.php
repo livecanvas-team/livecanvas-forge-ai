@@ -34,7 +34,7 @@ final class LCFA_Connection_Bundle_Builder {
             'shortcut_title'      => $shortcut['title'],
             'shortcut_command'    => $shortcut['command'],
             'codex_config_snippet' => $codex_config_snippet,
-            'codex_project_config_path' => $client === 'codex' ? ($workspace_root !== '' ? $workspace_root . '/.codex/config.toml' : '.codex/config.toml') : '',
+            'codex_project_config_path' => $client === 'codex' ? ($mode === 'local' && $workspace_root !== '' ? $workspace_root . '/.codex/config.toml' : '.codex/config.toml') : '',
             'environment'         => $environment,
             'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment),
             'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment),

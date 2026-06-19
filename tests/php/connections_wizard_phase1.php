@@ -713,6 +713,8 @@ $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance,
     'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
     'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
     'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+    'codex_config_snippet' => "[mcp_servers.livecanvas-forge]\ncommand = \"npx\"\nargs = [\"-y\", \"@automattic/mcp-wordpress-remote@latest\"]\n\n[mcp_servers.livecanvas-forge.env]\nWP_API_URL = \"https://remote.example/wp-json/livecanvas-forge-ai/mcp\"",
+    'codex_project_config_path' => '.codex/config.toml',
 ], 'remote', []);
 lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
 lcfa_assert_same('run_smoke', $complete_remote_state['primary_action'] ?? '', 'remote Codex should move directly to smoke test after shortcut generation');
@@ -783,10 +785,12 @@ $codex_fast_path_panel_method->invoke(
         'client'              => 'codex',
         'mode'                => 'remote',
         'connection_strategy' => 'remote-mcp-adapter',
-        'workspace_root'      => '',
+        'workspace_root'      => '/var/www/example.com',
         'copy_command_string' => "codex mcp add livecanvas-forge --env WP_API_URL='https://remote.example/wp-json/livecanvas-forge-ai/mcp' -- 'npx' '-y' '@automattic/mcp-wordpress-remote@latest'",
         'command_string'      => 'npx -y @automattic/mcp-wordpress-remote@latest',
         'agent_start_tool'    => 'livecanvas-forge-ai/get-connection-handoff',
+        'codex_config_snippet' => "[mcp_servers.livecanvas-forge]\ncommand = \"npx\"\nargs = [\"-y\", \"@automattic/mcp-wordpress-remote@latest\"]\n\n[mcp_servers.livecanvas-forge.env]\nWP_API_URL = \"https://remote.example/wp-json/livecanvas-forge-ai/mcp\"",
+        'codex_project_config_path' => '.codex/config.toml',
     ],
     [
         'remote_site_url'             => 'https://remote.example',
@@ -804,6 +808,9 @@ $codex_fast_path_panel_method->invoke(
 $codex_restart_markup = (string) ob_get_clean();
 lcfa_assert_true(strpos($codex_restart_markup, 'Reload Codex, then test') !== false, 'remote Codex restart state should say exactly what to do next');
 lcfa_assert_true(strpos($codex_restart_markup, 'Codex setup command') !== false, 'remote Codex restart state should expose the setup command as the only necessary manual block');
+lcfa_assert_true(strpos($codex_restart_markup, 'Copy Codex setup prompt') !== false, 'remote Codex setup should provide a single copy-ready prompt for Codex');
+lcfa_assert_true(strpos($codex_restart_markup, 'Create or update `.codex/config.toml`') !== false, 'remote Codex setup prompt should tell Codex to write the local project config');
+lcfa_assert_true(strpos($codex_restart_markup, '/var/www/example.com/.codex/config.toml') === false, 'remote Codex setup should not show the remote server path as the Codex project config');
 lcfa_assert_true(strpos($codex_restart_markup, 'livecanvas-forge-ai/get-connection-handoff') !== false, 'remote Codex restart fallback should still show the first handoff tool');
 
 ob_start();
