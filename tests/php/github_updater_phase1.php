@@ -121,6 +121,10 @@ function plugin_basename(string $file): string {
     return 'livecanvas-forge-ai/livecanvas-forge-ai.php';
 }
 
+function plugins_url(string $path = '', string $plugin = ''): string {
+    return 'https://example.test/wp-content/plugins/livecanvas-forge-ai/' . ltrim($path, '/');
+}
+
 function esc_html(string $value): string {
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
@@ -209,11 +213,13 @@ lcfa_updater_assert_true(is_object($update), 'licensed newer release should prod
 lcfa_updater_assert_same('0.1.8', $update->version ?? '', 'update object should expose the core-required version field');
 lcfa_updater_assert_same('0.1.8', $update->new_version ?? '', 'update object should expose the newer version');
 lcfa_updater_assert_same('https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/download?token=signed-v0.1.8', $update->package ?? '', 'update package should point to the signed LiveCanvas package URL');
+lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon.svg', $update->icons['svg'] ?? '', 'update object should expose the AI Bridge SVG icon');
 lcfa_updater_assert_same(21600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_livecanvas_update_release'] ?? 0, 'available updates should use the long LiveCanvas cache TTL');
 
 $info = $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'livecanvas-forge-ai']);
 lcfa_updater_assert_true(is_object($info), 'plugins_api should return details for the AI Bridge slug');
 lcfa_updater_assert_same('0.1.8', $info->version ?? '', 'plugins_api details should use the latest release version');
+lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon.svg', $info->icons['svg'] ?? '', 'plugins_api details should expose the AI Bridge SVG icon');
 lcfa_updater_assert_same(false, $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'other-plugin']), 'plugins_api should ignore other slugs');
 
 lcfa_updater_reset(lcfa_updater_release('v0.1.7'), 'valid-api-key', true);

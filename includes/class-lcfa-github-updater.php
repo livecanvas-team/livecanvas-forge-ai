@@ -113,6 +113,7 @@ final class LCFA_GitHub_Updater {
             'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
             'download_link' => (string) ($release['download_url'] ?? ''),
             'last_updated'  => (string) ($release['published_at'] ?? ''),
+            'icons'         => $this->get_plugin_icons(),
             'sections'      => [
                 'description' => 'AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.',
                 'changelog'   => $this->format_release_notes((string) ($release['body'] ?? '')),
@@ -141,9 +142,27 @@ final class LCFA_GitHub_Updater {
             'tested'        => (string) ($release['tested'] ?? ''),
             'requires'      => (string) ($release['requires'] ?? '6.0'),
             'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
-            'icons'         => [],
+            'icons'         => $this->get_plugin_icons(),
             'banners'       => [],
             'compatibility' => new stdClass(),
+        ];
+    }
+
+    private function get_plugin_icons(): array {
+        $icon_url = '';
+        if (function_exists('plugins_url') && defined('LCFA_FILE')) {
+            $icon_url = plugins_url('assets/plugin-icon.svg', LCFA_FILE);
+        } elseif (defined('LCFA_URL')) {
+            $icon_url = rtrim((string) LCFA_URL, '/') . '/assets/plugin-icon.svg';
+        }
+
+        if ($icon_url === '') {
+            return [];
+        }
+
+        return [
+            'svg'     => $icon_url,
+            'default' => $icon_url,
         ];
     }
 
