@@ -156,6 +156,26 @@ The GitHub fallback requires:
 
 If GitHub returns `404` for unauthenticated requests, the repository is still private or not publicly reachable and WordPress sites cannot use the fallback.
 
+### Minimal Update Release Checklist
+
+Before publishing a release:
+
+- bump `Version` and `LCFA_VERSION` in `livecanvas-forge-ai.php`;
+- run `bash scripts/build-dist.sh`;
+- run `php tests/php/github_updater_phase1.php`;
+- run `php tests/php/package_dist_phase1.php`;
+- create a stable GitHub release tag, for example `v0.1.16`;
+- upload the asset as exactly `livecanvas-forge-ai.zip`;
+- confirm the latest GitHub release is public and not marked as draft or prerelease;
+- on a licensed WordPress site with an older AI Bridge version, click `Dashboard > Updates > Check again`.
+
+Expected result:
+
+```text
+LiveCanvas AI Bridge update available
+package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/vX.Y.Z/livecanvas-forge-ai.zip
+```
+
 ## Quick Start
 
 1. Activate the plugin.
@@ -211,6 +231,20 @@ guardrail: read_only_first
 ```
 
 Use the global Codex MCP entry only as an advanced fallback. A global `~/.codex/config.toml` entry is convenient, but it is easier to point the wrong Codex project at the wrong WordPress site.
+
+### Minimal Codex Connection Checklist
+
+Use this checklist before allowing write requests:
+
+- open `WordPress Admin > AI Bridge > Connections`;
+- copy the `Prompt for Codex` from the correct WordPress site;
+- apply the generated Project TOML to that Codex project's `.codex/config.toml`;
+- restart Codex or reload the `livecanvas-ai-bridge` MCP server;
+- ask Codex to call `get_connection_handoff`;
+- approve the pending pairing request in WordPress;
+- call `get_connection_handoff` again;
+- verify `site_identity.site_url`, `site_identity.fingerprint`, `auth_method`, and `scopes`;
+- run a preview or `dry_run: true` before any apply command.
 
 ## Domain Changes And Staging To Production Migrations
 

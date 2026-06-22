@@ -79,3 +79,16 @@ When using the fallback path:
 3. The release tag must be a stable semantic version, for example `v0.1.16`.
 4. The release must include an uploaded asset named exactly `livecanvas-forge-ai.zip`.
 5. The plugin inside the zip must have the same version as the release tag.
+
+## Minimal Release Checklist
+
+1. Bump `Version` and `LCFA_VERSION` in `livecanvas-forge-ai.php`.
+2. Run `bash scripts/build-dist.sh`.
+3. Run `php tests/php/github_updater_phase1.php`.
+4. Run `php tests/php/package_dist_phase1.php`.
+5. Commit and push the release changes.
+6. Create a stable GitHub release tag such as `v0.1.16`.
+7. Upload `dist/livecanvas-forge-ai.zip` as `livecanvas-forge-ai.zip`.
+8. Confirm the latest release API returns the new tag and asset.
+9. On a licensed WordPress site with an older AI Bridge version, force `Dashboard > Updates > Check again`.
+10. Confirm WordPress receives an update package URL for the new release.
