@@ -149,20 +149,25 @@ final class LCFA_GitHub_Updater {
     }
 
     private function get_plugin_icons(): array {
-        $icon_url = '';
+        $icon_128 = '';
+        $icon_256 = '';
         if (function_exists('plugins_url') && defined('LCFA_FILE')) {
-            $icon_url = plugins_url('assets/plugin-icon.svg', LCFA_FILE);
+            $icon_128 = plugins_url('assets/plugin-icon-128.png', LCFA_FILE);
+            $icon_256 = plugins_url('assets/plugin-icon-256.png', LCFA_FILE);
         } elseif (defined('LCFA_URL')) {
-            $icon_url = rtrim((string) LCFA_URL, '/') . '/assets/plugin-icon.svg';
+            $base_url = rtrim((string) LCFA_URL, '/');
+            $icon_128 = $base_url . '/assets/plugin-icon-128.png';
+            $icon_256 = $base_url . '/assets/plugin-icon-256.png';
         }
 
-        if ($icon_url === '') {
+        if ($icon_128 === '' || $icon_256 === '') {
             return [];
         }
 
         return [
-            'svg'     => $icon_url,
-            'default' => $icon_url,
+            '1x'      => $icon_128,
+            '2x'      => $icon_256,
+            'default' => $icon_256,
         ];
     }
 
