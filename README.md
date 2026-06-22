@@ -8,6 +8,8 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 Status: `alpha`
 
+Alpha / not production guaranteed: this repository is public for early testing and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use staging sites, backups, previews, and `dry_run` checks before applying agent-generated changes.
+
 Usable today:
 
 - connect coding agents through the local MCP bridge or REST contract
