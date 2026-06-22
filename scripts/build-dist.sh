@@ -33,6 +33,7 @@ find "${PACKAGE_DIR}" \
   -delete
 
 rm -rf \
+  "${PACKAGE_DIR}/mcp/node_modules" \
   "${PACKAGE_DIR}/mcp/tests" \
   "${PACKAGE_DIR}/mcp/.DS_Store"
 

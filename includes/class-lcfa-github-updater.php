@@ -11,7 +11,7 @@ final class LCFA_GitHub_Updater {
     private const CACHE_KEY = 'lcfa_livecanvas_update_release';
     private const CACHE_TTL = 21600;
     private const NO_UPDATE_CACHE_TTL = 600;
-    private const CACHE_SCHEMA = 3;
+    private const CACHE_SCHEMA = 4;
 
     private ?LCFA_Environment $environment;
 
@@ -53,6 +53,7 @@ final class LCFA_GitHub_Updater {
         $state['release_url'] = (string) ($release['release_url'] ?? '');
         $state['update_available'] = $this->is_version_newer($state['latest_version']);
         $state['message'] = (string) ($release['message'] ?? '');
+        $state['source'] = (string) ($release['source'] ?? $state['source']);
 
         return $state;
     }
@@ -153,7 +154,7 @@ final class LCFA_GitHub_Updater {
         }
 
         $release = $this->request_livecanvas_release();
-        if (!empty($release['ok']) || !$this->allow_github_fallback()) {
+        if (!empty($release['ok']) || !$this->allow_github_fallback($release)) {
             return $this->cache_release_result($release);
         }
 
@@ -314,6 +315,7 @@ final class LCFA_GitHub_Updater {
             'tested'       => (string) ($payload['tested'] ?? ''),
             'requires_php' => (string) ($payload['requires_php'] ?? '7.4'),
             'message'      => (string) ($payload['message'] ?? ''),
+            'source'       => 'livecanvas_license_endpoint',
         ];
     }
 
@@ -359,6 +361,7 @@ final class LCFA_GitHub_Updater {
             'release_url'  => (string) ($payload['html_url'] ?? self::UPDATE_URI),
             'published_at' => (string) ($payload['published_at'] ?? ''),
             'body'         => (string) ($payload['body'] ?? ''),
+            'source'       => 'github_release',
         ];
     }
 
@@ -407,11 +410,20 @@ final class LCFA_GitHub_Updater {
         ];
     }
 
-    private function allow_github_fallback(): bool {
-        $allowed = defined('LCFA_ALLOW_GITHUB_UPDATE_FALLBACK') && LCFA_ALLOW_GITHUB_UPDATE_FALLBACK;
+    private function allow_github_fallback(array $livecanvas_result = []): bool {
+        if (($livecanvas_result['code'] ?? '') === 'license_rejected') {
+            return false;
+        }
+
+        $allowed = true;
+        if (defined('LCFA_DISABLE_GITHUB_UPDATE_FALLBACK') && LCFA_DISABLE_GITHUB_UPDATE_FALLBACK) {
+            $allowed = false;
+        } elseif (defined('LCFA_ALLOW_GITHUB_UPDATE_FALLBACK')) {
+            $allowed = (bool) LCFA_ALLOW_GITHUB_UPDATE_FALLBACK;
+        }
 
         if (function_exists('apply_filters')) {
-            $allowed = (bool) apply_filters('lcfa_allow_github_update_fallback', $allowed);
+            $allowed = (bool) apply_filters('lcfa_allow_github_update_fallback', $allowed, $livecanvas_result);
         }
 
         return $allowed;

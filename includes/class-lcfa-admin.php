@@ -2233,9 +2233,17 @@ final class LCFA_Admin {
         }
 
         if (!empty($updates['update_available'])) {
+            $source = sanitize_key((string) ($updates['source'] ?? ''));
+            $source_label = $source === 'github_release'
+                ? __('GitHub release fallback', 'livecanvas-forge-ai')
+                : __('LiveCanvas update endpoint', 'livecanvas-forge-ai');
             echo '<div class="notice notice-info inline lcfa-update-notice"><p>';
             echo '<strong>' . esc_html__('AI Bridge update available.', 'livecanvas-forge-ai') . '</strong> ';
-            echo esc_html__('Open the WordPress Plugins screen to install the latest licensed LiveCanvas release.', 'livecanvas-forge-ai');
+            echo esc_html(sprintf(
+                /* translators: %s: update source label. */
+                __('Open the WordPress Plugins screen to install the latest licensed LiveCanvas release. Source: %s.', 'livecanvas-forge-ai'),
+                $source_label
+            ));
             echo '</p></div>';
         }
     }

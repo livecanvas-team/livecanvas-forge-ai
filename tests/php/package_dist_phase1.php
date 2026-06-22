@@ -52,5 +52,9 @@ package_assert_true(!in_array('.claude/', $entries, true), 'distribution zip sho
 package_assert_true(!in_array('tests/', $entries, true), 'distribution zip should not expose tests at the archive root');
 package_assert_true(!in_array('livecanvas-forge-ai/tests/', $entries, true), 'distribution zip should not include tests inside the plugin package');
 package_assert_true(!in_array('livecanvas-forge-ai/docs/', $entries, true), 'distribution zip should not include internal docs inside the plugin package');
+foreach ($entries as $entry) {
+    package_assert_true(strpos((string) $entry, 'livecanvas-forge-ai/mcp/node_modules/') !== 0, 'distribution zip should not include bundled MCP node_modules');
+    package_assert_true(substr((string) $entry, -9) !== '.DS_Store', 'distribution zip should not include macOS metadata files');
+}
 
 echo "PASS\n";

@@ -2,7 +2,7 @@
 
 ## Goal
 
-LiveCanvas AI Bridge updates should be delivered through a LiveCanvas-controlled endpoint, not through public GitHub release metadata. The plugin remains license-gated locally and the LiveCanvas server verifies the same license before returning update metadata.
+LiveCanvas AI Bridge updates are license-gated locally. The preferred delivery path is a LiveCanvas-controlled endpoint; while that endpoint is unavailable, the plugin may fall back to public GitHub release metadata after confirming that LiveCanvas is active and licensed on the local WordPress site.
 
 ## Client Request
 
@@ -43,7 +43,7 @@ The license is sent in the HTTPS POST body, never in the update metadata URL. Th
 }
 ```
 
-`download_url` should be a short-lived signed URL. It can proxy a private GitHub release asset, S3 object, or other private storage, but it must not require WordPress to send custom headers during the core plugin install flow.
+`download_url` should be a short-lived signed URL when served by LiveCanvas. It can proxy a private GitHub release asset, S3 object, or other private storage, but it must not require WordPress to send custom headers during the core plugin install flow.
 
 ## Failure Response
 
@@ -62,6 +62,20 @@ Use `200` with `ok: false` for no update available only if the server wants to r
 ## Client Behavior
 
 - Auto updates are checked only when LiveCanvas is active and `lc_get_apikey()` or `get_site_option("lc_apikey")` returns a non-empty value.
+- The LiveCanvas endpoint is tried first.
+- If the LiveCanvas endpoint is unavailable and the license was not rejected, the client falls back to the public GitHub latest release API.
+- GitHub fallback accepts only stable tags like `v0.1.16` and the exact asset name `livecanvas-forge-ai.zip`.
+- GitHub fallback does not run when the LiveCanvas endpoint returns `401` or `403`.
 - Successful metadata is cached for 6 hours when an update is available.
 - No-update and error metadata is cached for 10 minutes.
-- GitHub fallback is disabled by default and is only available for development via `LCFA_ALLOW_GITHUB_UPDATE_FALLBACK` or the `lcfa_allow_github_update_fallback` filter.
+- GitHub fallback can be disabled with `LCFA_DISABLE_GITHUB_UPDATE_FALLBACK` or overridden with the `lcfa_allow_github_update_fallback` filter.
+
+## Public GitHub Release Requirements
+
+When using the fallback path:
+
+1. The repository must be publicly reachable without GitHub authentication.
+2. The latest release must not be a draft or prerelease.
+3. The release tag must be a stable semantic version, for example `v0.1.16`.
+4. The release must include an uploaded asset named exactly `livecanvas-forge-ai.zip`.
+5. The plugin inside the zip must have the same version as the release tag.

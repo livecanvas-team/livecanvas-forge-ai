@@ -135,6 +135,27 @@ WordPress Admin > AI Bridge
 
 If LiveCanvas is active, AI Bridge also appears inside the LiveCanvas admin area.
 
+## Updates
+
+AI Bridge uses the native WordPress plugin update flow.
+
+Updates are shown only when:
+
+- LiveCanvas is installed and active;
+- `lc_get_apikey()` or `get_site_option('lc_apikey')` returns a non-empty LiveCanvas API key;
+- update metadata reports a stable version newer than the installed plugin.
+
+The updater tries the LiveCanvas licensed update endpoint first. If that endpoint is unavailable and the local LiveCanvas license check passed, AI Bridge falls back to the public GitHub latest release API.
+
+The GitHub fallback requires:
+
+- a public repository;
+- a stable latest release tag such as `v0.1.16`;
+- an uploaded asset named exactly `livecanvas-forge-ai.zip`;
+- a plugin version inside the zip that matches the release version.
+
+If GitHub returns `404` for unauthenticated requests, the repository is still private or not publicly reachable and WordPress sites cannot use the fallback.
+
 ## Quick Start
 
 1. Activate the plugin.
@@ -190,6 +211,47 @@ guardrail: read_only_first
 ```
 
 Use the global Codex MCP entry only as an advanced fallback. A global `~/.codex/config.toml` entry is convenient, but it is easier to point the wrong Codex project at the wrong WordPress site.
+
+## Domain Changes And Staging To Production Migrations
+
+Treat a WordPress domain change as a new AI Bridge target. This is especially important after moving a site from staging to production, for example from:
+
+```text
+https://beta.example.com/
+```
+
+to:
+
+```text
+https://example.com/
+```
+
+Do not keep using the old Codex pairing session just because the `Connections` panel still says `Ready`. After a migration, the connection is stale if the generated Codex prompt, Project TOML, session label, or advanced remote target still contains the old staging URL.
+
+Recommended procedure:
+
+1. Open the production WordPress admin.
+2. Go to `AI Bridge > Connections`.
+3. Confirm that the dashboard header shows the production domain.
+4. Open `Advanced settings`.
+5. Update `Remote site URL` to the production URL.
+6. Save the settings.
+7. Revoke any active Codex sessions whose label or project still references the staging domain.
+8. Copy the new `Prompt for Codex` from the production site.
+9. Confirm the prompt contains the production URL and does not contain the old staging URL.
+10. Apply the new Project TOML to the correct Codex project `.codex/config.toml`.
+11. Restart Codex or reload the `livecanvas-ai-bridge` MCP server.
+12. Ask Codex to call `get_connection_handoff` and verify `site_identity.site_url` and `site_identity.fingerprint`.
+13. Approve the new pairing request in the production WordPress admin.
+14. Start with a read-only check or preview before allowing writes.
+
+Use this first test prompt:
+
+```text
+Call get_connection_handoff with {"limit":5}. Verify that site_identity.site_url is https://example.com/ and report the fingerprint, status, scopes, and public write abilities. Do not modify content.
+```
+
+If the handoff still reports the staging URL, stop and fix `.codex/config.toml` before running any preview or apply command.
 
 ## Re-Pair Codex And Verify Write Authorization
 

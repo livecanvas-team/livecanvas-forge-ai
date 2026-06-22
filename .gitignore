@@ -1,0 +1,14 @@
+.DS_Store
+*.log
+.env
+.env.*
+
+.claude/
+.agents/
+.codex/
+test-results/
+
+mcp/node_modules/
+mcp/.npmrc
+
+dist/.stage/
