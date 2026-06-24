@@ -1,4 +1,4 @@
-function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null) {
+function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null) {
   const tools = [
     {
       name: 'get_snapshot',
@@ -269,6 +269,159 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
         }
       },
       invoke: async (argumentsMap = {}) => client.applyNativePatternPage(argumentsMap)
+    },
+    {
+      name: 'content_patch_preview',
+      description: 'Preview a targeted text, selector, attribute, append, prepend, or LiveCanvas section patch. Fails when a selector is missing or ambiguous instead of rewriting the full document.',
+      inputSchema: contentPatchSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.previewContentPatch(argumentsMap)
+    },
+    {
+      name: 'content_patch_apply',
+      description: 'Apply a targeted content patch after preview. Creates audit/rollback metadata through the WordPress plugin.',
+      inputSchema: contentPatchSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.applyContentPatch(argumentsMap)
+    },
+    {
+      name: 'theme_file_read',
+      description: 'Read an allowed active theme file through the remote WordPress/PHP bridge.',
+      inputSchema: themeFileReadSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.remoteThemeFileRead(argumentsMap)
+    },
+    {
+      name: 'theme_file_preview_write',
+      description: 'Preview an allowed child-theme file write through the remote WordPress/PHP bridge without writing.',
+      inputSchema: themeFileWriteSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.remoteThemeFilePreviewWrite(argumentsMap)
+    },
+    {
+      name: 'theme_file_write',
+      description: 'Write an allowed child-theme file through the remote WordPress/PHP bridge with automatic backup protection.',
+      inputSchema: themeFileWriteSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.remoteThemeFileWrite(argumentsMap)
+    },
+    {
+      name: 'theme_file_backups',
+      description: 'List recent remote theme-file backups captured by AI Bridge.',
+      inputSchema: themeBackupListSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.remoteThemeFileBackups(argumentsMap)
+    },
+    {
+      name: 'theme_file_restore',
+      description: 'Restore a remote theme-file backup through the WordPress/PHP bridge.',
+      inputSchema: themeBackupRestoreSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.remoteThemeFileRestore(argumentsMap)
+    },
+    {
+      name: 'media_upload',
+      description: 'Upload URL or base64 media to the WordPress Media Library, with alt/title/caption and optional featured image.',
+      inputSchema: mediaUploadSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.uploadMedia(argumentsMap)
+    },
+    {
+      name: 'media_replace',
+      description: 'Replace a media URL inside LiveCanvas content through an audited content update.',
+      inputSchema: mediaReplaceSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.replaceMedia(argumentsMap)
+    },
+    {
+      name: 'picostrap_compile_preview',
+      description: 'Read Picostrap compile manifest and optional SCSS source before compiling.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          import_path: { type: 'string' },
+          source_path: { type: 'string' }
+        }
+      },
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.previewPicostrapCompile(argumentsMap)
+    },
+    {
+      name: 'picostrap_compile_apply',
+      description: 'Compile and store the Picostrap bundle through the local MCP runtime, or store provided compiled_css.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          compiled_css: { type: 'string' },
+          css: { type: 'string' },
+          force: { type: 'boolean' },
+          label: { type: 'string' }
+        }
+      },
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => {
+        if (argumentsMap.compiled_css || argumentsMap.css) {
+          return client.applyPicostrapCompile(argumentsMap)
+        }
+        if (!picostrapCompiler) {
+          throw new Error('Picostrap compiler is not available in this MCP runtime.')
+        }
+        return picostrapCompiler.buildBundle(argumentsMap)
+      }
+    },
+    {
+      name: 'wp_debug',
+      description: 'Read WordPress/PHP debug context, active plugins, theme status, recent debug.log lines, and recent AI Bridge runs.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', minimum: 10, maximum: 300 }
+        }
+      },
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.getDebugSnapshot(argumentsMap)
+    },
+    {
+      name: 'cache_flush',
+      description: 'Flush WordPress object cache, common cache plugins, opcache when available, and bump the AI Bridge asset version.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dry_run: { type: 'boolean' }
+        }
+      },
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.flushCache(argumentsMap)
+    },
+    {
+      name: 'polylang_tools',
+      description: 'Read or update Polylang language relationships when Polylang is active; returns unavailable when absent.',
+      inputSchema: polylangToolsSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.runPolylangTool(argumentsMap)
+    },
+    {
+      name: 'seo_tools',
+      description: 'Read or update SEOPress title, description, canonical, and social image metadata when SEOPress is active.',
+      inputSchema: seoToolsSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => client.runSeoTool(argumentsMap)
+    },
+    {
+      name: 'visual_check',
+      description: 'Run a local browser visual check with desktop/mobile screenshots, overflow checks, and optional computed style snapshots for selectors.',
+      inputSchema: visualCheckSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => {
+        if (!visualCheck) {
+          return {
+            ok: false,
+            status: 'visual_check_unavailable',
+            message: 'The visual check runtime was not initialized.'
+          }
+        }
+        return visualCheck.run(argumentsMap)
+      }
     },
     {
       name: 'suggest_lc_command',
@@ -829,10 +982,15 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
 
   return {
     list() {
-      return tools.map(({ name, description, inputSchema }) => ({
+      return tools.map(({ name, description, inputSchema, outputSchema }) => ({
         name,
         description,
-        inputSchema
+        inputSchema,
+        outputSchema: outputSchema || objectOutputSchema(),
+        annotations: {
+          lcfaCacheTtlMs: isReadMostlyTool(name) ? 30000 : 0,
+          lcfaCacheScope: isReadMostlyTool(name) ? 'site_session' : 'none'
+        }
       }))
     },
     has(name) {
@@ -986,6 +1144,188 @@ function normalizeWarnings(value) {
 
 function uniqueStrings(values) {
   return Array.from(new Set(values))
+}
+
+function objectOutputSchema() {
+  return {
+    type: 'object',
+    additionalProperties: true
+  }
+}
+
+function isReadMostlyTool(name) {
+  return /^(get_|list_|preview_|validate_|content_patch_preview|theme_file_read|theme_file_backups|wp_debug|visual_check)/.test(name)
+}
+
+function contentPatchSchema() {
+  return {
+    type: 'object',
+    required: ['target_type'],
+    properties: {
+      target_type: { type: 'string', enum: ['page', 'partial', 'header', 'footer', 'dynamic_template'] },
+      target_id: { type: 'integer' },
+      post_id: { type: 'integer' },
+      variant: { type: 'string' },
+      operation: {
+        type: 'string',
+        enum: ['replace_text', 'replace_html', 'replace_outer_html', 'append_html', 'prepend_html', 'set_attribute']
+      },
+      search: { type: 'string' },
+      selector: { type: 'string' },
+      livecanvas_block: { type: 'string' },
+      replacement: { type: 'string' },
+      html: { type: 'string' },
+      content: { type: 'string' },
+      attribute: { type: 'string' },
+      value: { type: 'string' },
+      allow_multiple: { type: 'boolean' }
+    }
+  }
+}
+
+function themeFileReadSchema() {
+  return {
+    type: 'object',
+    required: ['path'],
+    properties: {
+      root_scope: { type: 'string', enum: ['active', 'stylesheet', 'template', 'all'] },
+      path: { type: 'string' }
+    }
+  }
+}
+
+function themeFileWriteSchema() {
+  return {
+    type: 'object',
+    required: ['path', 'content'],
+    properties: {
+      root_scope: { type: 'string', enum: ['active', 'stylesheet', 'template', 'all'] },
+      path: { type: 'string' },
+      content: { type: 'string' },
+      create_directories: { type: 'boolean' }
+    }
+  }
+}
+
+function themeBackupListSchema() {
+  return {
+    type: 'object',
+    properties: {
+      path: { type: 'string' },
+      kind: { type: 'string' },
+      limit: { type: 'integer' }
+    }
+  }
+}
+
+function themeBackupRestoreSchema() {
+  return {
+    type: 'object',
+    required: ['backup_id'],
+    properties: {
+      backup_id: { type: 'string' },
+      root_scope: { type: 'string', enum: ['active', 'stylesheet', 'template', 'all'] },
+      path: { type: 'string' },
+      dry_run: { type: 'boolean' },
+      create_directories: { type: 'boolean' }
+    }
+  }
+}
+
+function mediaUploadSchema() {
+  return {
+    type: 'object',
+    properties: {
+      source_type: { type: 'string', enum: ['url', 'base64'] },
+      url: { type: 'string' },
+      data_url: { type: 'string' },
+      base64: { type: 'string' },
+      mime_type: { type: 'string' },
+      filename: { type: 'string' },
+      post_id: { type: 'integer' },
+      set_featured: { type: 'boolean' },
+      title: { type: 'string' },
+      alt: { type: 'string' },
+      caption: { type: 'string' },
+      description: { type: 'string' }
+    }
+  }
+}
+
+function mediaReplaceSchema() {
+  return {
+    type: 'object',
+    required: ['target_type', 'target_id', 'old_url'],
+    properties: {
+      target_type: { type: 'string', enum: ['page', 'partial', 'header', 'footer', 'dynamic_template'] },
+      target_id: { type: 'integer' },
+      variant: { type: 'string' },
+      old_url: { type: 'string' },
+      new_url: { type: 'string' },
+      attachment_id: { type: 'integer' }
+    }
+  }
+}
+
+function polylangToolsSchema() {
+  return {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['list_languages', 'get_translations', 'set_translations', 'create_translation'] },
+      post_id: { type: 'integer' },
+      language: { type: 'string' },
+      translations: { type: 'object', additionalProperties: true },
+      title: { type: 'string' },
+      slug: { type: 'string' },
+      content: { type: 'string' },
+      excerpt: { type: 'string' },
+      status: { type: 'string', enum: ['draft', 'pending', 'private', 'publish'] }
+    }
+  }
+}
+
+function seoToolsSchema() {
+  return {
+    type: 'object',
+    required: ['post_id'],
+    properties: {
+      action: { type: 'string', enum: ['get', 'update'] },
+      post_id: { type: 'integer' },
+      title: { type: 'string' },
+      description: { type: 'string' },
+      canonical: { type: 'string' },
+      social_image: { type: 'string' },
+      twitter_image: { type: 'string' }
+    }
+  }
+}
+
+function visualCheckSchema() {
+  return {
+    type: 'object',
+    properties: {
+      url: { type: 'string' },
+      full_page: { type: 'boolean' },
+      wait_ms: { type: 'integer' },
+      timeout_ms: { type: 'integer' },
+      output_directory: { type: 'string' },
+      selectors: {
+        type: 'array',
+        items: { type: 'string' }
+      },
+      viewports: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            width: { type: 'integer' },
+            height: { type: 'integer' }
+          }
+        }
+      }
+    }
+  }
 }
 
 module.exports = {

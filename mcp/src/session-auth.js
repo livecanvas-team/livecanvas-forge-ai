@@ -226,7 +226,7 @@ function isExpired(value) {
 }
 
 function normalizePairingScopes(value) {
-  const allowed = new Set(['read', 'preview', 'write'])
+  const allowed = new Set(['read', 'preview', 'write', 'media', 'theme_files', 'debug', 'cache', 'seo'])
   const scopes = String(value || 'read,preview,write')
     .split(',')
     .map((scope) => scope.trim().toLowerCase())

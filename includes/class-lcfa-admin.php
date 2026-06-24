@@ -1365,10 +1365,16 @@ final class LCFA_Admin {
         if ($project_label === '') {
             $project_label = __('Codex project', 'livecanvas-forge-ai');
         }
+        $snapshot = isset($this->environment) ? $this->environment->get_snapshot() : [];
+        $power_state = $this->get_power_mode()->get_state($connections, $snapshot);
+        $pairing_scopes = !empty($power_state['enabled'])
+            ? 'read,preview,write,media,theme_files,debug,cache,seo'
+            : '';
         $env = array_values(array_filter([
             $remote_site_url !== '' ? 'LCFA_SITE_URL=' . $remote_site_url : '',
             'LCFA_SITE_FINGERPRINT=' . (class_exists('LCFA_Settings', false) && method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : ''),
             'LCFA_PROJECT_LABEL=' . $project_label,
+            $pairing_scopes !== '' ? 'LCFA_PAIRING_SCOPES=' . $pairing_scopes : '',
         ]));
 
         return [
@@ -3567,7 +3573,7 @@ final class LCFA_Admin {
         echo '<summary>' . esc_html__('Advanced: Power Mode status', 'livecanvas-forge-ai') . '</summary>';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('shield-check');
-        echo '<div><h2>' . esc_html__('Power Mode status', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Prepared foundation for advanced filesystem, WP-CLI, upload, admin-link, and sandbox tools. These tools are not exposed to agents in this release.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Power Mode status', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Full Access unlocks advanced content patching, theme files, media, debug, cache, SEO, Polylang, and visual checks for approved AI Bridge sessions.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
         echo '<div class="lcfa-chip-row">';
         echo '<span class="lcfa-chip' . ($enabled ? ' is-warning' : ' is-positive') . '">' . esc_html($enabled ? __('Policy: enabled', 'livecanvas-forge-ai') : __('Policy: disabled', 'livecanvas-forge-ai')) . '</span>';
@@ -3576,9 +3582,7 @@ final class LCFA_Admin {
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Environment: %s', 'livecanvas-forge-ai'), (string) ($power_state['environment_type'] ?? 'production'))) . '</span>';
         echo '</div>';
         echo '<p class="lcfa-guide-copy">' . esc_html((string) ($power_state['reason'] ?? '')) . '</p>';
-        if (empty($power_state['implemented'])) {
-            echo '<p class="description">' . esc_html__('Next block: expose the advanced Power Mode tools behind explicit admin policy and per-tool guardrails.', 'livecanvas-forge-ai') . '</p>';
-        }
+        echo '<p class="description">' . esc_html__('For remote production sites, set Power Mode to Enabled by administrator, regenerate the Codex prompt, re-pair the session, and approve only trusted projects.', 'livecanvas-forge-ai') . '</p>';
         echo '</details>';
         echo '</section>';
     }

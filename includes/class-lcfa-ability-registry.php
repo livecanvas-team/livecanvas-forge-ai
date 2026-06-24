@@ -2,6 +2,27 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Theme_Files_Bridge', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-files-bridge.php';
+}
+if (!class_exists('LCFA_Picostrap_Compile_Service', false)) {
+    require_once __DIR__ . '/class-lcfa-picostrap-compile-manifest.php';
+    require_once __DIR__ . '/class-lcfa-picostrap-bundle-store.php';
+    require_once __DIR__ . '/class-lcfa-picostrap-compile-service.php';
+}
+if (!class_exists('LCFA_Content_Patch_Service', false)) {
+    require_once __DIR__ . '/class-lcfa-content-patch-service.php';
+}
+if (!class_exists('LCFA_Media_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-media-tools.php';
+}
+if (!class_exists('LCFA_Debug_Cache_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-debug-cache-tools.php';
+}
+if (!class_exists('LCFA_Polylang_SEO_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-polylang-seo-tools.php';
+}
+
 final class LCFA_Ability_Registry {
     private const CATEGORY = 'livecanvas-forge-ai';
     private const MCP_SERVER_ID = 'livecanvas-forge-ai';
@@ -13,17 +34,29 @@ final class LCFA_Ability_Registry {
     private LCFA_Context_Builder $context_builder;
     private LCFA_Command_Deck $command_deck;
     private LCFA_WindPress_Bridge $windpress_bridge;
+    private LCFA_Theme_Files_Bridge $theme_files_bridge;
+    private LCFA_Picostrap_Compile_Service $picostrap_compile_service;
     private LCFA_AI_Client $ai_client;
     private ?LCFA_Block_Patterns $block_patterns;
+    private LCFA_Content_Patch_Service $content_patch_service;
+    private LCFA_Media_Tools $media_tools;
+    private LCFA_Debug_Cache_Tools $debug_cache_tools;
+    private LCFA_Polylang_SEO_Tools $polylang_seo_tools;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_WindPress_Bridge $windpress_bridge, LCFA_AI_Client $ai_client, ?LCFA_Block_Patterns $block_patterns = null) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_WindPress_Bridge $windpress_bridge, LCFA_AI_Client $ai_client, ?LCFA_Block_Patterns $block_patterns = null, ?LCFA_Theme_Files_Bridge $theme_files_bridge = null, ?LCFA_Picostrap_Compile_Service $picostrap_compile_service = null) {
         $this->environment      = $environment;
         $this->inventory        = $inventory;
         $this->context_builder  = $context_builder;
         $this->command_deck     = $command_deck;
         $this->windpress_bridge = $windpress_bridge;
+        $this->theme_files_bridge = $theme_files_bridge ?: new LCFA_Theme_Files_Bridge($environment);
+        $this->picostrap_compile_service = $picostrap_compile_service ?: new LCFA_Picostrap_Compile_Service($environment);
         $this->ai_client        = $ai_client;
         $this->block_patterns   = $block_patterns;
+        $this->content_patch_service = new LCFA_Content_Patch_Service($inventory, $command_deck);
+        $this->media_tools = new LCFA_Media_Tools($command_deck);
+        $this->debug_cache_tools = new LCFA_Debug_Cache_Tools($environment);
+        $this->polylang_seo_tools = new LCFA_Polylang_SEO_Tools();
     }
 
     public function hooks(): void {
@@ -321,6 +354,51 @@ final class LCFA_Ability_Registry {
                 $preview_annotations,
                 true
             ),
+            'livecanvas-forge-ai/content-patch-preview' => $this->ability(
+                __('Preview content patch', 'livecanvas-forge-ai'),
+                __('Previews a targeted patch against a LiveCanvas page, partial, or dynamic template without rewriting the full document.', 'livecanvas-forge-ai'),
+                $this->content_patch_schema(),
+                [$this, 'preview_content_patch'],
+                [$this, 'can_read'],
+                $preview_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/theme-file-read' => $this->ability(
+                __('Read theme file', 'livecanvas-forge-ai'),
+                __('Reads an allowed file from the active theme roots without writing.', 'livecanvas-forge-ai'),
+                $this->theme_file_schema(false),
+                [$this, 'read_theme_file'],
+                [$this, 'can_theme_files'],
+                $readonly_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/theme-file-preview-write' => $this->ability(
+                __('Preview theme file write', 'livecanvas-forge-ai'),
+                __('Previews an allowed theme file write and returns diff/backup metadata without writing.', 'livecanvas-forge-ai'),
+                $this->theme_file_schema(true),
+                [$this, 'preview_theme_file_write'],
+                [$this, 'can_theme_files'],
+                $preview_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/theme-file-backups' => $this->ability(
+                __('List theme file backups', 'livecanvas-forge-ai'),
+                __('Lists recent AI Bridge theme file backups without exposing unrelated filesystem paths.', 'livecanvas-forge-ai'),
+                $this->theme_backup_schema(false),
+                [$this, 'list_theme_file_backups'],
+                [$this, 'can_theme_files'],
+                $readonly_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/wp-debug' => $this->ability(
+                __('Read WordPress debug snapshot', 'livecanvas-forge-ai'),
+                __('Returns recent debug.log lines, active plugins, theme, PHP, and WordPress diagnostics without writing.', 'livecanvas-forge-ai'),
+                $this->runs_schema(),
+                [$this, 'get_wp_debug'],
+                [$this, 'can_debug'],
+                $readonly_annotations,
+                true
+            ),
             'livecanvas-forge-ai/apply-page-upsert' => $this->ability(
                 __('Apply page upsert', 'livecanvas-forge-ai'),
                 __('Applies a LiveCanvas page create/update command. The action is forced to page_upsert and writes only after the caller invokes this dedicated apply ability.', 'livecanvas-forge-ai'),
@@ -374,6 +452,96 @@ final class LCFA_Ability_Registry {
                 [$this, 'can_write'],
                 $write_annotations,
                 $this->write_ability_is_mcp_public('livecanvas-forge-ai/restore-audit-rollback')
+            ),
+            'livecanvas-forge-ai/content-patch-apply' => $this->ability(
+                __('Apply content patch', 'livecanvas-forge-ai'),
+                __('Applies a targeted content patch and records Command Deck audit/rollback metadata.', 'livecanvas-forge-ai'),
+                $this->content_patch_schema(),
+                [$this, 'apply_content_patch'],
+                [$this, 'can_write'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/content-patch-apply')
+            ),
+            'livecanvas-forge-ai/theme-file-write' => $this->ability(
+                __('Write theme file', 'livecanvas-forge-ai'),
+                __('Writes an allowed child-theme file with backup protection.', 'livecanvas-forge-ai'),
+                $this->theme_file_schema(true),
+                [$this, 'write_theme_file'],
+                [$this, 'can_theme_files'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/theme-file-write')
+            ),
+            'livecanvas-forge-ai/theme-file-restore' => $this->ability(
+                __('Restore theme file backup', 'livecanvas-forge-ai'),
+                __('Restores an AI Bridge theme file backup with preview support.', 'livecanvas-forge-ai'),
+                $this->theme_backup_schema(true),
+                [$this, 'restore_theme_file_backup'],
+                [$this, 'can_theme_files'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/theme-file-restore')
+            ),
+            'livecanvas-forge-ai/media-upload' => $this->ability(
+                __('Upload media', 'livecanvas-forge-ai'),
+                __('Uploads image or video media to the WordPress Media Library.', 'livecanvas-forge-ai'),
+                $this->media_upload_schema(),
+                [$this, 'upload_media'],
+                [$this, 'can_media'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/media-upload')
+            ),
+            'livecanvas-forge-ai/media-replace' => $this->ability(
+                __('Replace media reference', 'livecanvas-forge-ai'),
+                __('Replaces a media URL in LiveCanvas content through an audited content update.', 'livecanvas-forge-ai'),
+                $this->media_replace_schema(),
+                [$this, 'replace_media'],
+                [$this, 'can_media'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/media-replace')
+            ),
+            'livecanvas-forge-ai/picostrap-compile-preview' => $this->ability(
+                __('Preview Picostrap compile', 'livecanvas-forge-ai'),
+                __('Reads Picostrap compile state and source inputs without storing a new bundle.', 'livecanvas-forge-ai'),
+                $this->empty_object_schema(),
+                [$this, 'preview_picostrap_compile'],
+                [$this, 'can_theme_files'],
+                $preview_annotations,
+                true
+            ),
+            'livecanvas-forge-ai/picostrap-compile-apply' => $this->ability(
+                __('Apply Picostrap compile', 'livecanvas-forge-ai'),
+                __('Stores a compiled Picostrap CSS bundle after an external compiler returns CSS.', 'livecanvas-forge-ai'),
+                $this->picostrap_compile_apply_schema(),
+                [$this, 'apply_picostrap_compile'],
+                [$this, 'can_theme_files'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/picostrap-compile-apply')
+            ),
+            'livecanvas-forge-ai/cache-flush' => $this->ability(
+                __('Flush caches', 'livecanvas-forge-ai'),
+                __('Flushes WordPress object cache, common cache plugins, opcache, and bumps the AI Bridge asset version.', 'livecanvas-forge-ai'),
+                $this->cache_flush_schema(),
+                [$this, 'flush_cache'],
+                [$this, 'can_cache'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/cache-flush')
+            ),
+            'livecanvas-forge-ai/polylang-tools' => $this->ability(
+                __('Run Polylang tools', 'livecanvas-forge-ai'),
+                __('Reads or updates Polylang language relationships when Polylang is active.', 'livecanvas-forge-ai'),
+                $this->polylang_tools_schema(),
+                [$this, 'run_polylang_tools'],
+                [$this, 'can_seo'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/polylang-tools')
+            ),
+            'livecanvas-forge-ai/seo-tools' => $this->ability(
+                __('Run SEO tools', 'livecanvas-forge-ai'),
+                __('Reads or updates SEOPress metadata when SEOPress is active.', 'livecanvas-forge-ai'),
+                $this->seo_tools_schema(),
+                [$this, 'run_seo_tools'],
+                [$this, 'can_seo'],
+                $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/seo-tools')
             ),
             'livecanvas-forge-ai/preview-command' => $this->ability(
                 __('Preview AI Bridge command', 'livecanvas-forge-ai'),
@@ -662,7 +830,7 @@ final class LCFA_Ability_Registry {
         foreach ($manifest as $name => $definition) {
             $annotations = is_array($definition['meta']['annotations'] ?? null) ? $definition['meta']['annotations'] : [];
             $is_public = !empty($definition['meta']['mcp']['public']);
-            $is_preview = strpos($name, '/preview-') !== false || strpos($name, '/validate-') !== false;
+            $is_preview = strpos($name, '/preview-') !== false || strpos($name, '-preview') !== false || strpos($name, '/validate-') !== false;
             $is_write = empty($annotations['readonly']) || !empty($annotations['destructive']);
             $group = $this->infer_ability_group($name, $annotations);
             if (!isset($groups[$group])) {
@@ -1146,6 +1314,183 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    public function preview_content_patch($input = []): array {
+        $payload = $this->normalize_input($input);
+
+        return [
+            'content_patch_preview' => $this->content_patch_service->preview($this->with_provenance($payload, 'wp_ability_content_patch_preview', 'wordpress_abilities')),
+        ];
+    }
+
+    public function apply_content_patch($input = []): array {
+        $payload = $this->normalize_input($input);
+
+        return [
+            'content_patch_apply' => $this->content_patch_service->apply($this->with_provenance($payload, 'wp_ability_content_patch_apply', 'wordpress_abilities')),
+        ];
+    }
+
+    public function read_theme_file($input = []): array {
+        try {
+            $payload = $this->normalize_input($input);
+            return [
+                'theme_file' => $this->theme_files_bridge->read_file([
+                    'root_scope' => sanitize_key((string) ($payload['root_scope'] ?? 'active')),
+                    'path'       => sanitize_text_field((string) ($payload['path'] ?? '')),
+                ]),
+            ];
+        } catch (Throwable $throwable) {
+            return ['theme_file' => $this->tool_error($throwable->getMessage())];
+        }
+    }
+
+    public function preview_theme_file_write($input = []): array {
+        return $this->run_theme_file_write($input, true);
+    }
+
+    public function write_theme_file($input = []): array {
+        return $this->run_theme_file_write($input, false);
+    }
+
+    public function list_theme_file_backups($input = []): array {
+        try {
+            $payload = $this->normalize_input($input);
+            return [
+                'theme_file_backups' => $this->theme_files_bridge->list_backups([
+                    'limit' => absint($payload['limit'] ?? 20),
+                    'path'  => sanitize_text_field((string) ($payload['path'] ?? '')),
+                    'kind'  => sanitize_key((string) ($payload['kind'] ?? '')),
+                ]),
+            ];
+        } catch (Throwable $throwable) {
+            return ['theme_file_backups' => $this->tool_error($throwable->getMessage())];
+        }
+    }
+
+    public function restore_theme_file_backup($input = []): array {
+        try {
+            $payload = $this->normalize_input($input);
+            return [
+                'theme_file_restore' => $this->theme_files_bridge->restore_backup([
+                    'backup_id'          => sanitize_text_field((string) ($payload['backup_id'] ?? $payload['id'] ?? '')),
+                    'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? '')),
+                    'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
+                    'dry_run'            => !empty($payload['dry_run']),
+                    'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
+                ]),
+            ];
+        } catch (Throwable $throwable) {
+            return ['theme_file_restore' => $this->tool_error($throwable->getMessage())];
+        }
+    }
+
+    public function upload_media($input = []): array {
+        return [
+            'media_upload' => $this->media_tools->upload($this->normalize_input($input)),
+        ];
+    }
+
+    public function replace_media($input = []): array {
+        $payload = $this->normalize_input($input);
+        $payload['dry_run'] = false;
+
+        return [
+            'media_replace' => $this->media_tools->replace($this->with_provenance($payload, 'wp_ability_media_replace', 'wordpress_abilities')),
+        ];
+    }
+
+    public function preview_picostrap_compile($input = []): array {
+        $payload = $this->normalize_input($input);
+        $result = [
+            'ok'          => true,
+            'manifest'    => $this->picostrap_compile_service->get_manifest(),
+            'compile_url' => $this->picostrap_compile_service->get_compile_url(),
+        ];
+
+        $source_path = sanitize_text_field((string) ($payload['source_path'] ?? $payload['import_path'] ?? ''));
+        if ($source_path !== '') {
+            try {
+                $result['source'] = $this->picostrap_compile_service->get_source($source_path);
+            } catch (Throwable $throwable) {
+                $result['source'] = $this->tool_error($throwable->getMessage());
+            }
+        }
+
+        return [
+            'picostrap_compile_preview' => $result,
+        ];
+    }
+
+    public function apply_picostrap_compile($input = []): array {
+        $payload = $this->normalize_input($input);
+        $compiled_css = is_string($payload['compiled_css'] ?? null) ? (string) $payload['compiled_css'] : '';
+        if ($compiled_css === '') {
+            return [
+                'picostrap_compile_apply' => $this->tool_error(__('compiled_css is required. Compile SCSS in the MCP runtime first, then apply the resulting CSS bundle.', 'livecanvas-forge-ai')),
+            ];
+        }
+
+        $source_result = null;
+        $source_path = sanitize_text_field((string) ($payload['source_path'] ?? ''));
+        if ($source_path !== '' && array_key_exists('source_content', $payload)) {
+            try {
+                $source_result = $this->theme_files_bridge->write_file([
+                    'root_scope'         => 'stylesheet',
+                    'path'               => $source_path,
+                    'content'            => (string) $payload['source_content'],
+                    'dry_run'            => false,
+                    'create_directories' => false,
+                ]);
+            } catch (Throwable $throwable) {
+                return [
+                    'picostrap_compile_apply' => $this->tool_error($throwable->getMessage()),
+                ];
+            }
+        }
+
+        try {
+            $bundle = $this->picostrap_compile_service->store_bundle($compiled_css);
+        } catch (Throwable $throwable) {
+            return [
+                'picostrap_compile_apply' => $this->tool_error($throwable->getMessage()),
+            ];
+        }
+
+        return [
+            'picostrap_compile_apply' => [
+                'ok'            => true,
+                'source_write'  => $source_result,
+                'bundle'        => $bundle,
+                'rollback_hint' => __('Restore the source_write backup_file if the compiled bundle needs to be reverted.', 'livecanvas-forge-ai'),
+                'message'       => __('Picostrap compiled bundle stored.', 'livecanvas-forge-ai'),
+            ],
+        ];
+    }
+
+    public function get_wp_debug($input = []): array {
+        return [
+            'wp_debug' => $this->debug_cache_tools->get_debug($this->normalize_input($input)),
+        ];
+    }
+
+    public function flush_cache($input = []): array {
+        return [
+            'cache_flush' => $this->debug_cache_tools->flush_cache($this->normalize_input($input)),
+        ];
+    }
+
+    public function run_polylang_tools($input = []): array {
+        return [
+            'polylang_tools' => $this->polylang_seo_tools->polylang($this->normalize_input($input)),
+        ];
+    }
+
+    public function run_seo_tools($input = []): array {
+        return [
+            'seo_tools' => $this->polylang_seo_tools->seo($this->normalize_input($input)),
+        ];
+    }
+
     public function apply_command($input = []): array {
         $payload = $this->normalize_command_payload($input);
         $payload['dry_run'] = false;
@@ -1160,6 +1505,26 @@ final class LCFA_Ability_Registry {
     }
 
     public function can_write(...$args): bool {
+        return current_user_can('edit_pages');
+    }
+
+    public function can_media(...$args): bool {
+        return current_user_can('upload_files');
+    }
+
+    public function can_theme_files(...$args): bool {
+        return current_user_can('edit_theme_options');
+    }
+
+    public function can_debug(...$args): bool {
+        return current_user_can('manage_options');
+    }
+
+    public function can_cache(...$args): bool {
+        return current_user_can('manage_options');
+    }
+
+    public function can_seo(...$args): bool {
         return current_user_can('edit_pages');
     }
 
@@ -1213,6 +1578,32 @@ final class LCFA_Ability_Registry {
         return $payload;
     }
 
+    private function run_theme_file_write($input, bool $dry_run): array {
+        try {
+            $payload = $this->normalize_input($input);
+            return [
+                $dry_run ? 'theme_file_preview_write' : 'theme_file_write' => $this->theme_files_bridge->write_file([
+                    'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
+                    'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
+                    'content'            => is_string($payload['content'] ?? null) ? (string) $payload['content'] : '',
+                    'dry_run'            => $dry_run,
+                    'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
+                ]),
+            ];
+        } catch (Throwable $throwable) {
+            return [
+                $dry_run ? 'theme_file_preview_write' : 'theme_file_write' => $this->tool_error($throwable->getMessage()),
+            ];
+        }
+    }
+
+    private function tool_error(string $message): array {
+        return [
+            'ok'      => false,
+            'message' => $message,
+        ];
+    }
+
     private function create_apply_audit_id(): string {
         if (function_exists('wp_generate_password')) {
             return sanitize_key('audit-' . strtolower(wp_generate_password(12, false, false)));
@@ -1245,7 +1636,7 @@ final class LCFA_Ability_Registry {
             return 'power';
         }
 
-        if (strpos($name, '/preview-') !== false || strpos($name, '/validate-') !== false) {
+        if (strpos($name, '/preview-') !== false || strpos($name, '-preview') !== false || strpos($name, '/validate-') !== false) {
             return 'preview';
         }
 
@@ -1578,6 +1969,239 @@ final class LCFA_Ability_Registry {
         ];
     }
 
+    private function content_patch_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => true,
+            'required'             => ['target_type'],
+            'properties'           => [
+                'target_type' => [
+                    'type'        => 'string',
+                    'enum'        => ['page', 'partial', 'header', 'footer', 'dynamic_template'],
+                    'description' => __('Content target type.', 'livecanvas-forge-ai'),
+                ],
+                'target_id' => [
+                    'type'        => 'integer',
+                    'minimum'     => 1,
+                    'description' => __('Target post ID. Header/footer may also resolve by variant.', 'livecanvas-forge-ai'),
+                ],
+                'variant' => [
+                    'type'        => 'string',
+                    'description' => __('Optional LiveCanvas header/footer variant.', 'livecanvas-forge-ai'),
+                ],
+                'operation' => [
+                    'type'        => 'string',
+                    'enum'        => ['replace_text', 'replace_html', 'replace_outer_html', 'append_html', 'prepend_html', 'set_attribute'],
+                    'description' => __('Patch operation. Selector matches must be unique unless allow_multiple is true.', 'livecanvas-forge-ai'),
+                ],
+                'search' => [
+                    'type'        => 'string',
+                    'description' => __('Exact text or HTML to replace.', 'livecanvas-forge-ai'),
+                ],
+                'selector' => [
+                    'type'        => 'string',
+                    'description' => __('Simple CSS selector: #id, .class, tag, tag.class, tag#id, or [attr=value].', 'livecanvas-forge-ai'),
+                ],
+                'livecanvas_block' => [
+                    'type'        => 'string',
+                    'description' => __('Optional LiveCanvas block identifier to resolve as data-lc-block/lc-block/id.', 'livecanvas-forge-ai'),
+                ],
+                'replacement' => [
+                    'type'        => 'string',
+                    'description' => __('Replacement text or HTML.', 'livecanvas-forge-ai'),
+                ],
+                'html' => [
+                    'type'        => 'string',
+                    'description' => __('HTML fragment for selector-based operations.', 'livecanvas-forge-ai'),
+                ],
+                'attribute' => [
+                    'type'        => 'string',
+                    'description' => __('Attribute name for set_attribute.', 'livecanvas-forge-ai'),
+                ],
+                'value' => [
+                    'type'        => 'string',
+                    'description' => __('Attribute value for set_attribute.', 'livecanvas-forge-ai'),
+                ],
+                'allow_multiple' => [
+                    'type'        => 'boolean',
+                    'description' => __('Allow replacing multiple matching nodes or strings.', 'livecanvas-forge-ai'),
+                ],
+            ],
+        ];
+    }
+
+    private function theme_file_schema(bool $write): array {
+        $properties = [
+            'root_scope' => [
+                'type'        => 'string',
+                'enum'        => ['active', 'stylesheet', 'template', 'all'],
+                'description' => __('Allowed theme root scope. Writes resolve to the child/stylesheet theme by default.', 'livecanvas-forge-ai'),
+            ],
+            'path' => [
+                'type'        => 'string',
+                'description' => __('Relative path inside the allowed theme root.', 'livecanvas-forge-ai'),
+            ],
+        ];
+
+        if ($write) {
+            $properties['content'] = [
+                'type'        => 'string',
+                'description' => __('Complete file content to write.', 'livecanvas-forge-ai'),
+            ];
+            $properties['create_directories'] = [
+                'type'        => 'boolean',
+                'description' => __('Create missing directories inside the allowed root.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'required'             => $write ? ['path', 'content'] : ['path'],
+            'properties'           => $properties,
+        ];
+    }
+
+    private function theme_backup_schema(bool $restore): array {
+        $properties = [
+            'limit' => [
+                'type'        => 'integer',
+                'minimum'     => 1,
+                'maximum'     => 100,
+                'description' => __('Maximum number of backups to list.', 'livecanvas-forge-ai'),
+            ],
+            'path' => [
+                'type'        => 'string',
+                'description' => __('Optional relative path filter or restore path override.', 'livecanvas-forge-ai'),
+            ],
+            'kind' => [
+                'type'        => 'string',
+                'description' => __('Optional backup kind filter.', 'livecanvas-forge-ai'),
+            ],
+        ];
+
+        if ($restore) {
+            $properties['backup_id'] = [
+                'type'        => 'string',
+                'description' => __('Backup ID returned by theme-file-backups.', 'livecanvas-forge-ai'),
+            ];
+            $properties['dry_run'] = [
+                'type'        => 'boolean',
+                'description' => __('Preview restore without writing.', 'livecanvas-forge-ai'),
+            ];
+            $properties['root_scope'] = [
+                'type'        => 'string',
+                'enum'        => ['active', 'stylesheet', 'template', 'all'],
+                'description' => __('Optional restore root scope.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'required'             => $restore ? ['backup_id'] : [],
+            'properties'           => $properties,
+        ];
+    }
+
+    private function media_upload_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'properties'           => [
+                'source_type'  => ['type' => 'string', 'enum' => ['url', 'base64']],
+                'url'          => ['type' => 'string', 'description' => __('Remote media URL.', 'livecanvas-forge-ai')],
+                'data_url'     => ['type' => 'string', 'description' => __('Data URL media payload.', 'livecanvas-forge-ai')],
+                'base64'       => ['type' => 'string', 'description' => __('Raw base64 media payload.', 'livecanvas-forge-ai')],
+                'mime_type'    => ['type' => 'string'],
+                'filename'     => ['type' => 'string'],
+                'post_id'      => ['type' => 'integer', 'minimum' => 1],
+                'set_featured' => ['type' => 'boolean'],
+                'title'        => ['type' => 'string'],
+                'alt'          => ['type' => 'string'],
+                'caption'      => ['type' => 'string'],
+                'description'  => ['type' => 'string'],
+            ],
+        ];
+    }
+
+    private function media_replace_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'required'             => ['target_type', 'target_id', 'old_url'],
+            'properties'           => [
+                'target_type'   => ['type' => 'string', 'enum' => ['page', 'partial', 'header', 'footer', 'dynamic_template']],
+                'target_id'     => ['type' => 'integer', 'minimum' => 1],
+                'variant'       => ['type' => 'string'],
+                'old_url'       => ['type' => 'string'],
+                'new_url'       => ['type' => 'string'],
+                'attachment_id' => ['type' => 'integer', 'minimum' => 1],
+            ],
+        ];
+    }
+
+    private function picostrap_compile_apply_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'required'             => ['compiled_css'],
+            'properties'           => [
+                'source_path'    => ['type' => 'string', 'description' => __('Optional child-theme SCSS path to write before storing the bundle.', 'livecanvas-forge-ai')],
+                'source_content' => ['type' => 'string', 'description' => __('Optional SCSS source content.', 'livecanvas-forge-ai')],
+                'compiled_css'   => ['type' => 'string', 'description' => __('Compiled CSS bundle produced by the MCP runtime.', 'livecanvas-forge-ai')],
+            ],
+        ];
+    }
+
+    private function cache_flush_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'properties'           => [
+                'dry_run' => [
+                    'type'        => 'boolean',
+                    'description' => __('Preview available flush operations without executing them.', 'livecanvas-forge-ai'),
+                ],
+            ],
+        ];
+    }
+
+    private function polylang_tools_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => true,
+            'properties'           => [
+                'action'       => ['type' => 'string', 'enum' => ['list_languages', 'get_translations', 'set_translations', 'create_translation']],
+                'post_id'      => ['type' => 'integer', 'minimum' => 1],
+                'language'     => ['type' => 'string'],
+                'translations' => ['type' => 'object', 'additionalProperties' => true],
+                'title'        => ['type' => 'string'],
+                'slug'         => ['type' => 'string'],
+                'content'      => ['type' => 'string'],
+                'excerpt'      => ['type' => 'string'],
+                'status'       => ['type' => 'string', 'enum' => ['draft', 'pending', 'private', 'publish']],
+            ],
+        ];
+    }
+
+    private function seo_tools_schema(): array {
+        return [
+            'type'                 => 'object',
+            'additionalProperties' => false,
+            'required'             => ['post_id'],
+            'properties'           => [
+                'action'        => ['type' => 'string', 'enum' => ['get', 'update']],
+                'post_id'       => ['type' => 'integer', 'minimum' => 1],
+                'title'         => ['type' => 'string'],
+                'description'   => ['type' => 'string'],
+                'canonical'     => ['type' => 'string'],
+                'social_image'  => ['type' => 'string'],
+                'twitter_image' => ['type' => 'string'],
+            ],
+        ];
+    }
+
     private function build_agent_handoff_smoke_tests(array $summary, array $ability): array {
         $public_abilities = array_flip(array_map('strval', (array) ($ability['mcp_public'] ?? [])));
         $public_writes = array_flip(array_map('strval', (array) ($ability['mcp_public_write'] ?? [])));
@@ -1764,6 +2388,8 @@ final class LCFA_Ability_Registry {
             __('Verify the returned site_identity before running any write ability; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
+            __('For small edits, prefer content-patch-preview/content-patch-apply over rewriting an entire page.', 'livecanvas-forge-ai'),
+            __('For media, theme files, cache, debug, SEO, or Polylang work, require the matching Full Access scope and review rollback output.', 'livecanvas-forge-ai'),
             __('Do not modify files or raw post content directly when a dedicated LiveCanvas preview/apply ability exists for the request.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
         ];
@@ -1771,7 +2397,10 @@ final class LCFA_Ability_Registry {
         $quick_prompts = [
             'audit_site' => __('Audit this WordPress + LiveCanvas site. Summarize the framework, pages, partials, templates, public abilities, risks, and next safe preview action. Do not change anything.', 'livecanvas-forge-ai'),
             'edit_partial' => __('Inspect the selected LiveCanvas partial, preview a small focused improvement, and apply it only after the preview is reviewed.', 'livecanvas-forge-ai'),
+            'targeted_text_patch' => __('Change one exact phrase in a LiveCanvas page or partial with content-patch-preview first, then content-patch-apply only if the match is unique and validation passes.', 'livecanvas-forge-ai'),
             'generate_page' => __('Create a draft LiveCanvas page from this brief. Use preview-page-upsert first, then apply-page-upsert only after confirmation.', 'livecanvas-forge-ai'),
+            'upload_media' => __('Upload an image to the Media Library, set clean alt text, then preview replacing its old LiveCanvas reference before applying.', 'livecanvas-forge-ai'),
+            'visual_check' => __('Run desktop and mobile visual_check on this URL, report overflow, selector styles, screenshot paths, and no-write issues first.', 'livecanvas-forge-ai'),
             'design_system_from_logo' => __('Build a design-system direction from the uploaded logo: colors, typography feel, buttons, spacing, and radius. Preview before applying.', 'livecanvas-forge-ai'),
             'bootstrap_tailwind_conversion' => __('Convert this LiveCanvas page from Bootstrap-style markup to the active Tailwind/DaisyUI or stack-native framework. Preview and validate before applying.', 'livecanvas-forge-ai'),
             'dynamic_template' => __('Create or update a LiveCanvas dynamic template with a large featured image, clear content hierarchy, and stack-native classes. Preview before applying.', 'livecanvas-forge-ai'),
@@ -1802,17 +2431,23 @@ final class LCFA_Ability_Registry {
                     'livecanvas-forge-ai/get-context',
                     'livecanvas-forge-ai/get-theme-context',
                     'livecanvas-forge-ai/get-page-html',
+                    'livecanvas-forge-ai/wp-debug',
                 ],
                 'preview' => [
+                    'livecanvas-forge-ai/content-patch-preview',
                     'livecanvas-forge-ai/preview-page-upsert',
                     'livecanvas-forge-ai/preview-global-shell',
                     'livecanvas-forge-ai/preview-design-system',
+                    'livecanvas-forge-ai/theme-file-preview-write',
                     'livecanvas-forge-ai/preview-command',
                 ],
                 'apply' => [
+                    'livecanvas-forge-ai/content-patch-apply',
                     'livecanvas-forge-ai/apply-page-upsert',
                     'livecanvas-forge-ai/apply-global-shell',
                     'livecanvas-forge-ai/apply-design-system',
+                    'livecanvas-forge-ai/media-upload',
+                    'livecanvas-forge-ai/theme-file-write',
                 ],
             ],
             'quick_prompts' => array_map('sanitize_text_field', $quick_prompts),

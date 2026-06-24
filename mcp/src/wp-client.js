@@ -91,6 +91,74 @@ class WPClient {
     return this.request('POST', 'studio/native-pattern-page-apply', { body: payload })
   }
 
+  async previewContentPatch(payload = {}) {
+    return this.request('POST', 'content/patch/preview', {
+      body: this.withProvenance(payload, 'content_patch_preview')
+    })
+  }
+
+  async applyContentPatch(payload = {}) {
+    return this.request('POST', 'content/patch/apply', {
+      body: this.withProvenance(payload, 'content_patch_apply')
+    })
+  }
+
+  async remoteThemeFileRead(payload = {}) {
+    return this.request('GET', 'theme/file', { query: payload })
+  }
+
+  async remoteThemeFilePreviewWrite(payload = {}) {
+    return this.request('POST', 'theme/file', {
+      body: {
+        ...payload,
+        dry_run: true
+      }
+    })
+  }
+
+  async remoteThemeFileWrite(payload = {}) {
+    return this.request('POST', 'theme/file', {
+      body: {
+        ...payload,
+        dry_run: false
+      }
+    })
+  }
+
+  async remoteThemeFileBackups(payload = {}) {
+    return this.request('GET', 'theme/backups', { query: payload })
+  }
+
+  async remoteThemeFileRestore(payload = {}) {
+    return this.request('POST', 'theme/backup/restore', { body: payload })
+  }
+
+  async uploadMedia(payload = {}) {
+    return this.request('POST', 'media/upload', { body: payload })
+  }
+
+  async replaceMedia(payload = {}) {
+    return this.request('POST', 'media/replace', {
+      body: this.withProvenance(payload, 'media_replace')
+    })
+  }
+
+  async getDebugSnapshot(payload = {}) {
+    return this.request('GET', 'debug', { query: payload })
+  }
+
+  async flushCache(payload = {}) {
+    return this.request('POST', 'cache/flush', { body: payload })
+  }
+
+  async runPolylangTool(payload = {}) {
+    return this.request('POST', 'polylang/tools', { body: payload })
+  }
+
+  async runSeoTool(payload = {}) {
+    return this.request('POST', 'seo/tools', { body: payload })
+  }
+
   async getThemeBackups(params = {}) {
     return this.request('GET', 'theme/backups', { query: params })
   }
@@ -207,6 +275,27 @@ class WPClient {
   async storePicostrapBundle(css) {
     return this.request('POST', 'picostrap/bundle', {
       body: { css }
+    })
+  }
+
+  async previewPicostrapCompile(payload = {}) {
+    const manifest = await this.getPicostrapCompileManifest()
+    if (!payload.import_path && !payload.source_path) {
+      return manifest
+    }
+
+    const source = await this.getPicostrapCompileSource(payload.import_path || payload.source_path)
+    return {
+      manifest,
+      source
+    }
+  }
+
+  async applyPicostrapCompile(payload = {}) {
+    return this.request('POST', 'picostrap/bundle', {
+      body: {
+        css: payload.compiled_css || payload.css || ''
+      }
     })
   }
 

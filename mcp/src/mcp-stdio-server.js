@@ -1,4 +1,5 @@
 const PROTOCOL_VERSION = '2024-11-05'
+const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-11-25', '2026-07-28']
 const fs = require('node:fs')
 
 async function runStdioServer({ client, tools, config }) {
@@ -57,11 +58,16 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
         tools: {}
       },
       serverInfo: {
-        name: 'livecanvas-forge-mcp',
-        version: '0.1.0'
+        name: 'livecanvas-ai-bridge-mcp',
+        version: '0.1.2'
       }
     }, debugLogPath, format)
 
+    return
+  }
+
+  if (method === 'server/discover') {
+    writeResponse(message.id, buildServerDiscovery(tools), debugLogPath, format)
     return
   }
 
@@ -72,7 +78,9 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
 
   if (method === 'tools/list') {
     writeResponse(message.id, {
-      tools: tools.list()
+      tools: tools.list(),
+      ttlMs: 30000,
+      cacheScope: 'site_session'
     }, debugLogPath, format)
 
     return
@@ -188,7 +196,30 @@ function resolveProtocolVersion(message) {
     ? message.params.protocolVersion.trim()
     : ''
 
+  if (requested && SUPPORTED_PROTOCOL_VERSIONS.includes(requested)) {
+    return requested
+  }
+
   return requested || PROTOCOL_VERSION
+}
+
+function buildServerDiscovery(tools) {
+  return {
+    protocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+    capabilities: {
+      tools: {
+        ttlMs: 30000,
+        cacheScope: 'site_session'
+      }
+    },
+    serverInfo: {
+      name: 'livecanvas-ai-bridge-mcp',
+      version: '0.1.2'
+    },
+    tools: tools.list(),
+    ttlMs: 30000,
+    cacheScope: 'site_session'
+  }
 }
 
 function writeResponse(id, result, debugLogPath = '', format = 'content-length') {

@@ -60,6 +60,15 @@ final class LCFA_Settings {
             'livecanvas-forge-ai/apply-dynamic-template' => ['label' => 'Apply dynamic template'],
             'livecanvas-forge-ai/apply-design-system' => ['label' => 'Apply design system'],
             'livecanvas-forge-ai/restore-audit-rollback' => ['label' => 'Restore audit rollback'],
+            'livecanvas-forge-ai/content-patch-apply' => ['label' => 'Apply content patch'],
+            'livecanvas-forge-ai/theme-file-write' => ['label' => 'Write theme file'],
+            'livecanvas-forge-ai/theme-file-restore' => ['label' => 'Restore theme file'],
+            'livecanvas-forge-ai/media-upload' => ['label' => 'Upload media'],
+            'livecanvas-forge-ai/media-replace' => ['label' => 'Replace media'],
+            'livecanvas-forge-ai/picostrap-compile-apply' => ['label' => 'Apply Picostrap compile'],
+            'livecanvas-forge-ai/cache-flush' => ['label' => 'Flush caches'],
+            'livecanvas-forge-ai/polylang-tools' => ['label' => 'Run Polylang tools'],
+            'livecanvas-forge-ai/seo-tools' => ['label' => 'Run SEO tools'],
         ];
     }
 
@@ -131,6 +140,45 @@ final class LCFA_WindPress_Bridge {
     }
 }
 
+final class LCFA_Theme_Files_Bridge {
+    public function __construct($environment = null) {}
+    public function read_file(array $options = []): array { return ['ok' => true, 'relative_path' => $options['path'] ?? '']; }
+    public function write_file(array $options = []): array { return ['ok' => true, 'dry_run' => !empty($options['dry_run']), 'relative_path' => $options['path'] ?? '']; }
+    public function list_backups(array $options = []): array { return ['ok' => true, 'backups' => []]; }
+    public function restore_backup(array $options = []): array { return ['ok' => true, 'backup_id' => $options['backup_id'] ?? '']; }
+}
+
+final class LCFA_Picostrap_Compile_Service {
+    public function __construct($environment = null) {}
+    public function get_manifest(): array { return ['framework' => 'picostrap']; }
+    public function get_compile_url(): string { return 'https://example.test/?compile_sass=1'; }
+    public function get_source(string $import_path): array { return ['ok' => true, 'normalized_path' => $import_path, 'contents' => '']; }
+    public function store_bundle(string $css): array { return ['ok' => true, 'bundle_url' => 'https://example.test/bundle.css']; }
+}
+
+final class LCFA_Content_Patch_Service {
+    public function __construct($inventory = null, $command_deck = null) {}
+    public function preview(array $payload): array { return ['ok' => true, 'mode' => 'preview']; }
+    public function apply(array $payload): array { return ['ok' => true, 'mode' => 'apply']; }
+}
+
+final class LCFA_Media_Tools {
+    public function __construct($command_deck = null) {}
+    public function upload(array $payload): array { return ['ok' => true, 'attachment_id' => 1]; }
+    public function replace(array $payload): array { return ['ok' => true, 'media_replace' => []]; }
+}
+
+final class LCFA_Debug_Cache_Tools {
+    public function __construct($environment = null) {}
+    public function get_debug(array $payload = []): array { return ['ok' => true]; }
+    public function flush_cache(array $payload = []): array { return ['ok' => true, 'dry_run' => !empty($payload['dry_run'])]; }
+}
+
+final class LCFA_Polylang_SEO_Tools {
+    public function polylang(array $payload): array { return ['ok' => false, 'status' => 'unavailable']; }
+    public function seo(array $payload): array { return ['ok' => false, 'status' => 'unavailable']; }
+}
+
 require dirname(__DIR__, 2) . '/includes/class-lcfa-ai-client.php';
 require dirname(__DIR__, 2) . '/includes/class-lcfa-ability-registry.php';
 
@@ -159,7 +207,7 @@ $registry->register_categories();
 lcfa_wp7_assert_true(isset($GLOBALS['lcfa_test_ability_categories']['livecanvas-forge-ai']), 'registry should register the AI Bridge ability category');
 
 $registry->register_abilities();
-lcfa_wp7_assert_true(count($GLOBALS['lcfa_test_abilities']) === 32, 'registry should register read, runs, connection handoff, handoff summary, handoff package, preview, dedicated apply, rollback, diagnostics, block pattern, native pattern page, blueprint, native page apply, and AI Client abilities');
+lcfa_wp7_assert_true(count($GLOBALS['lcfa_test_abilities']) === 47, 'registry should register read, runs, connection handoff, handoff summary, handoff package, preview, dedicated apply, rollback, diagnostics, block pattern, native pattern page, blueprint, native page apply, and AI Client abilities');
 
 foreach ($GLOBALS['lcfa_test_abilities'] as $name => $definition) {
     lcfa_wp7_assert_true(strpos($name, 'livecanvas-forge-ai/') === 0, 'ability names should use the AI Bridge namespace');
@@ -183,6 +231,11 @@ lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-design-system']['meta']['mcp']['public']), 'design-system preview should be public to MCP because it forces dry-run');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-block-pattern']['meta']['mcp']['public']), 'block pattern preview should be public to MCP because it never writes');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-native-pattern-page']['meta']['mcp']['public']), 'native pattern page preview should be public to MCP because it never writes');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/content-patch-preview']['meta']['mcp']['public']), 'content patch preview should be public to MCP because it never writes');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/theme-file-read']['meta']['mcp']['public']), 'theme file read should be public to MCP behind theme file permissions');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/theme-file-preview-write']['meta']['mcp']['public']), 'theme file preview write should be public to MCP because it forces dry-run');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/wp-debug']['meta']['mcp']['public']), 'wp debug should be public to MCP behind debug permissions');
+lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/picostrap-compile-preview']['meta']['mcp']['public']), 'Picostrap compile preview should be public to MCP because it never stores a bundle');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/generate-ai-text']['meta']['mcp']['public']), 'AI text generation should not be public on MCP by default');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/preview-command']['meta']['mcp']['public']), 'generic command preview should be public on MCP because it is forced dry-run');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-command']['meta']['mcp']['public']), 'apply command should not be public on MCP by default');
@@ -192,6 +245,9 @@ lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-dynamic-template']['meta']['mcp']['public']), 'dynamic template apply should not be public on MCP by default');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-design-system']['meta']['mcp']['public']), 'design-system apply should not be public on MCP by default');
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/restore-audit-rollback']['meta']['mcp']['public']), 'audit rollback restore should not be public on MCP by default');
+lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/theme-file-write']['meta']['mcp']['public']), 'theme file write should not be public on MCP by default');
+lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/media-upload']['meta']['mcp']['public']), 'media upload should not be public on MCP by default');
+lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/cache-flush']['meta']['mcp']['public']), 'cache flush should not be public on MCP by default');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-command']['meta']['annotations']['destructive']), 'apply command should be marked as destructive');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-page-upsert']['meta']['annotations']['destructive']), 'dedicated apply abilities should be marked as destructive');
 
@@ -205,12 +261,13 @@ $ai_status = $registry->get_ai_client_status();
 lcfa_wp7_assert_true(empty($ai_status['ai_client']['available']), 'AI Client status should gracefully report unavailable when wp_ai_client_prompt is missing');
 
 $diagnostics = $registry->get_ability_diagnostics();
-lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['total'] ?? 0) === 32, 'ability diagnostics should expose the full ability count');
-lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['mcp_public_total'] ?? 0) === 24, 'ability diagnostics should expose the MCP-public ability count');
+lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['total'] ?? 0) === 47, 'ability diagnostics should expose the full ability count');
+lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['mcp_public_total'] ?? 0) === 30, 'ability diagnostics should expose the MCP-public ability count');
 lcfa_wp7_assert_true(empty($diagnostics['ability_diagnostics']['has_mcp_public_write']), 'ability diagnostics should confirm no write ability is MCP-public');
 lcfa_wp7_assert_true(empty($diagnostics['ability_diagnostics']['mcp_write_opt_in_enabled']), 'ability diagnostics should report disabled write opt-in by default');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-page-upsert', $diagnostics['ability_diagnostics']['mcp_public_preview'] ?? [], true), 'ability diagnostics should list dedicated preview abilities');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-command', $diagnostics['ability_diagnostics']['mcp_public_preview'] ?? [], true), 'ability diagnostics should list the generic dry-run preview ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/content-patch-preview', $diagnostics['ability_diagnostics']['mcp_public_preview'] ?? [], true), 'ability diagnostics should list content patch preview ability');
 lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['groups']['preview'] ?? 0) >= 1, 'ability diagnostics should expose logical preview group counts');
 lcfa_wp7_assert_true(($diagnostics['ability_diagnostics']['groups']['apply'] ?? 0) >= 1, 'ability diagnostics should expose logical apply group counts');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-connection-handoff', $diagnostics['ability_diagnostics']['mcp_public'] ?? [], true), 'ability diagnostics should list the connection handoff ability as MCP-public');
@@ -224,15 +281,16 @@ $GLOBALS['lcfa_test_connections']['mcp_public_write_abilities'] = [
     'livecanvas-forge-ai/apply-page-upsert',
 ];
 $write_public = $registry->get_public_mcp_abilities();
-lcfa_wp7_assert_true(count($write_public) === 25, 'write opt-in should expose only the selected dedicated write abilities and no generic apply command');
+lcfa_wp7_assert_true(count($write_public) === 31, 'write opt-in should expose only the selected dedicated write abilities and no generic apply command');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/apply-page-upsert', array_keys($write_public), true), 'write opt-in should expose page apply ability');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/restore-audit-rollback', array_keys($write_public), true), 'write opt-in should not expose unselected rollback restore ability');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', array_keys($write_public), true), 'write opt-in should not expose the generic apply command');
 $GLOBALS['lcfa_test_connections']['mcp_public_write_abilities'] = array_keys(LCFA_Settings::get_mcp_write_ability_options());
 $all_write_public = $registry->get_public_mcp_abilities();
-lcfa_wp7_assert_true(count($all_write_public) === 30, 'selecting all write abilities should expose the full dedicated write surface');
+lcfa_wp7_assert_true(count($all_write_public) === 45, 'selecting all write abilities should expose the full dedicated write surface');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/apply-native-pattern-page', array_keys($all_write_public), true), 'selecting native page apply should expose the native page apply ability');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/restore-audit-rollback', array_keys($all_write_public), true), 'selecting rollback should expose audit rollback restore ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/content-patch-apply', array_keys($all_write_public), true), 'selecting content patch should expose targeted patch apply ability');
 $GLOBALS['lcfa_test_connections']['mcp_write_abilities_enabled'] = false;
 $GLOBALS['lcfa_test_connections']['mcp_public_write_abilities'] = [];
 
@@ -354,7 +412,7 @@ $adapter = new class {
 $registry->register_mcp_server($adapter);
 lcfa_wp7_assert_true(($adapter->args[0] ?? '') === 'livecanvas-forge-ai', 'registry should create a custom AI Bridge MCP server when the adapter is available');
 lcfa_wp7_assert_true(($adapter->args[1] ?? '') === 'livecanvas-forge-ai', 'AI Bridge MCP server should use the AI Bridge REST namespace');
-lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 24, 'AI Bridge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and preview abilities');
+lcfa_wp7_assert_true(count($adapter->args[9] ?? []) === 30, 'AI Bridge MCP server should expose public read-only, runs, connection handoff, handoff summary, handoff package, block manifest, block library, native page blueprints, native pattern preview, and preview abilities');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-command', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose apply-command by default');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/apply-native-pattern-page', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose native pattern page apply by default');
 lcfa_wp7_assert_true(!in_array('livecanvas-forge-ai/generate-ai-text', $adapter->args[9] ?? [], true), 'AI Bridge MCP server must not expose arbitrary AI generation by default');
@@ -365,5 +423,7 @@ lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-native-pattern-page-bluep
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/get-agent-handoff-package', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the read-only agent handoff package ability');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-native-pattern-page', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose the native pattern page preview ability');
 lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/preview-global-shell', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose dedicated preview abilities');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/content-patch-preview', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose targeted patch preview ability');
+lcfa_wp7_assert_true(in_array('livecanvas-forge-ai/wp-debug', $adapter->args[9] ?? [], true), 'AI Bridge MCP server should expose debug read ability behind permissions');
 
 echo "PASS\n";

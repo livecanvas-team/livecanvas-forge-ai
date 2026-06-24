@@ -286,10 +286,7 @@ final class LCFA_MCP_Session_Manager {
                 return false;
             }
             $scopes = self::sanitize_scopes((array) ($session['scopes'] ?? []));
-            if ($required_scope === 'write' && !in_array('write', $scopes, true)) {
-                return false;
-            }
-            if ($required_scope === 'preview' && !in_array('preview', $scopes, true) && !in_array('write', $scopes, true)) {
+            if (!self::scope_allows($scopes, $required_scope)) {
                 return false;
             }
 
@@ -381,7 +378,7 @@ final class LCFA_MCP_Session_Manager {
     }
 
     private static function sanitize_scopes(array $scopes): array {
-        $allowed = ['read', 'preview', 'write'];
+        $allowed = ['read', 'preview', 'write', 'media', 'theme_files', 'debug', 'cache', 'seo'];
         $normalized = [];
         foreach ($scopes as $scope) {
             $scope = sanitize_key((string) $scope);
@@ -394,6 +391,18 @@ final class LCFA_MCP_Session_Manager {
         }
 
         return array_values(array_unique($normalized));
+    }
+
+    private static function scope_allows(array $scopes, string $required_scope): bool {
+        $required_scope = sanitize_key($required_scope);
+        if ($required_scope === '' || $required_scope === 'read') {
+            return in_array('read', $scopes, true);
+        }
+        if ($required_scope === 'preview') {
+            return in_array('preview', $scopes, true) || in_array('write', $scopes, true);
+        }
+
+        return in_array($required_scope, $scopes, true);
     }
 
     private static function session_is_expired(array $session): bool {

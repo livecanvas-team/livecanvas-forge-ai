@@ -117,7 +117,7 @@ lcfa_assert_same('gpt-5.4-mini', $sanitized_codex['codex_model'] ?? '', 'Codex m
 lcfa_assert_same('fast', $sanitized_codex['codex_speed'] ?? '', 'Codex speed defaults should be saved from Connections');
 lcfa_assert_same('low', $sanitized_codex['codex_reasoning_effort'] ?? '', 'Codex intelligence defaults should be saved from Connections');
 lcfa_assert_same(true, $sanitized_codex['mcp_write_abilities_enabled'] ?? null, 'MCP write ability opt-in should sanitize to boolean true');
-lcfa_assert_same(array_keys(LCFA_Settings::get_mcp_write_ability_options()), $sanitized_codex['mcp_public_write_abilities'] ?? [], 'legacy write opt-in should default to all curated write abilities when no allowlist was submitted');
+lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $sanitized_codex['mcp_public_write_abilities'] ?? [], 'legacy write opt-in should default to core content write abilities when no allowlist was submitted');
 
 $sanitized_write_allowlist = LCFA_Settings::sanitize_connections([
     'preferred_client' => 'codex',

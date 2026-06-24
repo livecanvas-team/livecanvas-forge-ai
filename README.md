@@ -52,7 +52,7 @@ Usable today:
 - see handoff readiness ratios for read-only, preview, and guarded-write smoke tests
 - use `forge-handoff-summary.json` inside handoff packages for quick agent decisions
 - run the AI Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
-- review the Power Mode policy foundation; advanced filesystem, WP-CLI, upload, admin-link, and sandbox tools are prepared but not exposed in this release
+- enable Full Access for trusted sessions when Codex needs targeted content patches, guarded theme-file writes, media upload/replace, Picostrap compile, debug/cache, Polylang, SEO, or visual checks
 
 Still in progress:
 
@@ -429,9 +429,24 @@ WordPress 7 ability highlights:
 | `livecanvas-forge-ai/preview-block-pattern` | Convert supplied HTML into a native block pattern preview. |
 | `livecanvas-forge-ai/preview-native-pattern-page` | Compose a native block page preview from AI Bridge patterns. |
 | `livecanvas-forge-ai/apply-native-pattern-page` | Create a new draft native WordPress page from AI Bridge patterns. |
+| `livecanvas-forge-ai/content-patch-preview` | Preview an exact text, selector, attribute, append, or prepend patch without rewriting the full page. |
+| `livecanvas-forge-ai/content-patch-apply` | Apply a targeted content patch with validation and rollback metadata. |
+| `livecanvas-forge-ai/theme-file-read` | Read allowed theme files through the guarded PHP bridge. |
+| `livecanvas-forge-ai/theme-file-preview-write` | Preview a child-theme file write before applying it. |
+| `livecanvas-forge-ai/theme-file-write` | Write an allowed child-theme file with backup protection. |
+| `livecanvas-forge-ai/media-upload` | Upload URL/base64 media to the WordPress Media Library. |
+| `livecanvas-forge-ai/media-replace` | Replace media references inside LiveCanvas content. |
+| `livecanvas-forge-ai/picostrap-compile-preview` | Read Picostrap compile manifest and source inputs. |
+| `livecanvas-forge-ai/picostrap-compile-apply` | Store a compiled Picostrap CSS bundle after a successful local compile. |
+| `livecanvas-forge-ai/wp-debug` | Read PHP/WP/theme/plugin/debug-log context. |
+| `livecanvas-forge-ai/cache-flush` | Flush common WordPress caches and bump AI Bridge asset version. |
+| `livecanvas-forge-ai/polylang-tools` | Read or update Polylang language relationships when available. |
+| `livecanvas-forge-ai/seo-tools` | Read or update SEOPress metadata when available. |
 | `livecanvas-forge-ai/restore-audit-rollback` | Restore a stored rollback by audit ID. |
 
-Read and preview abilities are MCP-public by default. Curated write abilities are also enabled by default for paired AI Bridge agents so they can create and update content after previews. Under `AI Bridge > Connections > Advanced settings`, review the master write switch and per-ability allowlist; disable the switch or uncheck individual abilities when a client should stay read/preview-only.
+Read and preview abilities are MCP-public by default. Curated write abilities are enabled only through the master write switch, per-ability allowlist, and the paired session scopes. For production sites, enable Full Access only for trusted Codex sessions, review preview/diff output first, and keep rollback available for every apply.
+
+The Node MCP package also exposes `visual_check` for local browser-based desktop/mobile screenshots, overflow checks, and computed selector styles when Playwright is available in the Codex runtime.
 
 The backend also exposes `GET /wp-json/lcfa/v1/studio`, `GET /wp-json/lcfa/v1/studio/connection-handoff`, `GET /wp-json/lcfa/v1/studio/handoff-summary`, `GET /wp-json/lcfa/v1/studio/block-pattern-library`, `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`, and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, connection handoff, handoff summary, block pattern library, native page blueprints, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The connection-handoff endpoint returns only the first-prompt bootstrap. The handoff-summary endpoint returns only compact status, score, blocker, warning, missing-test, write-guard, and next-action metadata. The block-pattern-library endpoint returns only export-ready native patterns. The native-pattern-page-blueprints endpoint returns page recipes plus copy-ready preview/apply requests. The native-pattern-page preview endpoint composes block content from registered patterns without writing. The native-pattern-page apply endpoint creates a new draft native page and records a rollback reference. AI Studio can run the preview, create the draft from the blueprint panel, refresh audit state, and open the rollback flow for the created draft. MCP clients can also call `get_connection_handoff`, `get_handoff_summary`, `get_block_pattern_library`, `get_native_pattern_page_blueprints`, `preview_native_pattern_page`, `apply_native_pattern_page`, and `get_agent_handoff_package`.
 

@@ -164,6 +164,41 @@ async function run() {
     'apply_native_pattern_page should make write behavior clear'
   )
 
+  const contentPatchPreview = tools.find((tool) => tool.name === 'content_patch_preview')
+  assert.ok(contentPatchPreview, 'content_patch_preview should be registered')
+  assert.ok(contentPatchPreview.inputSchema.properties.selector, 'content_patch_preview should expose selector targeting')
+  assert.ok(contentPatchPreview.outputSchema, 'content_patch_preview should expose outputSchema metadata')
+  assert.equal(contentPatchPreview.annotations.lcfaCacheScope, 'site_session', 'content_patch_preview should expose cache scope metadata')
+
+  const contentPatchApply = tools.find((tool) => tool.name === 'content_patch_apply')
+  assert.ok(contentPatchApply, 'content_patch_apply should be registered')
+  assert.ok(contentPatchApply.inputSchema.properties.allow_multiple, 'content_patch_apply should expose the allow_multiple safety switch')
+
+  const themeFileRead = tools.find((tool) => tool.name === 'theme_file_read')
+  assert.ok(themeFileRead, 'theme_file_read should be registered for remote PHP theme access')
+  assert.ok(themeFileRead.inputSchema.required.includes('path'), 'theme_file_read should require a relative path')
+
+  const themeFileWrite = tools.find((tool) => tool.name === 'theme_file_write')
+  assert.ok(themeFileWrite, 'theme_file_write should be registered for guarded remote theme writes')
+  assert.ok(themeFileWrite.inputSchema.required.includes('content'), 'theme_file_write should require complete file content')
+
+  const mediaUpload = tools.find((tool) => tool.name === 'media_upload')
+  assert.ok(mediaUpload, 'media_upload should be registered')
+  assert.ok(mediaUpload.inputSchema.properties.data_url, 'media_upload should support data URL uploads')
+  assert.ok(mediaUpload.inputSchema.properties.set_featured, 'media_upload should support featured image assignment')
+
+  const picostrapCompileApply = tools.find((tool) => tool.name === 'picostrap_compile_apply')
+  assert.ok(picostrapCompileApply, 'picostrap_compile_apply should be registered')
+  assert.ok(picostrapCompileApply.inputSchema.properties.compiled_css, 'picostrap_compile_apply should accept precompiled CSS')
+
+  const wpDebug = tools.find((tool) => tool.name === 'wp_debug')
+  assert.ok(wpDebug, 'wp_debug should be registered')
+  assert.equal(wpDebug.annotations.lcfaCacheScope, 'site_session', 'wp_debug should be cache-scoped for the session')
+
+  const visualCheck = tools.find((tool) => tool.name === 'visual_check')
+  assert.ok(visualCheck, 'visual_check should be registered')
+  assert.ok(visualCheck.inputSchema.properties.viewports.items, 'visual_check should declare viewport item schema')
+
   const validateMarkup = tools.find((tool) => tool.name === 'validate_markup_for_framework')
   assert.ok(validateMarkup, 'validate_markup_for_framework should be registered')
   assert.ok(validateMarkup.inputSchema.properties.body_html_lines, 'validate_markup_for_framework should expose body_html_lines')

@@ -44,7 +44,8 @@ lcfa_repair_assert_contains("AI Bridge auto updates are paused", $admin, 'dashbo
 lcfa_repair_assert_contains(".lcfa-form label.lcfa-checkbox", $admin_css, 'admin CSS should keep checkbox labels aligned inside forms');
 lcfa_repair_assert_contains("missing_credentials", $direct_onboarding, 'Direct Mode should expose a missing_credentials state');
 lcfa_repair_assert_contains("ai-bridge-session", $direct_onboarding, 'Direct Mode should identify the secure AI Bridge session strategy');
-lcfa_repair_assert_contains("read-file", $power_mode, 'Power Mode foundation should list future file tools without exposing them yet');
+lcfa_repair_assert_contains("content-patch", $power_mode, 'Power Mode should list targeted content patching tools');
+lcfa_repair_assert_contains("theme-file-write", $power_mode, 'Power Mode should list guarded theme file tools');
 lcfa_repair_assert_contains("connection_last_bundle_hash", $settings, 'settings should keep a fingerprint field for verified connection config');
 lcfa_repair_assert_contains("power_mode", $settings, 'settings should persist the Power Mode policy');
 lcfa_repair_assert_contains("normalize_local_workspace_root", $settings, 'settings should normalize stale local workspace roots');

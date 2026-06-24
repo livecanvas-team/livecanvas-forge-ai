@@ -1,6 +1,6 @@
 {
   "name": "@livecanvas/ai-bridge-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Secure MCP bridge for LiveCanvas AI Bridge",
   "bin": {
     "livecanvas-ai-bridge-mcp": "bin/livecanvas-forge-mcp.js",

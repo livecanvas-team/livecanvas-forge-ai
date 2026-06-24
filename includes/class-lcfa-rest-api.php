@@ -11,6 +11,18 @@ if (!class_exists('LCFA_Genesis_Executor', false) && defined('LCFA_DIR')) {
 if (!class_exists('LCFA_Codex_Autorunner', false) && defined('LCFA_DIR')) {
     require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';
 }
+if (!class_exists('LCFA_Content_Patch_Service', false)) {
+    require_once __DIR__ . '/class-lcfa-content-patch-service.php';
+}
+if (!class_exists('LCFA_Media_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-media-tools.php';
+}
+if (!class_exists('LCFA_Debug_Cache_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-debug-cache-tools.php';
+}
+if (!class_exists('LCFA_Polylang_SEO_Tools', false)) {
+    require_once __DIR__ . '/class-lcfa-polylang-seo-tools.php';
+}
 
 final class LCFA_Rest_Api {
     private const COMMAND_EXECUTION_TRANSIENT_PREFIX = 'lcfa_command_execution_';
@@ -25,6 +37,10 @@ final class LCFA_Rest_Api {
     private LCFA_Genesis_Planner $genesis_planner;
     private LCFA_Genesis_Executor $genesis_executor;
     private LCFA_Picostrap_Compile_Service $picostrap_compile_service;
+    private LCFA_Content_Patch_Service $content_patch_service;
+    private LCFA_Media_Tools $media_tools;
+    private LCFA_Debug_Cache_Tools $debug_cache_tools;
+    private LCFA_Polylang_SEO_Tools $polylang_seo_tools;
     private ?LCFA_Ability_Registry $ability_registry = null;
 
     public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null, ?LCFA_Ability_Registry $ability_registry = null) {
@@ -39,6 +55,10 @@ final class LCFA_Rest_Api {
         $this->genesis_planner    = $genesis_planner;
         $this->genesis_executor   = $genesis_executor ?: new LCFA_Genesis_Executor($environment, $command_deck);
         $this->picostrap_compile_service = new LCFA_Picostrap_Compile_Service($environment);
+        $this->content_patch_service = new LCFA_Content_Patch_Service($inventory, $command_deck);
+        $this->media_tools = new LCFA_Media_Tools($command_deck);
+        $this->debug_cache_tools = new LCFA_Debug_Cache_Tools($environment);
+        $this->polylang_seo_tools = new LCFA_Polylang_SEO_Tools();
         $this->ability_registry = $ability_registry;
     }
 
@@ -152,7 +172,7 @@ final class LCFA_Rest_Api {
             [
                 'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'save_theme_file'],
-                'permission_callback' => [$this, 'can_write'],
+                'permission_callback' => [$this, 'can_theme_files'],
             ],
         ]);
 
@@ -165,7 +185,7 @@ final class LCFA_Rest_Api {
             [
                 'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'save_theme_template_file'],
-                'permission_callback' => [$this, 'can_write'],
+                'permission_callback' => [$this, 'can_theme_files'],
             ],
         ]);
 
@@ -184,7 +204,55 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/theme/backup/restore', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'restore_theme_backup'],
+            'permission_callback' => [$this, 'can_theme_files'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/content/patch/preview', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'preview_content_patch'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/content/patch/apply', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'apply_content_patch'],
             'permission_callback' => [$this, 'can_write'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/media/upload', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'upload_media'],
+            'permission_callback' => [$this, 'can_media'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/media/replace', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'replace_media'],
+            'permission_callback' => [$this, 'can_media'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/debug', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_debug_snapshot'],
+            'permission_callback' => [$this, 'can_debug'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/cache/flush', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'flush_cache'],
+            'permission_callback' => [$this, 'can_cache'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/polylang/tools', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'run_polylang_tool'],
+            'permission_callback' => [$this, 'can_seo'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/seo/tools', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'run_seo_tool'],
+            'permission_callback' => [$this, 'can_seo'],
         ]);
 
         register_rest_route('lcfa/v1', '/history', [
@@ -390,7 +458,7 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/picostrap/bundle', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'store_picostrap_bundle'],
-            'permission_callback' => [$this, 'can_write'],
+            'permission_callback' => [$this, 'can_theme_files'],
         ]);
 
         register_rest_route('lcfa/v1', '/windpress/status', [
@@ -2056,6 +2124,13 @@ final class LCFA_Rest_Api {
             $payload = $request->get_params();
         }
 
+        $fingerprint_error = $this->validate_mcp_site_fingerprint($request, is_array($payload) ? $payload : []);
+        if ($fingerprint_error) {
+            return new WP_REST_Response([
+                'result' => $fingerprint_error,
+            ], 403);
+        }
+
         $css = (string) ($payload['css'] ?? '');
 
         if ($css === '') {
@@ -2301,12 +2376,122 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function preview_content_patch(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->content_patch_service->preview($this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'mcp_agent', 'content_patch_preview')));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function apply_content_patch(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $fingerprint_error = $this->validate_mcp_site_fingerprint($request, $payload);
+        if ($fingerprint_error) {
+            return new WP_REST_Response([
+                'result' => $fingerprint_error,
+            ], 403);
+        }
+
+        $result = $this->content_patch_service->apply($this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'mcp_agent', 'content_patch_apply')));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function upload_media(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $fingerprint_error = $this->validate_mcp_site_fingerprint($request, $payload);
+        if ($fingerprint_error) {
+            return new WP_REST_Response([
+                'result' => $fingerprint_error,
+            ], 403);
+        }
+
+        $result = $this->media_tools->upload($payload);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function replace_media(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $fingerprint_error = $this->validate_mcp_site_fingerprint($request, $payload);
+        if ($fingerprint_error) {
+            return new WP_REST_Response([
+                'result' => $fingerprint_error,
+            ], 403);
+        }
+
+        $result = $this->media_tools->replace($this->add_payload_provenance($payload, $this->get_payload_provenance($payload, 'mcp_agent', 'media_replace')));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function get_debug_snapshot(WP_REST_Request $request): WP_REST_Response {
+        return new WP_REST_Response([
+            'result' => $this->debug_cache_tools->get_debug($request->get_params()),
+        ]);
+    }
+
+    public function flush_cache(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->debug_cache_tools->flush_cache($payload);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function run_polylang_tool(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->polylang_seo_tools->polylang($payload);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function run_seo_tool(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->polylang_seo_tools->seo($payload);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
     public function can_read(?WP_REST_Request $request = null): bool {
         return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'read');
     }
 
     public function can_write(?WP_REST_Request $request = null): bool {
         return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'write');
+    }
+
+    public function can_media(?WP_REST_Request $request = null): bool {
+        return current_user_can('upload_files') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'media');
+    }
+
+    public function can_theme_files(?WP_REST_Request $request = null): bool {
+        return current_user_can('edit_theme_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'theme_files');
+    }
+
+    public function can_debug(?WP_REST_Request $request = null): bool {
+        return current_user_can('manage_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'debug');
+    }
+
+    public function can_cache(?WP_REST_Request $request = null): bool {
+        return current_user_can('manage_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'cache');
+    }
+
+    public function can_seo(?WP_REST_Request $request = null): bool {
+        return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'seo');
     }
 
     public function can_manage(?WP_REST_Request $request = null): bool {
@@ -2701,6 +2886,8 @@ final class LCFA_Rest_Api {
             __('Run the read-only checks from the package, starting with get_snapshot, get_ability_diagnostics, and get_runs when available.', 'livecanvas-forge-ai'),
             __('Verify the returned site_identity before running any write command; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, available tools, active risks, and whether write abilities are exposed.', 'livecanvas-forge-ai'),
+            __('For small edits, prefer content_patch_preview/content_patch_apply over rewriting the full page.', 'livecanvas-forge-ai'),
+            __('Use media, theme file, debug, cache, SEO, and Polylang tools only when the session scope exposes them.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
         ];
         $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
@@ -2752,6 +2939,18 @@ final class LCFA_Rest_Api {
                     'label'   => __('Use preview or dry-run before writes', 'livecanvas-forge-ai'),
                     'tool'    => '',
                     'payload' => new stdClass(),
+                ],
+                [
+                    'id'      => 'targeted_patch',
+                    'label'   => __('Use targeted content patching for small page or partial edits', 'livecanvas-forge-ai'),
+                    'tool'    => 'content_patch_preview',
+                    'payload' => [
+                        'target_type' => 'page',
+                        'target_id' => 0,
+                        'operation' => 'replace_text',
+                        'search' => '',
+                        'replacement' => '',
+                    ],
                 ],
             ],
             'summary'        => [

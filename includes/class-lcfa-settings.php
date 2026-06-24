@@ -368,11 +368,54 @@ final class LCFA_Settings {
                 'label'       => self::translate('Restore audit rollback'),
                 'description' => self::translate('Restore or trash content from a stored audit rollback record.'),
             ],
+            'livecanvas-forge-ai/content-patch-apply' => [
+                'label'       => self::translate('Apply content patch'),
+                'description' => self::translate('Apply a targeted LiveCanvas content patch after preview.'),
+            ],
+            'livecanvas-forge-ai/theme-file-write' => [
+                'label'       => self::translate('Write theme file'),
+                'description' => self::translate('Write an allowed theme file with backup protection.'),
+            ],
+            'livecanvas-forge-ai/theme-file-restore' => [
+                'label'       => self::translate('Restore theme file backup'),
+                'description' => self::translate('Restore a previous theme file backup.'),
+            ],
+            'livecanvas-forge-ai/media-upload' => [
+                'label'       => self::translate('Upload media'),
+                'description' => self::translate('Upload media to the WordPress Media Library.'),
+            ],
+            'livecanvas-forge-ai/media-replace' => [
+                'label'       => self::translate('Replace media reference'),
+                'description' => self::translate('Replace a media URL inside LiveCanvas content.'),
+            ],
+            'livecanvas-forge-ai/picostrap-compile-apply' => [
+                'label'       => self::translate('Apply Picostrap compile'),
+                'description' => self::translate('Store a compiled Picostrap bundle.'),
+            ],
+            'livecanvas-forge-ai/cache-flush' => [
+                'label'       => self::translate('Flush caches'),
+                'description' => self::translate('Flush WordPress, plugin, opcode, and AI Bridge caches.'),
+            ],
+            'livecanvas-forge-ai/polylang-tools' => [
+                'label'       => self::translate('Polylang tools'),
+                'description' => self::translate('Create or link Polylang translations.'),
+            ],
+            'livecanvas-forge-ai/seo-tools' => [
+                'label'       => self::translate('SEO tools'),
+                'description' => self::translate('Read or update SEOPress metadata.'),
+            ],
         ];
     }
 
     public static function get_default_mcp_write_abilities(): array {
-        return array_keys(self::get_mcp_write_ability_options());
+        return [
+            'livecanvas-forge-ai/apply-page-upsert',
+            'livecanvas-forge-ai/apply-native-pattern-page',
+            'livecanvas-forge-ai/apply-global-shell',
+            'livecanvas-forge-ai/apply-dynamic-template',
+            'livecanvas-forge-ai/apply-design-system',
+            'livecanvas-forge-ai/restore-audit-rollback',
+        ];
     }
 
     public static function sanitize_mcp_write_abilities($abilities): array {

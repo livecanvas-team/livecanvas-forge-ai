@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.1.20
+ * Version: 0.1.21
  * Update URI: https://livecanvas.com/ai-bridge
  * Author: The LiveCanvas Team
  * Author URI: https://livecanvas.com/
@@ -12,7 +12,7 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.1.20');
+define('LCFA_VERSION', '0.1.21');
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
@@ -43,6 +43,10 @@ require_once LCFA_DIR . 'includes/class-lcfa-design-system-compose.php';
 require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-manifest.php';
 require_once LCFA_DIR . 'includes/class-lcfa-picostrap-bundle-store.php';
 require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
+require_once LCFA_DIR . 'includes/class-lcfa-content-patch-service.php';
+require_once LCFA_DIR . 'includes/class-lcfa-media-tools.php';
+require_once LCFA_DIR . 'includes/class-lcfa-debug-cache-tools.php';
+require_once LCFA_DIR . 'includes/class-lcfa-polylang-seo-tools.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
 require_once LCFA_DIR . 'includes/class-lcfa-direct-agent-onboarding.php';
