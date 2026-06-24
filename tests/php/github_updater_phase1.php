@@ -274,6 +274,7 @@ lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_get_calls'], 'GitHub fallback sh
 $update = $updater->filter_update_uri_response(false, [], $plugin_file);
 lcfa_updater_assert_true(is_object($update), 'GitHub fallback release should produce a WordPress update object');
 lcfa_updater_assert_same('https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.1.8/livecanvas-forge-ai.zip', $update->package ?? '', 'GitHub fallback should use the release asset URL');
+lcfa_updater_assert_same('7.0', $update->tested ?? '', 'GitHub fallback should mark WordPress 7.0 compatibility as tested');
 
 lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true);
 $GLOBALS['lcfa_test_get_release_payload'] = lcfa_updater_github_release('v0.1.9');
@@ -282,6 +283,7 @@ lcfa_updater_assert_same('0.1.9', $state['latest_version'] ?? '', 'GitHub releas
 lcfa_updater_assert_same('github_release', $state['source'] ?? '', 'newer GitHub release should identify GitHub as the selected update source');
 $update = $updater->filter_update_uri_response(false, [], $plugin_file);
 lcfa_updater_assert_same('0.1.9', $update->new_version ?? '', 'WordPress update object should use the newer GitHub version');
+lcfa_updater_assert_same('7.0', $update->tested ?? '', 'newer GitHub update object should mark WordPress 7.0 compatibility as tested');
 
 lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true, 500);
 $GLOBALS['lcfa_test_get_release_payload'] = lcfa_updater_github_release('v0.1.8-beta');

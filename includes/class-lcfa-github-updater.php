@@ -354,7 +354,7 @@ final class LCFA_GitHub_Updater {
             'published_at' => (string) ($payload['published_at'] ?? $payload['last_updated'] ?? ''),
             'body'         => (string) ($payload['body'] ?? $payload['changelog'] ?? ''),
             'requires'     => (string) ($payload['requires'] ?? '6.0'),
-            'tested'       => (string) ($payload['tested'] ?? ''),
+            'tested'       => (string) ($payload['tested'] ?? '7.0'),
             'requires_php' => (string) ($payload['requires_php'] ?? '7.4'),
             'message'      => (string) ($payload['message'] ?? ''),
             'source'       => 'livecanvas_license_endpoint',
@@ -403,6 +403,9 @@ final class LCFA_GitHub_Updater {
             'release_url'  => (string) ($payload['html_url'] ?? self::UPDATE_URI),
             'published_at' => (string) ($payload['published_at'] ?? ''),
             'body'         => (string) ($payload['body'] ?? ''),
+            'requires'     => '6.0',
+            'tested'       => '7.0',
+            'requires_php' => '7.4',
             'source'       => 'github_release',
         ];
     }

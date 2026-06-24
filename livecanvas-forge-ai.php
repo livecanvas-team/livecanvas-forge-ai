@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.1.22
+ * Version: 0.1.23
  * Update URI: https://livecanvas.com/ai-bridge
  * Author: The LiveCanvas Team
  * Author URI: https://livecanvas.com/
@@ -12,7 +12,7 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.1.22');
+define('LCFA_VERSION', '0.1.23');
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
