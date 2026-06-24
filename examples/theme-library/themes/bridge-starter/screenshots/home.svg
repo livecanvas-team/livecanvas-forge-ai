@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-label="Bridge Starter preview">
+  <rect width="1200" height="720" fill="#111827"/>
+  <circle cx="1030" cy="120" r="180" fill="#ec4899" opacity=".25"/>
+  <circle cx="160" cy="580" r="220" fill="#22d3ee" opacity=".2"/>
+  <rect x="90" y="88" width="1020" height="544" rx="36" fill="#ffffff"/>
+  <text x="150" y="180" fill="#22d3ee" font-family="Arial, sans-serif" font-size="28" font-weight="700">LiveCanvas AI Bridge</text>
+  <text x="150" y="292" fill="#111827" font-family="Arial, sans-serif" font-size="68" font-weight="800">Bridge Starter</text>
+  <text x="150" y="360" fill="#4b5563" font-family="Arial, sans-serif" font-size="30">Validated Picowind starter theme</text>
+  <rect x="150" y="420" width="210" height="58" rx="29" fill="#22d3ee"/>
+  <rect x="386" y="420" width="190" height="58" rx="29" fill="none" stroke="#111827" stroke-width="3"/>
+  <rect x="720" y="170" width="300" height="300" rx="28" fill="#f3f4f6"/>
+  <path d="M780 345c52-128 98-178 138-150 35 25 11 75-28 66-23-5-55 25-96 91-14 23-26 30-37 21-9-8-1-29 23-28z" fill="#ec4899"/>
+  <path d="M777 217c-86 115-118 207-95 250 15 27 62 20 141-22 21-11 27-8 17 9-16 26-113 79-162 75-84-8-55-153 86-347 22-30 44-42 65-30 17 10 0 39-52 65z" fill="#22d3ee"/>
+</svg>

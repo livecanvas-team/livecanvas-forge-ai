@@ -1,0 +1,10 @@
+{
+  "slug": "bridge-starter",
+  "name": "Bridge Starter",
+  "version": "1.0.0",
+  "schema": "lcfa-theme.v1",
+  "status": "beta-fixture",
+  "notes": [
+    "This package is intentionally minimal and is used to test the Theme Library preview/install/import/rollback flow."
+  ]
+}

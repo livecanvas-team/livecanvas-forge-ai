@@ -370,6 +370,10 @@
     align-items: start;
 }
 
+.lcfa-admin .lcfa-grid--cards {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .lcfa-admin .lcfa-main,
 .lcfa-admin .lcfa-sidebar {
     display: grid;
@@ -384,6 +388,36 @@
     background: var(--lcfa-surface);
     box-shadow: var(--lcfa-shadow-soft);
     overflow: hidden;
+}
+
+.lcfa-admin .lcfa-card--nested {
+    border-radius: 18px;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-actions form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-inline-check {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    color: var(--lcfa-text-muted);
+}
+
+.lcfa-admin .lcfa-table-wrap {
+    overflow-x: auto;
 }
 
 .lcfa-admin .lcfa-card::after {
@@ -1981,6 +2015,12 @@
 .lcfa-admin .lcfa-chip.is-negative {
     border-color: rgba(232, 62, 140, 0.32);
     color: #ff8eb9;
+}
+
+.lcfa-admin .lcfa-chip.is-critical {
+    border-color: rgba(248, 113, 113, 0.44);
+    background: rgba(248, 113, 113, 0.1);
+    color: #fca5a5;
 }
 
 .lcfa-admin .lcfa-summary-grid {

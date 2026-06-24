@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "themes": [
+    {
+      "slug": "bridge-starter",
+      "name": "Bridge Starter",
+      "version": "1.0.0",
+      "description": "Minimal Picowind child theme package for Theme Library beta testing.",
+      "category": "beta",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/screenshots/home.svg",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/bridge-starter.zip",
+      "checksum": "sha256:d6f78efcd561c8668a9930627f515978e84ee6b79517ec5a5b8dcb774ed1bd1b",
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/metadata.json"
+    }
+  ]
+}

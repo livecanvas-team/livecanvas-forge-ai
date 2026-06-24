@@ -53,6 +53,7 @@ Usable today:
 - use `forge-handoff-summary.json` inside handoff packages for quick agent decisions
 - run the AI Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
 - enable Full Access for trusted sessions when Codex needs targeted content patches, guarded theme-file writes, media upload/replace, Picostrap compile, debug/cache, Polylang, SEO, or visual checks
+- install validated Picowind child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
 
 Still in progress:
 
@@ -78,6 +79,7 @@ Main areas:
 - `Connections`: agent bootstrap for Codex, Cursor, Claude Code, OpenCode, and generic MCP clients
 - `Genesis`: project brief and executable site plan
 - `AI Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
+- `Theme Library`: admin-only catalog installer for validated Picowind child themes and LiveCanvas starter data
 - `Command Deck`: preview/apply console for structured operations
 - `LiveCanvas editor drawer`: in-editor prompt surface for contextual page edits
 - `MCP package`: local Node bridge in [`mcp/`](./mcp/)
@@ -86,6 +88,7 @@ Main areas:
 
 - `LiveCanvas AI Bridge`: this plugin. It connects WordPress, LiveCanvas, Picostrap, Picowind, WindPress, and coding agents through safe read/preview/apply workflows.
 - `LiveCanvas AI Vision`: planned premium extension for screenshot-to-code and URL-to-page rebuilds. It will analyze long screenshots or URLs, split pages into sections, extract a reusable design system, generate or map missing assets, and create editable Picowind/Tailwind pages through AI Bridge.
+- `LiveCanvas Theme Forge Internal`: planned private generator for creating validated Picowind child-theme ZIPs from approved source briefs, staging runs, and visual QA. It is not bundled in this public plugin.
 
 ## Requirements
 
@@ -195,6 +198,69 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 13. Apply only after the preview result looks correct.
 
 For detailed MCP setup, see [`mcp/README.md`](./mcp/README.md). The preferred setup path is the in-plugin `Connections` wizard.
+
+## Theme Library
+
+The `Theme Library` tab is an alpha importer for validated Picowind one-page child themes. It does not clone arbitrary websites and it is not exposed to MCP clients in v1. The full package contract is documented in [docs/theme-library-package-spec.md](https://github.com/livecanvas-team/livecanvas-forge-ai/blob/main/docs/theme-library-package-spec.md).
+
+Default catalog:
+
+```text
+https://raw.githubusercontent.com/livecanvas-team/livecanvas-picowind-onepage-themes/main/catalog.json
+```
+
+Beta fallback catalog:
+
+```text
+https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/catalog.json
+```
+
+AI Bridge tries the dedicated Theme Library catalog first. If it is unavailable, it can fall back to the beta catalog in this repository.
+
+Developers can override the catalog URL with:
+
+```php
+add_filter('lcfa_theme_library_catalog_url', function () {
+    return 'https://example.com/catalog.json';
+});
+```
+
+Theme Library flow:
+
+1. Open `WordPress Admin > AI Bridge > Theme Library`.
+2. Click `Preview` to download the ZIP, verify checksum, validate the manifest, and inspect the import plan. This does not write.
+3. Click `Install child theme` to install and activate the Picowind child theme through WordPress theme APIs.
+4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, homepage option, and cache flushes.
+5. Use `Rollback` from the same tab if the import needs to be reverted.
+
+Required ZIP structure:
+
+```text
+style.css
+functions.php
+screenshot.jpg
+livecanvas/configuration.php
+public/styles/presets/daisyui.css
+public/styles/tailwind.css
+starter-data/lcfa-theme.json
+starter-data/livecanvas-settings.json
+starter-data/design-system.json
+starter-data/media-manifest.json
+starter-data/menus.json
+starter-data/qa-report.json
+starter-data/media/*
+```
+
+The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. Header and footer are imported as separate LiveCanvas `lc_partial` posts; they are never inserted inline into the homepage. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
+
+Theme Library beta acceptance:
+
+- catalog loads at least one valid Picowind child theme item;
+- `Preview` passes checksum, manifest, child-theme header, content, and media validation;
+- `Install child theme` activates the child theme or reports it as already installed;
+- `Import starter data` creates or updates homepage, header partial, footer partial, media, menus, and homepage option;
+- failed imports expose an audit ID and rollback action;
+- `Rollback` restores previous theme, homepage settings, content, media, menus, and imported options where possible.
 
 ## Codex Multi-Site Safety
 

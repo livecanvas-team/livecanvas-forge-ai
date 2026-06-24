@@ -23,6 +23,21 @@ if (!class_exists('LCFA_Debug_Cache_Tools', false)) {
 if (!class_exists('LCFA_Polylang_SEO_Tools', false)) {
     require_once __DIR__ . '/class-lcfa-polylang-seo-tools.php';
 }
+if (!class_exists('LCFA_Theme_Library_Catalog', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-library-catalog.php';
+}
+if (!class_exists('LCFA_Theme_Library_Validator', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-library-validator.php';
+}
+if (!class_exists('LCFA_Theme_Library_Installer', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-library-installer.php';
+}
+if (!class_exists('LCFA_Theme_Library_Importer', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-library-importer.php';
+}
+if (!class_exists('LCFA_Theme_Library_Rollback', false)) {
+    require_once __DIR__ . '/class-lcfa-theme-library-rollback.php';
+}
 
 final class LCFA_Rest_Api {
     private const COMMAND_EXECUTION_TRANSIENT_PREFIX = 'lcfa_command_execution_';
@@ -41,6 +56,10 @@ final class LCFA_Rest_Api {
     private LCFA_Media_Tools $media_tools;
     private LCFA_Debug_Cache_Tools $debug_cache_tools;
     private LCFA_Polylang_SEO_Tools $polylang_seo_tools;
+    private LCFA_Theme_Library_Catalog $theme_library_catalog;
+    private LCFA_Theme_Library_Installer $theme_library_installer;
+    private LCFA_Theme_Library_Importer $theme_library_importer;
+    private LCFA_Theme_Library_Rollback $theme_library_rollback;
     private ?LCFA_Ability_Registry $ability_registry = null;
 
     public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null, ?LCFA_Ability_Registry $ability_registry = null) {
@@ -59,6 +78,11 @@ final class LCFA_Rest_Api {
         $this->media_tools = new LCFA_Media_Tools($command_deck);
         $this->debug_cache_tools = new LCFA_Debug_Cache_Tools($environment);
         $this->polylang_seo_tools = new LCFA_Polylang_SEO_Tools();
+        $theme_library_validator = new LCFA_Theme_Library_Validator();
+        $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
+        $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator);
+        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $windpress_bridge);
+        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback();
         $this->ability_registry = $ability_registry;
     }
 
@@ -253,6 +277,36 @@ final class LCFA_Rest_Api {
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'run_seo_tool'],
             'permission_callback' => [$this, 'can_seo'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/catalog', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_theme_library_catalog'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/preview', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'preview_theme_library_item'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/install', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'install_theme_library_item'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/import', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'import_theme_library_item'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/rollback', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'rollback_theme_library_import'],
+            'permission_callback' => [$this, 'can_manage'],
         ]);
 
         register_rest_route('lcfa/v1', '/history', [
@@ -2464,6 +2518,81 @@ final class LCFA_Rest_Api {
         return new WP_REST_Response([
             'result' => $result,
         ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function get_theme_library_catalog(WP_REST_Request $request): WP_REST_Response {
+        $force = (bool) $request->get_param('force');
+        $result = $this->theme_library_catalog->get_catalog($force);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function preview_theme_library_item(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $theme = $this->resolve_theme_library_item($payload);
+        if (empty($theme['ok'])) {
+            return new WP_REST_Response(['result' => $theme], 404);
+        }
+
+        $result = $this->theme_library_installer->preview($theme['theme']);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function install_theme_library_item(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $theme = $this->resolve_theme_library_item($payload);
+        if (empty($theme['ok'])) {
+            return new WP_REST_Response(['result' => $theme], 404);
+        }
+
+        $result = $this->theme_library_installer->install($theme['theme']);
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function import_theme_library_item(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $theme = $this->resolve_theme_library_item($payload);
+        if (empty($theme['ok'])) {
+            return new WP_REST_Response(['result' => $theme], 404);
+        }
+
+        $result = $this->theme_library_importer->import($theme['theme'], !empty($payload['force']));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function rollback_theme_library_import(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->theme_library_rollback->rollback(
+            (string) ($payload['audit_id'] ?? $payload['import_audit_id'] ?? ''),
+            !empty($payload['dry_run'])
+        );
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    private function resolve_theme_library_item(array $payload): array {
+        $slug = sanitize_key((string) ($payload['slug'] ?? $payload['theme_slug'] ?? ''));
+        if ($slug === '') {
+            return [
+                'ok'      => false,
+                'message' => __('Theme Library slug is required.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return $this->theme_library_catalog->get_theme($slug, !empty($payload['force_catalog']));
     }
 
     public function can_read(?WP_REST_Request $request = null): bool {

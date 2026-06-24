@@ -1,0 +1,14 @@
+{
+  "menus": [
+    {
+      "name": "Bridge Starter Primary",
+      "location": "primary",
+      "items": [
+        {
+          "title": "Home",
+          "url": "/"
+        }
+      ]
+    }
+  ]
+}

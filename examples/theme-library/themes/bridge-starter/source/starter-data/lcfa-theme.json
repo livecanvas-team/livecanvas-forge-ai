@@ -1,0 +1,39 @@
+{
+  "schema": "lcfa-theme.v1",
+  "theme": {
+    "slug": "bridge-starter",
+    "name": "Bridge Starter",
+    "version": "1.0.0",
+    "stylesheet": "bridge-starter"
+  },
+  "compatibility": {
+    "ai_bridge": ">=0.1.25",
+    "livecanvas": ">=4.0.0",
+    "picowind": ">=1.0.0",
+    "windpress": "optional"
+  },
+  "homepage": {
+    "title": "Bridge Starter",
+    "slug": "bridge-starter",
+    "template": "default",
+    "content_file": "starter-data/home.html"
+  },
+  "header": {
+    "title": "Bridge Starter Header",
+    "variant": "1",
+    "content_file": "starter-data/header.html"
+  },
+  "footer": {
+    "title": "Bridge Starter Footer",
+    "variant": "1",
+    "content_file": "starter-data/footer.html"
+  },
+  "media_manifest": "starter-data/media-manifest.json",
+  "menus_file": "starter-data/menus.json",
+  "design_system_file": "starter-data/design-system.json",
+  "livecanvas_settings": "starter-data/livecanvas-settings.json",
+  "qa_report": "starter-data/qa-report.json",
+  "rollback": {
+    "strategy": "lcfa-import-audit"
+  }
+}

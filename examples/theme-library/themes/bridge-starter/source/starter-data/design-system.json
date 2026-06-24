@@ -1,0 +1,14 @@
+{
+  "tokens": {
+    "colors": {
+      "primary": "#22d3ee",
+      "secondary": "#ec4899",
+      "ink": "#111827"
+    },
+    "radius": {
+      "card": "0.75rem",
+      "button": "999px"
+    }
+  },
+  "windpress_css": ".lcfa-bridge-starter-hero{min-height:72vh}"
+}
