@@ -8,10 +8,12 @@ final class LCFA_GitHub_Updater {
     private const REPO_API = 'https://api.github.com/repos/livecanvas-team/livecanvas-forge-ai/releases/latest';
     private const UPDATE_API = 'https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/update';
     private const UPDATE_URI = 'https://livecanvas.com/ai-bridge';
+    private const ICON_128_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png';
+    private const ICON_256_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-256.png';
     private const CACHE_KEY = 'lcfa_livecanvas_update_release';
     private const CACHE_TTL = 21600;
     private const NO_UPDATE_CACHE_TTL = 600;
-    private const CACHE_SCHEMA = 4;
+    private const CACHE_SCHEMA = 5;
 
     private ?LCFA_Environment $environment;
 
@@ -149,25 +151,10 @@ final class LCFA_GitHub_Updater {
     }
 
     private function get_plugin_icons(): array {
-        $icon_128 = '';
-        $icon_256 = '';
-        if (function_exists('plugins_url') && defined('LCFA_FILE')) {
-            $icon_128 = plugins_url('assets/plugin-icon-128.png', LCFA_FILE);
-            $icon_256 = plugins_url('assets/plugin-icon-256.png', LCFA_FILE);
-        } elseif (defined('LCFA_URL')) {
-            $base_url = rtrim((string) LCFA_URL, '/');
-            $icon_128 = $base_url . '/assets/plugin-icon-128.png';
-            $icon_256 = $base_url . '/assets/plugin-icon-256.png';
-        }
-
-        if ($icon_128 === '' || $icon_256 === '') {
-            return [];
-        }
-
         return [
-            '1x'      => $icon_128,
-            '2x'      => $icon_256,
-            'default' => $icon_256,
+            '1x'      => self::ICON_128_URL,
+            '2x'      => self::ICON_256_URL,
+            'default' => self::ICON_256_URL,
         ];
     }
 
@@ -177,12 +164,43 @@ final class LCFA_GitHub_Updater {
             return $cached;
         }
 
-        $release = $this->request_livecanvas_release();
-        if (!empty($release['ok']) || !$this->allow_github_fallback($release)) {
-            return $this->cache_release_result($release);
+        $livecanvas_release = $this->request_livecanvas_release();
+        if (!$this->allow_github_fallback($livecanvas_release)) {
+            return $this->cache_release_result($livecanvas_release);
         }
 
-        return $this->cache_release_result($this->request_github_release());
+        $github_release = $this->request_github_release();
+
+        if (!empty($livecanvas_release['ok']) && !empty($github_release['ok'])) {
+            return $this->cache_release_result(
+                $this->pick_newer_release($livecanvas_release, $github_release)
+            );
+        }
+
+        if (!empty($livecanvas_release['ok'])) {
+            return $this->cache_release_result($livecanvas_release);
+        }
+
+        if (!empty($github_release['ok'])) {
+            return $this->cache_release_result($github_release);
+        }
+
+        return $this->cache_release_result($livecanvas_release);
+    }
+
+    private function pick_newer_release(array $first, array $second): array {
+        $first_version = (string) ($first['version'] ?? '');
+        $second_version = (string) ($second['version'] ?? '');
+
+        if ($first_version === '') {
+            return $second;
+        }
+
+        if ($second_version === '') {
+            return $first;
+        }
+
+        return version_compare($second_version, $first_version, '>') ? $second : $first;
     }
 
     private function request_livecanvas_release(): array {

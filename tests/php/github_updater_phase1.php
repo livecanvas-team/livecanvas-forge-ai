@@ -204,7 +204,7 @@ lcfa_updater_assert_same('0.1.8', $state['latest_version'] ?? '', 'LiveCanvas en
 lcfa_updater_assert_true((bool) ($state['update_available'] ?? false), 'newer LiveCanvas release should be reported as an update');
 lcfa_updater_assert_same('livecanvas_license_endpoint', $state['source'] ?? '', 'update state should report the licensed LiveCanvas source');
 lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_post_calls'], 'licensed checks should call the LiveCanvas updater with POST');
-lcfa_updater_assert_same(0, $GLOBALS['lcfa_test_get_calls'], 'licensed checks should not use GitHub by default');
+lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_get_calls'], 'licensed checks should also inspect GitHub so public releases can supersede stale endpoint metadata');
 lcfa_updater_assert_same('https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/update', $GLOBALS['lcfa_test_last_post_url'], 'licensed checks should call the LiveCanvas update endpoint');
 lcfa_updater_assert_same('valid-api-key', $GLOBALS['lcfa_test_last_post_args']['body']['license_key'] ?? '', 'license key should be sent only in the POST body');
 
@@ -213,15 +213,15 @@ lcfa_updater_assert_true(is_object($update), 'licensed newer release should prod
 lcfa_updater_assert_same('0.1.8', $update->version ?? '', 'update object should expose the core-required version field');
 lcfa_updater_assert_same('0.1.8', $update->new_version ?? '', 'update object should expose the newer version');
 lcfa_updater_assert_same('https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/download?token=signed-v0.1.8', $update->package ?? '', 'update package should point to the signed LiveCanvas package URL');
-lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon-128.png', $update->icons['1x'] ?? '', 'update object should expose the AI Bridge 1x icon');
-lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon-256.png', $update->icons['2x'] ?? '', 'update object should expose the AI Bridge 2x icon');
+lcfa_updater_assert_same('https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png', $update->icons['1x'] ?? '', 'update object should expose the remote AI Bridge 1x icon');
+lcfa_updater_assert_same('https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-256.png', $update->icons['2x'] ?? '', 'update object should expose the remote AI Bridge 2x icon');
 lcfa_updater_assert_same(21600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_livecanvas_update_release'] ?? 0, 'available updates should use the long LiveCanvas cache TTL');
 
 $info = $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'livecanvas-forge-ai']);
 lcfa_updater_assert_true(is_object($info), 'plugins_api should return details for the AI Bridge slug');
 lcfa_updater_assert_same('0.1.8', $info->version ?? '', 'plugins_api details should use the latest release version');
-lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon-128.png', $info->icons['1x'] ?? '', 'plugins_api details should expose the AI Bridge 1x icon');
-lcfa_updater_assert_same('https://example.test/wp-content/plugins/livecanvas-forge-ai/assets/plugin-icon-256.png', $info->icons['2x'] ?? '', 'plugins_api details should expose the AI Bridge 2x icon');
+lcfa_updater_assert_same('https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png', $info->icons['1x'] ?? '', 'plugins_api details should expose the remote AI Bridge 1x icon');
+lcfa_updater_assert_same('https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-256.png', $info->icons['2x'] ?? '', 'plugins_api details should expose the remote AI Bridge 2x icon');
 lcfa_updater_assert_same(false, $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'other-plugin']), 'plugins_api should ignore other slugs');
 
 lcfa_updater_reset(lcfa_updater_release('v0.1.7'), 'valid-api-key', true);
@@ -235,19 +235,19 @@ $GLOBALS['lcfa_test_transients']['lcfa_livecanvas_update_release'] = [
     'version' => '0.1.7',
 ];
 $state = $updater->get_update_state();
-lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_remote_calls'], 'legacy cache entries without schema should be ignored');
+lcfa_updater_assert_same(2, $GLOBALS['lcfa_test_remote_calls'], 'legacy cache entries without schema should be ignored and refreshed from LiveCanvas plus GitHub');
 lcfa_updater_assert_same('0.1.8', $state['latest_version'] ?? '', 'legacy stale cache should refresh to the latest release');
 
 lcfa_updater_reset(lcfa_updater_release('v0.1.8'), 'valid-api-key', true);
 $GLOBALS['lcfa_test_transients']['lcfa_livecanvas_update_release'] = [
     'ok'                     => true,
     'version'                => '0.1.7',
-    'cache_schema'           => 4,
+    'cache_schema'           => 5,
     'checked_plugin_version' => LCFA_VERSION,
 ];
 $_GET['force-check'] = '1';
 $state = $updater->get_update_state();
-lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_remote_calls'], 'forced WordPress update checks should bypass the cached release');
+lcfa_updater_assert_same(2, $GLOBALS['lcfa_test_remote_calls'], 'forced WordPress update checks should bypass the cached release and refresh both metadata sources');
 lcfa_updater_assert_same('0.1.8', $state['latest_version'] ?? '', 'forced update check should refresh stale cached release metadata');
 
 lcfa_updater_reset(lcfa_updater_release('0.1.8', ''), 'valid-api-key', true);
@@ -274,6 +274,14 @@ lcfa_updater_assert_same(1, $GLOBALS['lcfa_test_get_calls'], 'GitHub fallback sh
 $update = $updater->filter_update_uri_response(false, [], $plugin_file);
 lcfa_updater_assert_true(is_object($update), 'GitHub fallback release should produce a WordPress update object');
 lcfa_updater_assert_same('https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.1.8/livecanvas-forge-ai.zip', $update->package ?? '', 'GitHub fallback should use the release asset URL');
+
+lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true);
+$GLOBALS['lcfa_test_get_release_payload'] = lcfa_updater_github_release('v0.1.9');
+$state = $updater->get_update_state();
+lcfa_updater_assert_same('0.1.9', $state['latest_version'] ?? '', 'GitHub release should supersede stale LiveCanvas endpoint metadata when it is newer');
+lcfa_updater_assert_same('github_release', $state['source'] ?? '', 'newer GitHub release should identify GitHub as the selected update source');
+$update = $updater->filter_update_uri_response(false, [], $plugin_file);
+lcfa_updater_assert_same('0.1.9', $update->new_version ?? '', 'WordPress update object should use the newer GitHub version');
 
 lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true, 500);
 $GLOBALS['lcfa_test_get_release_payload'] = lcfa_updater_github_release('v0.1.8-beta');
