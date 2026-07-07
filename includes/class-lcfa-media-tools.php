@@ -27,6 +27,21 @@ final class LCFA_Media_Tools {
             $source_type = 'base64';
         }
 
+        $existing_attachment_id = $this->find_existing_asset($payload);
+        if ($existing_attachment_id > 0 && empty($payload['force'])) {
+            if ($post_id > 0 && !empty($payload['set_featured'])) {
+                set_post_thumbnail($post_id, $existing_attachment_id);
+            }
+
+            return $this->describe_attachment($existing_attachment_id) + [
+                'ok'                  => true,
+                'attachment_id'       => $existing_attachment_id,
+                'already_uploaded'    => true,
+                'featured_image_set'  => $post_id > 0 && !empty($payload['set_featured']),
+                'message'             => __('Existing Media Library asset reused from the manifest.', 'livecanvas-forge-ai'),
+            ];
+        }
+
         if ($source_type === 'url') {
             $result = $this->upload_from_url(esc_url_raw((string) ($payload['url'] ?? '')), $filename, $post_id);
         } elseif ($source_type === 'base64') {
@@ -41,6 +56,7 @@ final class LCFA_Media_Tools {
 
         $attachment_id = (int) $result['attachment_id'];
         $this->update_attachment_fields($attachment_id, $payload);
+        $this->store_asset_manifest_meta($attachment_id, $payload);
 
         if ($post_id > 0 && !empty($payload['set_featured'])) {
             set_post_thumbnail($post_id, $attachment_id);
@@ -205,6 +221,57 @@ final class LCFA_Media_Tools {
         if (isset($payload['alt'])) {
             update_post_meta($attachment_id, '_wp_attachment_image_alt', sanitize_text_field((string) $payload['alt']));
         }
+    }
+
+    private function store_asset_manifest_meta(int $attachment_id, array $payload): void {
+        $asset_id = sanitize_key((string) ($payload['asset_id'] ?? ''));
+        $checksum = sanitize_text_field((string) ($payload['checksum_sha256'] ?? $payload['checksum'] ?? ''));
+
+        if ($asset_id !== '') {
+            update_post_meta($attachment_id, '_lcfa_asset_id', $asset_id);
+        }
+        if ($checksum !== '') {
+            update_post_meta($attachment_id, '_lcfa_asset_checksum_sha256', $checksum);
+        }
+    }
+
+    private function find_existing_asset(array $payload): int {
+        if (!function_exists('get_posts')) {
+            return 0;
+        }
+
+        $asset_id = sanitize_key((string) ($payload['asset_id'] ?? ''));
+        $checksum = sanitize_text_field((string) ($payload['checksum_sha256'] ?? $payload['checksum'] ?? ''));
+        $queries = [];
+
+        if ($asset_id !== '') {
+            $queries[] = [
+                'key'   => '_lcfa_asset_id',
+                'value' => $asset_id,
+            ];
+        }
+        if ($checksum !== '') {
+            $queries[] = [
+                'key'   => '_lcfa_asset_checksum_sha256',
+                'value' => $checksum,
+            ];
+        }
+
+        foreach ($queries as $meta_query) {
+            $posts = get_posts([
+                'post_type'      => 'attachment',
+                'post_status'    => 'inherit',
+                'posts_per_page' => 1,
+                'fields'         => 'ids',
+                'meta_query'     => [$meta_query],
+            ]);
+            $attachment_id = absint(is_array($posts) ? ($posts[0] ?? 0) : 0);
+            if ($attachment_id > 0) {
+                return $attachment_id;
+            }
+        }
+
+        return 0;
     }
 
     private function describe_attachment(int $attachment_id): array {

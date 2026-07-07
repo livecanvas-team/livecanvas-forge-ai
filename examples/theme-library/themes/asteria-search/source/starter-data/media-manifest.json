@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "id": "hero-signal-landscape",
+      "file": "starter-data/media/hero-signal-landscape.jpg",
+      "title": "Hero signal landscape",
+      "alt": "Abstract signal landscape for Asteria Search",
+      "checksum": "sha256:5ef63f57334e6747381886fd3ff61ab3af489635d83ef1308865eefd622e34d0"
+    },
+    {
+      "id": "case-neural-map",
+      "file": "starter-data/media/case-neural-map.jpg",
+      "title": "Neural map case study",
+      "alt": "Abstract neural map visual",
+      "checksum": "sha256:c1e80190b87dd276654389fc05c542a8a0878406dfc3350c7196f2eace287686"
+    },
+    {
+      "id": "case-inference-cube",
+      "file": "starter-data/media/case-inference-cube.jpg",
+      "title": "Inference cube case study",
+      "alt": "Abstract inference cube visual",
+      "checksum": "sha256:df85dcdbb0a14fc9f217e2b0d7e2ba914ae166a3dcb1fb85a0af3be4606098be"
+    },
+    {
+      "id": "case-signal-waves",
+      "file": "starter-data/media/case-signal-waves.jpg",
+      "title": "Signal waves case study",
+      "alt": "Abstract signal waves visual",
+      "checksum": "sha256:2245462fe3d528cd1f8c99b043495d6e0eae1836f7f4347400f3e0fd8edbea25"
+    }
+  ]
+}

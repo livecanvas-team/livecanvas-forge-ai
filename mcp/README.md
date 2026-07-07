@@ -103,6 +103,14 @@ HTTP routes:
 - `POST /theme/template`
 - `POST /theme/backup/restore`
 
+Local MCP-only helpers:
+
+- `visual_check` captures desktop/mobile screenshots and layout diagnostics with Playwright or local Chrome/Chromium.
+- `asset_discovery` scans a local asset folder and returns a checksum-based image/video manifest.
+- `media_upload_local_assets` scans local assets and uploads them to WordPress through `POST /media/upload`, preserving manifest IDs/checksums for dedupe.
+
+For page-only generation, prefer `run_lc_command` with `action=page_upsert`, `body_html_lines`, optional `page_css_lines`, optional `page_js_lines`, `seo.noindex`, and `no_theme_edits=true`. The guard blocks theme-file, design-system, global shell, and build asset writes for that payload.
+
 WebSocket bridge messages accept:
 
 - `{ "action": "tools/list" }`

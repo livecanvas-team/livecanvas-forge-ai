@@ -65,6 +65,8 @@ function lcfa_theme_create_zip(array $manifest_overrides = [], array $omit_files
         'style.css' => "/*\nTheme Name: Sample Theme\nTemplate: picowind\n*/",
         'functions.php' => "<?php\n",
         'screenshot.jpg' => 'fake-jpg',
+        'page-templates/empty.php' => "<?php\n/* Template Name: Empty Page Template */\n",
+        'views/page-templates/empty.twig' => '<!doctype html>{{ function("wp_head") }}{{ post.content }}{{ function("wp_footer") }}',
         'livecanvas/configuration.php' => "<?php\n",
         'public/styles/presets/daisyui.css' => '/* daisyui */',
         'public/styles/tailwind.css' => 'body{}',
@@ -151,6 +153,9 @@ $catalog = (new LCFA_Theme_Library_Catalog())->get_catalog(true);
 lcfa_theme_assert_true(!empty($catalog['ok']), 'valid catalog should load');
 lcfa_theme_assert_same(1, count($catalog['themes']), 'catalog should include only themes with required screenshot/package/checksum data');
 lcfa_theme_assert_same('sample-theme', $catalog['themes'][0]['slug'], 'catalog should normalize theme slug');
+lcfa_theme_assert_same('picowind', $catalog['themes'][0]['framework'], 'catalog should default Theme Library items to Picowind');
+lcfa_theme_assert_same('tailwind', $catalog['themes'][0]['stack']['css'], 'catalog should expose CSS stack metadata');
+lcfa_theme_assert_same('daisyui', $catalog['themes'][0]['stack']['ui'], 'catalog should expose UI stack metadata');
 lcfa_theme_assert_true(count($catalog['errors']) === 1, 'catalog should report invalid entries');
 
 $validator = new LCFA_Theme_Library_Validator();
@@ -159,13 +164,18 @@ lcfa_theme_assert_true(!empty($valid['ok']), 'valid ZIP should pass validation')
 lcfa_theme_assert_same('lcfa-theme.v1', $valid['manifest']['schema'] ?? '', 'manifest schema should be preserved');
 
 $example_catalog_path = dirname(__DIR__, 2) . '/examples/theme-library/catalog.json';
-$example_zip_path = dirname(__DIR__, 2) . '/examples/theme-library/themes/bridge-starter/bridge-starter.zip';
 $example_catalog = json_decode((string) file_get_contents($example_catalog_path), true);
-$example_theme = $example_catalog['themes'][0] ?? [];
-lcfa_theme_assert_true(is_file($example_zip_path), 'example Theme Library ZIP should exist for beta fallback catalog testing');
-lcfa_theme_assert_same((string) ($example_theme['checksum'] ?? ''), 'sha256:' . hash_file('sha256', $example_zip_path), 'example catalog checksum should match the packaged ZIP');
-$example_validation = $validator->validate_zip($example_zip_path, $example_theme);
-lcfa_theme_assert_true(!empty($example_validation['ok']), 'example Theme Library ZIP should pass validation');
+foreach ((array) ($example_catalog['themes'] ?? []) as $example_theme) {
+    $example_slug = (string) ($example_theme['slug'] ?? '');
+    $example_zip_path = dirname(__DIR__, 2) . '/examples/theme-library/themes/' . $example_slug . '/' . $example_slug . '.zip';
+    lcfa_theme_assert_true(is_file($example_zip_path), 'example Theme Library ZIP should exist for beta fallback catalog testing: ' . $example_slug);
+    lcfa_theme_assert_same('picowind', (string) ($example_theme['framework'] ?? ''), 'example Theme Library catalog entries should declare Picowind: ' . $example_slug);
+    lcfa_theme_assert_same('tailwind', (string) ($example_theme['css'] ?? ''), 'example Theme Library catalog entries should declare Tailwind: ' . $example_slug);
+    lcfa_theme_assert_same('daisyui', (string) ($example_theme['ui'] ?? ''), 'example Theme Library catalog entries should declare DaisyUI: ' . $example_slug);
+    lcfa_theme_assert_same((string) ($example_theme['checksum'] ?? ''), 'sha256:' . hash_file('sha256', $example_zip_path), 'example catalog checksum should match the packaged ZIP: ' . $example_slug);
+    $example_validation = $validator->validate_zip($example_zip_path, $example_theme);
+    lcfa_theme_assert_true(!empty($example_validation['ok']), 'example Theme Library ZIP should pass validation: ' . $example_slug);
+}
 
 $not_picowind_zip = lcfa_theme_create_zip([], [], [
     'style.css' => "/*\nTheme Name: Sample Theme\nTemplate: twentytwentyfour\n*/",
@@ -184,6 +194,12 @@ $missing_media_zip = lcfa_theme_create_zip([], [], [
 ]);
 $missing_media = $validator->validate_zip($missing_media_zip, ['checksum' => hash_file('sha256', $missing_media_zip)]);
 lcfa_theme_assert_false(!empty($missing_media['ok']), 'media manifest files should exist inside the ZIP');
+
+$missing_css_import_zip = lcfa_theme_create_zip([], [], [
+    'public/styles/tailwind.css' => '@import "./presets/missing.css";',
+]);
+$missing_css_import = $validator->validate_zip($missing_css_import_zip, ['checksum' => hash_file('sha256', $missing_css_import_zip)]);
+lcfa_theme_assert_false(!empty($missing_css_import['ok']), 'missing relative CSS imports should fail validation');
 
 $bad_checksum = $validator->validate_zip($valid_zip, ['checksum' => str_repeat('b', 64)]);
 lcfa_theme_assert_false(!empty($bad_checksum['ok']), 'checksum mismatch should fail validation');
@@ -224,11 +240,14 @@ lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "re
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "'permission_callback' => [\$this, 'can_manage']"), 'Theme Library REST endpoints should use admin-only can_manage permission');
 lcfa_theme_assert_true(is_string($ability_source) && !str_contains($ability_source, 'theme-library'), 'Theme Library endpoints should not be MCP-public abilities in v1');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, "'status'     => 'failed'"), 'failed Theme Library imports should be tracked for rollback visibility');
+lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'ensure_picowind_runtime'), 'Theme Library import should initialize the Picowind/WindPress runtime');
+lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'windpress_source_css_ready'), 'Theme Library import should not store Tailwind source CSS as compiled WindPress cache');
 
 @unlink($valid_zip);
 @unlink($not_picowind_zip);
 @unlink($inline_shell_zip);
 @unlink($missing_media_zip);
+@unlink($missing_css_import_zip);
 @unlink($traversal_zip);
 @unlink($missing_zip);
 

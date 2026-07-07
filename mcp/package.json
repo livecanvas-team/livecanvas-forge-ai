@@ -19,6 +19,7 @@
     "node": ">=18.17"
   },
   "dependencies": {
+    "playwright": "^1.57.0",
     "sass": "^1.93.2"
   },
   "license": "UNLICENSED"

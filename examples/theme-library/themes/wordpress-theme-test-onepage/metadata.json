@@ -1,0 +1,13 @@
+{
+  "slug": "wordpress-theme-test-onepage",
+  "name": "WordPress Theme Test Onepage",
+  "version": "1.0.0",
+  "description": "Generated Picowind starter theme from the wordpress-theme-test local site.",
+  "category": "generated",
+  "package": "wordpress-theme-test-onepage.zip",
+  "checksum": "sha256:9c6dc748947ba18028eaa3f8f6b43e705eb1ee7c5cbde761d903fec032606849",
+  "generated_at": "2026-06-26T17:20:35.287Z",
+  "source_urls": [
+    "http://wordpress-theme-test.local/"
+  ]
+}

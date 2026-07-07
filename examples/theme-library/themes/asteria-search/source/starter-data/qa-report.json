@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "source": "wordpress-theme-test.local",
+  "exported_front_page_id": 6,
+  "exported_header_partial_id": 17,
+  "exported_footer_partial_id": 15,
+  "notes": [
+    "Exported from the local onepage created on wordpress-theme-test."
+  ]
+}

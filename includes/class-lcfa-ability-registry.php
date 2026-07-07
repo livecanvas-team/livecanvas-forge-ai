@@ -1581,6 +1581,12 @@ final class LCFA_Ability_Registry {
     private function run_theme_file_write($input, bool $dry_run): array {
         try {
             $payload = $this->normalize_input($input);
+            if (!empty($payload['no_theme_edits'])) {
+                return [
+                    $dry_run ? 'theme_file_preview_write' : 'theme_file_write' => $this->tool_error(__('This request declares no_theme_edits=true, so theme file writes are blocked.', 'livecanvas-forge-ai')),
+                ];
+            }
+
             return [
                 $dry_run ? 'theme_file_preview_write' : 'theme_file_write' => $this->theme_files_bridge->write_file([
                     'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
@@ -2052,6 +2058,10 @@ final class LCFA_Ability_Registry {
                 'type'        => 'boolean',
                 'description' => __('Create missing directories inside the allowed root.', 'livecanvas-forge-ai'),
             ];
+            $properties['no_theme_edits'] = [
+                'type'        => 'boolean',
+                'description' => __('When true, this write is blocked. Use it to enforce page-only workflows.', 'livecanvas-forge-ai'),
+            ];
         }
 
         return [
@@ -2193,9 +2203,11 @@ final class LCFA_Ability_Registry {
             'properties'           => [
                 'action'        => ['type' => 'string', 'enum' => ['get', 'update']],
                 'post_id'       => ['type' => 'integer', 'minimum' => 1],
+                'provider'      => ['type' => 'string', 'enum' => ['auto', 'yoast', 'seopress', 'fallback']],
                 'title'         => ['type' => 'string'],
                 'description'   => ['type' => 'string'],
                 'canonical'     => ['type' => 'string'],
+                'noindex'       => ['type' => 'boolean'],
                 'social_image'  => ['type' => 'string'],
                 'twitter_image' => ['type' => 'string'],
             ],
@@ -2704,6 +2716,48 @@ final class LCFA_Ability_Registry {
             'content' => [
                 'type'        => 'string',
                 'description' => __('Generated LiveCanvas-safe page HTML.', 'livecanvas-forge-ai'),
+            ],
+            'body_html' => [
+                'type'        => 'string',
+                'description' => __('Alias for content when the agent is explicitly sending only the LiveCanvas body HTML.', 'livecanvas-forge-ai'),
+            ],
+            'body_html_lines' => [
+                'type'        => 'array',
+                'items'       => ['type' => 'string'],
+                'description' => __('Line-safe alias for body_html. AI Bridge joins the lines with newlines before saving.', 'livecanvas-forge-ai'),
+            ],
+            'page_css' => [
+                'type'        => 'string',
+                'description' => __('CSS scoped to this page only. It is stored as post meta and printed only on this page.', 'livecanvas-forge-ai'),
+            ],
+            'page_css_lines' => [
+                'type'        => 'array',
+                'items'       => ['type' => 'string'],
+                'description' => __('Line-safe page CSS. Use this for large CSS payloads.', 'livecanvas-forge-ai'),
+            ],
+            'page_js' => [
+                'type'        => 'string',
+                'description' => __('JavaScript scoped to this page only. It is stored as post meta and printed only on this page.', 'livecanvas-forge-ai'),
+            ],
+            'page_js_lines' => [
+                'type'        => 'array',
+                'items'       => ['type' => 'string'],
+                'description' => __('Line-safe page JavaScript. Use this for large JS payloads.', 'livecanvas-forge-ai'),
+            ],
+            'no_theme_edits' => [
+                'type'        => 'boolean',
+                'description' => __('Explicitly declare that the request must not modify theme files or global assets.', 'livecanvas-forge-ai'),
+            ],
+            'seo' => [
+                'type'                 => 'object',
+                'additionalProperties' => false,
+                'properties'           => [
+                    'title'       => ['type' => 'string'],
+                    'description' => ['type' => 'string'],
+                    'canonical'   => ['type' => 'string'],
+                    'noindex'     => ['type' => 'boolean'],
+                ],
+                'description'          => __('Page SEO metadata. Yoast/SEOPress are used when active, otherwise AI Bridge emits fallback noindex/canonical tags.', 'livecanvas-forge-ai'),
             ],
             'framework' => [
                 'type'        => 'string',

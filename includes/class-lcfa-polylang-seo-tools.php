@@ -100,28 +100,20 @@ final class LCFA_Polylang_SEO_Tools {
     }
 
     public function seo(array $payload): array {
-        if (!$this->seopress_available()) {
-            return $this->unavailable('seopress', __('SEOPress is not active on this site.', 'livecanvas-forge-ai'));
-        }
-
         $action = sanitize_key((string) ($payload['action'] ?? 'get'));
         $post_id = absint($payload['post_id'] ?? 0);
         if ($post_id <= 0) {
             return $this->error(__('A post_id is required for SEO tools.', 'livecanvas-forge-ai'));
         }
 
-        $keys = [
-            'title' => '_seopress_titles_title',
-            'description' => '_seopress_titles_desc',
-            'canonical' => '_seopress_robots_canonical',
-            'social_image' => '_seopress_social_fb_img',
-            'twitter_image' => '_seopress_social_twitter_img',
-        ];
+        $provider = $this->resolve_seo_provider(sanitize_key((string) ($payload['provider'] ?? 'auto')));
+        $keys = $this->seo_meta_keys($provider);
 
         if ($action === 'get') {
             return [
                 'ok' => true,
                 'available' => true,
+                'provider' => $provider,
                 'post_id' => $post_id,
                 'seo' => $this->read_meta($post_id, $keys),
             ];
@@ -134,16 +126,17 @@ final class LCFA_Polylang_SEO_Tools {
                 }
                 $value = in_array($field, ['canonical', 'social_image', 'twitter_image'], true)
                     ? esc_url_raw((string) $payload[$field])
-                    : sanitize_text_field((string) $payload[$field]);
+                    : ($field === 'noindex' ? (!empty($payload[$field]) ? $this->noindex_enabled_value($provider) : '') : sanitize_text_field((string) $payload[$field]));
                 update_post_meta($post_id, $meta_key, $value);
             }
 
             return [
                 'ok' => true,
                 'available' => true,
+                'provider' => $provider,
                 'post_id' => $post_id,
                 'seo' => $this->read_meta($post_id, $keys),
-                'message' => __('SEOPress metadata updated.', 'livecanvas-forge-ai'),
+                'message' => __('SEO metadata updated.', 'livecanvas-forge-ai'),
             ];
         }
 
@@ -171,10 +164,68 @@ final class LCFA_Polylang_SEO_Tools {
     private function read_meta(int $post_id, array $keys): array {
         $values = [];
         foreach ($keys as $field => $meta_key) {
-            $values[$field] = (string) get_post_meta($post_id, $meta_key, true);
+            $raw = (string) get_post_meta($post_id, $meta_key, true);
+            $values[$field] = $field === 'noindex' ? in_array($raw, ['1', 'yes', 'true'], true) : $raw;
         }
 
         return $values;
+    }
+
+    private function resolve_seo_provider(string $provider): string {
+        if ($provider === 'yoast') {
+            return $this->yoast_available() ? 'yoast' : 'fallback';
+        }
+
+        if ($provider === 'seopress') {
+            return $this->seopress_available() ? 'seopress' : 'fallback';
+        }
+
+        if ($this->yoast_available()) {
+            return 'yoast';
+        }
+
+        if ($this->seopress_available()) {
+            return 'seopress';
+        }
+
+        return 'fallback';
+    }
+
+    private function seo_meta_keys(string $provider): array {
+        if ($provider === 'yoast') {
+            return [
+                'title' => '_yoast_wpseo_title',
+                'description' => '_yoast_wpseo_metadesc',
+                'canonical' => '_yoast_wpseo_canonical',
+                'noindex' => '_yoast_wpseo_meta-robots-noindex',
+                'social_image' => '_yoast_wpseo_opengraph-image',
+                'twitter_image' => '_yoast_wpseo_twitter-image',
+            ];
+        }
+
+        if ($provider === 'seopress') {
+            return [
+                'title' => '_seopress_titles_title',
+                'description' => '_seopress_titles_desc',
+                'canonical' => '_seopress_robots_canonical',
+                'noindex' => '_seopress_robots_index',
+                'social_image' => '_seopress_social_fb_img',
+                'twitter_image' => '_seopress_social_twitter_img',
+            ];
+        }
+
+        return [
+            'title' => '_lcfa_seo_title',
+            'description' => '_lcfa_seo_description',
+            'canonical' => '_lcfa_seo_canonical',
+            'noindex' => '_lcfa_seo_noindex',
+            'social_image' => '_lcfa_seo_social_image',
+            'twitter_image' => '_lcfa_seo_twitter_image',
+        ];
+    }
+
+    private function noindex_enabled_value(string $provider): string {
+        return $provider === 'seopress' ? 'yes' : '1';
     }
 
     private function polylang_available(): bool {
@@ -185,11 +236,24 @@ final class LCFA_Polylang_SEO_Tools {
         if (defined('SEOPRESS_VERSION') || function_exists('seopress_activation')) {
             return true;
         }
-        if (defined('ABSPATH')) {
-            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        $plugin_file = defined('ABSPATH') ? ABSPATH . 'wp-admin/includes/plugin.php' : '';
+        if ($plugin_file !== '' && is_readable($plugin_file)) {
+            require_once $plugin_file;
         }
 
         return function_exists('is_plugin_active') && is_plugin_active('wp-seopress/seopress.php');
+    }
+
+    private function yoast_available(): bool {
+        if (defined('WPSEO_VERSION') || class_exists('WPSEO_Options')) {
+            return true;
+        }
+        $plugin_file = defined('ABSPATH') ? ABSPATH . 'wp-admin/includes/plugin.php' : '';
+        if ($plugin_file !== '' && is_readable($plugin_file)) {
+            require_once $plugin_file;
+        }
+
+        return function_exists('is_plugin_active') && is_plugin_active('wordpress-seo/wp-seo.php');
     }
 
     private function unavailable(string $integration, string $message): array {

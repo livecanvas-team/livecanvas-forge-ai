@@ -2,6 +2,10 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Page_Runtime')) {
+    require_once __DIR__ . '/class-lcfa-page-runtime.php';
+}
+
 final class LCFA_Command_Deck {
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
@@ -198,6 +202,10 @@ final class LCFA_Command_Deck {
             $execution_target = 'local';
         }
 
+        if (!empty($payload['no_theme_edits']) && $this->is_no_theme_edits_blocked_action($action, $payload)) {
+            return $this->error_result(__('This payload declares no_theme_edits=true, so AI Bridge blocked theme, design-system, global shell, or build asset writes. Use page_upsert with body_html/page_css/page_js instead.', 'livecanvas-forge-ai'));
+        }
+
         $policy = $this->evaluate_policy($action, $dry_run);
 
         if (empty($policy['ok'])) {
@@ -319,6 +327,7 @@ final class LCFA_Command_Deck {
                 }
 
                 $existing   = ['post' => null, 'content' => ''];
+                $existing_runtime = [];
                 $is_update  = false;
                 $page_title = $title;
                 $page_slug  = $slug;
@@ -332,6 +341,9 @@ final class LCFA_Command_Deck {
                     }
 
                     $is_update = !empty($existing['post']);
+                    if ($is_update) {
+                        $existing_runtime = $this->get_page_runtime_snapshot($page_target_id);
+                    }
                 } elseif ($action === 'update_page') {
                     return $this->error_result(__('A target page ID is required.', 'livecanvas-forge-ai'));
                 }
@@ -352,6 +364,9 @@ final class LCFA_Command_Deck {
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['data']['framework'] = $framework;
                 $result['data']['operation'] = $is_update ? 'update' : 'create';
+                $result['data']['no_theme_edits'] = !empty($payload['no_theme_edits']);
+                $result['data']['page_runtime'] = $this->preview_page_runtime_payload($payload);
+                $result['data']['page_runtime_rollback'] = $existing_runtime;
                 $this->append_global_shell_framework_warnings($result, $framework, $variant);
                 if (sanitize_key((string) ($payload['content_strategy'] ?? '')) === 'section_starter') {
                     $result['data']['section_intent'] = sanitize_key((string) ($payload['section_intent'] ?? ''));
@@ -388,6 +403,8 @@ final class LCFA_Command_Deck {
 
                     $page_id = (int) $page_id;
                     update_post_meta($page_id, '_lc_livecanvas_enabled', '1');
+                    $runtime = LCFA_Page_Runtime::persist_page_runtime($page_id, $payload);
+                    $result['data']['page_runtime'] = $runtime;
                     $page_template = $this->resolve_livecanvas_page_template();
 
                     if ($page_template !== '') {
@@ -398,6 +415,10 @@ final class LCFA_Command_Deck {
                     }
 
                     $this->hydrate_target_urls($result, 'page', $page_id);
+                    if (!empty($runtime['public_preview']['url'])) {
+                        $result['preview_url'] = (string) $runtime['public_preview']['url'];
+                        $result['data']['public_preview'] = $runtime['public_preview'];
+                    }
 
                     $result['message'] = $is_update
                         ? __('Page updated.', 'livecanvas-forge-ai')
@@ -1234,6 +1255,14 @@ final class LCFA_Command_Deck {
             $result['proposed_html'] = $created_post ? '' : $previous_content;
             $result['diff_html'] = $this->build_diff($result['existing_html'], $result['proposed_html']);
             $result['data']['restore_operation'] = $created_post ? 'trash_created_post' : 'restore_previous_content';
+            $runtime_snapshot = is_array($restore['page_runtime'] ?? null) ? $this->sanitize_page_runtime_snapshot((array) $restore['page_runtime']) : [];
+
+            if (!empty($runtime_snapshot)) {
+                $result['data']['page_runtime_restore'] = [
+                    'current'  => $this->get_page_runtime_snapshot($target_id),
+                    'previous' => $runtime_snapshot,
+                ];
+            }
 
             if (!$dry_run) {
                 $restore_result = $created_post
@@ -1245,6 +1274,8 @@ final class LCFA_Command_Deck {
 
                 if (empty($result['ok'])) {
                     $result['message'] = (string) ($restore_result['message'] ?? __('Audit rollback restore failed.', 'livecanvas-forge-ai'));
+                } elseif (!$created_post && !empty($runtime_snapshot)) {
+                    $result['data']['page_runtime_restore']['result'] = $this->restore_page_runtime_snapshot($target_id, $runtime_snapshot);
                 }
             }
         }
@@ -1272,6 +1303,135 @@ final class LCFA_Command_Deck {
         }
 
         return '';
+    }
+
+    private function preview_page_runtime_payload(array $payload): array {
+        $css = LCFA_Page_Runtime::normalize_multiline($payload, 'page_css', 'page_css_lines');
+        $js = LCFA_Page_Runtime::normalize_multiline($payload, 'page_js', 'page_js_lines');
+        $seo = is_array($payload['seo'] ?? null) ? (array) $payload['seo'] : [];
+
+        return [
+            'page_css_lines' => $css !== '' ? substr_count($css, "\n") + 1 : 0,
+            'page_js_lines'  => $js !== '' ? substr_count($js, "\n") + 1 : 0,
+            'no_theme_edits' => !empty($payload['no_theme_edits']),
+            'seo'            => [
+                'title'       => sanitize_text_field((string) ($seo['title'] ?? '')),
+                'description' => sanitize_text_field((string) ($seo['description'] ?? '')),
+                'canonical'   => esc_url_raw((string) ($seo['canonical'] ?? '')),
+                'noindex'     => !empty($seo['noindex']),
+            ],
+        ];
+    }
+
+    private function get_page_runtime_snapshot(int $post_id): array {
+        if ($post_id < 1 || !function_exists('get_post_meta')) {
+            return [];
+        }
+
+        return [
+            'page_css'       => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_PAGE_CSS, true),
+            'page_js'        => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_PAGE_JS, true),
+            'no_theme_edits' => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_NO_THEME_EDITS, true) === '1',
+            'seo'            => [
+                'title'       => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_SEO_TITLE, true),
+                'description' => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_SEO_DESCRIPTION, true),
+                'canonical'   => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_SEO_CANONICAL, true),
+                'noindex'     => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_SEO_NOINDEX, true) === '1',
+            ],
+            'seo_provider_meta' => $this->get_page_runtime_seo_provider_meta_snapshot($post_id),
+        ];
+    }
+
+    private function sanitize_page_runtime_snapshot(array $snapshot): array {
+        $seo = is_array($snapshot['seo'] ?? null) ? (array) $snapshot['seo'] : [];
+
+        $provider_meta = [];
+        if (is_array($snapshot['seo_provider_meta'] ?? null)) {
+            foreach ((array) $snapshot['seo_provider_meta'] as $key => $value) {
+                $key = sanitize_key((string) $key);
+                if ($key !== '') {
+                    $provider_meta[$key] = (string) $value;
+                }
+            }
+        }
+
+        return [
+            'page_css'       => (string) ($snapshot['page_css'] ?? ''),
+            'page_js'        => (string) ($snapshot['page_js'] ?? ''),
+            'no_theme_edits' => !empty($snapshot['no_theme_edits']),
+            'seo'            => [
+                'title'       => sanitize_text_field((string) ($seo['title'] ?? '')),
+                'description' => sanitize_text_field((string) ($seo['description'] ?? '')),
+                'canonical'   => esc_url_raw((string) ($seo['canonical'] ?? '')),
+                'noindex'     => !empty($seo['noindex']),
+            ],
+            'seo_provider_meta' => $provider_meta,
+        ];
+    }
+
+    private function restore_page_runtime_snapshot(int $post_id, array $snapshot): array {
+        if (!function_exists('update_post_meta') || !function_exists('delete_post_meta')) {
+            return [
+                'ok'      => false,
+                'message' => __('Post meta functions are not available in this runtime.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $snapshot = $this->sanitize_page_runtime_snapshot($snapshot);
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_PAGE_CSS, $snapshot['page_css']);
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_PAGE_JS, $snapshot['page_js']);
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_NO_THEME_EDITS, !empty($snapshot['no_theme_edits']) ? '1' : '');
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_SEO_TITLE, (string) ($snapshot['seo']['title'] ?? ''));
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_SEO_DESCRIPTION, (string) ($snapshot['seo']['description'] ?? ''));
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_SEO_CANONICAL, (string) ($snapshot['seo']['canonical'] ?? ''));
+        $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_SEO_NOINDEX, !empty($snapshot['seo']['noindex']) ? '1' : '');
+        foreach ((array) ($snapshot['seo_provider_meta'] ?? []) as $key => $value) {
+            $this->update_or_delete_page_runtime_meta($post_id, sanitize_key((string) $key), (string) $value);
+        }
+
+        return [
+            'ok'              => true,
+            'target_id'       => $post_id,
+            'page_css_lines'  => $snapshot['page_css'] !== '' ? substr_count($snapshot['page_css'], "\n") + 1 : 0,
+            'page_js_lines'   => $snapshot['page_js'] !== '' ? substr_count($snapshot['page_js'], "\n") + 1 : 0,
+            'no_theme_edits'  => !empty($snapshot['no_theme_edits']),
+            'message'         => __('Previous page runtime metadata restored.', 'livecanvas-forge-ai'),
+        ];
+    }
+
+    private function update_or_delete_page_runtime_meta(int $post_id, string $key, string $value): void {
+        if ($value === '') {
+            delete_post_meta($post_id, $key);
+            return;
+        }
+
+        update_post_meta($post_id, $key, $value);
+    }
+
+    private function get_page_runtime_seo_provider_meta_snapshot(int $post_id): array {
+        $keys = [
+            '_yoast_wpseo_title',
+            '_yoast_wpseo_metadesc',
+            '_yoast_wpseo_canonical',
+            '_yoast_wpseo_meta-robots-noindex',
+            '_yoast_wpseo_opengraph-image',
+            '_yoast_wpseo_twitter-image',
+            '_seopress_titles_title',
+            '_seopress_titles_desc',
+            '_seopress_robots_canonical',
+            '_seopress_robots_index',
+            '_seopress_social_fb_img',
+            '_seopress_social_twitter_img',
+            '_lcfa_seo_social_image',
+            '_lcfa_seo_twitter_image',
+        ];
+        $values = [];
+
+        foreach ($keys as $key) {
+            $values[$key] = (string) get_post_meta($post_id, $key, true);
+        }
+
+        return $values;
     }
 
     private function update_post_content_for_rollback(int $post_id, string $content): array {
@@ -2304,6 +2464,10 @@ HTML,
             'previous_content' => (string) ($result['existing_html'] ?? ''),
             'created_post'     => ($rollback['type'] ?? '') === 'created_post',
         ]);
+
+        if (($record['restore']['target_type'] ?? '') === 'page' && is_array($result['data']['page_runtime_rollback'] ?? null)) {
+            $record['restore']['page_runtime'] = $this->sanitize_page_runtime_snapshot((array) $result['data']['page_runtime_rollback']);
+        }
 
         return $record;
     }
@@ -3606,6 +3770,25 @@ HTML;
 
     private function is_file_fallback_action(string $action): bool {
         return in_array($action, [
+            'write_theme_template',
+            'write_theme_file',
+            'restore_theme_backup',
+        ], true);
+    }
+
+    private function is_no_theme_edits_blocked_action(string $action, array $payload = []): bool {
+        if ($action === 'design_system_compose') {
+            return !empty($payload['auto_apply']);
+        }
+
+        return in_array($action, [
+            'site_foundation_run',
+            'design_system_apply',
+            'global_shell_apply',
+            'windpress_reset_entry',
+            'windpress_store_theme_json',
+            'windpress_store_cache_css',
+            'build_windpress_cache',
             'write_theme_template',
             'write_theme_file',
             'restore_theme_backup',

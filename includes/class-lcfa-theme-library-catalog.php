@@ -21,6 +21,13 @@ final class LCFA_Theme_Library_Catalog {
 
         $requested_url = $url;
         $response = $this->request_catalog($url);
+        if (empty($response['ok'])) {
+            $local = $this->read_local_catalog();
+            if (!empty($local['ok'])) {
+                $response = $local;
+                $url = (string) ($local['source_url'] ?? $url);
+            }
+        }
         if (empty($response['ok']) && $url !== self::FALLBACK_CATALOG_URL) {
             $fallback = $this->request_catalog(self::FALLBACK_CATALOG_URL);
             if (!empty($fallback['ok'])) {
@@ -42,6 +49,16 @@ final class LCFA_Theme_Library_Catalog {
         }
 
         $catalog = $this->normalize_catalog($payload, $url);
+        $local = $this->read_local_catalog();
+        if (!empty($local['ok'])) {
+            $local_payload = json_decode((string) ($local['body'] ?? ''), true);
+            if (is_array($local_payload)) {
+                $local_catalog = $this->normalize_catalog($local_payload, (string) ($local['source_url'] ?? 'bundled'));
+                if (!empty($local_catalog['ok'])) {
+                    $catalog = $this->merge_catalogs($catalog, $local_catalog);
+                }
+            }
+        }
         set_transient(self::CACHE_KEY, $catalog, self::CACHE_TTL);
 
         return $catalog;
@@ -98,6 +115,28 @@ final class LCFA_Theme_Library_Catalog {
         ];
     }
 
+    private function read_local_catalog(): array {
+        if (!defined('LCFA_DIR')) {
+            return $this->error(__('Local Theme Library catalog is unavailable.', 'livecanvas-forge-ai'));
+        }
+
+        $path = trailingslashit(LCFA_DIR) . 'examples/theme-library/catalog.json';
+        if (!is_readable($path)) {
+            return $this->error(__('Local Theme Library catalog is unavailable.', 'livecanvas-forge-ai'));
+        }
+
+        $body = (string) file_get_contents($path);
+        if ($body === '') {
+            return $this->error(__('Local Theme Library catalog is empty.', 'livecanvas-forge-ai'));
+        }
+
+        return [
+            'ok'         => true,
+            'body'       => $body,
+            'source_url' => $path,
+        ];
+    }
+
     private function normalize_catalog(array $payload, string $source_url): array {
         $raw_themes = [];
         if (isset($payload['themes']) && is_array($payload['themes'])) {
@@ -138,17 +177,28 @@ final class LCFA_Theme_Library_Catalog {
         $name = sanitize_text_field((string) ($raw['name'] ?? $raw['title'] ?? $slug));
         $version = sanitize_text_field((string) ($raw['version'] ?? ''));
         $package_url = esc_url_raw((string) ($raw['package_url'] ?? $raw['zip_url'] ?? $raw['download_url'] ?? ''));
+        $package_path = $this->normalize_local_path((string) ($raw['package_path'] ?? ''));
         $checksum = $this->normalize_checksum((string) ($raw['checksum'] ?? $raw['sha256'] ?? ''));
         $screenshot = esc_url_raw((string) ($raw['screenshot'] ?? $raw['screenshot_url'] ?? ''));
+        $screenshot_path = $this->normalize_local_path((string) ($raw['screenshot_path'] ?? ''));
+        $raw_stack = is_array($raw['stack'] ?? null) ? $raw['stack'] : [];
+        $framework = sanitize_key((string) ($raw['framework'] ?? $raw_stack['framework'] ?? 'picowind'));
+        $css = sanitize_key((string) ($raw['css'] ?? $raw_stack['css'] ?? ($framework === 'picostrap' ? 'bootstrap' : 'tailwind')));
+        $ui = sanitize_key((string) ($raw['ui'] ?? $raw_stack['ui'] ?? ($framework === 'picostrap' ? 'bootstrap' : 'daisyui')));
+        $builder = sanitize_key((string) ($raw['builder'] ?? $raw_stack['builder'] ?? ($framework === 'picostrap' ? 'picostrap' : 'picowind')));
+
+        if ($screenshot_path !== '' && defined('LCFA_DIR') && defined('LCFA_URL') && is_readable(trailingslashit(LCFA_DIR) . $screenshot_path)) {
+            $screenshot = esc_url_raw(trailingslashit(LCFA_URL) . $screenshot_path);
+        }
 
         if ($screenshot === '' && isset($raw['screenshots']) && is_array($raw['screenshots'])) {
             $first = reset($raw['screenshots']);
             $screenshot = esc_url_raw(is_scalar($first) ? (string) $first : (string) ($first['url'] ?? ''));
         }
 
-        if ($slug === '' || $name === '' || $version === '' || $package_url === '' || $checksum === '' || $screenshot === '') {
+        if ($slug === '' || $name === '' || $version === '' || ($package_url === '' && $package_path === '') || $checksum === '' || $screenshot === '') {
             return $this->error(sprintf(
-                'Theme "%s" is missing slug, name, version, package_url, checksum, or screenshot.',
+                'Theme "%s" is missing slug, name, version, package_url/package_path, checksum, or screenshot.',
                 $slug !== '' ? $slug : 'unknown'
             ));
         }
@@ -161,8 +211,19 @@ final class LCFA_Theme_Library_Catalog {
                 'version'     => $version,
                 'description' => sanitize_text_field((string) ($raw['description'] ?? '')),
                 'category'    => sanitize_text_field((string) ($raw['category'] ?? '')),
+                'framework'   => $framework,
+                'css'         => $css,
+                'ui'          => $ui,
+                'builder'     => $builder,
+                'stack'       => [
+                    'framework' => $framework,
+                    'css'       => $css,
+                    'ui'        => $ui,
+                    'builder'   => $builder,
+                ],
                 'screenshot'  => $screenshot,
                 'package_url' => $package_url,
+                'package_path'=> $package_path,
                 'checksum'    => $checksum,
                 'metadata_url'=> esc_url_raw((string) ($raw['metadata_url'] ?? '')),
             ],
@@ -177,11 +238,54 @@ final class LCFA_Theme_Library_Catalog {
         return array_keys($value) === range(0, count($value) - 1);
     }
 
+    private function merge_catalogs(array $remote, array $local): array {
+        $themes = [];
+        foreach ((array) ($remote['themes'] ?? []) as $theme) {
+            if (is_array($theme) && !empty($theme['slug'])) {
+                $themes[(string) $theme['slug']] = $theme;
+            }
+        }
+
+        foreach ((array) ($local['themes'] ?? []) as $theme) {
+            if (is_array($theme) && !empty($theme['slug'])) {
+                $themes[(string) $theme['slug']] = $theme;
+            }
+        }
+
+        $remote['themes'] = array_values($themes);
+        $remote['errors'] = array_values(array_filter(array_merge(
+            (array) ($remote['errors'] ?? []),
+            (array) ($local['errors'] ?? [])
+        )));
+        $remote['bundled_catalog_loaded'] = true;
+
+        return $remote;
+    }
+
     private function normalize_checksum(string $checksum): string {
         $checksum = strtolower(trim($checksum));
         $checksum = preg_replace('/^sha256[:=]/', '', $checksum);
 
         return preg_match('/^[a-f0-9]{64}$/', $checksum) ? $checksum : '';
+    }
+
+    private function normalize_local_path(string $path): string {
+        $path = str_replace('\\', '/', trim($path));
+        $path = ltrim($path, '/');
+        $parts = [];
+        foreach (explode('/', $path) as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+
+            if ($part === '..') {
+                return '';
+            }
+
+            $parts[] = $part;
+        }
+
+        return $parts ? implode('/', $parts) : '';
     }
 
     private function error(string $message, array $extra = []): array {

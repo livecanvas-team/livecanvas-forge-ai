@@ -1,4 +1,4 @@
-function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null) {
+function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null, assetDiscovery = null) {
   const tools = [
     {
       name: 'get_snapshot',
@@ -296,14 +296,18 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       description: 'Preview an allowed child-theme file write through the remote WordPress/PHP bridge without writing.',
       inputSchema: themeFileWriteSchema(),
       outputSchema: objectOutputSchema(),
-      invoke: async (argumentsMap = {}) => client.remoteThemeFilePreviewWrite(argumentsMap)
+      invoke: async (argumentsMap = {}) => argumentsMap.no_theme_edits
+        ? noThemeEditsBlockedResult('theme_file_preview_write')
+        : client.remoteThemeFilePreviewWrite(argumentsMap)
     },
     {
       name: 'theme_file_write',
       description: 'Write an allowed child-theme file through the remote WordPress/PHP bridge with automatic backup protection.',
       inputSchema: themeFileWriteSchema(),
       outputSchema: objectOutputSchema(),
-      invoke: async (argumentsMap = {}) => client.remoteThemeFileWrite(argumentsMap)
+      invoke: async (argumentsMap = {}) => argumentsMap.no_theme_edits
+        ? noThemeEditsBlockedResult('theme_file_write')
+        : client.remoteThemeFileWrite(argumentsMap)
     },
     {
       name: 'theme_file_backups',
@@ -402,7 +406,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'seo_tools',
-      description: 'Read or update SEOPress title, description, canonical, and social image metadata when SEOPress is active.',
+      description: 'Read or update Yoast, SEOPress, or AI Bridge fallback SEO metadata including title, description, canonical, noindex, and social images.',
       inputSchema: seoToolsSchema(),
       outputSchema: objectOutputSchema(),
       invoke: async (argumentsMap = {}) => client.runSeoTool(argumentsMap)
@@ -421,6 +425,38 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           }
         }
         return visualCheck.run(argumentsMap)
+      }
+    },
+    {
+      name: 'asset_discovery',
+      description: 'Scan a local folder for image/video assets and return a deterministic manifest with checksums, mime types, and stable asset IDs. This tool does not write WordPress.',
+      inputSchema: assetDiscoverySchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => {
+        if (!assetDiscovery) {
+          return {
+            ok: false,
+            status: 'asset_discovery_unavailable',
+            message: 'The asset discovery runtime was not initialized.'
+          }
+        }
+        return assetDiscovery.run(argumentsMap)
+      }
+    },
+    {
+      name: 'media_upload_local_assets',
+      description: 'Scan a local asset folder, upload matching image/video files to the WordPress Media Library, and return a manifest with attachment IDs and URLs. This does not edit pages or theme files.',
+      inputSchema: localAssetUploadSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => {
+        if (!assetDiscovery) {
+          return {
+            ok: false,
+            status: 'asset_upload_unavailable',
+            message: 'The asset upload runtime was not initialized.'
+          }
+        }
+        return assetDiscovery.uploadLocalAssets(client, argumentsMap)
       }
     },
     {
@@ -474,7 +510,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas AI Bridge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, update_partial for generic lc_partial posts, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For full homepage or framework migrations, run site_prepare first, resolve global shell warnings with global_shell_apply/site_foundation_run, and rebuild WindPress with build_windpress_cache. For page_upsert and update_partial flows, prefer the structured fast-path with body_html/body_html_lines plus footer_script/footer_script_lines instead of sending one large content blob when the page includes interactivity. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
+      description: 'Execute a LiveCanvas AI Bridge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, update_partial for generic lc_partial posts, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert and update_partial flows, prefer the structured fast-path with body_html/body_html_lines, page_css/page_css_lines, page_js/page_js_lines, no_theme_edits:true, and seo metadata instead of theme edits or one large content blob. Rollback restores use audit_id, not backup_id. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -494,6 +530,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           root_scope: { type: 'string' },
           file_path: { type: 'string' },
           backup_id: { type: 'string' },
+          audit_id: { type: 'string' },
           section_intent: { type: 'string' },
           section_operation: { type: 'string' },
           content_strategy: { type: 'string' },
@@ -527,6 +564,26 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           body_html_lines: {
             type: 'array',
             items: { type: 'string' }
+          },
+          page_css: { type: 'string' },
+          page_css_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          page_js: { type: 'string' },
+          page_js_lines: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          no_theme_edits: { type: 'boolean' },
+          seo: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              description: { type: 'string' },
+              canonical: { type: 'string' },
+              noindex: { type: 'boolean' }
+            }
           },
           footer_script: { type: 'string' },
           footer_script_lines: {
@@ -914,10 +971,13 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           path: { type: 'string' },
           content: { type: 'string' },
           dry_run: { type: 'boolean' },
-          create_directories: { type: 'boolean' }
+          create_directories: { type: 'boolean' },
+          no_theme_edits: { type: 'boolean' }
         }
       },
-      invoke: async (argumentsMap = {}) => themeFiles.writeFile(argumentsMap)
+      invoke: async (argumentsMap = {}) => argumentsMap.no_theme_edits
+        ? noThemeEditsBlockedResult('write_theme_file')
+        : themeFiles.writeFile(argumentsMap)
     },
     {
       name: 'write_template_file',
@@ -930,10 +990,13 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           path: { type: 'string' },
           content: { type: 'string' },
           dry_run: { type: 'boolean' },
-          create_directories: { type: 'boolean' }
+          create_directories: { type: 'boolean' },
+          no_theme_edits: { type: 'boolean' }
         }
       },
-      invoke: async (argumentsMap = {}) => themeFiles.writeTemplateFile(argumentsMap)
+      invoke: async (argumentsMap = {}) => argumentsMap.no_theme_edits
+        ? noThemeEditsBlockedResult('write_template_file')
+        : themeFiles.writeTemplateFile(argumentsMap)
     },
     {
       name: 'list_theme_backups',
@@ -1153,6 +1216,15 @@ function objectOutputSchema() {
   }
 }
 
+function noThemeEditsBlockedResult(toolName) {
+  return {
+    ok: false,
+    status: 'blocked_by_no_theme_edits',
+    tool: toolName,
+    message: 'This request declares no_theme_edits=true, so local theme file writes are blocked. Use page_upsert with body_html, page_css, page_js, and seo instead.'
+  }
+}
+
 function isReadMostlyTool(name) {
   return /^(get_|list_|preview_|validate_|content_patch_preview|theme_file_read|theme_file_backups|wp_debug|visual_check)/.test(name)
 }
@@ -1202,7 +1274,9 @@ function themeFileWriteSchema() {
       root_scope: { type: 'string', enum: ['active', 'stylesheet', 'template', 'all'] },
       path: { type: 'string' },
       content: { type: 'string' },
-      create_directories: { type: 'boolean' }
+      create_directories: { type: 'boolean' },
+      dry_run: { type: 'boolean' },
+      no_theme_edits: { type: 'boolean' }
     }
   }
 }
@@ -1291,11 +1365,51 @@ function seoToolsSchema() {
     properties: {
       action: { type: 'string', enum: ['get', 'update'] },
       post_id: { type: 'integer' },
+      provider: { type: 'string', enum: ['auto', 'yoast', 'seopress', 'fallback'] },
       title: { type: 'string' },
       description: { type: 'string' },
       canonical: { type: 'string' },
+      noindex: { type: 'boolean' },
       social_image: { type: 'string' },
       twitter_image: { type: 'string' }
+    }
+  }
+}
+
+function assetDiscoverySchema() {
+  return {
+    type: 'object',
+    required: ['directory'],
+    properties: {
+      directory: { type: 'string' },
+      recursive: { type: 'boolean' },
+      limit: { type: 'integer' },
+      name_includes: {
+        type: 'array',
+        items: { type: 'string' }
+      }
+    }
+  }
+}
+
+function localAssetUploadSchema() {
+  return {
+    type: 'object',
+    required: ['directory'],
+    properties: {
+      directory: { type: 'string' },
+      recursive: { type: 'boolean' },
+      limit: { type: 'integer' },
+      name_includes: {
+        type: 'array',
+        items: { type: 'string' }
+      },
+      post_id: { type: 'integer' },
+      set_first_featured: { type: 'boolean' },
+      metadata: {
+        type: 'object',
+        additionalProperties: true
+      }
     }
   }
 }

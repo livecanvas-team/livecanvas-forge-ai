@@ -147,7 +147,32 @@ final class LCFA_Admin {
             'message' => __('Unknown Theme Library action.', 'livecanvas-forge-ai'),
         ];
 
-        if ($operation === 'rollback') {
+        if ($operation === 'install_framework') {
+            $framework = $this->normalize_supported_framework((string) ($_POST['framework'] ?? ''));
+            if ($framework === '') {
+                $result = [
+                    'ok'      => false,
+                    'message' => __('Unsupported Theme Library framework.', 'livecanvas-forge-ai'),
+                ];
+            } else {
+                $install_result = $this->installer->apply_framework($framework);
+                if (is_wp_error($install_result)) {
+                    $result = [
+                        'ok'      => false,
+                        'message' => $install_result->get_error_message(),
+                    ];
+                } else {
+                    $result = [
+                        'ok'      => true,
+                        'message' => sprintf(
+                            /* translators: %s: framework name. */
+                            __('%s is installed and ready for Theme Library imports.', 'livecanvas-forge-ai'),
+                            $this->get_framework_display_name($framework)
+                        ),
+                    ];
+                }
+            }
+        } elseif ($operation === 'rollback') {
             $result = $this->theme_library_rollback->rollback($audit_id, false);
         } else {
             $theme = $this->theme_library_catalog->get_theme($slug, $force);
@@ -2448,6 +2473,14 @@ final class LCFA_Admin {
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Theme: %s', 'livecanvas-forge-ai'), (string) ($snapshot['current_theme_stylesheet'] ?? 'unknown'))) . '</span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Catalog: %s', 'livecanvas-forge-ai'), $this->theme_library_catalog->get_catalog_url())) . '</span>';
         echo '</div>';
+        echo '<div class="lcfa-theme-library-guide">';
+        echo '<strong>' . esc_html__('Import flow', 'livecanvas-forge-ai') . '</strong>';
+        echo '<ol>';
+        echo '<li>' . esc_html__('Install the required parent framework theme, for example Picowind for Tailwind/DaisyUI starters.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Install and activate the selected child theme.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Import starter data: LiveCanvas settings, design system, media, header, footer, homepage, menus, and cache flush.', 'livecanvas-forge-ai') . '</li>';
+        echo '</ol>';
+        echo '</div>';
         echo '<p><a class="button" href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=theme-library&refresh_catalog=1')) . '">' . esc_html__('Refresh catalog', 'livecanvas-forge-ai') . '</a></p>';
         echo '</section>';
 
@@ -2471,7 +2504,7 @@ final class LCFA_Admin {
             echo '</section>';
         }
 
-        echo '<section class="lcfa-card">';
+        echo '<section class="lcfa-card lcfa-card--theme-library">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('layers');
         echo '<div><h2>' . esc_html__('Available Picowind child themes', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Preview validates the ZIP and manifest without writing. Install activates the child theme. Import writes starter data and creates rollback metadata.', 'livecanvas-forge-ai') . '</p></div>';
@@ -2481,6 +2514,24 @@ final class LCFA_Admin {
         if (!$themes) {
             echo '<p>' . esc_html__('No valid themes are currently available in the catalog.', 'livecanvas-forge-ai') . '</p>';
         } else {
+            $categories = [];
+            foreach ($themes as $theme) {
+                if (is_array($theme) && !empty($theme['category'])) {
+                    $categories[] = sanitize_text_field((string) $theme['category']);
+                }
+            }
+            $categories = array_values(array_unique(array_filter($categories)));
+
+            echo '<div class="lcfa-theme-library-toolbar">';
+            echo '<div class="lcfa-theme-library-toolbar__title"><span>' . esc_html__('Featured', 'livecanvas-forge-ai') . '</span><strong>' . esc_html(sprintf(_n('%d theme', '%d themes', count($themes), 'livecanvas-forge-ai'), count($themes))) . '</strong></div>';
+            echo '<div class="lcfa-theme-library-filterbar" aria-label="' . esc_attr__('Theme categories', 'livecanvas-forge-ai') . '">';
+            echo '<span class="lcfa-theme-filter is-active">' . esc_html__('All', 'livecanvas-forge-ai') . '</span>';
+            foreach ($categories as $category) {
+                echo '<span class="lcfa-theme-filter">' . esc_html($category) . '</span>';
+            }
+            echo '</div>';
+            echo '</div>';
+
             echo '<div class="lcfa-grid lcfa-grid--cards">';
             foreach ($themes as $theme) {
                 if (!is_array($theme)) {
@@ -2489,13 +2540,61 @@ final class LCFA_Admin {
 
                 $slug = sanitize_key((string) ($theme['slug'] ?? ''));
                 $import = $imports[$slug] ?? [];
-                echo '<article class="lcfa-card lcfa-card--nested">';
-                if (!empty($theme['screenshot'])) {
-                    echo '<img src="' . esc_url((string) $theme['screenshot']) . '" alt="" style="width:100%;height:auto;border-radius:12px;border:1px solid rgba(255,255,255,.12);">';
+                $name = (string) ($theme['name'] ?? $slug);
+                $version = (string) ($theme['version'] ?? '');
+                $category = (string) ($theme['category'] ?? '');
+                $has_screenshot = !empty($theme['screenshot']);
+                $framework = $this->get_theme_library_framework($theme);
+                $parent_ready = $this->theme_library_framework_is_ready($framework, $snapshot);
+                $windpress_ready = $framework !== 'picowind' || (!empty($snapshot['windpress_installed']) && !empty($snapshot['windpress_active']));
+                $installed_stylesheet = $this->find_theme_library_child_stylesheet($theme);
+                $child_installed = $installed_stylesheet !== '';
+                $is_imported = !empty($import) && (string) ($import['status'] ?? 'imported') !== 'failed';
+                echo '<article class="lcfa-theme-card">';
+                if ($has_screenshot) {
+                    echo '<figure class="lcfa-theme-card__media">';
+                    echo '<img src="' . esc_url((string) $theme['screenshot']) . '" alt="">';
+                    echo '<figcaption class="lcfa-theme-card__overlay">';
+                    echo '<span><strong>' . esc_html($name) . '</strong><small>' . esc_html(sprintf(__('Version %s', 'livecanvas-forge-ai'), $version)) . '</small></span>';
+                    if ($category !== '') {
+                        echo '<em>' . esc_html($category) . '</em>';
+                    }
+                    echo '</figcaption>';
+                    echo '</figure>';
                 }
-                echo '<h3>' . esc_html((string) ($theme['name'] ?? $slug)) . '</h3>';
-                echo '<p>' . esc_html((string) ($theme['description'] ?? '')) . '</p>';
-                echo '<div class="lcfa-chip-row">';
+                echo '<div class="lcfa-theme-card__body">';
+                if (!$has_screenshot || !empty($import['audit_id'])) {
+                    echo '<div class="lcfa-theme-card__meta-row">';
+                    if (!$has_screenshot) {
+                        echo '<h3>' . esc_html($name) . '</h3>';
+                    }
+                    if (!empty($import['audit_id'])) {
+                        echo '<code class="lcfa-theme-card__audit">' . esc_html((string) $import['audit_id']) . '</code>';
+                    }
+                    echo '</div>';
+                }
+                if (!empty($theme['description'])) {
+                    echo '<p class="lcfa-theme-card__description">' . esc_html((string) $theme['description']) . '</p>';
+                }
+                $this->render_theme_library_stack_badges($theme);
+                echo '<div class="lcfa-theme-card__readiness">';
+                $this->render_theme_library_check(__('Parent theme', 'livecanvas-forge-ai'), $parent_ready, $parent_ready ? __('Ready', 'livecanvas-forge-ai') : sprintf(__('Install %s first', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)));
+                if ($framework === 'picowind') {
+                    $windpress_detail = $windpress_ready
+                        ? __('Active', 'livecanvas-forge-ai')
+                        : (!empty($snapshot['windpress_installed']) ? __('Installed but inactive', 'livecanvas-forge-ai') : __('Will be installed by Picowind during activation', 'livecanvas-forge-ai'));
+                    $this->render_theme_library_check(__('WindPress runtime', 'livecanvas-forge-ai'), $windpress_ready, $windpress_detail);
+                }
+                $this->render_theme_library_check(__('Child theme', 'livecanvas-forge-ai'), $child_installed, $child_installed ? $installed_stylesheet : __('Not installed yet', 'livecanvas-forge-ai'));
+                $this->render_theme_library_check(__('Starter data', 'livecanvas-forge-ai'), $is_imported, $is_imported ? __('Imported', 'livecanvas-forge-ai') : __('Not imported yet', 'livecanvas-forge-ai'));
+                echo '</div>';
+                if (!$parent_ready) {
+                    echo '<div class="lcfa-theme-card__notice">';
+                    echo '<strong>' . esc_html__('Required before install', 'livecanvas-forge-ai') . '</strong>';
+                    echo '<span>' . esc_html(sprintf(__('This starter needs %s. Install the parent framework first, then install the child theme.', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework))) . '</span>';
+                    echo '</div>';
+                }
+                echo '<div class="lcfa-chip-row lcfa-theme-card__chips">';
                 echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Version %s', 'livecanvas-forge-ai'), (string) ($theme['version'] ?? ''))) . '</span>';
                 if (!empty($theme['category'])) {
                     echo '<span class="lcfa-chip">' . esc_html((string) $theme['category']) . '</span>';
@@ -2508,12 +2607,13 @@ final class LCFA_Admin {
                 echo '</div>';
                 echo '<div class="lcfa-actions">';
                 $this->render_theme_library_action_form($slug, 'preview', __('Preview', 'livecanvas-forge-ai'), false);
-                $this->render_theme_library_action_form($slug, 'install', __('Install child theme', 'livecanvas-forge-ai'), false);
-                $this->render_theme_library_action_form($slug, 'import', __('Import starter data', 'livecanvas-forge-ai'), true);
-                echo '</div>';
-                if (!empty($import['audit_id'])) {
-                    echo '<p><code>' . esc_html((string) $import['audit_id']) . '</code></p>';
+                if (!$parent_ready) {
+                    $this->render_theme_library_framework_form($framework, sprintf(__('Install %s', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)));
                 }
+                $this->render_theme_library_action_form($slug, 'install', $child_installed ? __('Activate child theme', 'livecanvas-forge-ai') : __('Install child theme', 'livecanvas-forge-ai'), false, !$parent_ready, __('Install the parent framework theme first.', 'livecanvas-forge-ai'));
+                $this->render_theme_library_action_form($slug, 'import', $is_imported ? __('Re-import starter data', 'livecanvas-forge-ai') : __('Import starter data', 'livecanvas-forge-ai'), true, !$parent_ready || !$child_installed, !$parent_ready ? __('Install the parent framework theme first.', 'livecanvas-forge-ai') : __('Install the child theme before importing starter data.', 'livecanvas-forge-ai'));
+                echo '</div>';
+                echo '</div>';
                 echo '</article>';
             }
             echo '</div>';
@@ -2551,17 +2651,145 @@ final class LCFA_Admin {
         echo '</div>';
     }
 
-    private function render_theme_library_action_form(string $slug, string $operation, string $label, bool $confirm): void {
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '"' . ($confirm ? ' onsubmit="return confirm(\'' . esc_js(__('This will write starter data to the site. Continue?', 'livecanvas-forge-ai')) . '\');"' : '') . '>';
+    private function render_theme_library_action_form(string $slug, string $operation, string $label, bool $confirm, bool $disabled = false, string $disabled_reason = ''): void {
+        $form_class = 'lcfa-theme-action lcfa-theme-action--' . sanitize_html_class($operation);
+        $button_class = 'button lcfa-theme-button lcfa-theme-button--' . sanitize_html_class($operation) . ($operation === 'import' ? ' button-primary' : '');
+        echo '<form class="' . esc_attr($form_class) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '"' . ($confirm ? ' onsubmit="return confirm(\'' . esc_js(__('This will write starter data to the site. Continue?', 'livecanvas-forge-ai')) . '\');"' : '') . '>';
         wp_nonce_field('lcfa_theme_library');
         echo '<input type="hidden" name="action" value="lcfa_theme_library">';
         echo '<input type="hidden" name="operation" value="' . esc_attr($operation) . '">';
         echo '<input type="hidden" name="slug" value="' . esc_attr($slug) . '">';
         if ($operation === 'import') {
-            echo '<label class="lcfa-inline-check"><input type="checkbox" name="force" value="1"> ' . esc_html__('Force update existing import', 'livecanvas-forge-ai') . '</label>';
+            echo '<label class="lcfa-inline-check lcfa-theme-card__force"><input type="checkbox" name="force" value="1"> <span>' . esc_html__('Force update existing import', 'livecanvas-forge-ai') . '</span></label>';
         }
-        echo '<button class="button' . ($operation === 'import' ? ' button-primary' : '') . '" type="submit">' . esc_html($label) . '</button>';
+        echo '<button class="' . esc_attr($button_class) . '" type="submit"' . ($disabled ? ' disabled aria-disabled="true" title="' . esc_attr($disabled_reason) . '"' : '') . '>' . esc_html($label) . '</button>';
         echo '</form>';
+    }
+
+    private function render_theme_library_framework_form(string $framework, string $label): void {
+        $framework = $this->normalize_supported_framework($framework);
+        if ($framework === '') {
+            return;
+        }
+
+        echo '<form class="lcfa-theme-action lcfa-theme-action--framework" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        wp_nonce_field('lcfa_theme_library');
+        echo '<input type="hidden" name="action" value="lcfa_theme_library">';
+        echo '<input type="hidden" name="operation" value="install_framework">';
+        echo '<input type="hidden" name="framework" value="' . esc_attr($framework) . '">';
+        echo '<button class="button button-primary lcfa-theme-button lcfa-theme-button--framework" type="submit">' . esc_html($label) . '</button>';
+        echo '</form>';
+    }
+
+    private function render_theme_library_stack_badges(array $theme): void {
+        $badges = $this->get_theme_library_stack_badges($theme);
+        if (!$badges) {
+            return;
+        }
+
+        echo '<div class="lcfa-theme-stack-badges" aria-label="' . esc_attr__('Theme stack', 'livecanvas-forge-ai') . '">';
+        foreach ($badges as $badge) {
+            echo '<span class="' . esc_attr('lcfa-stack-badge lcfa-stack-badge--' . sanitize_html_class($badge['key'])) . '">';
+            echo '<span class="lcfa-stack-badge__mark">' . esc_html($badge['mark']) . '</span>';
+            echo '<span>' . esc_html($badge['label']) . '</span>';
+            echo '</span>';
+        }
+        echo '</div>';
+    }
+
+    private function render_theme_library_check(string $label, bool $ok, string $detail): void {
+        echo '<span class="' . esc_attr('lcfa-theme-check' . ($ok ? ' is-ok' : ' is-pending')) . '">';
+        echo '<strong>' . esc_html($label) . '</strong>';
+        echo '<small>' . esc_html($detail) . '</small>';
+        echo '</span>';
+    }
+
+    private function get_theme_library_stack_badges(array $theme): array {
+        $framework = $this->get_theme_library_framework($theme);
+        $css = sanitize_key((string) ($theme['css'] ?? ($theme['stack']['css'] ?? '')));
+        $ui = sanitize_key((string) ($theme['ui'] ?? ($theme['stack']['ui'] ?? '')));
+        $badges = [];
+
+        if ($framework === 'picowind') {
+            $badges[] = ['key' => 'picowind', 'mark' => 'PW', 'label' => __('Picowind', 'livecanvas-forge-ai')];
+            $badges[] = ['key' => 'tailwind', 'mark' => 'TW', 'label' => __('Tailwind', 'livecanvas-forge-ai')];
+            $badges[] = ['key' => 'daisyui', 'mark' => 'DU', 'label' => __('DaisyUI', 'livecanvas-forge-ai')];
+        } elseif ($framework === 'picostrap') {
+            $badges[] = ['key' => 'picostrap', 'mark' => 'PS', 'label' => __('Picostrap', 'livecanvas-forge-ai')];
+            $badges[] = ['key' => 'bootstrap', 'mark' => 'B', 'label' => __('Bootstrap', 'livecanvas-forge-ai')];
+        }
+
+        if ($css !== '' && !in_array($css, wp_list_pluck($badges, 'key'), true)) {
+            $badges[] = ['key' => $css, 'mark' => strtoupper(substr($css, 0, 2)), 'label' => ucfirst($css)];
+        }
+
+        if ($ui !== '' && !in_array($ui, wp_list_pluck($badges, 'key'), true)) {
+            $badges[] = ['key' => $ui, 'mark' => strtoupper(substr($ui, 0, 2)), 'label' => ucfirst($ui)];
+        }
+
+        return $badges;
+    }
+
+    private function get_theme_library_framework(array $theme): string {
+        $framework = sanitize_key((string) ($theme['framework'] ?? ($theme['stack']['framework'] ?? '')));
+        if ($framework === '') {
+            $framework = 'picowind';
+        }
+
+        return $this->normalize_supported_framework($framework) ?: $framework;
+    }
+
+    private function get_theme_library_framework_label(string $framework): string {
+        $framework = $this->normalize_supported_framework($framework);
+        if ($framework === 'picowind') {
+            return __('Picowind', 'livecanvas-forge-ai');
+        }
+
+        if ($framework === 'picostrap') {
+            return __('Picostrap', 'livecanvas-forge-ai');
+        }
+
+        return __('required framework', 'livecanvas-forge-ai');
+    }
+
+    private function theme_library_framework_is_ready(string $framework, array $snapshot): bool {
+        $framework = $this->normalize_supported_framework($framework);
+        if ($framework === 'picowind') {
+            return !empty($snapshot['picowind_candidates']) || wp_get_theme('picowind')->exists();
+        }
+
+        if ($framework === 'picostrap') {
+            return !empty($snapshot['picostrap_candidates']) || wp_get_theme('picostrap5')->exists() || wp_get_theme('picostrap')->exists();
+        }
+
+        return false;
+    }
+
+    private function find_theme_library_child_stylesheet(array $theme): string {
+        $expected_slug = sanitize_key((string) ($theme['slug'] ?? ''));
+        $expected_name = sanitize_text_field((string) ($theme['name'] ?? ''));
+
+        if ($expected_slug !== '' && wp_get_theme($expected_slug)->exists()) {
+            return $expected_slug;
+        }
+
+        foreach (wp_get_themes() as $candidate_stylesheet => $candidate) {
+            if (!$candidate->exists()) {
+                continue;
+            }
+
+            $candidate_name = sanitize_text_field((string) $candidate->get('Name'));
+            $candidate_key = sanitize_key((string) $candidate_stylesheet);
+            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0) {
+                return (string) $candidate_stylesheet;
+            }
+
+            if ($expected_slug !== '' && strpos($candidate_key, $expected_slug . '-') === 0) {
+                return (string) $candidate_stylesheet;
+            }
+        }
+
+        return '';
     }
 
     private function render_theme_library_rollback_form(string $audit_id): void {

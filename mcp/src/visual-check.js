@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises')
+const fsSync = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -24,7 +25,7 @@ class VisualCheck {
 
     const viewports = this.normalizeViewports(options)
     const outputDirectory = await this.resolveOutputDirectory(options)
-    const browser = await playwright.chromium.launch({ headless: true })
+    const browser = await playwright.chromium.launch(this.resolveLaunchOptions(options))
     const results = []
 
     try {
@@ -138,6 +139,32 @@ class VisualCheck {
         detail: error instanceof Error ? error.message : String(error)
       }
     }
+  }
+
+  resolveLaunchOptions(options = {}) {
+    const explicitExecutable = String(options.executable_path || process.env.LCFA_PLAYWRIGHT_EXECUTABLE_PATH || '').trim()
+    const launchOptions = { headless: options.headless !== false }
+
+    if (explicitExecutable && fsSync.existsSync(explicitExecutable)) {
+      launchOptions.executablePath = explicitExecutable
+      return launchOptions
+    }
+
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser'
+    ]
+
+    const executablePath = candidates.find((candidate) => fsSync.existsSync(candidate))
+    if (executablePath) {
+      launchOptions.executablePath = executablePath
+    }
+
+    return launchOptions
   }
 
   normalizeViewports(options = {}) {

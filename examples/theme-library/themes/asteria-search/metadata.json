@@ -1,0 +1,8 @@
+{
+  "slug": "asteria-search",
+  "name": "Asteria Search",
+  "version": "1.0.0",
+  "schema": "lcfa-theme.v1",
+  "status": "local-export",
+  "source": "wordpress-theme-test.local"
+}

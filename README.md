@@ -239,6 +239,8 @@ Required ZIP structure:
 style.css
 functions.php
 screenshot.jpg
+page-templates/empty.php
+views/page-templates/empty.twig
 livecanvas/configuration.php
 public/styles/presets/daisyui.css
 public/styles/tailwind.css
@@ -251,7 +253,24 @@ starter-data/qa-report.json
 starter-data/media/*
 ```
 
-The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. Header and footer are imported as separate LiveCanvas `lc_partial` posts; they are never inserted inline into the homepage. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
+The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. The default page template must include `wp_head()` and `wp_footer()` so Picowind/WindPress assets load on imported pages. Header and footer are imported as separate LiveCanvas `lc_partial` posts; they are never inserted inline into the homepage. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
+
+Marketplace covers:
+
+- keep a raw site snapshot as `screenshots/home.jpg`;
+- generate a polished catalog image as `screenshots/cover.jpg`;
+- point the catalog `screenshot` field to `cover.jpg`;
+- generate covers in the private/internal export flow, not inside the WordPress importer.
+
+From a repository checkout, the helper below prepares the prompt or calls an image provider when API credentials are available:
+
+```bash
+node scripts/theme-library-cover.js \
+  --provider prompt \
+  --screenshot examples/theme-library/themes/asteria-search/screenshots/home.jpg \
+  --output /tmp/asteria-cover-prompt.json \
+  --title "Asteria Search"
+```
 
 Theme Library beta acceptance:
 
@@ -507,12 +526,14 @@ WordPress 7 ability highlights:
 | `livecanvas-forge-ai/wp-debug` | Read PHP/WP/theme/plugin/debug-log context. |
 | `livecanvas-forge-ai/cache-flush` | Flush common WordPress caches and bump AI Bridge asset version. |
 | `livecanvas-forge-ai/polylang-tools` | Read or update Polylang language relationships when available. |
-| `livecanvas-forge-ai/seo-tools` | Read or update SEOPress metadata when available. |
+| `livecanvas-forge-ai/seo-tools` | Read or update Yoast, SEOPress, or AI Bridge fallback SEO metadata. |
 | `livecanvas-forge-ai/restore-audit-rollback` | Restore a stored rollback by audit ID. |
 
 Read and preview abilities are MCP-public by default. Curated write abilities are enabled only through the master write switch, per-ability allowlist, and the paired session scopes. For production sites, enable Full Access only for trusted Codex sessions, review preview/diff output first, and keep rollback available for every apply.
 
-The Node MCP package also exposes `visual_check` for local browser-based desktop/mobile screenshots, overflow checks, and computed selector styles when Playwright is available in the Codex runtime.
+For page-only work, tell the agent to use `page_upsert` with `body_html` or `body_html_lines`, optional `page_css_lines`, optional `page_js_lines`, `seo.noindex`, `seo.canonical`, and `no_theme_edits: true`. AI Bridge stores CSS/JS as page metadata, prints it only on that page, creates temporary public preview URLs for draft/private pages, and blocks theme/design-system/global shell writes when `no_theme_edits` is present. Apply results return an `audit_id`; rollback uses that `audit_id`, not theme-file `backup_id`.
+
+The Node MCP package also exposes `visual_check` for local browser-based desktop/mobile screenshots, overflow checks, and computed selector styles. The package declares Playwright and falls back to local Chrome/Chromium when available. It also exposes `asset_discovery` and `media_upload_local_assets` to scan a local image/video folder, upload selected assets to the WordPress Media Library, dedupe by manifest checksum, and return attachment IDs/URLs for later page insertion or `media_replace`.
 
 The backend also exposes `GET /wp-json/lcfa/v1/studio`, `GET /wp-json/lcfa/v1/studio/connection-handoff`, `GET /wp-json/lcfa/v1/studio/handoff-summary`, `GET /wp-json/lcfa/v1/studio/block-pattern-library`, `GET /wp-json/lcfa/v1/studio/native-pattern-page-blueprints`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-preview`, `POST /wp-json/lcfa/v1/studio/native-pattern-page-apply`, and `GET /wp-json/lcfa/v1/studio/handoff-package` for authenticated users or valid MCP tokens. Studio returns contract metadata, summary, readiness alerts, connection handoff, handoff summary, block pattern library, native page blueprints, handoff readiness, briefing, runbook, smoke tests, ability diagnostics, manifest, MCP write policy, AI/MCP readiness, run-health analytics, and sanitized run/audit rows without exposing rollback payload content. The connection-handoff endpoint returns only the first-prompt bootstrap. The handoff-summary endpoint returns only compact status, score, blocker, warning, missing-test, write-guard, and next-action metadata. The block-pattern-library endpoint returns only export-ready native patterns. The native-pattern-page-blueprints endpoint returns page recipes plus copy-ready preview/apply requests. The native-pattern-page preview endpoint composes block content from registered patterns without writing. The native-pattern-page apply endpoint creates a new draft native page and records a rollback reference. AI Studio can run the preview, create the draft from the blueprint panel, refresh audit state, and open the rollback flow for the created draft. MCP clients can also call `get_connection_handoff`, `get_handoff_summary`, `get_block_pattern_library`, `get_native_pattern_page_blueprints`, `preview_native_pattern_page`, `apply_native_pattern_page`, and `get_agent_handoff_package`.
 

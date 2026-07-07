@@ -26,6 +26,7 @@ final class LCFA_Plugin {
     private LCFA_Rest_Api $rest_api;
     private LCFA_Admin $admin;
     private LCFA_Design_System_Preview $design_system_preview;
+    private LCFA_Page_Runtime $page_runtime;
 
     public static function instance(): LCFA_Plugin {
         if (self::$instance === null) {
@@ -68,6 +69,7 @@ final class LCFA_Plugin {
         $this->prompt_suggester = new LCFA_Prompt_Suggester($this->environment, $this->inventory);
         $this->context_builder = new LCFA_Context_Builder($this->environment, $this->inventory, $this->windpress_bridge, $this->local_mcp_bridge);
         $this->design_system_preview = new LCFA_Design_System_Preview();
+        $this->page_runtime = new LCFA_Page_Runtime();
         $design_system_build_gateway = new LCFA_Design_System_Build_Gateway($this->local_mcp_bridge);
         $picostrap_design_system = new LCFA_Design_System_Picostrap_Executor();
         $picowind_design_system = new LCFA_Design_System_Picowind_Executor(
@@ -101,6 +103,7 @@ final class LCFA_Plugin {
 
     public function boot(): void {
         $this->github_updater->hooks();
+        $this->page_runtime->hooks();
         $this->design_system_preview->hooks();
         $this->admin->hooks();
         $this->rest_api->hooks();

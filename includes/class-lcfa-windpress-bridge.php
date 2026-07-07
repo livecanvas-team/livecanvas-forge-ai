@@ -343,6 +343,100 @@ final class LCFA_WindPress_Bridge {
         ];
     }
 
+    public function ensure_picowind_runtime(): array {
+        if (!$this->is_available()) {
+            return [
+                'ok'      => false,
+                'message' => __('WindPress is not active on this site.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (class_exists('\WindPress\WindPress\Utils\Config')) {
+            try {
+                \WindPress\WindPress\Utils\Config::set('integration.picowind.enabled', true);
+
+                $mode = (string) \WindPress\WindPress\Utils\Config::get('performance.mode', 'hybrid');
+                if (!in_array($mode, ['cached', 'hybrid', 'compiler'], true)) {
+                    \WindPress\WindPress\Utils\Config::set('performance.mode', 'hybrid');
+                }
+            } catch (\Throwable $throwable) {
+                return [
+                    'ok'      => false,
+                    'message' => $throwable->getMessage(),
+                ];
+            }
+        }
+
+        $main_css_path = trailingslashit(WP_CONTENT_DIR) . 'uploads/windpress/data/main.css';
+        $main_css_dir  = dirname($main_css_path);
+
+        if (!is_dir($main_css_dir) && !wp_mkdir_p($main_css_dir)) {
+            return [
+                'ok'      => false,
+                'message' => __('WindPress data directory could not be created.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $content = '';
+        if (is_readable($main_css_path)) {
+            $content = (string) file_get_contents($main_css_path);
+        }
+
+        if ($content === '') {
+            $stub = trailingslashit(WP_PLUGIN_DIR) . 'windpress/stubs/tailwindcss-v4/main.css';
+            if (is_readable($stub)) {
+                $content = (string) file_get_contents($stub);
+            }
+        }
+
+        if ($content === '') {
+            $content = "@layer theme, base, components, utilities;\n\n"
+                . "@import \"tailwindcss/theme.css\" layer(theme) theme(static);\n"
+                . "@import \"tailwindcss/preflight.css\" layer(base);\n"
+                . "@import \"tailwindcss/utilities.css\" layer(utilities);\n";
+        }
+
+        $picowind_import = '@import "./@picowind/tailwind.css";';
+        $content = (string) preg_replace(
+            '~\/\*\s*@import\s+["\']\./@picowind/tailwind\.css["\']\s*;\s*\*\/~',
+            $picowind_import,
+            $content
+        );
+
+        if (!preg_match('~@import\s+["\']\./@picowind/tailwind\.css["\']\s*;~', $content)) {
+            $content = rtrim($content) . "\n\n" . $picowind_import . "\n";
+        }
+
+        $preflight_import = '@import "tailwindcss/preflight.css" layer(base);';
+        $content = (string) preg_replace(
+            '~\/\*\s*@import\s+["\']tailwindcss/preflight\.css["\']\s+layer\(base\)\s*;\s*\*\/~',
+            $preflight_import,
+            $content
+        );
+
+        if (file_put_contents($main_css_path, $content) === false) {
+            return [
+                'ok'      => false,
+                'message' => __('WindPress main.css could not be written.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $cache_path = \WindPress\WindPress\Core\Cache::get_cache_path(\WindPress\WindPress\Core\Cache::CSS_CACHE_FILE);
+        if (is_readable($cache_path)) {
+            $cached_css = (string) file_get_contents($cache_path);
+            if (preg_match('/@(import|tailwind)\b/', $cached_css)) {
+                @unlink($cache_path);
+            }
+        }
+
+        return [
+            'ok'       => true,
+            'message'  => __('WindPress Picowind runtime is initialized.', 'livecanvas-forge-ai'),
+            'main_css' => $main_css_path,
+            'cache'    => $this->get_cache_summary(),
+        ];
+    }
+
     private function is_available(): bool {
         return $this->environment->is_windpress_active()
             && class_exists('\WindPress\WindPress\Core\Volume')

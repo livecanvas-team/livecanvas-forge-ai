@@ -87,6 +87,67 @@ themes/{theme-slug}/metadata.json
 
 Only the ZIP and the catalog are required by the importer.
 
+## Marketplace Cover Images
+
+Theme Library catalog cards should use a curated marketplace cover image, not the raw full-page screenshot.
+
+Recommended files:
+
+```text
+themes/{theme-slug}/screenshots/home.jpg
+themes/{theme-slug}/screenshots/cover.jpg
+```
+
+- `home.jpg` is the raw desktop snapshot of the generated site.
+- `cover.jpg` is the polished marketplace asset shown in the catalog.
+- The catalog `screenshot` field should point to `cover.jpg`.
+- The ZIP can still include the normal WordPress theme `screenshot.jpg`; that file is separate from the marketplace cover.
+
+The internal export pipeline should generate `cover.jpg` after the real site snapshot:
+
+1. Capture a clean desktop screenshot of the generated homepage.
+2. Send that screenshot to an image provider as visual reference.
+3. Ask the model to keep the website readable inside a browser/monitor mockup.
+4. Ask the model to generate an abstract background tuned to the screenshot palette.
+5. Save the result as `screenshots/cover.jpg`.
+6. Save the prompt and provider metadata in the private generator logs, never API keys.
+
+The public repository includes a helper for this private/internal workflow:
+
+```bash
+node scripts/theme-library-cover.js \
+  --provider prompt \
+  --screenshot examples/theme-library/themes/asteria-search/screenshots/home.jpg \
+  --output /tmp/asteria-cover-prompt.json \
+  --title "Asteria Search" \
+  --subtitle "One-page Picowind starter"
+```
+
+Generation providers:
+
+```bash
+# GPT Image 2 / OpenAI image edit
+OPENAI_API_KEY="..." \
+node scripts/theme-library-cover.js \
+  --provider openai \
+  --screenshot screenshots/home.jpg \
+  --output screenshots/cover.jpg \
+  --title "Asteria Search"
+
+# WaveSpeed GPT Image 2 Edit.
+# The script defaults to:
+# - https://api.wavespeed.ai/api/v3/media/upload/binary
+# - https://api.wavespeed.ai/api/v3/openai/gpt-image-2/edit
+WAVESPEED_API_KEY="..." \
+node scripts/theme-library-cover.js \
+  --provider wavespeed \
+  --screenshot screenshots/home.jpg \
+  --output screenshots/cover.jpg \
+  --title "Asteria Search"
+```
+
+Do not commit API keys, raw provider responses containing secrets, or temporary generation files.
+
 ## ZIP Structure
 
 Every ZIP must contain a valid Picowind child theme. A root directory inside the ZIP is allowed. The following files are required:
@@ -95,6 +156,8 @@ Every ZIP must contain a valid Picowind child theme. A root directory inside the
 style.css
 functions.php
 screenshot.jpg
+page-templates/empty.php
+views/page-templates/empty.twig
 livecanvas/configuration.php
 public/styles/presets/daisyui.css
 public/styles/tailwind.css
@@ -106,6 +169,8 @@ starter-data/menus.json
 starter-data/qa-report.json
 starter-data/media/*
 ```
+
+If `starter-data/lcfa-theme.json` declares another `homepage.template`, that template file must exist in the ZIP. The default `page-templates/empty.php` should render a standalone `page-templates/empty.twig` with a complete HTML shell, including `wp_head()`, `wp_body_open()`, `{{ post.content }}`, and `wp_footer()`. Do not rely on a parent `base.twig` unless the ZIP also ships the full child-theme view scaffold.
 
 The importer accepts a ZIP with either:
 

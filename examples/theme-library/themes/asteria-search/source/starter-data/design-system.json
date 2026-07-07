@@ -1,0 +1,13 @@
+{
+  "tokens": {
+    "colors": {
+      "primary": "#9be7ff",
+      "secondary": "#b8a7ff",
+      "ink": "#0b1020"
+    },
+    "radius": {
+      "card": "1.5rem",
+      "button": "999px"
+    }
+  }
+}

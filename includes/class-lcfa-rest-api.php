@@ -2335,6 +2335,12 @@ final class LCFA_Rest_Api {
             $payload = $request->get_params();
         }
 
+        if (!empty($payload['no_theme_edits'])) {
+            return new WP_REST_Response([
+                'error' => __('This request declares no_theme_edits=true, so theme file writes are blocked.', 'livecanvas-forge-ai'),
+            ], 403);
+        }
+
         $policy = $this->command_deck->evaluate_action_policy_for_rest('write_theme_file', !empty($payload['dry_run']));
 
         if (empty($policy['ok'])) {
@@ -2371,6 +2377,12 @@ final class LCFA_Rest_Api {
         $payload = $request->get_json_params();
         if (!is_array($payload)) {
             $payload = $request->get_params();
+        }
+
+        if (!empty($payload['no_theme_edits'])) {
+            return new WP_REST_Response([
+                'error' => __('This request declares no_theme_edits=true, so theme template writes are blocked.', 'livecanvas-forge-ai'),
+            ], 403);
         }
 
         $policy = $this->command_deck->evaluate_action_policy_for_rest('write_theme_template', !empty($payload['dry_run']));

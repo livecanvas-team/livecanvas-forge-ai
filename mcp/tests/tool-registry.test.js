@@ -199,6 +199,14 @@ async function run() {
   assert.ok(visualCheck, 'visual_check should be registered')
   assert.ok(visualCheck.inputSchema.properties.viewports.items, 'visual_check should declare viewport item schema')
 
+  const assetDiscovery = tools.find((tool) => tool.name === 'asset_discovery')
+  assert.ok(assetDiscovery, 'asset_discovery should be registered')
+  assert.ok(assetDiscovery.inputSchema.required.includes('directory'), 'asset_discovery should require a source directory')
+
+  const localAssetUpload = tools.find((tool) => tool.name === 'media_upload_local_assets')
+  assert.ok(localAssetUpload, 'media_upload_local_assets should be registered')
+  assert.ok(localAssetUpload.inputSchema.properties.metadata, 'media_upload_local_assets should accept per-asset metadata')
+
   const validateMarkup = tools.find((tool) => tool.name === 'validate_markup_for_framework')
   assert.ok(validateMarkup, 'validate_markup_for_framework should be registered')
   assert.ok(validateMarkup.inputSchema.properties.body_html_lines, 'validate_markup_for_framework should expose body_html_lines')
@@ -213,6 +221,10 @@ async function run() {
   assert.ok(runLcCommand.inputSchema.properties.body_html, 'run_lc_command should expose body_html for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.body_html_lines, 'run_lc_command should expose body_html_lines for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.body_html_lines.items, 'run_lc_command should declare array items for body_html_lines')
+  assert.ok(runLcCommand.inputSchema.properties.page_css_lines, 'run_lc_command should expose page_css_lines for page-scoped CSS')
+  assert.ok(runLcCommand.inputSchema.properties.page_js_lines, 'run_lc_command should expose page_js_lines for page-scoped JS')
+  assert.ok(runLcCommand.inputSchema.properties.no_theme_edits, 'run_lc_command should expose no_theme_edits guardrail')
+  assert.ok(runLcCommand.inputSchema.properties.seo, 'run_lc_command should expose page SEO metadata')
   assert.ok(runLcCommand.inputSchema.properties.footer_script, 'run_lc_command should expose footer_script for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.footer_script_lines, 'run_lc_command should expose footer_script_lines for structured page writes')
   assert.ok(runLcCommand.inputSchema.properties.footer_script_lines.items, 'run_lc_command should declare array items for footer_script_lines')

@@ -25,6 +25,7 @@ copy_into_package() {
 copy_into_package "${ROOT_DIR}/livecanvas-forge-ai.php"
 copy_into_package "${ROOT_DIR}/README.md"
 copy_into_package "${ROOT_DIR}/assets"
+copy_into_package "${ROOT_DIR}/examples"
 copy_into_package "${ROOT_DIR}/includes"
 copy_into_package "${ROOT_DIR}/mcp"
 

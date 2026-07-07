@@ -49,6 +49,7 @@ final class LCFA_Theme_Library_Importer {
         }
 
         $stylesheet = sanitize_key((string) ($manifest['theme']['stylesheet'] ?? $slug));
+        $stylesheet = $this->resolve_installed_stylesheet($stylesheet, $manifest, $theme);
         if ($stylesheet !== '' && !wp_get_theme($stylesheet)->exists()) {
             $this->delete_file($zip_path);
             return [
@@ -105,6 +106,15 @@ final class LCFA_Theme_Library_Importer {
             if ($stylesheet !== '' && wp_get_theme($stylesheet)->exists() && wp_get_theme()->get_stylesheet() !== $stylesheet) {
                 switch_theme($stylesheet);
                 $result['steps'][] = 'theme_activated';
+            }
+
+            if (($manifest['compatibility']['picowind'] ?? null) !== null || ($theme['framework'] ?? '') === 'picowind') {
+                $runtime = $this->windpress_bridge->ensure_picowind_runtime();
+                if (empty($runtime['ok'])) {
+                    $result['warnings'][] = (string) ($runtime['message'] ?? __('WindPress Picowind runtime could not be initialized.', 'livecanvas-forge-ai'));
+                } else {
+                    $result['steps'][] = 'windpress_picowind_runtime_initialized';
+                }
             }
 
             $this->import_options($base_dir, (string) ($manifest['livecanvas_settings'] ?? ''), $rollback, $result);
@@ -229,11 +239,15 @@ final class LCFA_Theme_Library_Importer {
         if ($css_path !== '' && is_readable($css_path)) {
             $css = (string) file_get_contents($css_path);
             if ($css !== '') {
-                $saved_css = $this->windpress_bridge->save_cache_css($css);
-                if (empty($saved_css['ok'])) {
-                    $result['warnings'][] = (string) ($saved_css['message'] ?? __('WindPress CSS cache import was not available.', 'livecanvas-forge-ai'));
+                if (preg_match('/@(import|tailwind)\b/', $css)) {
+                    $result['steps'][] = 'windpress_source_css_ready';
                 } else {
-                    $result['steps'][] = 'windpress_css_imported';
+                    $saved_css = $this->windpress_bridge->save_cache_css($css);
+                    if (empty($saved_css['ok'])) {
+                        $result['warnings'][] = (string) ($saved_css['message'] ?? __('WindPress CSS cache import was not available.', 'livecanvas-forge-ai'));
+                    } else {
+                        $result['steps'][] = 'windpress_css_imported';
+                    }
                 }
             }
         }
@@ -570,6 +584,41 @@ final class LCFA_Theme_Library_Importer {
         ]);
 
         return isset($posts[0]) ? (int) $posts[0] : 0;
+    }
+
+    private function resolve_installed_stylesheet(string $stylesheet, array $manifest, array $theme): string {
+        if ($stylesheet !== '' && wp_get_theme($stylesheet)->exists()) {
+            return $stylesheet;
+        }
+
+        $expected_name = sanitize_text_field((string) ($manifest['theme']['name'] ?? $theme['name'] ?? ''));
+        $expected_slug = sanitize_key((string) ($manifest['theme']['slug'] ?? $theme['slug'] ?? $stylesheet));
+        $expected_text_domain = sanitize_key((string) ($manifest['theme']['text_domain'] ?? $expected_slug));
+
+        foreach (wp_get_themes() as $candidate_stylesheet => $candidate) {
+            if (!$candidate->exists()) {
+                continue;
+            }
+
+            $candidate_name = sanitize_text_field((string) $candidate->get('Name'));
+            $candidate_text_domain = sanitize_key((string) $candidate->get('TextDomain'));
+            $candidate_template = sanitize_key((string) $candidate->get_template());
+            $candidate_key = sanitize_key((string) $candidate_stylesheet);
+
+            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0 && $candidate_template === 'picowind') {
+                return (string) $candidate_stylesheet;
+            }
+
+            if ($expected_text_domain !== '' && $candidate_text_domain === $expected_text_domain) {
+                return (string) $candidate_stylesheet;
+            }
+
+            if ($expected_slug !== '' && strpos($candidate_key, $expected_slug . '-') === 0) {
+                return (string) $candidate_stylesheet;
+            }
+        }
+
+        return $stylesheet;
     }
 
     private function record_post_rollback(int $post_id, array &$rollback): void {

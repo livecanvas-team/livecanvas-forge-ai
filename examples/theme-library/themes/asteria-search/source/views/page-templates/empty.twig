@@ -1,0 +1,13 @@
+<!doctype html>
+<html {{ site.language_attributes }} data-theme="{{ theme.mods.data_theme|default('light') }}">
+<head>
+    <meta charset="{{ site.charset }}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{ function('wp_head') }}
+</head>
+<body class="{{ body_class }}" data-template="lcfa-empty.twig">
+    {{ function('wp_body_open') }}
+    {{ post.content }}
+    {{ function('wp_footer') }}
+</body>
+</html>

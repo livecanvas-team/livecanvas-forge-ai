@@ -371,7 +371,7 @@
 }
 
 .lcfa-admin .lcfa-grid--cards {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
 }
 
 .lcfa-admin .lcfa-main,
@@ -395,11 +395,341 @@
     box-shadow: none;
 }
 
+.lcfa-admin .lcfa-card--theme-library {
+    padding: 28px;
+}
+
+.lcfa-admin .lcfa-theme-library-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 22px 0;
+}
+
+.lcfa-admin .lcfa-theme-library-toolbar__title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--lcfa-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.lcfa-admin .lcfa-theme-library-toolbar__title span {
+    color: #fff;
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.lcfa-admin .lcfa-theme-library-filterbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-theme-library-guide {
+    display: grid;
+    gap: 8px;
+    margin-top: 18px;
+    padding: 16px 18px;
+    border: 1px solid rgba(52, 213, 240, 0.24);
+    border-radius: 18px;
+    background: rgba(52, 213, 240, 0.08);
+}
+
+.lcfa-admin .lcfa-theme-library-guide strong {
+    color: #fff;
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-theme-library-guide ol {
+    display: grid;
+    gap: 5px;
+    margin: 0 0 0 18px;
+    color: var(--lcfa-text-soft);
+}
+
+.lcfa-admin .lcfa-theme-filter {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: capitalize;
+}
+
+.lcfa-admin .lcfa-theme-filter.is-active {
+    border-color: rgba(52, 213, 240, 0.48);
+    background: rgba(52, 213, 240, 0.14);
+    color: #35d0f2;
+}
+
+.lcfa-admin .lcfa-theme-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid rgba(169, 171, 203, 0.18);
+    border-radius: 22px;
+    background:
+        radial-gradient(circle at 84% 8%, rgba(237, 58, 154, 0.16), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+}
+
+.lcfa-admin .lcfa-theme-card__media {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    margin: 0;
+    border-bottom: 1px solid rgba(169, 171, 203, 0.18);
+    background: rgba(10, 14, 26, 0.72);
+    overflow: hidden;
+}
+
+.lcfa-admin .lcfa-theme-card__media::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 44%;
+    background: linear-gradient(180deg, transparent, rgba(8, 10, 19, 0.82));
+    pointer-events: none;
+}
+
+.lcfa-admin .lcfa-theme-card__media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1.001);
+}
+
+.lcfa-admin .lcfa-theme-card__overlay {
+    position: absolute;
+    z-index: 1;
+    right: 18px;
+    bottom: 16px;
+    left: 18px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-theme-card__overlay span {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.lcfa-admin .lcfa-theme-card__overlay strong {
+    font-size: 18px;
+    line-height: 1.1;
+}
+
+.lcfa-admin .lcfa-theme-card__overlay small {
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.lcfa-admin .lcfa-theme-card__overlay em {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(11, 14, 24, 0.68);
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.lcfa-admin .lcfa-theme-card__body {
+    display: grid;
+    gap: 13px;
+    padding: 18px;
+}
+
+.lcfa-admin .lcfa-theme-card__meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.lcfa-admin .lcfa-theme-card h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 18px;
+    line-height: 1.25;
+}
+
+.lcfa-admin .lcfa-theme-card__description {
+    min-height: 42px;
+    margin: 0;
+    color: var(--lcfa-text-soft);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.lcfa-admin .lcfa-theme-stack-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-stack-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 0 10px 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.lcfa-admin .lcfa-stack-badge__mark {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+}
+
+.lcfa-admin .lcfa-stack-badge--picowind,
+.lcfa-admin .lcfa-stack-badge--tailwind {
+    border-color: rgba(52, 213, 240, 0.3);
+    background: rgba(52, 213, 240, 0.08);
+}
+
+.lcfa-admin .lcfa-stack-badge--picowind .lcfa-stack-badge__mark,
+.lcfa-admin .lcfa-stack-badge--tailwind .lcfa-stack-badge__mark {
+    background: #35d0f2;
+    color: #08111f;
+}
+
+.lcfa-admin .lcfa-stack-badge--daisyui {
+    border-color: rgba(237, 58, 154, 0.34);
+    background: rgba(237, 58, 154, 0.08);
+}
+
+.lcfa-admin .lcfa-stack-badge--daisyui .lcfa-stack-badge__mark {
+    background: #ed3a9a;
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-stack-badge--bootstrap,
+.lcfa-admin .lcfa-stack-badge--picostrap {
+    border-color: rgba(124, 58, 237, 0.34);
+    background: rgba(124, 58, 237, 0.1);
+}
+
+.lcfa-admin .lcfa-stack-badge--bootstrap .lcfa-stack-badge__mark,
+.lcfa-admin .lcfa-stack-badge--picostrap .lcfa-stack-badge__mark {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-theme-card__readiness {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-theme-check {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(237, 58, 154, 0.22);
+    border-radius: 14px;
+    background: rgba(237, 58, 154, 0.06);
+}
+
+.lcfa-admin .lcfa-theme-check.is-ok {
+    border-color: rgba(34, 197, 94, 0.28);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.lcfa-admin .lcfa-theme-check strong {
+    color: #fff;
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-theme-check small {
+    color: var(--lcfa-text-soft);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-theme-card__notice {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid rgba(245, 158, 11, 0.34);
+    border-radius: 16px;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.lcfa-admin .lcfa-theme-card__notice strong {
+    color: #fbbf24;
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-theme-card__notice span {
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.lcfa-admin .lcfa-theme-card__audit {
+    max-width: 100%;
+    color: #35d0f2;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-theme-card__chips {
+    gap: 8px;
+}
+
 .lcfa-admin .lcfa-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
     align-items: center;
+}
+
+.lcfa-admin .lcfa-theme-card .lcfa-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, max-content)) minmax(230px, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding-top: 2px;
 }
 
 .lcfa-admin .lcfa-actions form {
@@ -409,6 +739,43 @@
     align-items: center;
 }
 
+.lcfa-admin .lcfa-theme-action {
+    min-width: 0;
+}
+
+.lcfa-admin .lcfa-theme-action--import {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) max-content;
+    gap: 10px;
+    align-items: center;
+    justify-self: end;
+}
+
+.lcfa-admin .lcfa-theme-action--framework {
+    grid-column: 1 / -1;
+}
+
+.lcfa-admin .lcfa-theme-button {
+    min-height: 42px;
+    padding: 0 16px !important;
+    border-radius: 999px !important;
+    font-weight: 800 !important;
+    line-height: 40px !important;
+    white-space: nowrap;
+}
+
+.lcfa-admin .lcfa-theme-button--import {
+    min-width: 180px;
+}
+
+.lcfa-admin .lcfa-theme-button:disabled {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.42) !important;
+    box-shadow: none !important;
+    cursor: not-allowed;
+}
+
 .lcfa-admin .lcfa-inline-check {
     display: inline-flex;
     gap: 6px;
@@ -416,8 +783,75 @@
     color: var(--lcfa-text-muted);
 }
 
+.lcfa-admin .lcfa-theme-card__force {
+    min-width: 0;
+    justify-content: flex-end;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-theme-card__force input {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-theme-card__force span {
+    overflow-wrap: anywhere;
+}
+
 .lcfa-admin .lcfa-table-wrap {
     overflow-x: auto;
+}
+
+@media (max-width: 1100px) {
+    .lcfa-admin .lcfa-theme-card .lcfa-actions {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .lcfa-admin .lcfa-theme-card__readiness {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-theme-action--import {
+        grid-column: 1 / -1;
+        grid-template-columns: 1fr max-content;
+        justify-self: stretch;
+    }
+}
+
+@media (max-width: 640px) {
+    .lcfa-admin .lcfa-card--theme-library {
+        padding: 18px;
+    }
+
+    .lcfa-admin .lcfa-theme-library-toolbar {
+        align-items: flex-start;
+    }
+
+    .lcfa-admin .lcfa-theme-card__overlay {
+        right: 14px;
+        bottom: 12px;
+        left: 14px;
+    }
+
+    .lcfa-admin .lcfa-theme-card__body {
+        padding: 16px;
+    }
+
+    .lcfa-admin .lcfa-theme-card .lcfa-actions,
+    .lcfa-admin .lcfa-theme-action--import {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-theme-card__force {
+        justify-content: flex-start;
+    }
+
+    .lcfa-admin .lcfa-theme-button {
+        width: 100%;
+    }
 }
 
 .lcfa-admin .lcfa-card::after {

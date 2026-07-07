@@ -4,6 +4,7 @@ const { ThemeFilesystem } = require('./theme-files')
 const { WindPressCompiler } = require('./windpress-compiler')
 const { PicostrapCompiler } = require('./picostrap-compiler')
 const { VisualCheck } = require('./visual-check')
+const { AssetDiscovery } = require('./asset-discovery')
 const { createToolRegistry } = require('./tool-registry')
 const { runStdioServer } = require('./mcp-stdio-server')
 const { startBridgeServer } = require('./bridge-server')
@@ -16,7 +17,8 @@ async function runCli(argv = []) {
   const windpressCompiler = new WindPressCompiler({ client, config })
   const picostrapCompiler = new PicostrapCompiler({ client, config, themeFiles })
   const visualCheck = new VisualCheck({ config })
-  const tools = createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler, visualCheck)
+  const assetDiscovery = new AssetDiscovery()
+  const tools = createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler, visualCheck, assetDiscovery)
 
   if (config.tool) {
     if (config.wpRoot) {

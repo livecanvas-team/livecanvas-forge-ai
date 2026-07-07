@@ -1292,6 +1292,18 @@ lcfa_assert_same('global_shell', (string) ($global_shell_preview['target_type'] 
 lcfa_assert_same('update', (string) ($global_shell_preview['data']['parts']['header']['operation'] ?? ''), 'global_shell preview should target the existing header partial when present');
 lcfa_assert_same('<header>Header partial</header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell preview must not mutate the existing header partial');
 
+$blocked_global_shell = $command_deck->execute([
+    'action'         => 'global_shell_apply',
+    'variant'        => '1',
+    'header_html'    => '<header>Blocked Header</header>',
+    'footer_html'    => '<footer>Blocked Footer</footer>',
+    'no_theme_edits' => true,
+]);
+
+lcfa_assert_true($blocked_global_shell['ok'] === false, 'no_theme_edits should block global shell writes');
+lcfa_assert_contains('no_theme_edits=true', (string) ($blocked_global_shell['message'] ?? ''), 'blocked global shell result should explain the no_theme_edits guardrail');
+lcfa_assert_same('<header>Header partial</header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'blocked global shell must not mutate header content');
+
 $global_shell_apply = $command_deck->execute([
     'action'      => 'global_shell_apply',
     'variant'     => '1',
@@ -2073,5 +2085,18 @@ $payload = $response->get_data();
 lcfa_assert_true(isset($payload['result']['dry_run']), 'save_theme_file should return a write result');
 lcfa_assert_true($payload['result']['dry_run'] === true, 'direct theme writes should be downgraded to preview when fallback is disabled');
 lcfa_assert_true(!file_exists($theme_file), 'policy downgrade should prevent writing the file');
+
+$blocked_theme_response = $rest_api->save_theme_file(new WP_REST_Request([
+    'root_scope'      => 'stylesheet',
+    'path'            => 'assets/theme.css',
+    'content'         => 'body{color:blue;}',
+    'dry_run'         => false,
+    'no_theme_edits'  => true,
+]));
+$blocked_theme_payload = $blocked_theme_response->get_data();
+
+lcfa_assert_same(403, $blocked_theme_response->get_status(), 'save_theme_file should reject writes when no_theme_edits is true');
+lcfa_assert_contains('no_theme_edits=true', (string) ($blocked_theme_payload['error'] ?? ''), 'blocked theme file response should explain the no_theme_edits guardrail');
+lcfa_assert_true(!file_exists($theme_file), 'blocked no_theme_edits file write must not create the file');
 
 echo "PASS\n";

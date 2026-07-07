@@ -7,6 +7,8 @@ final class LCFA_Theme_Library_Validator {
         'style.css',
         'functions.php',
         'screenshot.jpg',
+        'page-templates/empty.php',
+        'views/page-templates/empty.twig',
         'livecanvas/configuration.php',
         'public/styles/presets/daisyui.css',
         'public/styles/tailwind.css',
@@ -61,6 +63,18 @@ final class LCFA_Theme_Library_Validator {
         if (empty($style_result['ok'])) {
             $zip->close();
             return $style_result;
+        }
+
+        $template_result = $this->validate_page_template_shell($zip, $root);
+        if (empty($template_result['ok'])) {
+            $zip->close();
+            return $template_result;
+        }
+
+        $stylesheet_result = $this->validate_stylesheet_imports($zip, $entries, $root);
+        if (empty($stylesheet_result['ok'])) {
+            $zip->close();
+            return $stylesheet_result;
         }
 
         $manifest_json = $zip->getFromName($root . 'starter-data/lcfa-theme.json');
@@ -211,6 +225,17 @@ final class LCFA_Theme_Library_Validator {
             $manifest[$section]['content_file'] = $content_file;
         }
 
+        $homepage_template = $this->normalize_relative_path((string) ($manifest['homepage']['template'] ?? ''));
+        if ($homepage_template !== '' && $homepage_template !== 'default') {
+            if (!$this->entry_exists($entries, $root . $homepage_template)) {
+                return $this->error(__('Homepage template file declared in the manifest is missing from the child theme ZIP.', 'livecanvas-forge-ai'), [
+                    'template' => $homepage_template,
+                ]);
+            }
+
+            $manifest['homepage']['template'] = $homepage_template;
+        }
+
         $defaults = [
             'media_manifest'      => 'starter-data/media-manifest.json',
             'menus_file'          => 'starter-data/menus.json',
@@ -251,6 +276,72 @@ final class LCFA_Theme_Library_Validator {
             'ok'       => true,
             'template' => $template,
         ];
+    }
+
+    private function validate_page_template_shell(ZipArchive $zip, string $root): array {
+        $twig = $zip->getFromName($root . 'views/page-templates/empty.twig');
+        if (!is_string($twig) || trim($twig) === '') {
+            return $this->error(__('Theme page template view is empty.', 'livecanvas-forge-ai'));
+        }
+
+        $required = [
+            'wp_head' => 'wp_head',
+            'wp_footer' => 'wp_footer',
+            'post.content' => 'post.content',
+        ];
+        $missing = [];
+        foreach ($required as $label => $needle) {
+            if (strpos($twig, $needle) === false) {
+                $missing[] = $label;
+            }
+        }
+
+        if ($missing) {
+            return $this->error(__('Theme page template must include wp_head(), wp_footer(), and post.content so Picowind/WindPress assets load.', 'livecanvas-forge-ai'), [
+                'missing_template_calls' => $missing,
+            ]);
+        }
+
+        return ['ok' => true];
+    }
+
+    private function validate_stylesheet_imports(ZipArchive $zip, array $entries, string $root): array {
+        foreach ($entries as $entry) {
+            if (strpos($entry, $root . 'public/styles/') !== 0 || substr($entry, -4) !== '.css') {
+                continue;
+            }
+
+            $contents = $zip->getFromName($entry);
+            if (!is_string($contents) || $contents === '') {
+                continue;
+            }
+
+            if (!preg_match_all('~@import\s+(?:url\()?\s*["\']([^"\']+)["\']~', $contents, $matches)) {
+                continue;
+            }
+
+            $relative_entry = substr($entry, strlen($root));
+            $base_dir = trim(dirname($relative_entry), '.');
+            $base_dir = $base_dir === '' ? '' : trim($base_dir, '/') . '/';
+
+            foreach ((array) ($matches[1] ?? []) as $import_path) {
+                $import_path = trim((string) $import_path);
+                if ($import_path === '' || preg_match('~^(?:https?:)?//~i', $import_path) || $import_path[0] !== '.') {
+                    continue;
+                }
+
+                $resolved = $this->normalize_relative_path($base_dir . $import_path);
+                if ($resolved === '' || !$this->entry_exists($entries, $root . $resolved)) {
+                    return $this->error(__('Theme CSS imports a stylesheet that is missing from the ZIP.', 'livecanvas-forge-ai'), [
+                        'stylesheet' => $relative_entry,
+                        'import'     => $import_path,
+                        'resolved'   => $resolved,
+                    ]);
+                }
+            }
+        }
+
+        return ['ok' => true];
     }
 
     private function validate_content_files(ZipArchive $zip, string $root, array $manifest): array {
