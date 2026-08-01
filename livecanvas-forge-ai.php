@@ -4,6 +4,7 @@
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
  * Version: 0.1.26
+ * Requires PHP: 8.0
  * Update URI: https://livecanvas.com/ai-bridge
  * Author: The LiveCanvas Team
  * Author URI: https://livecanvas.com/
@@ -17,8 +18,24 @@ define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
 
+$lcfa_composer_autoload = LCFA_DIR . 'vendor/autoload.php';
+if (is_readable($lcfa_composer_autoload)) {
+    require_once $lcfa_composer_autoload;
+}
+
 require_once LCFA_DIR . 'includes/class-lcfa-settings.php';
+require_once LCFA_DIR . 'includes/class-lcfa-oauth-storage.php';
+if (
+    class_exists('League\\OAuth2\\Server\\AuthorizationServer')
+    && class_exists('Nyholm\\Psr7\\ServerRequest')
+) {
+    require_once LCFA_DIR . 'includes/class-lcfa-oauth-entities.php';
+    require_once LCFA_DIR . 'includes/class-lcfa-oauth-repositories.php';
+    require_once LCFA_DIR . 'includes/class-lcfa-oauth-server.php';
+}
 require_once LCFA_DIR . 'includes/class-lcfa-environment.php';
+require_once LCFA_DIR . 'includes/class-lcfa-framework-compatibility.php';
+require_once LCFA_DIR . 'includes/class-lcfa-connection-diagnostics.php';
 require_once LCFA_DIR . 'includes/class-lcfa-github-updater.php';
 require_once LCFA_DIR . 'includes/class-lcfa-installer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-inventory.php';
@@ -71,6 +88,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-admin.php';
 require_once LCFA_DIR . 'includes/class-lcfa-plugin.php';
 
 register_activation_hook(LCFA_FILE, ['LCFA_Plugin', 'activate']);
+register_deactivation_hook(LCFA_FILE, ['LCFA_Plugin', 'deactivate']);
 
 function lcfa(): LCFA_Plugin {
     return LCFA_Plugin::instance();

@@ -1,0 +1,639 @@
+/*
+ * AI Bridge operational UI.
+ * Loaded after the legacy component sheet while screens migrate to the V2 system.
+ */
+
+.lcfa-admin {
+    --lcfa-v2-bg: #12131c;
+    --lcfa-v2-surface: #1a1c29;
+    --lcfa-v2-surface-raised: #222536;
+    --lcfa-v2-border: #3b3f57;
+    --lcfa-v2-border-strong: #585d78;
+    --lcfa-v2-text: #f6f7fd;
+    --lcfa-v2-muted: #b9bdd1;
+    --lcfa-v2-quiet: #9298b1;
+    --lcfa-v2-cyan: #2cc5d8;
+    --lcfa-v2-green: #43d98a;
+    --lcfa-v2-amber: #f2c45b;
+    --lcfa-v2-pink: #ec3e8d;
+    --lcfa-v2-radius: 8px;
+    --lcfa-border: var(--lcfa-v2-border);
+    --lcfa-border-strong: var(--lcfa-v2-border-strong);
+    --lcfa-surface: var(--lcfa-v2-surface);
+    --lcfa-surface-soft: var(--lcfa-v2-surface);
+    --lcfa-surface-muted: var(--lcfa-v2-bg);
+    --lcfa-text: var(--lcfa-v2-text);
+    --lcfa-text-muted: var(--lcfa-v2-muted);
+    --lcfa-shadow: none;
+    --lcfa-shadow-soft: none;
+    max-width: 1440px;
+    letter-spacing: 0;
+}
+
+.lcfa-admin::before {
+    background: var(--lcfa-v2-bg);
+}
+
+.lcfa-admin h1,
+.lcfa-admin h2,
+.lcfa-admin h3,
+.lcfa-admin p,
+.lcfa-admin li,
+.lcfa-admin label,
+.lcfa-admin small,
+.lcfa-admin span,
+.lcfa-admin strong {
+    letter-spacing: 0;
+}
+
+.lcfa-admin .lcfa-hero,
+.lcfa-admin .lcfa-tabbar,
+.lcfa-admin .lcfa-card {
+    border-color: var(--lcfa-v2-border);
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface);
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-hero {
+    margin: 16px 0 12px;
+    padding: 18px 20px;
+    overflow: visible;
+}
+
+.lcfa-admin .lcfa-hero::before,
+.lcfa-admin .lcfa-hero::after,
+.lcfa-admin .lcfa-card::after {
+    display: none;
+}
+
+.lcfa-admin .lcfa-hero-main {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-product-id {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--lcfa-v2-muted);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-product-id__brand {
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+}
+
+.lcfa-admin .lcfa-product-id__brand .lcfa-logo-livecanvas {
+    width: 108px;
+}
+
+.lcfa-admin .lcfa-product-id strong {
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-hero h1 {
+    margin: 8px 0 4px;
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: 0;
+}
+
+.lcfa-admin .lcfa-lead {
+    max-width: 70ch;
+    color: var(--lcfa-v2-muted);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-hero-mark {
+    width: 40px;
+    height: 40px;
+    border-color: var(--lcfa-v2-border);
+    border-radius: 6px;
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-hero-mark.is-active,
+.lcfa-admin .lcfa-hero-chip.is-active {
+    border-color: #287885;
+    background: #183840;
+}
+
+.lcfa-admin .lcfa-hero-chip {
+    min-height: 30px;
+    padding: 5px 9px;
+    border-color: var(--lcfa-v2-border);
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-hero-details-toggle,
+.lcfa-admin .lcfa-hero-details-toggle__icon {
+    border-radius: 6px;
+}
+
+.lcfa-admin .lcfa-hero-details-panel:not([open]) > .lcfa-hero-details {
+    display: none;
+}
+
+.lcfa-admin .lcfa-hero-details-panel[open] {
+    width: min(440px, 100%);
+    border-radius: var(--lcfa-v2-radius);
+}
+
+.lcfa-admin .lcfa-hero-details-panel[open] > .lcfa-hero-details-toggle {
+    display: flex;
+    margin-left: auto;
+}
+
+.lcfa-admin .lcfa-tabbar {
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 6px;
+}
+
+.lcfa-admin .lcfa-tabs {
+    gap: 4px;
+}
+
+.lcfa-admin .lcfa-tab {
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 12px;
+    border-color: transparent;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-tab:hover {
+    transform: none;
+    border-color: var(--lcfa-v2-border);
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-tab.is-current {
+    border-color: #287885;
+    background: #183840;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-advanced-nav {
+    position: relative;
+    margin-left: auto;
+    border: 0;
+}
+
+.lcfa-admin .lcfa-advanced-nav > summary,
+.lcfa-admin .lcfa-advanced-nav__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--lcfa-v2-muted);
+    cursor: pointer;
+    list-style: none;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-advanced-nav > summary::-webkit-details-marker {
+    display: none;
+}
+
+.lcfa-admin .lcfa-advanced-nav > summary:hover,
+.lcfa-admin .lcfa-advanced-nav[open] > summary,
+.lcfa-admin .lcfa-advanced-nav__link:hover,
+.lcfa-admin .lcfa-advanced-nav__link.is-current {
+    border-color: var(--lcfa-v2-border);
+    background: var(--lcfa-v2-surface-raised);
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-advanced-nav__links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-top: 6px;
+}
+
+.lcfa-admin .lcfa-card {
+    padding: 20px;
+}
+
+.lcfa-admin .lcfa-card-head {
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.lcfa-admin .lcfa-card-head h2 {
+    margin-bottom: 4px;
+    font-size: 20px;
+    line-height: 1.25;
+    letter-spacing: 0;
+}
+
+.lcfa-admin .lcfa-card-head > .lcfa-icon {
+    width: 36px;
+    height: 36px;
+    padding: 9px;
+    border-radius: 6px;
+    background: var(--lcfa-v2-surface-raised);
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-steps--streamlined {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 0 16px;
+    padding: 6px;
+    border: 1px solid var(--lcfa-v2-border);
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface);
+}
+
+.lcfa-admin .lcfa-steps--streamlined .lcfa-step {
+    justify-content: flex-start;
+    min-height: 42px;
+    padding: 7px 10px;
+    border-color: transparent;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-steps--streamlined .lcfa-step:hover {
+    transform: none;
+    border-color: var(--lcfa-v2-border);
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-steps--streamlined .lcfa-step.is-current {
+    border-color: #287885;
+    background: #183840;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-steps--streamlined .lcfa-step.is-done:not(.is-current) {
+    color: #8fe8b8;
+    background: #173226;
+}
+
+.lcfa-admin .lcfa-form input[type="text"],
+.lcfa-admin .lcfa-form input[type="password"],
+.lcfa-admin .lcfa-form select,
+.lcfa-admin .lcfa-form textarea {
+    border-color: var(--lcfa-v2-border);
+    border-radius: 6px;
+    background: #11121a;
+}
+
+.lcfa-admin .button,
+.lcfa-admin .button.button-primary {
+    min-height: 40px;
+    border-radius: 6px;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+.lcfa-admin .button.button-primary {
+    border-color: var(--lcfa-v2-cyan);
+    background: var(--lcfa-v2-cyan);
+    color: #092229;
+}
+
+.lcfa-admin .button.button-primary:hover,
+.lcfa-admin .button.button-primary:focus {
+    border-color: #83e4ed;
+    background: #83e4ed;
+    color: #092229;
+}
+
+.lcfa-admin .lcfa-choice-card,
+.lcfa-admin .lcfa-radio {
+    border-color: var(--lcfa-v2-border);
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-choice-card:hover,
+.lcfa-admin .lcfa-radio:hover {
+    transform: none;
+}
+
+.lcfa-admin .lcfa-choice-card:has(input:checked),
+.lcfa-admin .lcfa-radio:has(input:checked) {
+    border-color: #287885;
+    background: #183840;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-setup-detected {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--lcfa-v2-border);
+    border-radius: 6px;
+    background: #141620;
+    color: var(--lcfa-v2-muted);
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-setup-field-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.lcfa-admin .lcfa-setup-field-grid small,
+.lcfa-admin .lcfa-setup-submit > span {
+    color: var(--lcfa-v2-quiet);
+    line-height: 1.45;
+}
+
+.lcfa-admin .lcfa-setup-access {
+    padding: 14px;
+    border: 1px solid #69552a;
+    border-radius: 6px;
+    background: #302819;
+}
+
+.lcfa-admin .lcfa-setup-submit {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-setup-review {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin: 0 0 18px;
+    overflow: hidden;
+    border: 1px solid var(--lcfa-v2-border);
+    border-radius: 6px;
+    background: var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-setup-review > div {
+    min-width: 0;
+    padding: 12px;
+    background: #141620;
+}
+
+.lcfa-admin .lcfa-setup-review dt {
+    margin-bottom: 4px;
+    color: var(--lcfa-v2-quiet);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-setup-review dd {
+    margin: 0;
+    color: var(--lcfa-v2-text);
+    font-weight: 750;
+    overflow-wrap: anywhere;
+}
+
+.lcfa-admin .lcfa-brief-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+}
+
+.lcfa-admin .lcfa-brief-grid > label {
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-brief-grid__wide {
+    grid-column: 1 / -1;
+}
+
+.lcfa-admin .lcfa-theme-library-status {
+    margin-bottom: 12px;
+}
+
+.lcfa-admin .lcfa-theme-library-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    border: 1px solid var(--lcfa-v2-border);
+    border-radius: 6px;
+    background: var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-theme-library-steps span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px;
+    background: #141620;
+    color: var(--lcfa-v2-muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.lcfa-admin .lcfa-theme-library-steps b {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid #287885;
+    border-radius: 50%;
+    color: var(--lcfa-v2-cyan);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-theme-library-source {
+    margin-top: 0;
+}
+
+.lcfa-admin .lcfa-theme-library-source > summary {
+    min-height: 36px;
+    padding: 8px 0;
+    color: var(--lcfa-v2-quiet);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-next-action {
+    margin-bottom: 18px;
+    padding: 14px;
+    border: 1px solid #287885;
+    border-radius: 6px;
+    background: #183840;
+}
+
+.lcfa-admin .lcfa-status-row .pending {
+    color: var(--lcfa-v2-amber);
+}
+
+.lcfa-admin .lcfa-codex-mode-switch .lcfa-radio-group--inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-codex-mode-switch .lcfa-radio {
+    min-height: 68px;
+    padding: 12px;
+}
+
+.lcfa-admin .lcfa-connection-support {
+    display: grid;
+    gap: 0;
+}
+
+.lcfa-admin .lcfa-connection-option {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--lcfa-v2-border);
+    border-radius: 0;
+    background: transparent;
+}
+
+.lcfa-admin .lcfa-connection-option > summary,
+.lcfa-admin .lcfa-connections-secondary > summary {
+    min-height: 48px;
+    padding: 13px 0;
+    color: var(--lcfa-v2-text);
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.lcfa-admin .lcfa-connection-option .lcfa-technical-details__body {
+    padding: 0 0 16px;
+}
+
+.lcfa-admin .lcfa-connections-secondary {
+    display: block;
+    gap: 0;
+}
+
+.lcfa-admin .lcfa-connections-secondary__body {
+    display: grid;
+    gap: 0;
+    padding-top: 8px;
+}
+
+.lcfa-admin .lcfa-connections-secondary__panel {
+    padding: 16px 0;
+    border-top: 1px solid var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-connections-secondary__line {
+    border-radius: 3px;
+    background: #2a2d3d;
+    animation: none;
+}
+
+.lcfa-admin .lcfa-workspace-viewbar {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    margin: 0 0 16px;
+    padding: 6px;
+    border: 1px solid var(--lcfa-v2-border);
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface);
+}
+
+.lcfa-admin .lcfa-workspace-viewbar .lcfa-studio-segmented {
+    gap: 4px;
+}
+
+.lcfa-admin .lcfa-workspace-viewbar .button {
+    min-height: 38px;
+    padding: 6px 12px;
+    border-color: transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lcfa-v2-muted);
+}
+
+.lcfa-admin .lcfa-workspace-viewbar .button:hover {
+    border-color: var(--lcfa-v2-border-strong);
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-workspace-viewbar .button.is-current {
+    border-color: #287885;
+    background: #183840;
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-grid--single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.lcfa-admin .lcfa-inline-doc-link {
+    margin: 0;
+}
+
+@media (max-width: 1100px) {
+    .lcfa-admin .lcfa-hero-main,
+    .lcfa-admin .lcfa-setup-field-grid,
+    .lcfa-admin .lcfa-setup-review,
+    .lcfa-admin .lcfa-brief-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-brief-grid__wide {
+        grid-column: auto;
+    }
+
+    .lcfa-admin .lcfa-tabbar,
+    .lcfa-admin .lcfa-hero-meta {
+        align-items: flex-start;
+    }
+
+    .lcfa-admin .lcfa-advanced-nav {
+        margin-left: 0;
+    }
+
+    .lcfa-admin .lcfa-advanced-nav__links {
+        justify-content: flex-start;
+    }
+
+    .lcfa-admin .lcfa-hero-details-panel[open] {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+@media (max-width: 700px) {
+    .lcfa-admin .lcfa-steps--streamlined,
+    .lcfa-admin .lcfa-codex-mode-switch .lcfa-radio-group--inline,
+    .lcfa-admin .lcfa-theme-library-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .lcfa-admin .lcfa-tabs {
+        width: 100%;
+    }
+
+    .lcfa-admin .lcfa-tab {
+        flex: 1 1 auto;
+    }
+
+    .lcfa-admin .lcfa-workspace-viewbar,
+    .lcfa-admin .lcfa-workspace-viewbar .lcfa-studio-segmented {
+        width: 100%;
+    }
+
+    .lcfa-admin .lcfa-workspace-viewbar .button {
+        flex: 1 1 calc(50% - 4px);
+    }
+}

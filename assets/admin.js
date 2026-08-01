@@ -289,6 +289,29 @@
         });
     }
 
+    function applyThemeLibraryFilter(root, filter) {
+        root.querySelectorAll('[data-lcfa-theme-filter]').forEach(function (button) {
+            var active = (button.getAttribute('data-lcfa-theme-filter') || 'all') === filter;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+
+        root.querySelectorAll('[data-lcfa-theme-card]').forEach(function (card) {
+            var category = card.getAttribute('data-lcfa-theme-category') || '';
+            card.hidden = filter !== 'all' && category !== filter;
+        });
+    }
+
+    function bootstrapThemeLibraryFilters() {
+        document.querySelectorAll('[data-lcfa-theme-library]').forEach(function (root) {
+            root.querySelectorAll('[data-lcfa-theme-filter]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    applyThemeLibraryFilter(root, button.getAttribute('data-lcfa-theme-filter') || 'all');
+                });
+            });
+        });
+    }
+
     function setActiveFilter(button, selector) {
         var root = button.closest('[data-lcfa-studio-root]');
 
@@ -443,6 +466,7 @@
             bootstrapConnectionsSecondaryPanels();
             bootstrapStudioRoots();
             bootstrapModeSwitches();
+            bootstrapThemeLibraryFilters();
         });
     } else {
         highlightBlocks(document);
@@ -450,5 +474,6 @@
         bootstrapConnectionsSecondaryPanels();
         bootstrapStudioRoots();
         bootstrapModeSwitches();
+        bootstrapThemeLibraryFilters();
     }
 })();

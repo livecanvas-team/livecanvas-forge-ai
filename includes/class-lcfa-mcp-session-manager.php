@@ -28,14 +28,20 @@ final class LCFA_MCP_Session_Manager {
         }
 
         $now = time();
+        $client = self::sanitize_client((string) ($payload['client'] ?? 'codex'));
+        $client_label = self::get_client_label($client);
+        $project_label = sanitize_text_field((string) ($payload['project_label'] ?? ''));
+        if ($project_label === '') {
+            $project_label = $client_label . ' project';
+        }
         $pairing_id = 'pair_' . strtolower(self::random_url_token(12));
         $device_secret = 'lcfa_dev_' . self::random_url_token(32);
         $user_code = self::generate_user_code();
         $record = [
             'pairing_id'         => $pairing_id,
             'user_code'          => $user_code,
-            'client'             => self::sanitize_client((string) ($payload['client'] ?? 'codex')),
-            'project_label'      => sanitize_text_field((string) ($payload['project_label'] ?? 'Codex project')),
+            'client'             => $client,
+            'project_label'      => $project_label,
             'site_fingerprint'   => $site_fingerprint !== '' ? $site_fingerprint : $expected_fingerprint,
             'scopes'             => self::sanitize_scopes((array) ($payload['scopes'] ?? ['read', 'preview', 'write'])),
             'status'             => 'pending',
@@ -57,7 +63,10 @@ final class LCFA_MCP_Session_Manager {
             'user_code'        => $user_code,
             'verification_url' => self::get_verification_url(),
             'expires_at'       => $record['expires_at'],
-            'message'          => __('Approve this Codex pairing request in LiveCanvas AI Bridge.', 'livecanvas-forge-ai'),
+            'message'          => sprintf(
+                __('Approve this %s pairing request in LiveCanvas AI Bridge.', 'livecanvas-forge-ai'),
+                self::get_client_label((string) $record['client'])
+            ),
         ];
     }
 
@@ -90,13 +99,17 @@ final class LCFA_MCP_Session_Manager {
         }
 
         if (($record['status'] ?? '') !== 'approved') {
+            $client_label = self::get_client_label((string) ($record['client'] ?? 'codex'));
             return [
                 'ok'          => true,
                 'status'      => (string) ($record['status'] ?? 'pending'),
                 'pairing_id'  => $pairing_id,
                 'user_code'   => (string) ($record['user_code'] ?? ''),
                 'expires_at'  => (string) ($record['expires_at'] ?? ''),
-                'message'     => __('Waiting for a WordPress admin to approve this Codex pairing request.', 'livecanvas-forge-ai'),
+                'message'     => sprintf(
+                    __('Waiting for a WordPress admin to approve this %s pairing request.', 'livecanvas-forge-ai'),
+                    $client_label
+                ),
             ];
         }
 
@@ -115,13 +128,18 @@ final class LCFA_MCP_Session_Manager {
         $record['consumed_at'] = gmdate('c');
         set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
 
+        $client_label = self::get_client_label((string) ($record['client'] ?? 'codex'));
+
         return [
             'ok'            => true,
             'status'        => 'approved',
             'session_id'    => (string) ($record['session_id'] ?? ''),
             'session_token' => $session_token,
             'expires_at'    => self::get_session_expires_at((string) ($record['session_id'] ?? '')),
-            'message'       => __('Codex pairing approved. The AI Bridge session token was issued once.', 'livecanvas-forge-ai'),
+            'message'       => sprintf(
+                __('%s pairing approved. The AI Bridge session token was issued once.', 'livecanvas-forge-ai'),
+                $client_label
+            ),
         ];
     }
 
@@ -139,10 +157,16 @@ final class LCFA_MCP_Session_Manager {
         $session_token = 'lcfa_sess_' . self::random_url_token(40);
         $session_id = 'sess_' . strtolower(self::random_url_token(12));
         $now = time();
+        $client = self::sanitize_client((string) ($record['client'] ?? 'codex'));
+        $client_label = self::get_client_label($client);
+        $project_label = sanitize_text_field((string) ($record['project_label'] ?? ''));
+        if ($project_label === '') {
+            $project_label = $client_label . ' project';
+        }
         $session = [
             'session_id'       => $session_id,
-            'client'           => self::sanitize_client((string) ($record['client'] ?? 'codex')),
-            'project_label'    => sanitize_text_field((string) ($record['project_label'] ?? 'Codex project')),
+            'client'           => $client,
+            'project_label'    => $project_label,
             'site_fingerprint' => sanitize_text_field((string) ($record['site_fingerprint'] ?? self::get_site_fingerprint())),
             'scopes'           => self::sanitize_scopes((array) ($record['scopes'] ?? ['read', 'preview', 'write'])),
             'created_at'       => gmdate('c', $now),
@@ -162,12 +186,20 @@ final class LCFA_MCP_Session_Manager {
         $record['approved_at'] = gmdate('c', $now);
         set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
 
-        self::invalidate_ready_state(__('A new Codex pairing session was approved. Run the smoke test again.', 'livecanvas-forge-ai'));
+        self::invalidate_ready_state(sprintf(
+            __('A new %s pairing session was approved. Run the smoke test again.', 'livecanvas-forge-ai'),
+            $client_label
+        ));
 
         return [
             'ok'         => true,
             'session_id' => $session_id,
-            'message'    => __('Codex pairing approved. Ask Codex to retry the connection handoff.', 'livecanvas-forge-ai'),
+            'client'     => $client,
+            'project_label' => $project_label,
+            'message'    => sprintf(
+                __('%1$s pairing approved. Ask %1$s to retry the connection handoff.', 'livecanvas-forge-ai'),
+                $client_label
+            ),
         ];
     }
 
@@ -237,9 +269,13 @@ final class LCFA_MCP_Session_Manager {
             ];
         }
 
+        $client_label = self::get_client_label((string) ($sessions[$session_id]['client'] ?? 'codex'));
         $sessions[$session_id]['revoked_at'] = gmdate('c');
         update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
-        self::invalidate_ready_state(__('The active Codex session was revoked. Pair Codex again before testing.', 'livecanvas-forge-ai'));
+        self::invalidate_ready_state(sprintf(
+            __('The active %1$s session was revoked. Pair %1$s again before testing.', 'livecanvas-forge-ai'),
+            $client_label
+        ));
 
         return [
             'ok'      => true,
@@ -282,7 +318,11 @@ final class LCFA_MCP_Session_Manager {
             $session_fingerprint = sanitize_text_field((string) ($session['site_fingerprint'] ?? ''));
             $site_fingerprint = self::get_site_fingerprint();
             if ($session_fingerprint !== '' && $site_fingerprint !== '' && !hash_equals($site_fingerprint, $session_fingerprint)) {
-                self::invalidate_ready_state(__('The active Codex session belongs to another AI Bridge site fingerprint. Pair Codex again.', 'livecanvas-forge-ai'));
+                $client_label = self::get_client_label((string) ($session['client'] ?? 'codex'));
+                self::invalidate_ready_state(sprintf(
+                    __('The active %1$s session belongs to another AI Bridge site fingerprint. Pair %1$s again.', 'livecanvas-forge-ai'),
+                    $client_label
+                ));
                 return false;
             }
             $scopes = self::sanitize_scopes((array) ($session['scopes'] ?? []));
@@ -377,6 +417,20 @@ final class LCFA_MCP_Session_Manager {
         return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $client : 'codex';
     }
 
+    private static function get_client_label(string $client): string {
+        $labels = [
+            'codex'    => 'Codex',
+            'opencode' => 'OpenCode',
+            'claude'   => 'Claude',
+            'cursor'   => 'Cursor',
+            'generic'  => __('coding agent', 'livecanvas-forge-ai'),
+        ];
+
+        $client = self::sanitize_client($client);
+
+        return (string) ($labels[$client] ?? $labels['generic']);
+    }
+
     private static function sanitize_scopes(array $scopes): array {
         $allowed = ['read', 'preview', 'write', 'media', 'theme_files', 'debug', 'cache', 'seo'];
         $normalized = [];
@@ -436,7 +490,7 @@ final class LCFA_MCP_Session_Manager {
         $connections = LCFA_Settings::get_connections();
         $changed = false;
         $updates = [
-            'preferred_client'       => 'codex',
+            'preferred_client'       => self::sanitize_client((string) ($session['client'] ?? 'codex')),
             'connection_mode'        => 'remote',
             'connection_strategy'    => 'ai-bridge-session',
             'connection_status'      => 'ready',

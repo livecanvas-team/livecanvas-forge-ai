@@ -168,6 +168,7 @@
         }
 
         [
+            'activeView',
             'abilityFilter',
             'abilitySort',
             'abilityColumns',
@@ -321,20 +322,41 @@
         return h('span', attrs, props.children);
     }
 
-    function Overview(props) {
-        var summary = props.summary || {};
+    function StudioViewNavigation(props) {
+        var views = [
+            { id: 'overview', label: 'Overview' },
+            { id: 'abilities', label: 'Abilities' },
+            { id: 'runs', label: 'Runs' },
+            { id: 'developer', label: 'Developer' }
+        ];
 
+        return h('nav', { className: 'lcfa-workspace-viewbar lcfa-studio-viewbar', 'aria-label': 'Abilities and runs views' },
+            h('div', { className: 'lcfa-studio-segmented', role: 'tablist', 'aria-label': 'Choose a workspace' },
+                views.map(function (view) {
+                    var current = props.activeView === view.id;
+
+                    return h('button', {
+                        key: view.id,
+                        type: 'button',
+                        role: 'tab',
+                        className: className(['button', current ? 'is-current' : '']),
+                        'aria-selected': current ? 'true' : 'false',
+                        'data-lcfa-studio-view': view.id,
+                        onClick: function () {
+                            props.onChange(view.id);
+                        }
+                    }, view.label);
+                })
+            )
+        );
+    }
+
+    function DeveloperToolsPanel(props) {
         return h(Card, {
-            title: 'AI Studio app',
-            description: 'WordPress-native Studio state loaded through the REST endpoint.'
+            title: 'Developer tools',
+            description: 'Export the full Studio state or reset saved table and workspace preferences.'
         },
             h('div', { className: 'lcfa-studio-actions' },
-                h('button', {
-                    type: 'button',
-                    className: 'button',
-                    disabled: !!props.loading,
-                    onClick: props.onRefresh
-                }, props.loading ? 'Refreshing...' : 'Refresh'),
                 h('button', {
                     type: 'button',
                     className: 'button',
@@ -347,6 +369,24 @@
                     'data-lcfa-copy-label': 'Copy Studio state',
                     'data-lcfa-copied-label': 'Copied'
                 }, 'Copy Studio state')
+            )
+        );
+    }
+
+    function Overview(props) {
+        var summary = props.summary || {};
+
+        return h(Card, {
+            title: 'Overview',
+            description: 'Connection, ability exposure, recent runs, and rollback status.'
+        },
+            h('div', { className: 'lcfa-studio-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'button',
+                    disabled: !!props.loading,
+                    onClick: props.onRefresh
+                }, props.loading ? 'Refreshing...' : 'Refresh')
             ),
             props.generatedAt ? h('p', { className: 'lcfa-studio-meta' }, 'State generated at ' + props.generatedAt) : null,
             h('div', { className: 'lcfa-summary-grid' },
@@ -2211,6 +2251,12 @@
         var refreshedAtState = useState('');
         var refreshedAt = refreshedAtState[0];
         var setRefreshedAt = refreshedAtState[1];
+        var activeViewState = useStoredState('activeView', 'overview');
+        var storedActiveView = activeViewState[0];
+        var setActiveView = activeViewState[1];
+        var activeView = ['overview', 'abilities', 'runs', 'developer'].indexOf(storedActiveView) !== -1
+            ? storedActiveView
+            : 'overview';
         var selectedAbilityState = useState('');
         var selectedAbilityName = selectedAbilityState[0];
         var setSelectedAbilityName = selectedAbilityState[1];
@@ -2273,6 +2319,7 @@
 
         function resetView() {
             clearStoredViewPreferences();
+            setActiveView('overview');
             setAbilityFilter('all');
             setAbilitySort('label');
             setAbilityColumns(DEFAULT_ABILITY_COLUMNS);
@@ -2298,122 +2345,137 @@
 
         data = data || {};
 
+        var alertsPanel = h(AlertsPanel, {
+            alerts: data.alerts || [],
+            diagnostics: data.diagnostics || {}
+        });
+        var writePolicyPanel = h(WritePolicy, { policy: data.mcp_write_policy || {}, links: config.links || {} });
+        var inspectorPanel = h(InspectorPanel, {
+            ability: selectedAbility,
+            run: selectedRun,
+            links: config.links || {}
+        });
+        var mainPanels = [];
+        var sidebarPanels = [];
+
+        if (activeView === 'overview') {
+            mainPanels = [
+                h(Overview, {
+                    summary: data.summary || {},
+                    links: config.links || {},
+                    loading: loading,
+                    generatedAt: refreshedAt || String(data.studio && data.studio.generated_at ? data.studio.generated_at : ''),
+                    onRefresh: load
+                }),
+                h(HandoffReadinessPanel, {
+                    readiness: data.handoff_readiness || {},
+                    summaryEndpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : '')
+                }),
+                h(HandoffSummaryPanel, {
+                    summary: data.handoff_summary || {},
+                    endpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : ''),
+                    nonce: config.nonce || ''
+                }),
+                h(RunHealthPanel, { analysis: data.run_analysis || {} })
+            ];
+            sidebarPanels = [alertsPanel, writePolicyPanel];
+        } else if (activeView === 'abilities') {
+            mainPanels = [
+                h(AbilityExplorer, {
+                    abilities: data.abilities || {},
+                    search: abilitySearch,
+                    filter: abilityFilter,
+                    sort: abilitySort,
+                    columns: abilityColumns,
+                    selectedName: selectedAbilityName,
+                    labels: labels,
+                    onSearch: setAbilitySearch,
+                    onFilter: setAbilityFilter,
+                    onSort: setAbilitySort,
+                    onInspect: function (name) {
+                        setSelectedAbilityName(name);
+                        setSelectedRunKey('');
+                    },
+                    onToggleColumn: function (key) {
+                        setAbilityColumns(toggleColumn(abilityColumns, key));
+                    }
+                }),
+                h(AbilityManifestPanel, { manifest: data.ability_manifest || {} })
+            ];
+            sidebarPanels = [writePolicyPanel, inspectorPanel];
+        } else if (activeView === 'runs') {
+            mainPanels = [
+                h(RunHealthPanel, { analysis: data.run_analysis || {} }),
+                h(RunsExplorer, {
+                    runs: data.runs || {},
+                    search: runSearch,
+                    filter: runFilter,
+                    sort: runSort,
+                    columns: runColumns,
+                    selectedKey: selectedRunKey,
+                    labels: labels,
+                    links: config.links || {},
+                    onSearch: setRunSearch,
+                    onFilter: setRunFilter,
+                    onSort: setRunSort,
+                    onInspect: function (key) {
+                        setSelectedRunKey(key);
+                        setSelectedAbilityName('');
+                    },
+                    onToggleColumn: function (key) {
+                        setRunColumns(toggleColumn(runColumns, key));
+                    }
+                })
+            ];
+            sidebarPanels = [alertsPanel, inspectorPanel];
+        } else {
+            mainPanels = [
+                h(DeveloperToolsPanel, {
+                    copyText: toJson(data),
+                    onResetView: resetView
+                }),
+                h(IntegrationTestPlanPanel, {
+                    data: data,
+                    studioEndpoint: config.endpoint || ''
+                }),
+                h(ContractPanel, { contract: data.contract || {} }),
+                h(ConnectionHandoffPanel, {
+                    handoff: data.connection_handoff || {},
+                    endpoint: String(data.studio && data.studio.connection_handoff_route ? data.studio.connection_handoff_route : '')
+                }),
+                h(OperatorBriefingPanel, { briefing: data.operator_briefing || {} }),
+                h(AgentSmokeTestsPanel, { plan: data.agent_smoke_tests || {} }),
+                h(AgentRunbookPanel, { runbook: data.agent_runbook || {} }),
+                h(BlockPatternLibraryPanel, {
+                    library: data.block_pattern_library || {},
+                    endpoint: String(data.studio && data.studio.block_pattern_library_route ? data.studio.block_pattern_library_route : '')
+                }),
+                h(NativePatternPageBlueprintsPanel, {
+                    blueprints: data.native_pattern_page_blueprints || {},
+                    endpoint: String(data.studio && data.studio.native_pattern_page_blueprints_route ? data.studio.native_pattern_page_blueprints_route : ''),
+                    previewEndpoint: String(data.studio && data.studio.native_pattern_page_preview_route ? data.studio.native_pattern_page_preview_route : ''),
+                    applyEndpoint: String(data.studio && data.studio.native_pattern_page_apply_route ? data.studio.native_pattern_page_apply_route : ''),
+                    commandUrl: String(config.links && config.links.command ? config.links.command : ''),
+                    onApplySuccess: load,
+                    nonce: config.nonce || ''
+                }),
+                h(AgentHandoffPackagePanel, {
+                    bundle: data.agent_handoff_package || {},
+                    endpoint: String(data.studio && data.studio.handoff_package_route ? data.studio.handoff_package_route : '')
+                }),
+                h(AbilityManifestPanel, { manifest: data.ability_manifest || {} })
+            ];
+            sidebarPanels = [alertsPanel, writePolicyPanel];
+        }
+
         return h('div', { className: 'lcfa-studio-react' },
-            h('div', { className: 'lcfa-grid' },
-                h('div', { className: 'lcfa-main' },
-                    h(Overview, {
-                        summary: data.summary || {},
-                        links: config.links || {},
-                        loading: loading,
-                        generatedAt: refreshedAt || String(data.studio && data.studio.generated_at ? data.studio.generated_at : ''),
-                        copyText: toJson(data),
-                        onRefresh: load,
-                        onResetView: resetView
-                    }),
-                    h(IntegrationTestPlanPanel, {
-                        data: data,
-                        studioEndpoint: config.endpoint || ''
-                    }),
-                    h(ContractPanel, {
-                        contract: data.contract || {}
-                    }),
-                    h(HandoffReadinessPanel, {
-                        readiness: data.handoff_readiness || {},
-                        summaryEndpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : '')
-                    }),
-                    h(HandoffSummaryPanel, {
-                        summary: data.handoff_summary || {},
-                        endpoint: String(data.studio && data.studio.handoff_summary_route ? data.studio.handoff_summary_route : ''),
-                        nonce: config.nonce || ''
-                    }),
-                    h(ConnectionHandoffPanel, {
-                        handoff: data.connection_handoff || {},
-                        endpoint: String(data.studio && data.studio.connection_handoff_route ? data.studio.connection_handoff_route : '')
-                    }),
-                    h(OperatorBriefingPanel, {
-                        briefing: data.operator_briefing || {}
-                    }),
-                    h(AgentSmokeTestsPanel, {
-                        plan: data.agent_smoke_tests || {}
-                    }),
-                    h(AgentRunbookPanel, {
-                        runbook: data.agent_runbook || {}
-                    }),
-                    h(BlockPatternLibraryPanel, {
-                        library: data.block_pattern_library || {},
-                        endpoint: String(data.studio && data.studio.block_pattern_library_route ? data.studio.block_pattern_library_route : '')
-                    }),
-                    h(NativePatternPageBlueprintsPanel, {
-                        blueprints: data.native_pattern_page_blueprints || {},
-                        endpoint: String(data.studio && data.studio.native_pattern_page_blueprints_route ? data.studio.native_pattern_page_blueprints_route : ''),
-                        previewEndpoint: String(data.studio && data.studio.native_pattern_page_preview_route ? data.studio.native_pattern_page_preview_route : ''),
-                        applyEndpoint: String(data.studio && data.studio.native_pattern_page_apply_route ? data.studio.native_pattern_page_apply_route : ''),
-                        commandUrl: String(config.links && config.links.command ? config.links.command : ''),
-                        onApplySuccess: load,
-                        nonce: config.nonce || ''
-                    }),
-                    h(AgentHandoffPackagePanel, {
-                        bundle: data.agent_handoff_package || {},
-                        endpoint: String(data.studio && data.studio.handoff_package_route ? data.studio.handoff_package_route : '')
-                    }),
-                    h(RunHealthPanel, {
-                        analysis: data.run_analysis || {}
-                    }),
-                    h(AbilityManifestPanel, {
-                        manifest: data.ability_manifest || {}
-                    }),
-                    h(AbilityExplorer, {
-                        abilities: data.abilities || {},
-                        search: abilitySearch,
-                        filter: abilityFilter,
-                        sort: abilitySort,
-                        columns: abilityColumns,
-                        selectedName: selectedAbilityName,
-                        labels: labels,
-                        onSearch: setAbilitySearch,
-                        onFilter: setAbilityFilter,
-                        onSort: setAbilitySort,
-                        onInspect: function (name) {
-                            setSelectedAbilityName(name);
-                            setSelectedRunKey('');
-                        },
-                        onToggleColumn: function (key) {
-                            setAbilityColumns(toggleColumn(abilityColumns, key));
-                        }
-                    })
-                ),
-                h('aside', { className: 'lcfa-sidebar' },
-                    h(AlertsPanel, {
-                        alerts: data.alerts || [],
-                        diagnostics: data.diagnostics || {}
-                    }),
-                    h(WritePolicy, { policy: data.mcp_write_policy || {}, links: config.links || {} }),
-                    h(InspectorPanel, {
-                        ability: selectedAbility,
-                        run: selectedRun,
-                        links: config.links || {}
-                    }),
-                    h(RunsExplorer, {
-                        runs: data.runs || {},
-                        search: runSearch,
-                        filter: runFilter,
-                        sort: runSort,
-                        columns: runColumns,
-                        selectedKey: selectedRunKey,
-                        labels: labels,
-                        links: config.links || {},
-                        onSearch: setRunSearch,
-                        onFilter: setRunFilter,
-                        onSort: setRunSort,
-                        onInspect: function (key) {
-                            setSelectedRunKey(key);
-                            setSelectedAbilityName('');
-                        },
-                        onToggleColumn: function (key) {
-                            setRunColumns(toggleColumn(runColumns, key));
-                        }
-                    })
-                )
+            h(StudioViewNavigation, {
+                activeView: activeView,
+                onChange: setActiveView
+            }),
+            h('div', { className: 'lcfa-grid', 'data-lcfa-studio-active-view': activeView },
+                h('div', { className: 'lcfa-main' }, mainPanels),
+                h('aside', { className: 'lcfa-sidebar' }, sidebarPanels)
             )
         );
     }

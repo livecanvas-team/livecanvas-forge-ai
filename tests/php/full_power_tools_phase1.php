@@ -18,6 +18,7 @@ final class LCFA_Inventory {
             'post' => [
                 'id' => $target_id,
                 'title' => 'Patch target',
+                'status' => 'publish',
             ],
             'content' => $this->content,
         ];
@@ -100,5 +101,6 @@ $apply = $service->apply([
 lcfa_full_power_assert_true(!empty($apply['ok']), 'content patch apply should execute the command deck write');
 lcfa_full_power_assert_true(($apply['action'] ?? '') === 'update_page', 'page content patch apply should use update_page');
 lcfa_full_power_assert_true(str_contains($apply['content'] ?? '', 'Applied title'), 'content patch apply should pass patched content to Command Deck');
+lcfa_full_power_assert_true(($command_deck->last_payload['status'] ?? '') === 'publish', 'page content patch apply should preserve the current page status');
 
 echo "PASS\n";

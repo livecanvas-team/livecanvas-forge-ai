@@ -74,11 +74,9 @@ $method->invoke($admin);
 $markup = (string) ob_get_clean();
 
 lcfa_assert_contains('Reset setup', $markup, 'setup should expose a reset panel at the bottom');
-lcfa_assert_contains('This does not uninstall the plugin', $markup, 'reset panel should clarify that it is not a destructive uninstall');
-lcfa_assert_contains('Connections are cleared and a new MCP token is generated.', $markup, 'reset panel should clarify that connections are reset');
-lcfa_assert_contains('Project Brief and Command Deck history stay intact.', $markup, 'reset panel should clarify preserved project data');
-lcfa_assert_contains('If you already wrote a client config into your workspace, reset will not delete that file.', $markup, 'reset panel should clarify that workspace files are not deleted');
-lcfa_assert_contains('Any previously written or downloaded client bundle may no longer match the new token after reset.', $markup, 'reset panel should warn that old bundles become stale after reset');
+lcfa_assert_contains('Reset clears the connection state and rotates the MCP token.', $markup, 'reset panel should explain the connection reset');
+lcfa_assert_contains('It keeps WordPress content, the project brief, command history, and existing workspace files.', $markup, 'reset panel should explain preserved data without a long warning list');
+lcfa_assert_contains('<details', $markup, 'reset controls should stay collapsed until requested');
 lcfa_assert_contains('name="action" value="lcfa_reset_setup"', $markup, 'reset panel should post the setup reset action');
 lcfa_assert_contains('Reset setup and start again', $markup, 'reset panel should expose the reset CTA');
 

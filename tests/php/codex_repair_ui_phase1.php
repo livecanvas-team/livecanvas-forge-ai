@@ -28,8 +28,9 @@ lcfa_repair_assert_contains("Repair Codex Connection", $admin, 'Connections UI s
 lcfa_repair_assert_contains("codex_repair_action", $admin, 'Codex repair forms should post a specific repair action');
 lcfa_repair_assert_contains("get_codex_onboarding_state", $admin, 'Connections UI should expose a unified Codex onboarding state model');
 lcfa_repair_assert_contains("render_codex_fast_path_panel", $admin, 'Connections UI should render Codex as the fast path');
+lcfa_repair_assert_contains("docs/coding-agent-setup.html#codex", $admin, 'Connections should link incomplete setups to the bundled four-step guide');
 lcfa_repair_assert_contains("connect_codex", $admin, 'Codex fast path should post a composite connect action');
-lcfa_repair_assert_contains("Other clients", $admin, 'non-Codex clients should remain available under Other clients');
+lcfa_repair_assert_contains("Other coding agents", $admin, 'non-Codex agents should remain available under the advanced connection options');
 lcfa_repair_assert_contains("sync_local_workspace_root(true)", $admin, 'Codex repair should force-sync WordPress workspace root');
 lcfa_repair_assert_contains("Restart Codex or reload the MCP server", $admin, 'Codex repair should tell the user to restart Codex after config changes');
 lcfa_repair_assert_contains("connection_current_step'] = 'smoke_test'", $admin, 'Codex connect should move to smoke_test instead of ready');

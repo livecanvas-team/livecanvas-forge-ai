@@ -1,0 +1,28 @@
+<tangible>
+  <section class="houseflow-template-hero text-center">
+    <div class="container col-xl-8">
+      <div class="lc-block mb-3"><span class="houseflow-kicker">Ideas for a calmer home</span></div>
+      <div class="lc-block"><h1 class="houseflow-section-title mx-auto mb-4">The Hearthline journal</h1></div>
+      <div class="lc-block"><p class="houseflow-lead mx-auto mb-0">Practical notes on shared routines, family planning and protecting unhurried time.</p></div>
+    </div>
+  </section>
+  <section class="houseflow-section">
+    <div class="container">
+      <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        <loop>
+          <div class="col">
+            <article class="card houseflow-card houseflow-post-card h-100 rounded-5">
+              <if field="image"><img src="{Field image_url size='large'}" srcset="{Field image_srcset}" sizes="{Field image_sizes}" class="card-img-top" alt="{Field image_alt}"></if>
+              <div class="card-body p-4 p-xl-5 d-flex flex-column">
+                <small class="houseflow-kicker mb-3"><field name="publish_date" date_format="M j, Y"></field></small>
+                <h2 class="h2"><a href="{Field url}" class="stretched-link text-dark text-decoration-none"><field name="title"></field></a></h2>
+                <div class="text-body-secondary mt-3"><field name="excerpt" auto="true" words="24" more="..."></field></div>
+              </div>
+            </article>
+          </div>
+        </loop>
+      </div>
+      <div class="pt-5 lc-block">[lc_the_pagination class="pagination pagination-lg justify-content-center"]</div>
+    </div>
+  </section>
+</tangible>

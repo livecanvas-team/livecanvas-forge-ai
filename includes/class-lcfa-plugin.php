@@ -5,6 +5,7 @@ defined('ABSPATH') || exit;
 final class LCFA_Plugin {
     private static ?LCFA_Plugin $instance = null;
     private LCFA_Environment $environment;
+    private LCFA_Framework_Compatibility $framework_compatibility;
     private LCFA_GitHub_Updater $github_updater;
     private LCFA_Installer $installer;
     private LCFA_Inventory $inventory;
@@ -27,6 +28,7 @@ final class LCFA_Plugin {
     private LCFA_Admin $admin;
     private LCFA_Design_System_Preview $design_system_preview;
     private LCFA_Page_Runtime $page_runtime;
+    private $oauth_server = null;
 
     public static function instance(): LCFA_Plugin {
         if (self::$instance === null) {
@@ -49,11 +51,22 @@ final class LCFA_Plugin {
             LCFA_Settings::sync_local_workspace_root(true);
         }
 
+        if (class_exists('LCFA_OAuth_Storage', false)) {
+            LCFA_OAuth_Storage::activate();
+        }
+
         add_option(LCFA_Settings::REDIRECT_OPTION_KEY, 1);
+    }
+
+    public static function deactivate(): void {
+        if (class_exists('LCFA_OAuth_Storage', false)) {
+            LCFA_OAuth_Storage::deactivate();
+        }
     }
 
     private function __construct() {
         $this->environment = new LCFA_Environment();
+        $this->framework_compatibility = new LCFA_Framework_Compatibility($this->environment);
         $this->github_updater = new LCFA_GitHub_Updater($this->environment);
         $this->installer   = new LCFA_Installer($this->environment);
         $this->inventory   = new LCFA_Inventory($this->environment);
@@ -70,6 +83,9 @@ final class LCFA_Plugin {
         $this->context_builder = new LCFA_Context_Builder($this->environment, $this->inventory, $this->windpress_bridge, $this->local_mcp_bridge);
         $this->design_system_preview = new LCFA_Design_System_Preview();
         $this->page_runtime = new LCFA_Page_Runtime();
+        $this->oauth_server = class_exists('LCFA_OAuth_Server', false)
+            ? new LCFA_OAuth_Server()
+            : null;
         $design_system_build_gateway = new LCFA_Design_System_Build_Gateway($this->local_mcp_bridge);
         $picostrap_design_system = new LCFA_Design_System_Picostrap_Executor();
         $picowind_design_system = new LCFA_Design_System_Picowind_Executor(
@@ -102,7 +118,11 @@ final class LCFA_Plugin {
     }
 
     public function boot(): void {
+        $this->framework_compatibility->hooks();
         $this->github_updater->hooks();
+        if ($this->oauth_server instanceof LCFA_OAuth_Server) {
+            $this->oauth_server->hooks();
+        }
         $this->page_runtime->hooks();
         $this->design_system_preview->hooks();
         $this->admin->hooks();

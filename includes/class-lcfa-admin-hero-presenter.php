@@ -19,20 +19,28 @@ final class LCFA_Admin_Hero_Presenter {
     private function get_tab_content(string $tab): array {
         $map = [
             'setup' => [
-                'title' => __('Bridge Setup', 'livecanvas-forge-ai'),
-                'subtitle' => __('LiveCanvas AI Bridge prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', 'livecanvas-forge-ai'),
+                'title' => __('Get Started', 'livecanvas-forge-ai'),
+                'subtitle' => __('Check the LiveCanvas stack, confirm this project, then connect a coding agent.', 'livecanvas-forge-ai'),
             ],
             'connections' => [
-                'title' => __('Connections', 'livecanvas-forge-ai'),
-                'subtitle' => __('Connect and verify your coding agent.', 'livecanvas-forge-ai'),
+                'title' => __('Connect a Coding Agent', 'livecanvas-forge-ai'),
+                'subtitle' => __('Follow the highlighted action, verify the target site, and finish with a smoke test.', 'livecanvas-forge-ai'),
             ],
             'genesis' => [
-                'title' => __('Project Brief & Build Plan', 'livecanvas-forge-ai'),
-                'subtitle' => __('Shape the project after the connection is ready.', 'livecanvas-forge-ai'),
+                'title' => __('Build Plan', 'livecanvas-forge-ai'),
+                'subtitle' => __('Describe the site once and turn it into a reusable sequence of pages and implementation tasks.', 'livecanvas-forge-ai'),
+            ],
+            'studio' => [
+                'title' => __('Abilities & Runs', 'livecanvas-forge-ai'),
+                'subtitle' => __('Inspect available tools, write exposure, readiness, and recent audited activity.', 'livecanvas-forge-ai'),
+            ],
+            'theme-library' => [
+                'title' => __('Theme Library', 'livecanvas-forge-ai'),
+                'subtitle' => __('Preview, install, and import validated LiveCanvas starter themes.', 'livecanvas-forge-ai'),
             ],
             'command' => [
                 'title' => __('Command Deck', 'livecanvas-forge-ai'),
-                'subtitle' => __('Run concrete site operations through AI Bridge.', 'livecanvas-forge-ai'),
+                'subtitle' => __('Preview or apply a specific operation with audit and rollback support.', 'livecanvas-forge-ai'),
             ],
         ];
 
@@ -51,13 +59,21 @@ final class LCFA_Admin_Hero_Presenter {
                 'asset' => 'wind',
                 'active' => true,
             ];
-        } else {
+        } elseif ($framework === 'picostrap') {
             $marks[] = [
                 'key' => 'bootstrap',
                 'label' => __('Bootstrap', 'livecanvas-forge-ai'),
                 'type' => 'partner',
                 'asset' => 'bootstrap',
-                'active' => $framework === 'bootstrap',
+                'active' => true,
+            ];
+        } else {
+            $marks[] = [
+                'key' => 'framework-setup',
+                'label' => __('Theme setup needed', 'livecanvas-forge-ai'),
+                'type' => 'icon',
+                'asset' => 'layers',
+                'active' => false,
             ];
         }
 
@@ -103,7 +119,8 @@ final class LCFA_Admin_Hero_Presenter {
         }
 
         $editor_value = (string) ($snapshot['framework_slug'] ?? '');
-        if ($editor_value !== '') {
+        $detected_framework = (string) ($snapshot['detected_framework'] ?? 'unknown');
+        if ($editor_value !== '' && $detected_framework !== 'unknown') {
             $chips[] = [
                 'label' => __('Editor', 'livecanvas-forge-ai'),
                 'value' => $editor_value,

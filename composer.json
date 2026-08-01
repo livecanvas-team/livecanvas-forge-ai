@@ -1,0 +1,19 @@
+{
+  "name": "livecanvas-team/livecanvas-ai-bridge",
+  "description": "OAuth runtime dependencies for LiveCanvas AI Bridge.",
+  "type": "wordpress-plugin",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.0",
+    "league/oauth2-server": "^8.5",
+    "nyholm/psr7": "^1.8"
+  },
+  "conflict": {
+    "lcobucci/clock": ">=3.0",
+    "lcobucci/jwt": ">=5.0",
+    "league/uri": ">=6.8"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

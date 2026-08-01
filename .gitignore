@@ -10,5 +10,6 @@ test-results/
 
 mcp/node_modules/
 mcp/.npmrc
+vendor/
 
 dist/.stage/

@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Connect Codex and other coding agents to LiveCanvas AI Bridge in four clear steps.">
+    <title>Connect a Coding Agent | LiveCanvas AI Bridge</title>
+    <style>
+        :root {
+            --bg: #11121a;
+            --surface: #191b27;
+            --surface-raised: #222533;
+            --line: #3b3f55;
+            --line-strong: #5a607a;
+            --text: #f7f8fc;
+            --muted: #bec2d4;
+            --quiet: #969cb4;
+            --cyan: #2cc5d8;
+            --cyan-soft: #173c45;
+            --green: #43d98a;
+            --green-soft: #17392b;
+            --amber: #f2c45b;
+            --amber-soft: #3d331e;
+            --pink: #ec3e8d;
+            --radius: 8px;
+            --focus: #8cebf3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+            line-height: 1.55;
+            letter-spacing: 0;
+        }
+
+        button,
+        select {
+            font: inherit;
+            letter-spacing: 0;
+        }
+
+        button {
+            color: inherit;
+        }
+
+        a {
+            color: var(--cyan);
+            text-underline-offset: 0.18em;
+        }
+
+        :focus-visible {
+            outline: 3px solid var(--focus);
+            outline-offset: 3px;
+        }
+
+        .skip-link {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 20;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .skip-link:focus-visible {
+            top: 0.75rem;
+            left: 0.75rem;
+            width: auto;
+            height: auto;
+            padding: 0.55rem 0.8rem;
+            clip-path: none;
+        }
+
+        .topbar {
+            border-bottom: 1px solid var(--line);
+            background: #141520;
+        }
+
+        .topbar__inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            width: min(100% - 2rem, 62rem);
+            min-height: 4.25rem;
+            margin: 0 auto;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.7rem;
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        .brand img {
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: 50%;
+        }
+
+        .brand strong,
+        .brand span {
+            display: block;
+        }
+
+        .brand span {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
+        .duration {
+            color: var(--muted);
+            font-size: 0.84rem;
+            white-space: nowrap;
+        }
+
+        main {
+            width: min(100% - 2rem, 54rem);
+            margin: 0 auto;
+            padding: 2.25rem 0 5rem;
+        }
+
+        .intro h1 {
+            max-width: 22ch;
+            margin: 0;
+            font-size: 2.15rem;
+            line-height: 1.15;
+            letter-spacing: 0;
+            text-wrap: balance;
+        }
+
+        .intro p {
+            max-width: 66ch;
+            margin: 0.65rem 0 0;
+            color: var(--muted);
+            text-wrap: pretty;
+        }
+
+        .target-lock {
+            display: flex;
+            gap: 0.8rem;
+            margin: 1.4rem 0 1.75rem;
+            padding: 0.9rem 1rem;
+            border: 1px solid #2a7886;
+            border-radius: var(--radius);
+            background: var(--cyan-soft);
+        }
+
+        .target-lock__icon {
+            display: grid;
+            flex: 0 0 auto;
+            place-items: center;
+            width: 2.15rem;
+            height: 2.15rem;
+            border-radius: 6px;
+            background: var(--cyan);
+            color: #09252b;
+            font-weight: 900;
+        }
+
+        .target-lock strong {
+            display: block;
+            color: #d8fbff;
+        }
+
+        .target-lock p {
+            margin: 0.12rem 0 0;
+            color: #b5e4ea;
+            font-size: 0.92rem;
+        }
+
+        .agent-picker {
+            display: grid;
+            gap: 0.45rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .agent-picker label {
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 750;
+        }
+
+        .agent-picker select {
+            width: 100%;
+            min-height: 3.2rem;
+            padding: 0.65rem 0.85rem;
+            border: 1px solid var(--line-strong);
+            border-radius: 7px;
+            background: var(--surface-raised);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .agent-heading {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1rem 0;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .agent-heading img {
+            width: 2.7rem;
+            height: 2.7rem;
+            border-radius: 7px;
+            background: var(--surface-raised);
+        }
+
+        .agent-heading h2 {
+            margin: 0;
+            font-size: 1.28rem;
+            letter-spacing: 0;
+        }
+
+        .agent-heading p {
+            margin: 0.15rem 0 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .progress {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 1rem 0 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .progress__track {
+            flex: 1;
+            height: 0.35rem;
+            overflow: hidden;
+            border-radius: 999px;
+            background: var(--surface-raised);
+        }
+
+        .progress__bar {
+            display: block;
+            width: 0;
+            height: 100%;
+            background: var(--green);
+            transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .steps {
+            display: grid;
+            gap: 0;
+            margin: 1.25rem 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .step {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 0.85rem;
+            padding: 1.15rem 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .step:first-child {
+            border-top: 1px solid var(--line);
+        }
+
+        .step__check {
+            display: grid;
+            place-items: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border: 1px solid var(--line-strong);
+            border-radius: 7px;
+            background: var(--surface);
+            color: var(--quiet);
+            font-weight: 850;
+            cursor: pointer;
+        }
+
+        .step__check:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .step.is-done .step__check {
+            border-color: #2a8056;
+            background: var(--green-soft);
+            color: var(--green);
+        }
+
+        .step__place {
+            display: inline-block;
+            margin-bottom: 0.22rem;
+            color: var(--cyan);
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .step h3 {
+            margin: 0;
+            font-size: 1rem;
+            letter-spacing: 0;
+        }
+
+        .step p {
+            max-width: 68ch;
+            margin: 0.28rem 0 0;
+            color: var(--muted);
+            font-size: 0.93rem;
+        }
+
+        .step__success {
+            color: #aee9ca !important;
+            font-size: 0.84rem !important;
+        }
+
+        .copy-box {
+            display: grid;
+            gap: 0.65rem;
+            margin-top: 0.8rem;
+            padding: 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            background: #12131c;
+        }
+
+        .copy-box code {
+            color: #d8daf0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.78rem;
+            overflow-wrap: anywhere;
+        }
+
+        .copy-button {
+            justify-self: start;
+            min-height: 2.35rem;
+            padding: 0.45rem 0.75rem;
+            border: 1px solid #2d7884;
+            border-radius: 6px;
+            background: var(--cyan-soft);
+            color: #d3f9fd;
+            font-weight: 750;
+            cursor: pointer;
+        }
+
+        .copy-button:hover {
+            border-color: var(--cyan);
+        }
+
+        .ready {
+            display: none;
+            margin-top: 1.25rem;
+            padding: 0.9rem 1rem;
+            border: 1px solid #2b8058;
+            border-radius: var(--radius);
+            background: var(--green-soft);
+            color: #c8f6dc;
+        }
+
+        .ready.is-visible {
+            display: block;
+        }
+
+        .advanced {
+            margin-top: 1.5rem;
+            border-top: 1px solid var(--line);
+        }
+
+        .advanced details {
+            border-bottom: 1px solid var(--line);
+        }
+
+        .advanced summary {
+            padding: 0.9rem 0;
+            color: var(--text);
+            font-weight: 750;
+            cursor: pointer;
+        }
+
+        .advanced__body {
+            max-width: 70ch;
+            padding: 0 0 1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .advanced__body p,
+        .advanced__body ul {
+            margin-top: 0;
+        }
+
+        .advanced__body li + li {
+            margin-top: 0.4rem;
+        }
+
+        .warning {
+            margin-top: 1.5rem;
+            padding: 0.8rem 0.9rem;
+            border: 1px solid #6c5927;
+            border-radius: var(--radius);
+            background: var(--amber-soft);
+            color: #f8dfa5;
+            font-size: 0.88rem;
+        }
+
+        footer {
+            margin-top: 2rem;
+            color: var(--quiet);
+            font-size: 0.82rem;
+        }
+
+        @media (max-width: 600px) {
+            .duration {
+                display: none;
+            }
+
+            main {
+                width: min(100% - 1.25rem, 54rem);
+                padding-top: 1.4rem;
+            }
+
+            .intro h1 {
+                font-size: 1.75rem;
+            }
+
+            .target-lock {
+                padding: 0.8rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#instructions">Skip to instructions</a>
+
+    <header class="topbar">
+        <div class="topbar__inner">
+            <a class="brand" href="#instructions">
+                <img src="../assets/plugin-icon-128.png" alt="">
+                <span>
+                    <strong>LiveCanvas AI Bridge</strong>
+                    <span>Connection guide</span>
+                </span>
+            </a>
+            <span class="duration">About 5 minutes</span>
+        </div>
+    </header>
+
+    <main id="instructions">
+        <section class="intro">
+            <h1 id="page-title">Connect Codex in four steps</h1>
+            <p><strong>Start in WordPress:</strong> open <b>LiveCanvas &gt; AI Bridge &gt; Connections</b>. You do not need an Application Password or a global MCP configuration.</p>
+        </section>
+
+        <div class="target-lock">
+            <span class="target-lock__icon" aria-hidden="true">1:1</span>
+            <div>
+                <strong>One project = one WordPress site.</strong>
+                <p>Open only the Codex, OpenCode, Claude, or Cursor project that belongs to the site you are connecting.</p>
+            </div>
+        </div>
+
+        <div class="agent-picker">
+            <label for="agent-select">Which coding agent are you connecting?</label>
+            <select id="agent-select">
+                <option value="codex">Codex (recommended)</option>
+                <option value="opencode">OpenCode</option>
+                <option value="claude-code">Claude Code</option>
+                <option value="claude-desktop">Claude Desktop</option>
+                <option value="cursor">Cursor</option>
+                <option value="generic">Another MCP client</option>
+            </select>
+        </div>
+
+        <section aria-live="polite">
+            <div class="agent-heading">
+                <img id="agent-icon" src="../assets/agent-icons/codex-color.svg" alt="">
+                <div>
+                    <h2 id="agent-title">Codex setup</h2>
+                    <p id="agent-summary">Use the setup prompt generated by WordPress. Do not create a global MCP entry.</p>
+                </div>
+            </div>
+
+            <div class="progress">
+                <span id="progress-text">0 of 4 complete</span>
+                <span class="progress__track" aria-hidden="true"><span class="progress__bar" id="progress-bar"></span></span>
+            </div>
+
+            <ol class="steps" id="steps"></ol>
+            <div class="ready" id="ready-message"><strong>Ready.</strong> The coding agent is connected to the correct WordPress site.</div>
+        </section>
+
+        <section class="advanced">
+            <details>
+                <summary>When should I use Local runtime?</summary>
+                <div class="advanced__body">
+                    <p>Use <b>Local runtime (advanced)</b> only when the agent must read local theme files, run Sass or WindPress builds, discover local assets, or run visual checks. For normal page, partial, template, media, and design-system work, keep <b>Direct Mode</b>.</p>
+                </div>
+            </details>
+            <details>
+                <summary>The coding agent cannot see AI Bridge</summary>
+                <div class="advanced__body">
+                    <ul>
+                        <li>Confirm that you opened the same project where the generated configuration was saved.</li>
+                        <li>Trust the project when Codex asks. Untrusted projects ignore their <code>.codex/config.toml</code> file.</li>
+                        <li>Close the coding agent completely, then reopen it. The first npm start can take up to 60 seconds.</li>
+                        <li>Disable any older <code>livecanvas-forge</code> MCP entry so only the site-specific server remains enabled.</li>
+                    </ul>
+                </div>
+            </details>
+            <details>
+                <summary>The site URL or fingerprint is wrong</summary>
+                <div class="advanced__body">
+                    <p>Stop without writing. Revoke the old session in WordPress, remove that site's stale MCP block from this coding-agent project, and generate a new setup from the correct site.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Reads work but writes do not</summary>
+                <div class="advanced__body">
+                    <p>First make the smoke test pass. Then enable the required write abilities in AI Bridge. If the session does not include the <code>write</code> scope, revoke it and connect again.</p>
+                </div>
+            </details>
+        </section>
+
+        <div class="warning">Before any write, verify that the site URL and fingerprint reported by the coding agent match the Connections screen.</div>
+
+        <footer>LiveCanvas AI Bridge is alpha software. Use preview, audit IDs, and rollback for write workflows.</footer>
+    </main>
+
+    <script>
+        (() => {
+            const testPrompt = 'Test this LiveCanvas AI Bridge connection. Call get_connection_handoff with {"limit":5}. If only a prefixed tool is available, call livecanvas-forge-ai/get-connection-handoff. If authorization or pairing is required, stop and tell me the exact next action. Report the site URL, fingerprint, status, auth method, scopes, and public write abilities. Do not modify anything.';
+
+            const agents = {
+                codex: {
+                    name: 'Codex',
+                    icon: '../assets/agent-icons/codex-color.svg',
+                    summary: 'Use the setup prompt generated by WordPress. Do not create a global MCP entry.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections. Keep Direct Mode selected. Click Connect Codex securely, then copy Prompt for Codex.',
+                    install: 'Open the Codex project for this WordPress site. Paste the setup prompt. Allow Codex to update only this project\'s .codex/config.toml.',
+                    installSuccess: 'Codex confirms that it updated .codex/config.toml.',
+                    restart: 'Close Codex completely and reopen the same project. Paste the test prompt below. The first MCP start can take up to 60 seconds.'
+                },
+                opencode: {
+                    name: 'OpenCode',
+                    icon: '../assets/agent-icons/opencode.svg',
+                    summary: 'Generate an OpenCode configuration for this project, then authorize the site.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections > Other coding agents. Choose OpenCode and generate the configuration.',
+                    install: 'Save or merge the generated opencode.json in the root of the OpenCode project for this WordPress site.',
+                    installSuccess: 'The project configuration contains one livecanvas-forge MCP server.',
+                    restart: 'Close OpenCode and reopen the same project. Wait for the MCP server to start, then paste the test prompt below.'
+                },
+                'claude-code': {
+                    name: 'Claude Code',
+                    icon: '../assets/agent-icons/claude-color.svg',
+                    summary: 'Run the generated Claude MCP command inside the correct project.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections > Other coding agents. Choose Claude and Command Line Interface. Copy the generated command.',
+                    install: 'Open a terminal in the Claude Code project for this site and run the exact claude mcp add command.',
+                    installSuccess: 'claude mcp list shows one livecanvas-forge server for this project.',
+                    restart: 'Reopen Claude Code in the same project, then paste the test prompt below.'
+                },
+                'claude-desktop': {
+                    name: 'Claude Desktop',
+                    icon: '../assets/agent-icons/claude-color.svg',
+                    summary: 'Merge the generated server into Claude Desktop without deleting other settings.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections > Other coding agents. Choose Claude and Desktop App. Copy the generated JSON.',
+                    install: 'Merge the livecanvas-forge entry into the existing Claude Desktop mcpServers configuration. Keep unrelated entries unchanged.',
+                    installSuccess: 'Claude Desktop settings contain one livecanvas-forge server.',
+                    restart: 'Quit Claude Desktop completely, reopen it, then paste the test prompt below.'
+                },
+                cursor: {
+                    name: 'Cursor',
+                    icon: '../assets/agent-icons/cursor.svg',
+                    summary: 'Install the generated MCP file in the Cursor workspace for this site.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections > Other coding agents. Choose Cursor and generate the configuration.',
+                    install: 'Save or merge the generated configuration at .cursor/mcp.json in the Cursor project for this WordPress site.',
+                    installSuccess: 'Cursor MCP settings show one enabled livecanvas-forge server.',
+                    restart: 'Reload the Cursor workspace, confirm the server is enabled, then paste the test prompt below.'
+                },
+                generic: {
+                    name: 'MCP client',
+                    icon: '../assets/plugin-icon-128.png',
+                    summary: 'Use the generated stdio command and environment in one project-specific MCP entry.',
+                    generate: 'Open LiveCanvas > AI Bridge > Connections > Other coding agents. Choose Generic MCP client and generate the configuration.',
+                    install: 'Add the generated command and environment variables to this project\'s MCP settings. Do not make it global.',
+                    installSuccess: 'The client lists one livecanvas-forge MCP server for this project.',
+                    restart: 'Restart the MCP client, then paste the test prompt below.'
+                }
+            };
+
+            const select = document.getElementById('agent-select');
+            const steps = document.getElementById('steps');
+            const title = document.getElementById('page-title');
+            const agentTitle = document.getElementById('agent-title');
+            const agentSummary = document.getElementById('agent-summary');
+            const agentIcon = document.getElementById('agent-icon');
+            const progressText = document.getElementById('progress-text');
+            const progressBar = document.getElementById('progress-bar');
+            const readyMessage = document.getElementById('ready-message');
+
+            const stateKey = (agent) => `lcfa-agent-guide:${agent}`;
+
+            const readProgress = (agent) => {
+                try {
+                    const value = JSON.parse(localStorage.getItem(stateKey(agent)) || '[]');
+                    return Array.from({ length: 4 }, (_, index) => Boolean(value[index]));
+                } catch (error) {
+                    return [false, false, false, false];
+                }
+            };
+
+            const writeProgress = (agent, value) => {
+                try {
+                    localStorage.setItem(stateKey(agent), JSON.stringify(value));
+                } catch (error) {
+                    // The checklist still works when storage is unavailable.
+                }
+            };
+
+            const stepMarkup = (number, place, heading, body, success, prompt = '') => `
+                <li class="step" data-step="${number - 1}">
+                    <button class="step__check" type="button" aria-label="Mark step ${number} complete" aria-pressed="false">${number}</button>
+                    <div>
+                        <span class="step__place">${place}</span>
+                        <h3>${heading}</h3>
+                        <p>${body}</p>
+                        ${prompt ? `<div class="copy-box"><code id="test-prompt">${prompt}</code><button class="copy-button" type="button" data-copy>Copy test prompt</button></div>` : ''}
+                        <p class="step__success"><b>Done when:</b> ${success}</p>
+                    </div>
+                </li>`;
+
+            const updateProgress = (agent, progress) => {
+                const complete = progress.filter(Boolean).length;
+                progressText.textContent = `${complete} of 4 complete`;
+                progressBar.style.width = `${complete * 25}%`;
+                readyMessage.classList.toggle('is-visible', complete === 4);
+                Array.from(steps.querySelectorAll('.step')).forEach((item, index) => {
+                    const done = Boolean(progress[index]);
+                    item.classList.toggle('is-done', done);
+                    const button = item.querySelector('.step__check');
+                    button.setAttribute('aria-pressed', done ? 'true' : 'false');
+                    button.textContent = done ? '\u2713' : String(index + 1);
+                });
+            };
+
+            const render = (agentKey) => {
+                const agent = agents[agentKey] || agents.codex;
+                const progress = readProgress(agentKey);
+
+                title.textContent = `Connect ${agent.name} in four steps`;
+                agentTitle.textContent = `${agent.name} setup`;
+                agentSummary.textContent = agent.summary;
+                agentIcon.src = agent.icon;
+                agentIcon.alt = '';
+                document.title = `Connect ${agent.name} | LiveCanvas AI Bridge`;
+                history.replaceState(null, '', `#${agentKey}`);
+
+                steps.innerHTML = [
+                    stepMarkup(1, 'In WordPress', `Generate the ${agent.name} setup`, agent.generate, 'WordPress shows a copy-ready configuration or setup prompt.'),
+                    stepMarkup(2, `In ${agent.name}`, 'Install it in the correct project', agent.install, agent.installSuccess),
+                    stepMarkup(3, `Restart ${agent.name}`, 'Test and authorize the connection', agent.restart, 'The agent reports this site\'s URL and fingerprint.', testPrompt),
+                    stepMarkup(4, 'Back in WordPress', 'Approve and finish', 'If a pairing request appears, approve only the request with the matching code. Ask the agent to retry the test. Then click Run smoke test in Connections.', 'Connections shows Ready.')
+                ].join('');
+
+                steps.querySelectorAll('.step__check').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const index = Number(button.closest('.step').dataset.step);
+                        progress[index] = !progress[index];
+                        writeProgress(agentKey, progress);
+                        updateProgress(agentKey, progress);
+                    });
+                });
+
+                const copyButton = steps.querySelector('[data-copy]');
+                if (copyButton) {
+                    copyButton.addEventListener('click', async () => {
+                        try {
+                            await navigator.clipboard.writeText(testPrompt);
+                            copyButton.textContent = 'Copied';
+                            window.setTimeout(() => { copyButton.textContent = 'Copy test prompt'; }, 1400);
+                        } catch (error) {
+                            copyButton.textContent = 'Select and copy the prompt';
+                        }
+                    });
+                }
+
+                updateProgress(agentKey, progress);
+            };
+
+            const hashAgent = window.location.hash.replace('#', '');
+            const initialAgent = Object.prototype.hasOwnProperty.call(agents, hashAgent) ? hashAgent : 'codex';
+            select.value = initialAgent;
+            render(initialAgent);
+
+            select.addEventListener('change', () => render(select.value));
+        })();
+    </script>
+</body>
+</html>

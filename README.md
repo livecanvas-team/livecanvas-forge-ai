@@ -10,10 +10,13 @@ Status: `alpha`
 
 Alpha / not production guaranteed: this repository is public for early testing and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use staging sites, backups, previews, and `dry_run` checks before applying agent-generated changes.
 
+See the current [development status and release gates](./docs/plugin-development-status.md) for the tested baseline, beta areas, and known incomplete work.
+
 Usable today:
 
 - connect coding agents through the local MCP bridge or REST contract
-- use Codex Direct Mode through secure AI Bridge pairing, without storing a WordPress Application Password in Codex
+- use Codex Direct Mode through OAuth 2.1 + PKCE on public HTTPS sites, without an npm proxy or WordPress credentials in Codex
+- fall back automatically to secure AI Bridge pairing on local/private sites or when WordPress MCP Adapter is unavailable
 - keep Codex connections site-bound with project-scoped `.codex/config.toml` files and a Site ID fingerprint
 - expose WordPress 7 Abilities and a custom WordPress MCP Adapter server when available
 - inspect WordPress, LiveCanvas, Picostrap, Picowind, WindPress, WooCommerce, and ACF context
@@ -90,14 +93,21 @@ Main areas:
 - `LiveCanvas AI Vision`: planned premium extension for screenshot-to-code and URL-to-page rebuilds. It will analyze long screenshots or URLs, split pages into sections, extract a reusable design system, generate or map missing assets, and create editable Picowind/Tailwind pages through AI Bridge.
 - `LiveCanvas Theme Forge Internal`: planned private generator for creating validated Picowind child-theme ZIPs from approved source briefs, staging runs, and visual QA. It is not bundled in this public plugin.
 
+Tested development references:
+
+- [Picostrap site generation flow](./docs/picostrap-site-generation-flow.md)
+- [Future image generation provider architecture](./docs/image-generation-provider-architecture.md)
+
 ## Requirements
 
 Recommended:
 
 - WordPress
 - LiveCanvas
-- PHP compatible with your WordPress install
-- Node.js for local MCP/coding-agent integrations and the WordPress MCP remote proxy
+- PHP 8.0 or newer
+- the official WordPress MCP Adapter for the recommended remote Direct OAuth path
+- a public HTTPS WordPress URL for Direct OAuth
+- Node.js only for secure pairing fallback, local filesystem/build tools, visual checks, or other advanced local integrations
 - Picostrap, Picowind/WindPress, or another active WordPress theme
 
 ## Installation
@@ -183,21 +193,14 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 ## Quick Start
 
-1. Activate the plugin.
-2. Open `WordPress Admin > AI Bridge`.
-3. Complete the setup wizard.
-4. Open `Connections`.
-5. Use the default `Connect Codex` Direct Mode path, or open `Other clients`.
-6. For Direct Mode, confirm the site URL and add a clear Codex project label.
-7. Generate the secure Codex setup.
-8. Prefer the Project TOML snippet and save it in the `.codex/config.toml` file of the Codex project for this WordPress site.
-9. Restart/reload the MCP server and ask Codex to call `get_connection_handoff`.
-10. Approve the pending Codex pairing request in WordPress, then run the smoke test.
-11. Check the returned `site_identity.fingerprint` before write requests when you work across multiple sites.
-12. Start with preview abilities or `dry_run: true`.
-13. Apply only after the preview result looks correct.
+1. Install and activate LiveCanvas AI Bridge, complete `Setup`, then open `LiveCanvas > AI Bridge > Connections`.
+2. Keep `Direct Mode` selected, click `Connect Codex securely`, and copy `Prompt for Codex`.
+3. Open the Codex project that belongs to this WordPress site, trust the project, paste the setup prompt, then restart Codex. The first MCP start can take up to 60 seconds.
+4. Paste the generated test prompt. Complete the WordPress authorization or approve the matching pairing code, verify the site URL and fingerprint, then run the WordPress smoke test.
 
-For detailed MCP setup, see [`mcp/README.md`](./mcp/README.md). The preferred setup path is the in-plugin `Connections` wizard.
+You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
+
+The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
 
 ## Theme Library
 
@@ -290,12 +293,13 @@ Recommended structure when you manage multiple sites:
 ```text
 site-a/.codex/config.toml -> livecanvas-forge points to Site A
 site-b/.codex/config.toml -> livecanvas-forge points to Site B
-remote-client/.codex/config.toml -> livecanvas-ai-bridge points to the remote WordPress site URL
+remote-a/.codex/config.toml -> livecanvas-site-a-fingerprint points to Site A MCP URL
+remote-b/.codex/config.toml -> livecanvas-site-b-fingerprint points to Site B MCP URL
 ```
 
-Each MCP config includes `LCFA_SITE_FINGERPRINT`. MCP requests send that fingerprint to WordPress. If a Codex chat is connected to a different site, AI Bridge rejects MCP write commands before they reach the Command Deck.
+For Direct OAuth, AI Bridge generates a distinct MCP server name from the WordPress host and Site ID. The OAuth token has the exact MCP URL as its audience and is also bound to the current site fingerprint in WordPress. A domain/path migration invalidates the old grant.
 
-Remote Direct Mode uses a plugin-scoped AI Bridge session token. The token is created only after WordPress admin approval, stored hashed in WordPress, can be revoked from `Connections`, and is not a WordPress account credential. The old Application Password adapter remains available only under `Advanced/manual fallback`.
+On public HTTPS sites, Remote Direct Mode uses an OAuth access/refresh grant approved by a WordPress administrator. Token identifiers are stored hashed, signing material is encrypted at rest, and the entire Codex client can be revoked from `Connections`. On fallback environments, AI Bridge uses its plugin-scoped pairing session. Neither default path stores a WordPress Application Password in Codex. The Application Password adapter remains under `Advanced/manual fallback`.
 
 When you start a Codex session, first call:
 
@@ -326,12 +330,15 @@ Use this checklist before allowing write requests:
 - open `WordPress Admin > AI Bridge > Connections`;
 - copy the `Prompt for Codex` from the correct WordPress site;
 - apply the generated Project TOML to that Codex project's `.codex/config.toml`;
-- restart Codex or reload the `livecanvas-ai-bridge` MCP server;
-- ask Codex to call `get_connection_handoff`;
-- approve the pending pairing request in WordPress;
-- call `get_connection_handoff` again;
+- restart Codex;
+- if Codex still lists an old global `livecanvas-forge` server with duplicate LiveCanvas tools, disable that legacy server before testing this project;
+- for Direct OAuth, run the generated `codex mcp login --scopes mcp <server-name>` command and approve WordPress authorization;
+- for secure pairing fallback, ask Codex to call the handoff and approve the matching user code in WordPress;
+- call `livecanvas-forge-ai/get-connection-handoff`;
 - verify `site_identity.site_url`, `site_identity.fingerprint`, `auth_method`, and `scopes`;
 - run a preview or `dry_run: true` before any apply command.
+
+If authorization or discovery is slow, open `Connections > Connection diagnostics`. The on-demand check verifies HTTPS, OAuth dependencies, MCP Adapter classes, REST routes, discovery metadata, and the expected `401` MCP OAuth challenge. A loopback warning can be hosting-specific even when external Codex access works.
 
 ## Domain Changes And Staging To Production Migrations
 
@@ -357,14 +364,15 @@ Recommended procedure:
 4. Open `Advanced settings`.
 5. Update `Remote site URL` to the production URL.
 6. Save the settings.
-7. Revoke any active Codex sessions whose label or project still references the staging domain.
+7. Revoke every old OAuth app or secure pairing session whose project still references the staging domain.
 8. Copy the new `Prompt for Codex` from the production site.
 9. Confirm the prompt contains the production URL and does not contain the old staging URL.
 10. Apply the new Project TOML to the correct Codex project `.codex/config.toml`.
-11. Restart Codex or reload the `livecanvas-ai-bridge` MCP server.
-12. Ask Codex to call `get_connection_handoff` and verify `site_identity.site_url` and `site_identity.fingerprint`.
-13. Approve the new pairing request in the production WordPress admin.
-14. Start with a read-only check or preview before allowing writes.
+11. Restart Codex.
+12. For Direct OAuth, run the new generated `codex mcp login --scopes mcp <server-name>` command and approve the production WordPress authorization screen.
+13. For pairing fallback, approve the new pairing request in the production WordPress admin.
+14. Ask Codex to call `livecanvas-forge-ai/get-connection-handoff` and verify `site_identity.site_url` and `site_identity.fingerprint`.
+15. Start with a read-only check or preview before allowing writes.
 
 Use this first test prompt:
 
@@ -374,9 +382,23 @@ Call get_connection_handoff with {"limit":5}. Verify that site_identity.site_url
 
 If the handoff still reports the staging URL, stop and fix `.codex/config.toml` before running any preview or apply command.
 
-## Re-Pair Codex And Verify Write Authorization
+## Reauthorize Codex
 
-Use this procedure when Codex was previously connected in read-only mode, when a session looks stale, or when you need to re-check that the current Codex project is authorized for the right WordPress site.
+For a public HTTPS site using `auth_method: oauth_direct`:
+
+1. Open `AI Bridge > Connections > Connected Codex apps`.
+2. Revoke the app for the Codex project you are resetting.
+3. Remove only that site's generated MCP block from the project `.codex/config.toml`, or regenerate it from the current site's setup prompt.
+4. Restart Codex.
+5. Run the `codex mcp login --scopes mcp <server-name>` command shown by AI Bridge.
+6. Approve the WordPress authorization screen.
+7. Call `livecanvas-forge-ai/get-connection-handoff` and verify the site URL and fingerprint.
+
+Revocation invalidates that app's access tokens, refresh tokens, and pending authorization codes. It does not change a WordPress password.
+
+## Re-Pair Secure Fallback And Verify Write Authorization
+
+Use this procedure only when Connections reports `ai_bridge_session`, such as a local/private site or a server without the official MCP Adapter.
 
 ### 1. Revoke The Old Session
 

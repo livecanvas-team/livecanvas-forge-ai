@@ -28,6 +28,7 @@ async function main() {
 
       if (req.url === '/wp-json/lcfa/v1/mcp/pairing/start' && req.method === 'POST') {
         const payload = JSON.parse(body || '{}')
+        assert.ok(['codex', 'opencode'].includes(payload.client), 'pairing should send the configured coding-agent identity')
         assert.deepStrictEqual(payload.scopes, ['read', 'preview', 'write'], 'default pairing should request read, preview, and write scopes')
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
@@ -99,6 +100,20 @@ async function main() {
     const snapshotRequest = requests.find((request) => request.url === '/wp-json/lcfa/v1/snapshot')
     assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-session'], 'session_secret', 'protected requests should use the AI Bridge session header')
     assert.ok(!snapshotRequest.headers['x-lcfa-mcp-token'], 'protected requests should not send a legacy MCP token')
+
+    approved = false
+    const openCodeClient = new WPClient({
+      ...config,
+      agent: 'opencode',
+      sessionToken: ''
+    })
+    const openCodePending = await openCodeClient.getSnapshot()
+    assert.strictEqual(openCodePending.status, 'pairing_pending', 'a different coding agent should not reuse the Codex session cache')
+    assert.ok(openCodePending.message.includes('OpenCode pairing'), 'pairing guidance should name OpenCode')
+
+    const pairingRequests = requests.filter((request) => request.url === '/wp-json/lcfa/v1/mcp/pairing/start')
+    const openCodePairing = JSON.parse(pairingRequests[pairingRequests.length - 1].body || '{}')
+    assert.strictEqual(openCodePairing.client, 'opencode', 'OpenCode pairing should be registered with the correct client identity')
   } finally {
     process.env.HOME = originalHome
     server.close()

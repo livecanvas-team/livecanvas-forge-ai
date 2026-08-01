@@ -312,7 +312,7 @@ final class LCFA_Settings {
     public static function sanitize_connection_strategy(string $strategy): string {
         $strategy = sanitize_key($strategy);
 
-        return in_array($strategy, ['ai-bridge-session', 'remote-mcp-adapter', 'wordpress-mcp-adapter', 'remote-rest', 'local-mcp-bridge'], true) ? $strategy : '';
+        return in_array($strategy, ['oauth-direct', 'ai-bridge-session', 'remote-mcp-adapter', 'wordpress-mcp-adapter', 'remote-rest', 'local-mcp-bridge'], true) ? $strategy : '';
     }
 
     public static function get_site_fingerprint(): string {
@@ -328,6 +328,61 @@ final class LCFA_Settings {
             : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return substr(hash('sha256', (string) $encoded), 0, 16);
+    }
+
+    public static function site_urls_match(string $first_url, string $second_url): bool {
+        $first = self::normalize_site_identity_url($first_url);
+        $second = self::normalize_site_identity_url($second_url);
+
+        return $first !== '' && $second !== '' && hash_equals($first, $second);
+    }
+
+    public static function is_public_https_site_url(string $url): bool {
+        $parts = self::parse_url($url);
+        if (!is_array($parts) || strtolower((string) ($parts['scheme'] ?? '')) !== 'https') {
+            return false;
+        }
+
+        $host = strtolower(trim((string) ($parts['host'] ?? ''), '[]'));
+        if ($host === '' || $host === 'localhost' || $host === '::1') {
+            return false;
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return filter_var(
+                $host,
+                FILTER_VALIDATE_IP,
+                FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+            ) !== false;
+        }
+
+        return !preg_match('/(?:^|\.)(?:local|test|localhost|internal|lan|home|ddev\.site|lndo\.site)$/i', $host);
+    }
+
+    private static function normalize_site_identity_url(string $url): string {
+        $parts = self::parse_url(trim($url));
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return '';
+        }
+
+        $scheme = strtolower((string) $parts['scheme']);
+        $host = strtolower(trim((string) $parts['host'], '[]'));
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return '';
+        }
+
+        $port = isset($parts['port']) ? (int) $parts['port'] : 0;
+        $default_port = ($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80);
+        $authority = $host . ($port > 0 && !$default_port ? ':' . $port : '');
+        $path = '/' . ltrim((string) ($parts['path'] ?? '/'), '/');
+        $path = preg_replace('#/+#', '/', $path);
+        $path = rtrim(is_string($path) ? $path : '/', '/') . '/';
+
+        return $scheme . '://' . $authority . $path;
+    }
+
+    private static function parse_url(string $url) {
+        return function_exists('wp_parse_url') ? wp_parse_url($url) : parse_url($url);
     }
 
     public static function get_codex_model_options(): array {

@@ -24,10 +24,17 @@ copy_into_package() {
 
 copy_into_package "${ROOT_DIR}/livecanvas-forge-ai.php"
 copy_into_package "${ROOT_DIR}/README.md"
+copy_into_package "${ROOT_DIR}/LICENSE.md"
+copy_into_package "${ROOT_DIR}/composer.json"
+copy_into_package "${ROOT_DIR}/composer.lock"
 copy_into_package "${ROOT_DIR}/assets"
 copy_into_package "${ROOT_DIR}/examples"
 copy_into_package "${ROOT_DIR}/includes"
 copy_into_package "${ROOT_DIR}/mcp"
+copy_into_package "${ROOT_DIR}/vendor"
+
+mkdir -p "${PACKAGE_DIR}/docs"
+cp "${ROOT_DIR}/docs/coding-agent-setup.html" "${PACKAGE_DIR}/docs/coding-agent-setup.html"
 
 find "${PACKAGE_DIR}" \
   \( -name '.DS_Store' -o -name '*.log' \) \
@@ -36,7 +43,8 @@ find "${PACKAGE_DIR}" \
 rm -rf \
   "${PACKAGE_DIR}/mcp/node_modules" \
   "${PACKAGE_DIR}/mcp/tests" \
-  "${PACKAGE_DIR}/mcp/.DS_Store"
+  "${PACKAGE_DIR}/mcp/.DS_Store" \
+  "${PACKAGE_DIR}/vendor/bin"
 
 mkdir -p "${DIST_DIR}"
 rm -f "${ZIP_PATH}"

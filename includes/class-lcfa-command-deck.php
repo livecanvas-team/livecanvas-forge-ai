@@ -355,6 +355,12 @@ final class LCFA_Command_Deck {
                 if ($is_update) {
                     $page_title = $page_title !== '' ? $page_title : (string) ($existing['post']['title'] ?? '');
                     $page_slug  = $page_slug !== '' ? $page_slug : (string) ($existing['post']['slug'] ?? '');
+                    if (!array_key_exists('status', $payload)) {
+                        $existing_status = sanitize_key((string) ($existing['post']['status'] ?? ''));
+                        if (in_array($existing_status, ['draft', 'publish', 'private', 'pending'], true)) {
+                            $status = $existing_status;
+                        }
+                    }
                 }
 
                 $result['target_type']   = 'page';
@@ -1275,7 +1281,12 @@ final class LCFA_Command_Deck {
                 if (empty($result['ok'])) {
                     $result['message'] = (string) ($restore_result['message'] ?? __('Audit rollback restore failed.', 'livecanvas-forge-ai'));
                 } elseif (!$created_post && !empty($runtime_snapshot)) {
-                    $result['data']['page_runtime_restore']['result'] = $this->restore_page_runtime_snapshot($target_id, $runtime_snapshot);
+                    $runtime_restore = $this->restore_page_runtime_snapshot($target_id, $runtime_snapshot);
+                    $result['data']['page_runtime_restore']['result'] = $runtime_restore;
+                    if (empty($runtime_restore['ok'])) {
+                        $result['ok'] = false;
+                        $result['message'] = (string) ($runtime_restore['message'] ?? __('Previous page status or runtime metadata could not be restored.', 'livecanvas-forge-ai'));
+                    }
                 }
             }
         }
@@ -1329,6 +1340,7 @@ final class LCFA_Command_Deck {
         }
 
         return [
+            'post_status'    => function_exists('get_post_status') ? sanitize_key((string) get_post_status($post_id)) : '',
             'page_css'       => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_PAGE_CSS, true),
             'page_js'        => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_PAGE_JS, true),
             'no_theme_edits' => (string) get_post_meta($post_id, LCFA_Page_Runtime::META_NO_THEME_EDITS, true) === '1',
@@ -1344,6 +1356,10 @@ final class LCFA_Command_Deck {
 
     private function sanitize_page_runtime_snapshot(array $snapshot): array {
         $seo = is_array($snapshot['seo'] ?? null) ? (array) $snapshot['seo'] : [];
+        $post_status = sanitize_key((string) ($snapshot['post_status'] ?? ''));
+        if (!in_array($post_status, ['draft', 'publish', 'private', 'pending', 'future'], true)) {
+            $post_status = '';
+        }
 
         $provider_meta = [];
         if (is_array($snapshot['seo_provider_meta'] ?? null)) {
@@ -1356,6 +1372,7 @@ final class LCFA_Command_Deck {
         }
 
         return [
+            'post_status'    => $post_status,
             'page_css'       => (string) ($snapshot['page_css'] ?? ''),
             'page_js'        => (string) ($snapshot['page_js'] ?? ''),
             'no_theme_edits' => !empty($snapshot['no_theme_edits']),
@@ -1378,6 +1395,14 @@ final class LCFA_Command_Deck {
         }
 
         $snapshot = $this->sanitize_page_runtime_snapshot($snapshot);
+        $post_status_restored = true;
+        if ($snapshot['post_status'] !== '' && function_exists('wp_update_post')) {
+            $status_result = wp_update_post([
+                'ID'          => $post_id,
+                'post_status' => $snapshot['post_status'],
+            ], true);
+            $post_status_restored = !is_wp_error($status_result);
+        }
         $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_PAGE_CSS, $snapshot['page_css']);
         $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_PAGE_JS, $snapshot['page_js']);
         $this->update_or_delete_page_runtime_meta($post_id, LCFA_Page_Runtime::META_NO_THEME_EDITS, !empty($snapshot['no_theme_edits']) ? '1' : '');
@@ -1390,12 +1415,15 @@ final class LCFA_Command_Deck {
         }
 
         return [
-            'ok'              => true,
+            'ok'              => $post_status_restored,
             'target_id'       => $post_id,
+            'post_status'     => $snapshot['post_status'],
             'page_css_lines'  => $snapshot['page_css'] !== '' ? substr_count($snapshot['page_css'], "\n") + 1 : 0,
             'page_js_lines'   => $snapshot['page_js'] !== '' ? substr_count($snapshot['page_js'], "\n") + 1 : 0,
             'no_theme_edits'  => !empty($snapshot['no_theme_edits']),
-            'message'         => __('Previous page runtime metadata restored.', 'livecanvas-forge-ai'),
+            'message'         => $post_status_restored
+                ? __('Previous page status and runtime metadata restored.', 'livecanvas-forge-ai')
+                : __('Previous page runtime metadata restored, but WordPress could not restore the page status.', 'livecanvas-forge-ai'),
         ];
     }
 

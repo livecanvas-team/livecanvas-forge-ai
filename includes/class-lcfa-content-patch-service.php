@@ -71,6 +71,10 @@ final class LCFA_Content_Patch_Service {
 
         if ((string) $target['command_action'] === 'update_page') {
             $command_payload['title'] = (string) ($target['target_title'] ?? '');
+            $target_status = sanitize_key((string) ($target['target_status'] ?? ''));
+            if (in_array($target_status, ['draft', 'publish', 'private', 'pending'], true)) {
+                $command_payload['status'] = $target_status;
+            }
         }
 
         $apply = $this->command_deck->execute($command_payload);
@@ -151,6 +155,7 @@ final class LCFA_Content_Patch_Service {
             'target_type' => $target_type,
             'target_id' => $target_id,
             'target_title' => (string) ($content['post']['title'] ?? ''),
+            'target_status' => sanitize_key((string) ($content['post']['status'] ?? '')),
             'variant' => $variant,
             'content' => (string) ($content['content'] ?? ''),
             'command_action' => $map[$target_type]['command'],

@@ -118,6 +118,44 @@ final class LCFA_Connection_Tester {
     }
 
     private function test_remote_rest(array $connections): array {
+        if (
+            (string) ($connections['connection_strategy'] ?? '') === 'oauth-direct'
+            && class_exists('LCFA_OAuth_Server', false)
+        ) {
+            $apps = (new LCFA_OAuth_Server())->get_connected_apps();
+            $active = array_values(array_filter($apps, static function (array $app): bool {
+                return empty($app['revoked_at']) && (int) ($app['active_tokens'] ?? 0) > 0;
+            }));
+
+            if ($active !== []) {
+                $app = $active[0];
+                return [
+                    'label' => __('Codex Direct OAuth grant', 'livecanvas-forge-ai'),
+                    'ok' => true,
+                    'skipped' => false,
+                    'message' => __('Codex authenticated successfully through the WordPress MCP endpoint.', 'livecanvas-forge-ai'),
+                    'details' => [
+                        'client_id' => (string) ($app['client_id'] ?? ''),
+                        'client_name' => (string) ($app['client_name'] ?? ''),
+                        'last_seen_at' => (string) ($app['token_last_seen_at'] ?? ($app['last_used_at'] ?? '')),
+                        'auth_method' => 'oauth_direct',
+                        'resource' => LCFA_OAuth_Storage::resource_url(),
+                    ],
+                ];
+            }
+
+            return [
+                'label' => __('Codex Direct OAuth grant', 'livecanvas-forge-ai'),
+                'ok' => false,
+                'skipped' => false,
+                'message' => __('No active Codex OAuth grant has reached this site. Run Codex MCP login, approve access in WordPress, then call get_connection_handoff.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'auth_method' => 'oauth_direct',
+                    'resource' => LCFA_OAuth_Storage::resource_url(),
+                ],
+            ];
+        }
+
         if (class_exists('LCFA_MCP_Session_Manager', false)) {
             $sessions = LCFA_MCP_Session_Manager::get_public_sessions();
             $active = array_values(array_filter($sessions, static function (array $session): bool {
@@ -127,7 +165,7 @@ final class LCFA_Connection_Tester {
             if ($active !== []) {
                 $session = $active[0];
                 return [
-                    'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
+                    'label'   => __('Secure coding-agent pairing session', 'livecanvas-forge-ai'),
                     'ok'      => true,
                     'skipped' => false,
                     'message' => __('A scoped AI Bridge session has connected to this site.', 'livecanvas-forge-ai'),
@@ -142,10 +180,10 @@ final class LCFA_Connection_Tester {
 
             if (LCFA_MCP_Session_Manager::has_active_session()) {
                 return [
-                    'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
+                    'label'   => __('Secure coding-agent pairing session', 'livecanvas-forge-ai'),
                     'ok'      => false,
                     'skipped' => false,
-                    'message' => __('A Codex session is approved but has not connected yet. Ask Codex to call get_connection_handoff, then run the smoke test again.', 'livecanvas-forge-ai'),
+                    'message' => __('A coding-agent session is approved but has not connected yet. Ask that agent to call get_connection_handoff, then run the smoke test again.', 'livecanvas-forge-ai'),
                     'details' => [
                         'auth_method' => 'ai_bridge_session',
                     ],
@@ -155,10 +193,10 @@ final class LCFA_Connection_Tester {
 
         if (!$this->remote_client->is_configured()) {
             return [
-                'label'   => __('Secure Codex pairing session', 'livecanvas-forge-ai'),
+                'label'   => __('Secure coding-agent pairing session', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => __('No approved Codex session has connected yet. Copy the secure setup prompt into Codex, call get_connection_handoff, approve the pairing request, then retry.', 'livecanvas-forge-ai'),
+                'message' => __('No approved coding-agent session has connected yet. Install the generated project config, call get_connection_handoff, approve the pairing request, then retry.', 'livecanvas-forge-ai'),
                 'details' => [],
             ];
         }

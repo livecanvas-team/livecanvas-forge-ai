@@ -1899,7 +1899,7 @@ final class LCFA_Rest_Api {
             return [
                 'ok' => false,
                 'action' => sanitize_key((string) ($payload['action'] ?? '')),
-                'message' => __('This Codex MCP config is missing the site fingerprint. Repair Codex for this project before running write commands.', 'livecanvas-forge-ai'),
+                'message' => __('This coding-agent MCP config is missing the site fingerprint. Repair the project connection before running write commands.', 'livecanvas-forge-ai'),
                 'summary' => __('Site safety check failed before execution.', 'livecanvas-forge-ai'),
                 'site_fingerprint' => [
                     'expected' => $expected,
@@ -1913,7 +1913,7 @@ final class LCFA_Rest_Api {
             return [
                 'ok' => false,
                 'action' => sanitize_key((string) ($payload['action'] ?? '')),
-                'message' => __('This Codex chat is connected to a different WordPress site. Open the matching Codex project or repair the MCP config before running write commands.', 'livecanvas-forge-ai'),
+                'message' => __('This coding-agent project is connected to a different WordPress site. Open the matching project or repair the MCP config before running write commands.', 'livecanvas-forge-ai'),
                 'summary' => __('Site safety check failed before execution.', 'livecanvas-forge-ai'),
                 'site_fingerprint' => [
                     'expected' => $expected,
@@ -2995,6 +2995,10 @@ final class LCFA_Rest_Api {
         $connection_strategy = sanitize_key((string) ($connections['connection_strategy'] ?? ''));
         $is_remote_adapter = $client === 'codex' && $mode === 'remote' && !empty($adapter['available']);
         $is_ai_bridge_session = $client === 'codex' && $mode === 'remote' && $connection_strategy === 'ai-bridge-session';
+        $oauth_identity = class_exists('LCFA_OAuth_Server', false)
+            ? LCFA_OAuth_Server::get_current_identity()
+            : [];
+        $is_oauth_direct = $connection_strategy === 'oauth-direct' || $oauth_identity !== [];
         $connection_handoff_tool = $is_remote_adapter
             ? 'livecanvas-forge-ai/get-connection-handoff'
             : 'get_connection_handoff';
@@ -3006,10 +3010,14 @@ final class LCFA_Rest_Api {
             : ($mode === 'remote' ? 'remote_rest_bridge' : 'local_mcp_bridge');
         if ($session !== []) {
             $transport = 'ai_bridge_session';
+        } elseif ($is_oauth_direct) {
+            $transport = 'wordpress_mcp_oauth';
         }
-        $auth_method = ($session !== [] || $is_ai_bridge_session)
-            ? 'ai_bridge_session'
-            : ($is_remote_adapter ? 'wordpress_application_password_legacy' : ($mode === 'local' ? 'legacy_mcp_token' : 'unknown'));
+        $auth_method = $is_oauth_direct
+            ? 'oauth_direct'
+            : (($session !== [] || $is_ai_bridge_session)
+                ? 'ai_bridge_session'
+                : ($is_remote_adapter ? 'wordpress_application_password_legacy' : ($mode === 'local' ? 'legacy_mcp_token' : 'unknown')));
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
             sprintf(
@@ -3025,7 +3033,7 @@ final class LCFA_Rest_Api {
                 $handoff_package_tool
             ),
             __('Run the read-only checks from the package, starting with get_snapshot, get_ability_diagnostics, and get_runs when available.', 'livecanvas-forge-ai'),
-            __('Verify the returned site_identity before running any write command; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
+            __('Verify the returned site_identity before running any write command; a different Site ID means this coding-agent project targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, available tools, active risks, and whether write abilities are exposed.', 'livecanvas-forge-ai'),
             __('For small edits, prefer content_patch_preview/content_patch_apply over rewriting the full page.', 'livecanvas-forge-ai'),
             __('Use media, theme file, debug, cache, SEO, and Polylang tools only when the session scope exposes them.', 'livecanvas-forge-ai'),
@@ -3045,9 +3053,13 @@ final class LCFA_Rest_Api {
             'last_verified_at' => sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? '')),
             'transport'      => $transport,
             'auth_method'    => $auth_method,
-            'session_id'     => sanitize_key((string) ($session['session_id'] ?? '')),
+            'session_id'     => sanitize_key((string) ($session['session_id'] ?? ($oauth_identity['access_token_id'] ?? ''))),
+            'client_id'      => sanitize_text_field((string) ($oauth_identity['client_id'] ?? '')),
             'project_label'  => sanitize_text_field((string) ($session['project_label'] ?? ($connections['remote_project_label'] ?? ''))),
-            'scopes'         => array_values(array_map('sanitize_key', (array) ($session['scopes'] ?? []))),
+            'scopes'         => array_values(array_map('sanitize_key', (array) ($session['scopes'] ?? ($oauth_identity['scopes'] ?? [])))),
+            'oauth_resource' => $is_oauth_direct && class_exists('LCFA_OAuth_Storage', false)
+                ? LCFA_OAuth_Storage::resource_url()
+                : '',
             'mcp_adapter_url' => sanitize_text_field((string) ($custom_server['url'] ?? '')),
             'site_identity'  => [
                 'site_url' => function_exists('home_url') ? home_url('/') : '',

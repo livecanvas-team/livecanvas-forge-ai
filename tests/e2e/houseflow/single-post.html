@@ -1,0 +1,22 @@
+<tangible>
+  <article>
+    <header class="houseflow-template-hero text-center">
+      <div class="container col-xl-9">
+        <div class="lc-block mb-3"><span class="houseflow-kicker">Hearthline journal</span></div>
+        <div class="lc-block"><h1 class="display-2 mb-4"><field name="title"></field></h1></div>
+        <div class="lc-block"><p class="text-body-secondary mb-0"><field name="publish_date" date_format="F j, Y"></field> · <field name="author_full_name"></field></p></div>
+      </div>
+    </header>
+    <if field="image">
+      <div class="container mt-n5 position-relative"><img src="{Field image_url}" srcset="{Field image_srcset}" sizes="{Field image_sizes}" class="w-100 rounded-5 object-fit-cover shadow" style="max-height: 640px" alt="{Field image_alt}"></div>
+    </if>
+    <div class="container houseflow-section">
+      <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-7">
+          <div class="lc-block fs-5"><field name="content"></field></div>
+          <div class="lc-block border-top mt-5 pt-4 d-flex justify-content-between gap-3">[lc_the_previous_post_link class="btn btn-outline-primary"] [lc_the_next_post_link class="btn btn-primary"]</div>
+        </div>
+      </div>
+    </div>
+  </article>
+</tangible>

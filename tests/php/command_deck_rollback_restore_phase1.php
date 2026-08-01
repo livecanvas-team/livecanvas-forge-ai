@@ -29,6 +29,10 @@ function sanitize_text_field($value): string {
     return trim(strip_tags((string) $value));
 }
 
+function esc_url_raw($value): string {
+    return (string) $value;
+}
+
 function absint($value): int {
     return max(0, (int) $value);
 }
@@ -53,6 +57,20 @@ function get_post(int $post_id) {
     return (object) $GLOBALS['lcfa_test_posts'][$post_id];
 }
 
+function get_post_status(int $post_id): string {
+    return (string) ($GLOBALS['lcfa_test_posts'][$post_id]['post_status'] ?? '');
+}
+
+function update_post_meta(int $post_id, string $key, $value): bool {
+    $GLOBALS['lcfa_test_posts'][$post_id]['meta'][$key] = $value;
+    return true;
+}
+
+function delete_post_meta(int $post_id, string $key): bool {
+    unset($GLOBALS['lcfa_test_posts'][$post_id]['meta'][$key]);
+    return true;
+}
+
 function wp_update_post(array $postarr, bool $wp_error = false) {
     $post_id = absint($postarr['ID'] ?? 0);
 
@@ -62,6 +80,10 @@ function wp_update_post(array $postarr, bool $wp_error = false) {
 
     if (array_key_exists('post_content', $postarr)) {
         $GLOBALS['lcfa_test_posts'][$post_id]['post_content'] = (string) $postarr['post_content'];
+    }
+
+    if (array_key_exists('post_status', $postarr)) {
+        $GLOBALS['lcfa_test_posts'][$post_id]['post_status'] = (string) $postarr['post_status'];
     }
 
     return $post_id;
@@ -156,6 +178,9 @@ $apply_result = [
     'existing_html'    => '<section>Before</section>',
     'data'             => [
         'operation' => 'update',
+        'page_runtime_rollback' => [
+            'post_status' => 'publish',
+        ],
     ],
 ];
 
@@ -170,9 +195,12 @@ lcfa_rollback_assert_same('preview', $preview['mode'] ?? '', 'rollback restore s
 lcfa_rollback_assert_same('<section>Before</section>', $preview['proposed_html'] ?? '', 'rollback preview should propose the stored previous content');
 lcfa_rollback_assert_same('<section>After</section>', $GLOBALS['lcfa_test_posts'][123]['post_content'], 'rollback preview should not write post content');
 
+$GLOBALS['lcfa_test_posts'][123]['post_status'] = 'draft';
+
 $restored = $restore_rollback->invoke($instance, $audit_id, false);
 lcfa_rollback_assert_true(!empty($restored['ok']), 'rollback apply should succeed for previous post content');
 lcfa_rollback_assert_same('<section>Before</section>', $GLOBALS['lcfa_test_posts'][123]['post_content'], 'rollback apply should restore previous post content');
+lcfa_rollback_assert_same('publish', $GLOBALS['lcfa_test_posts'][123]['post_status'], 'rollback apply should restore the previous page status');
 lcfa_rollback_assert_same('2026-05-27 12:00:00', LCFA_Settings::$records[$audit_id]['restored_at'] ?? '', 'rollback apply should mark the record as restored');
 
 $created_result = [

@@ -102,7 +102,7 @@ $hero = $presenter->build('connections', [
     'preferred_client' => 'codex',
 ]);
 
-lcfa_assert_same('Connections', $hero['title'] ?? '', 'hero presenter should keep the approved tab title');
+lcfa_assert_same('Connect a Coding Agent', $hero['title'] ?? '', 'connections hero should name the user goal');
 lcfa_assert_same('connections', $hero['tab'] ?? '', 'hero presenter should keep the current tab key');
 lcfa_assert_true(count($hero['marks'] ?? []) >= 2, 'hero presenter should expose compact stack marks');
 lcfa_assert_true(count($hero['chips'] ?? []) >= 4, 'hero presenter should expose compact stack chips');
@@ -125,8 +125,8 @@ $setup_hero = $presenter->build('setup', [
     'preferred_client' => 'codex',
 ]);
 
-lcfa_assert_same('Bridge Setup', $setup_hero['title'] ?? '', 'setup hero should keep the approved tab title');
-lcfa_assert_same('LiveCanvas AI Bridge prepares the site, verifies the stack, and gets your coding agent ready for guided page changes.', $setup_hero['subtitle'] ?? '', 'setup hero subtitle should explain what AI Bridge actually does');
+lcfa_assert_same('Get Started', $setup_hero['title'] ?? '', 'setup hero should use the primary onboarding label');
+lcfa_assert_same('Check the LiveCanvas stack, confirm this project, then connect a coding agent.', $setup_hero['subtitle'] ?? '', 'setup hero subtitle should state the three onboarding stages');
 
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
@@ -163,8 +163,12 @@ lcfa_assert_contains('lcfa-hero-details', $output, 'hero should render inline de
 lcfa_assert_true(strpos($output, 'lcfa-hero-mark-label') === false, 'hero marks should render as icon-only badges without visible labels');
 lcfa_assert_contains('aria-label="Details"', $output, 'hero details toggle should stay accessible after switching to an icon-only control');
 lcfa_assert_true(strpos($output, 'Stack snapshot') === false, 'hero should stop rendering stack snapshot copy');
-lcfa_assert_contains('lcfa-kicker-brand', $output, 'hero kicker should render the LiveCanvas brand mark');
+lcfa_assert_contains('lcfa-product-id__brand', $output, 'product identity should render the LiveCanvas brand mark');
 lcfa_assert_contains('lcfa-logo-livecanvas', $output, 'hero kicker should use the full LiveCanvas logo');
 lcfa_assert_false(strpos($output, 'lcfa-logo-livecanvas-micro') !== false, 'hero stack should stop rendering the separate LiveCanvas micro logo');
+
+$admin_v2_css = (string) file_get_contents(LCFA_DIR . 'assets/admin-v2.css');
+lcfa_assert_contains('.lcfa-hero-details-panel:not([open]) > .lcfa-hero-details', $admin_v2_css, 'closed hero details should not occupy layout space');
+lcfa_assert_contains('.lcfa-hero-details-panel[open]', $admin_v2_css, 'open hero details should have an explicit responsive width');
 
 echo "PASS\n";

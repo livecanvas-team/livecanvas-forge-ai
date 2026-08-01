@@ -183,4 +183,17 @@ $read_only_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $read_
 lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'preview'), 'read-only session should validate for preview scope');
 lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'write'), 'explicit read-only session should not validate for write scope');
 
+$opencode_pairing = LCFA_MCP_Session_Manager::start_pairing([
+    'client' => 'opencode',
+    'project_label' => 'OpenCode Project',
+    'site_fingerprint' => 'site-fp',
+]);
+lcfa_assert_true(strpos((string) ($opencode_pairing['message'] ?? ''), 'OpenCode') !== false, 'pairing guidance should name OpenCode');
+$opencode_approve = LCFA_MCP_Session_Manager::approve_pairing((string) $opencode_pairing['pairing_id']);
+lcfa_assert_true(strpos((string) ($opencode_approve['message'] ?? ''), 'OpenCode') !== false, 'approval guidance should name OpenCode');
+lcfa_assert_same('opencode', $opencode_approve['client'] ?? '', 'approval result should preserve the OpenCode client identity');
+$opencode_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $opencode_pairing['pairing_id'], (string) $opencode_pairing['device_secret']);
+lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $opencode_status['session_token'], 'read'), 'OpenCode session should validate');
+lcfa_assert_same('opencode', $GLOBALS['lcfa_test_connections']['preferred_client'] ?? '', 'OpenCode session usage should store the correct preferred client');
+
 echo "PASS\n";

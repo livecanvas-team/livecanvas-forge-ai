@@ -8,17 +8,21 @@ final class LCFA_Connection_Bundle_Builder {
         $mode           = $this->normalize_mode((string) ($payload['mode'] ?? 'local'));
         $common         = is_array($payload['common'] ?? null) ? $payload['common'] : [];
         $workspace_root = $this->normalize_workspace_root((string) ($payload['workspace_root'] ?? ''), $common, $mode);
+        $mcp_url        = $this->normalize_remote_url((string) ($payload['client_payload']['url'] ?? ($common['mcp_url'] ?? '')));
+        $oauth_resource = $this->normalize_remote_url((string) ($common['oauth_resource'] ?? $mcp_url));
         $command_input  = trim((string) ($payload['client_payload']['command'] ?? ''));
         $command        = $this->normalize_command($this->tokenize_command($command_input), $workspace_root, $mode);
         $command_string = $this->join_shell_tokens($command);
         $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $workspace_root, $mode);
         $claude_connection_target = $this->normalize_claude_target($payload, $client);
-        $server_name = $this->resolve_server_name($client, $mode, $common, $command);
-        $agent_start_tool = $this->build_connection_handoff_tool($environment, $command);
-        $handoff_package_tool = $this->build_handoff_package_tool($environment, $command);
-        $codex_config_snippet = $client === 'codex' ? $this->build_codex_config_snippet($command, $environment, $server_name) : '';
+        $server_name = $this->resolve_server_name($client, $mode, $common, $command, $mcp_url);
+        $agent_start_tool = $this->build_connection_handoff_tool($environment, $command, $mcp_url);
+        $handoff_package_tool = $this->build_handoff_package_tool($environment, $command, $mcp_url);
+        $codex_config_snippet = $client === 'codex'
+            ? $this->build_codex_config_snippet($command, $environment, $server_name, $mcp_url, $oauth_resource)
+            : '';
 
-        $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment, $server_name);
+        $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment, $server_name, $mcp_url, $oauth_resource);
 
         return [
             'client'              => $client,
@@ -28,6 +32,8 @@ final class LCFA_Connection_Bundle_Builder {
             'workspace_root'      => $workspace_root,
             'connection_strategy' => (string) ($common['connection_strategy'] ?? ($mode === 'remote' ? 'remote-rest' : 'local-mcp')),
             'mcp_adapter_url'     => (string) ($common['mcp_adapter_url'] ?? ''),
+            'mcp_url'             => $mcp_url,
+            'oauth_resource'      => $oauth_resource,
             'remote_site_url'     => (string) ($common['remote_site_url'] ?? ''),
             'command'             => $command,
             'command_string'      => $command_string,
@@ -38,8 +44,8 @@ final class LCFA_Connection_Bundle_Builder {
             'codex_project_config_path' => $client === 'codex' ? ($mode === 'local' && $workspace_root !== '' ? $workspace_root . '/.codex/config.toml' : '.codex/config.toml') : '',
             'environment'         => $environment,
             'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment, $server_name),
-            'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment, $server_name),
-            'smoke_test_command'  => $this->build_smoke_test_command($environment, $command, $server_name),
+            'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment, $server_name, $mcp_url, $oauth_resource),
+            'smoke_test_command'  => $this->build_smoke_test_command($environment, $command, $server_name, $mcp_url),
             'agent_start_tool'    => $agent_start_tool,
             'connection_handoff_tool' => $agent_start_tool,
             'handoff_package_tool' => $handoff_package_tool,
@@ -79,7 +85,21 @@ final class LCFA_Connection_Bundle_Builder {
         return $mode === 'remote' ? 'remote' : 'local';
     }
 
-    private function resolve_server_name(string $client, string $mode, array $common, array $command): string {
+    private function normalize_remote_url(string $url): string {
+        $url = trim($url);
+
+        return function_exists('esc_url_raw') ? esc_url_raw($url) : $url;
+    }
+
+    private function resolve_server_name(string $client, string $mode, array $common, array $command, string $mcp_url = ''): string {
+        if ($client === 'codex' && $mode === 'remote' && (string) ($common['connection_strategy'] ?? '') === 'oauth-direct' && $mcp_url !== '') {
+            $host = sanitize_key(str_replace('.', '-', (string) wp_parse_url($mcp_url, PHP_URL_HOST)));
+            $fingerprint = sanitize_key((string) ($common['site_fingerprint'] ?? ''));
+            $suffix = $fingerprint !== '' ? '-' . substr($fingerprint, 0, 8) : '';
+
+            return substr('livecanvas-' . ($host !== '' ? $host : 'site') . $suffix, 0, 64);
+        }
+
         if ($client === 'codex' && $mode === 'remote' && (string) ($common['connection_strategy'] ?? '') === 'ai-bridge-session') {
             return 'livecanvas-ai-bridge';
         }
@@ -396,7 +416,7 @@ final class LCFA_Connection_Bundle_Builder {
         }
     }
 
-    private function build_download_files(string $client, string $mode, string $claude_connection_target, array $command, array $environment, string $server_name): array {
+    private function build_download_files(string $client, string $mode, string $claude_connection_target, array $command, array $environment, string $server_name, string $mcp_url = '', string $oauth_resource = ''): array {
         switch ($client) {
             case 'opencode':
                 return [[
@@ -411,6 +431,14 @@ final class LCFA_Connection_Bundle_Builder {
                     'content' => $this->build_cursor_config($command, $environment),
                 ]];
             case 'codex':
+                if ($mcp_url !== '') {
+                    return [[
+                        'name'    => 'livecanvas-ai-bridge.codex.toml',
+                        'mime'    => 'text/plain',
+                        'content' => $this->build_codex_config_snippet($command, $environment, $server_name, $mcp_url, $oauth_resource),
+                    ]];
+                }
+
                 return [[
                     'name'    => 'livecanvas-forge.codex.sh',
                     'mime'    => 'text/x-shellscript',
@@ -449,6 +477,7 @@ final class LCFA_Connection_Bundle_Builder {
                     'type'        => 'local',
                     'command'     => $command,
                     'enabled'     => true,
+                    'timeout'     => 60000,
                     'environment' => (object) $environment,
                 ],
             ],
@@ -526,12 +555,12 @@ final class LCFA_Connection_Bundle_Builder {
             . "\n";
     }
 
-    private function build_client_shortcut(string $client, string $mode, string $claude_connection_target, array $command, array $environment, string $server_name): array {
+    private function build_client_shortcut(string $client, string $mode, string $claude_connection_target, array $command, array $environment, string $server_name, string $mcp_url = '', string $oauth_resource = ''): array {
         switch ($client) {
             case 'codex':
                 return [
                     'title'   => __('Codex shortcut', 'livecanvas-forge-ai'),
-                    'command' => $this->build_codex_register_command($command, $environment, $server_name),
+                    'command' => $this->build_codex_register_command($command, $environment, $server_name, $mcp_url, $oauth_resource),
                 ];
             case 'claude':
                 if ($claude_connection_target === 'desktop_app') {
@@ -557,7 +586,7 @@ final class LCFA_Connection_Bundle_Builder {
         }
     }
 
-    private function build_codex_register_command(array $command, array $environment, string $server_name): string {
+    private function build_codex_register_command(array $command, array $environment, string $server_name, string $mcp_url = '', string $oauth_resource = ''): string {
         $lines = [
             'LCFA_CODEX_BIN=""',
             'if command -v codex >/dev/null 2>&1; then',
@@ -568,9 +597,26 @@ final class LCFA_Connection_Bundle_Builder {
             '',
             'if [ -n "$LCFA_CODEX_BIN" ]; then',
             '  "$LCFA_CODEX_BIN" mcp remove ' . $server_name . ' >/dev/null 2>&1 || true',
-            '  "$LCFA_CODEX_BIN" mcp add ' . $server_name . ' \\',
         ];
 
+        if ($mcp_url !== '') {
+            $lines[] = '  "$LCFA_CODEX_BIN" mcp add ' . $server_name
+                . ' --url ' . $this->quote_shell_value($mcp_url)
+                . ' --oauth-resource ' . $this->quote_shell_value($oauth_resource !== '' ? $oauth_resource : $mcp_url);
+            $lines[] = '  echo "Codex MCP server ' . $server_name . ' registered for Direct OAuth. Run: $LCFA_CODEX_BIN mcp login --scopes mcp ' . $server_name . '"';
+            $lines[] = 'else';
+            $lines[] = "  cat <<'EOF'";
+            $lines[] = 'Codex CLI not found. Add this MCP server to the project .codex/config.toml, then reopen Codex:';
+            $lines[] = '';
+            $lines[] = $this->build_codex_config_snippet($command, $environment, $server_name, $mcp_url, $oauth_resource);
+            $lines[] = 'EOF';
+            $lines[] = '  exit 1';
+            $lines[] = 'fi';
+
+            return implode("\n", $lines);
+        }
+
+        $lines[] = '  "$LCFA_CODEX_BIN" mcp add ' . $server_name . ' \\';
         foreach ($environment as $key => $value) {
             $lines[] = '    --env ' . $key . '=' . $this->quote_shell_value($value) . ' \\';
         }
@@ -594,13 +640,24 @@ final class LCFA_Connection_Bundle_Builder {
         return implode("\n", $lines);
     }
 
-    private function build_codex_config_snippet(array $command, array $environment, string $server_name = 'livecanvas-forge'): string {
+    private function build_codex_config_snippet(array $command, array $environment, string $server_name = 'livecanvas-forge', string $mcp_url = '', string $oauth_resource = ''): string {
+        if ($mcp_url !== '') {
+            return implode("\n", [
+                '[mcp_servers.' . $server_name . ']',
+                'url = ' . $this->quote_toml_string($mcp_url),
+                'oauth_resource = ' . $this->quote_toml_string($oauth_resource !== '' ? $oauth_resource : $mcp_url),
+                'default_tools_approval_mode = "writes"',
+            ]);
+        }
+
         $command_bin = $command[0] ?? 'node';
         $args = array_slice($command, 1);
         $lines = [
             '[mcp_servers.' . $server_name . ']',
             'command = ' . $this->quote_toml_string($command_bin),
             'args = [' . implode(', ', array_map([$this, 'quote_toml_string'], $args)) . ']',
+            'startup_timeout_sec = 60',
+            'default_tools_approval_mode = "writes"',
             '',
             '[mcp_servers.' . $server_name . '.env]',
         ];
@@ -646,7 +703,14 @@ final class LCFA_Connection_Bundle_Builder {
         return implode("\n", $lines) . "\n";
     }
 
-    private function build_smoke_test_command(array $environment, array $command, string $server_name = 'livecanvas-forge'): string {
+    private function build_smoke_test_command(array $environment, array $command, string $server_name = 'livecanvas-forge', string $mcp_url = ''): string {
+        if ($mcp_url !== '') {
+            return "codex mcp get " . $server_name
+                . " || /Applications/Codex.app/Contents/Resources/codex mcp get " . $server_name
+                . "\n# Authenticate once with: codex mcp login --scopes mcp " . $server_name
+                . "\n# Then reopen the project and call livecanvas-forge-ai/get-connection-handoff.";
+        }
+
         if ($this->uses_secure_ai_bridge_remote($environment, $command)) {
             return "codex mcp get " . $server_name . " || /Applications/Codex.app/Contents/Resources/codex mcp get " . $server_name . "\n# Then reopen Codex, approve the pending AI Bridge session in WordPress, and ask Codex to call get_connection_handoff.";
         }
@@ -680,14 +744,14 @@ final class LCFA_Connection_Bundle_Builder {
         return implode("\n", $lines);
     }
 
-    private function build_connection_handoff_tool(array $environment, array $command): string {
-        return $this->uses_wordpress_mcp_remote_proxy($environment, $command)
+    private function build_connection_handoff_tool(array $environment, array $command, string $mcp_url = ''): string {
+        return $mcp_url !== '' || $this->uses_wordpress_mcp_remote_proxy($environment, $command)
             ? 'livecanvas-forge-ai/get-connection-handoff'
             : 'get_connection_handoff';
     }
 
-    private function build_handoff_package_tool(array $environment, array $command): string {
-        return $this->uses_wordpress_mcp_remote_proxy($environment, $command)
+    private function build_handoff_package_tool(array $environment, array $command, string $mcp_url = ''): string {
+        return $mcp_url !== '' || $this->uses_wordpress_mcp_remote_proxy($environment, $command)
             ? 'livecanvas-forge-ai/get-agent-handoff-package'
             : 'get_agent_handoff_package';
     }

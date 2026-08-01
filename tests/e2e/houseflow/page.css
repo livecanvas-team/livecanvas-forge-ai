@@ -1,0 +1,17 @@
+#houseflow-page .houseflow-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+
+#houseflow-page .houseflow-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #houseflow-page .houseflow-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

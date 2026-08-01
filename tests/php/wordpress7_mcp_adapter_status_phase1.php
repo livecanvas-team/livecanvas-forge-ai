@@ -20,6 +20,9 @@ function untrailingslashit(string $value): string {
     return rtrim($value, '/\\');
 }
 
+function wp_register_ability(string $name, array $args = []): void {
+}
+
 eval('namespace WP\\MCP\\Core { class McpAdapter {} }');
 eval('namespace WP\\MCP\\Transport { class HttpTransport {} }');
 eval('namespace WP\\MCP\\Infrastructure\\ErrorHandling { class ErrorLogMcpErrorHandler {} }');

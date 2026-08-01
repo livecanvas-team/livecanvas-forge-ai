@@ -2389,6 +2389,16 @@ final class LCFA_Ability_Registry {
         if ($status === '') {
             $status = 'unknown';
         }
+        $connection_strategy = sanitize_key((string) ($connections['connection_strategy'] ?? ''));
+        $oauth_identity = class_exists('LCFA_OAuth_Server', false)
+            ? LCFA_OAuth_Server::get_current_identity()
+            : [];
+        $oauth_direct = $connection_strategy === 'oauth-direct' || $oauth_identity !== [];
+        $auth_method = $oauth_direct ? 'oauth_direct' : (
+            $connection_strategy === 'ai-bridge-session'
+                ? 'ai_bridge_session'
+                : ($mode === 'local' ? 'legacy_mcp_token' : 'wordpress_ability')
+        );
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
@@ -2397,7 +2407,7 @@ final class LCFA_Ability_Registry {
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
             __('Then call livecanvas-forge-ai/get-agent-handoff-package with {"limit":5} only if you need the full runbook, smoke tests, ability diagnostics, MCP status, AI status, or recent run summary.', 'livecanvas-forge-ai'),
             __('Then run read-only checks starting with livecanvas-forge-ai/get-snapshot, livecanvas-forge-ai/get-ability-diagnostics, and livecanvas-forge-ai/get-runs when available.', 'livecanvas-forge-ai'),
-            __('Verify the returned site_identity before running any write ability; a different Site ID means this Codex chat targets another WordPress site.', 'livecanvas-forge-ai'),
+            __('Verify the returned site_identity before running any write ability; a different Site ID means this coding-agent project targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
             __('For small edits, prefer content-patch-preview/content-patch-apply over rewriting an entire page.', 'livecanvas-forge-ai'),
@@ -2424,7 +2434,13 @@ final class LCFA_Ability_Registry {
             'client'         => $client,
             'mode'           => $mode,
             'status'         => $status,
-            'transport'      => 'wordpress_ability',
+            'transport'      => $oauth_direct ? 'wordpress_mcp_oauth' : 'wordpress_ability',
+            'auth_method'    => $auth_method,
+            'client_id'      => sanitize_text_field((string) ($oauth_identity['client_id'] ?? '')),
+            'scopes'         => array_values(array_map('sanitize_key', (array) ($oauth_identity['scopes'] ?? []))),
+            'oauth_resource' => $oauth_direct && class_exists('LCFA_OAuth_Storage', false)
+                ? LCFA_OAuth_Storage::resource_url()
+                : '',
             'site_identity'  => [
                 'site_url' => function_exists('home_url') ? home_url('/') : '',
                 'rest_base' => function_exists('rest_url') ? rest_url('lcfa/v1/') : '',

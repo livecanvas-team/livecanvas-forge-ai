@@ -320,7 +320,7 @@ lcfa_assert_contains('data-lcfa-connections-panel="remote"', $output, 'connectio
 lcfa_assert_contains('data-lcfa-connections-panel="advanced"', $output, 'connections tab should render an advanced settings placeholder');
 lcfa_assert_contains('lcfa-codex-fast-path', $output, 'connections tab should render Codex fast path as the primary default panel');
 lcfa_assert_contains('Connect Codex', $output, 'connections tab should show the Codex one-click entry point by default');
-lcfa_assert_contains('Other clients', $output, 'connections tab should keep non-Codex clients behind a secondary panel');
+lcfa_assert_contains('Other coding agents', $output, 'connections tab should keep non-Codex agents behind a secondary panel');
 lcfa_assert_same(0, $remote_client->status_calls, 'initial connections render should not call remote status eagerly');
 lcfa_assert_same(0, $context_builder->mcp_status_calls, 'initial connections render should not call mcp status eagerly for secondary panels');
 lcfa_assert_same(0, $context_builder->bootstrap_calls, 'initial connections render should not build bootstrap payload eagerly');

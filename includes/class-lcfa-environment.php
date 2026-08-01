@@ -17,6 +17,16 @@ final class LCFA_Environment {
 
         $current_theme = wp_get_theme();
 
+        $mcp_adapter_status = $this->get_mcp_adapter_status();
+        $oauth_direct_status = class_exists('LCFA_OAuth_Server', false)
+            ? (new LCFA_OAuth_Server())->get_status($mcp_adapter_status)
+            : [
+                'available' => false,
+                'dependencies' => false,
+                'strategy' => 'ai-bridge-session',
+                'message' => __('The bundled OAuth runtime is unavailable.', 'livecanvas-forge-ai'),
+            ];
+
         $this->snapshot_cache = [
             'livecanvas_installed'    => $this->is_plugin_installed('livecanvas'),
             'livecanvas_active'       => $this->is_livecanvas_active(),
@@ -36,7 +46,8 @@ final class LCFA_Environment {
             'woocommerce_active'      => class_exists('WooCommerce'),
             'picostrap_candidates'    => $this->find_theme_candidates('picostrap'),
             'picowind_candidates'     => $this->find_theme_candidates('picowind'),
-            'mcp_adapter'             => $this->get_mcp_adapter_status(),
+            'mcp_adapter'             => $mcp_adapter_status,
+            'oauth_direct'            => $oauth_direct_status,
             'ai_bridge_updates'       => class_exists('LCFA_GitHub_Updater')
                 ? (new LCFA_GitHub_Updater($this))->get_update_state()
                 : [],
@@ -51,16 +62,29 @@ final class LCFA_Environment {
         $error_handler = 'WP\\MCP\\Infrastructure\\ErrorHandling\\ErrorLogMcpErrorHandler';
         $observability_handler = 'WP\\MCP\\Infrastructure\\Observability\\NullMcpObservabilityHandler';
         $classes = [
+            'abilities_api' => function_exists('wp_register_ability'),
             'adapter'       => class_exists($adapter_class),
             'http_transport' => class_exists($http_transport),
             'error_handler' => class_exists($error_handler),
             'observability' => class_exists($observability_handler),
         ];
         $available = !in_array(false, $classes, true);
+        $version = defined('WP_MCP_VERSION')
+            ? (string) WP_MCP_VERSION
+            : (defined($adapter_class . '::VERSION') ? (string) constant($adapter_class . '::VERSION') : '');
+        $oauth_direct = class_exists('LCFA_OAuth_Server', false)
+            ? (new LCFA_OAuth_Server())->get_status(['available' => $available])
+            : [
+                'available' => false,
+                'dependencies' => false,
+                'strategy' => 'ai-bridge-session',
+            ];
 
         return [
             'available' => $available,
+            'version' => $version,
             'classes'   => $classes,
+            'oauth_direct' => $oauth_direct,
             'custom_server' => [
                 'id'        => 'livecanvas-forge-ai',
                 'namespace' => 'livecanvas-forge-ai',
@@ -190,7 +214,7 @@ final class LCFA_Environment {
         $name       = strtolower($theme->get('Name'));
         $slug       = strtolower($this->get_livecanvas_editor_config_slug());
 
-        foreach ([$stylesheet, $template, $name, $slug] as $value) {
+        foreach ([$stylesheet, $template, $name] as $value) {
             if (strpos($value, 'picowind') !== false || strpos($value, 'daisyui') !== false) {
                 return 'picowind';
             }
@@ -200,7 +224,38 @@ final class LCFA_Environment {
             }
         }
 
+        // LiveCanvas exposes a default Bootstrap editor slug even on unrelated
+        // themes. Treat it as framework evidence only when the active theme
+        // ships its own LiveCanvas configuration.
+        if ($this->active_theme_declares_livecanvas_config()) {
+            if (strpos($slug, 'picowind') !== false || strpos($slug, 'daisyui') !== false || strpos($slug, 'tailwind') !== false) {
+                return 'picowind';
+            }
+
+            if (strpos($slug, 'picostrap') !== false || strpos($slug, 'bootstrap') !== false) {
+                return 'picostrap';
+            }
+        }
+
         return 'unknown';
+    }
+
+    private function active_theme_declares_livecanvas_config(): bool {
+        $directories = [];
+        if (function_exists('get_stylesheet_directory')) {
+            $directories[] = (string) get_stylesheet_directory();
+        }
+        if (function_exists('get_template_directory')) {
+            $directories[] = (string) get_template_directory();
+        }
+
+        foreach (array_unique(array_filter($directories)) as $directory) {
+            if (is_file(trailingslashit($directory) . 'livecanvas/configuration.php')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function detect_site_mode(): string {

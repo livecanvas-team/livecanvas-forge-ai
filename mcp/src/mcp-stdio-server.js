@@ -90,21 +90,99 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
     const toolName = message.params && message.params.name ? message.params.name : ''
     const args = message.params && message.params.arguments ? message.params.arguments : {}
     const result = await tools.invoke(toolName, args)
+    const responseResult = formatToolResultForMcp(toolName, result)
 
     writeResponse(message.id, {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result, null, 2)
+          text: JSON.stringify(responseResult, null, 2)
         }
       ],
-      structuredContent: result
+      structuredContent: responseResult
     }, debugLogPath, format)
 
     return
   }
 
   writeError(message.id, -32601, `Unsupported method "${method}"`, debugLogPath, format)
+}
+
+function formatToolResultForMcp(toolName, result) {
+  if (toolName !== 'content_patch_preview' && toolName !== 'content_patch_apply') {
+    return result
+  }
+
+  const wrapped = isPlainObject(result) && isPlainObject(result.result)
+  const source = wrapped ? result.result : result
+
+  if (!isPlainObject(source)) {
+    return result
+  }
+
+  const data = isPlainObject(source.data) ? source.data : {}
+  const patch = isPlainObject(source.content_patch) ? source.content_patch : {}
+  const audit = isPlainObject(data.audit)
+    ? data.audit
+    : (isPlainObject(source.audit) ? source.audit : {})
+  const publicPreview = isPlainObject(data.public_preview)
+    ? data.public_preview
+    : (isPlainObject(source.public_preview) ? source.public_preview : {})
+  const frameworkValidation = compactFrameworkValidation(source.framework_validation)
+  const compact = {
+    ok: source.ok !== false,
+    action: source.action || '',
+    mode: source.mode || (toolName === 'content_patch_preview' ? 'preview' : 'apply'),
+    message: source.message || '',
+    summary: source.summary || '',
+    target_type: source.target_type || '',
+    target_id: source.target_id || 0,
+    target_title: source.target_title || '',
+    operation: patch.operation || source.operation || '',
+    match_count: numberOrZero(patch.match_count ?? source.match_count),
+    changed: Boolean(patch.changed ?? source.changed),
+    framework_validation: frameworkValidation,
+    warnings: Array.isArray(source.warnings) ? source.warnings : [],
+    frontend_url: source.frontend_url || data.frontend_url || '',
+    edit_url: source.edit_url || data.edit_url || '',
+    preview_url: source.preview_url || publicPreview.url || '',
+    preview_expires_at: publicPreview.expires_at || '',
+    audit_id: source.audit_id || audit.id || '',
+    rollback_available: Boolean(source.rollback_available ?? audit.rollback_available),
+    rollback_reference: isPlainObject(audit.rollback_reference) ? audit.rollback_reference : {},
+    response_detail: 'compact',
+    omitted_fields: ['existing_html', 'patched_html', 'diff_html']
+  }
+
+  return wrapped ? { ...result, result: compact } : compact
+}
+
+function compactFrameworkValidation(validation) {
+  if (!isPlainObject(validation)) {
+    return {}
+  }
+
+  const data = isPlainObject(validation.data) ? validation.data : {}
+  const warnings = Array.isArray(validation.warnings)
+    ? validation.warnings
+    : (Array.isArray(data.warnings) ? data.warnings : [])
+
+  return {
+    ok: validation.ok !== false,
+    valid: Object.prototype.hasOwnProperty.call(data, 'valid') ? Boolean(data.valid) : validation.ok !== false,
+    framework: data.framework || validation.framework || '',
+    validation_error: data.validation_error || validation.validation_error || '',
+    warnings
+  }
+}
+
+function numberOrZero(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function extractMessages(buffer) {
@@ -274,5 +352,6 @@ function previewChunk(chunk) {
 }
 
 module.exports = {
-  runStdioServer
+  runStdioServer,
+  formatToolResultForMcp
 }

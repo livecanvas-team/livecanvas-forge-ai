@@ -1045,16 +1045,24 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
 
   return {
     list() {
-      return tools.map(({ name, description, inputSchema, outputSchema }) => ({
-        name,
-        description,
-        inputSchema,
-        outputSchema: outputSchema || objectOutputSchema(),
-        annotations: {
-          lcfaCacheTtlMs: isReadMostlyTool(name) ? 30000 : 0,
-          lcfaCacheScope: isReadMostlyTool(name) ? 'site_session' : 'none'
+      return tools.map(({ name, description, inputSchema, outputSchema }) => {
+        const readOnly = isReadMostlyTool(name)
+
+        return {
+          name,
+          description,
+          inputSchema,
+          outputSchema: outputSchema || objectOutputSchema(),
+          annotations: {
+            readOnlyHint: readOnly,
+            destructiveHint: !readOnly,
+            idempotentHint: readOnly,
+            openWorldHint: name === 'visual_check',
+            lcfaCacheTtlMs: readOnly ? 30000 : 0,
+            lcfaCacheScope: readOnly ? 'site_session' : 'none'
+          }
         }
-      }))
+      })
     },
     has(name) {
       return toolMap.has(name)
@@ -1226,7 +1234,7 @@ function noThemeEditsBlockedResult(toolName) {
 }
 
 function isReadMostlyTool(name) {
-  return /^(get_|list_|preview_|validate_|content_patch_preview|theme_file_read|theme_file_backups|wp_debug|visual_check)/.test(name)
+  return /^(get_|list_|read_|scan_|preview_|validate_|suggest_|content_patch_preview|theme_file_read|theme_file_preview_write|theme_file_backups|picostrap_compile_preview|wp_debug|visual_check|asset_discovery)/.test(name)
 }
 
 function contentPatchSchema() {

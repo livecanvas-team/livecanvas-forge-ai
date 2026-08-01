@@ -123,6 +123,8 @@ async function run() {
     /first prompt/i,
     'get_connection_handoff should describe the first prompt'
   )
+  assert.equal(connectionHandoff.annotations.readOnlyHint, true, 'get_connection_handoff should be declared read-only to MCP clients')
+  assert.equal(connectionHandoff.annotations.destructiveHint, false, 'get_connection_handoff should not require write approval')
 
   const blockPatternLibrary = tools.find((tool) => tool.name === 'get_block_pattern_library')
   assert.ok(blockPatternLibrary, 'get_block_pattern_library should be registered')
@@ -163,6 +165,8 @@ async function run() {
     /dedicated write action/i,
     'apply_native_pattern_page should make write behavior clear'
   )
+  assert.equal(nativePatternPageApply.annotations.readOnlyHint, false, 'apply_native_pattern_page should be declared as a write tool')
+  assert.equal(nativePatternPageApply.annotations.destructiveHint, true, 'apply_native_pattern_page should keep Codex write approval enabled')
 
   const contentPatchPreview = tools.find((tool) => tool.name === 'content_patch_preview')
   assert.ok(contentPatchPreview, 'content_patch_preview should be registered')

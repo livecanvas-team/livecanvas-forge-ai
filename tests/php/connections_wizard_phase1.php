@@ -130,6 +130,22 @@ function lcfa_assert_false(bool $condition, string $message): void {
     }
 }
 
+final class LCFA_MCP_Session_Manager {
+    public static array $pending = [];
+
+    public static function get_pending_pairings(): array {
+        return self::$pending;
+    }
+
+    public static function get_public_sessions(): array {
+        return [];
+    }
+
+    public static function has_active_session(): bool {
+        return false;
+    }
+}
+
 require LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
 require LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
 require LCFA_DIR . 'includes/class-lcfa-direct-agent-onboarding.php';
@@ -192,6 +208,8 @@ lcfa_assert_same('generated', $bundle['status'] ?? '', 'bundle should expose gen
 $opencode_config = json_decode((string) ($bundle['workspace_files'][0]['content'] ?? ''), true);
 lcfa_assert_true(is_array($opencode_config), 'local OpenCode bundle should serialize a valid JSON config');
 lcfa_assert_same('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', $opencode_config['mcp']['livecanvas-forge']['command'][1] ?? '', 'local OpenCode bundle should resolve the MCP script to an absolute workspace path');
+lcfa_assert_true(in_array('--agent=opencode', $opencode_config['mcp']['livecanvas-forge']['command'] ?? [], true), 'OpenCode config should identify itself during secure pairing');
+lcfa_assert_same(60000, $opencode_config['mcp']['livecanvas-forge']['timeout'] ?? 0, 'OpenCode should allow the npm MCP package enough time to start');
 lcfa_assert_true(strpos((string) ($bundle['command_string'] ?? ''), '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js') !== false, 'connection summary should display the absolute MCP script path');
 
 $fallback_bundle = $builder->build([
@@ -241,6 +259,8 @@ lcfa_assert_same('/Users/commander/Studio/consultala', $legacy_saved_bundle['env
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), 'mcp add livecanvas-forge') !== false, 'codex bundles should expose the registration shortcut');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex shortcut should auto-detect the desktop app CLI when codex is not in PATH');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex shortcut should include a config.toml fallback snippet');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['codex_config_snippet'] ?? ''), 'startup_timeout_sec = 60') !== false, 'Codex stdio config should allow the npm MCP package enough time to start');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['codex_config_snippet'] ?? ''), 'default_tools_approval_mode = "writes"') !== false, 'Codex should run read-only MCP tools without prompting and still require approval for writes');
 lcfa_assert_same((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), (string) ($legacy_saved_bundle['copy_command_string'] ?? ''), 'codex bundles should prefer copying the Codex shortcut, not the raw MCP command');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex helper script should auto-detect the desktop app CLI');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex helper script should include a config.toml fallback snippet');
@@ -623,18 +643,18 @@ lcfa_assert_same('setup', $default_tab_method->invoke($admin_instance, [
 lcfa_assert_same('connections', $post_setup_redirect_method->invoke($admin_instance), 'setup completion should redirect to Connections');
 
 $genesis_hero = $hero_content_method->invoke($admin_instance, 'genesis');
-lcfa_assert_same('Project Brief & Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should explain the real purpose of the tab');
-lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'after your coding agent connection is ready') !== false, 'genesis hero subtitle should position Genesis after Connections');
+lcfa_assert_same('Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should use the concise primary navigation label');
+lcfa_assert_true(strpos((string) ($genesis_hero['subtitle'] ?? ''), 'reusable sequence of pages') !== false, 'build-plan subtitle should explain the reusable implementation sequence');
 
 $studio_hero = $hero_content_method->invoke($admin_instance, 'studio');
-lcfa_assert_same('AI Studio', $studio_hero['title'] ?? '', 'studio hero should expose the operational Studio tab');
-lcfa_assert_true(strpos((string) ($studio_hero['subtitle'] ?? ''), 'MCP exposure') !== false, 'studio hero subtitle should mention MCP exposure');
+lcfa_assert_same('Abilities & Runs', $studio_hero['title'] ?? '', 'advanced studio hero should name the operational content it exposes');
+lcfa_assert_true(strpos((string) ($studio_hero['subtitle'] ?? ''), 'write exposure') !== false, 'advanced studio subtitle should mention write exposure');
 
 ob_start();
 $internal_tabs_method->invoke($admin_instance, 'studio', ['completed' => true]);
 $internal_tabs_markup = (string) ob_get_clean();
 lcfa_assert_true(strpos($internal_tabs_markup, 'tab=studio') !== false, 'internal tabs should include the AI Studio tab');
-lcfa_assert_true(strpos($internal_tabs_markup, 'AI Studio') !== false, 'internal tabs should label the AI Studio tab');
+lcfa_assert_true(strpos($internal_tabs_markup, 'Abilities &amp; Runs') !== false || strpos($internal_tabs_markup, 'Abilities & Runs') !== false, 'advanced navigation should label the abilities and runs tab');
 
 $admin_codex_command = (string) $admin_codex_command_method->invoke($admin_instance, [
     'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio',
@@ -802,8 +822,38 @@ lcfa_assert_true(strpos($codex_restart_markup, 'Reload Codex, approve pairing, t
 lcfa_assert_true(strpos($codex_restart_markup, 'Codex setup command') !== false, 'remote Codex restart state should expose the setup command as the only necessary manual block');
 lcfa_assert_true(strpos($codex_restart_markup, 'Copy Codex setup prompt') !== false, 'remote Codex setup should provide a single copy-ready prompt for Codex');
 lcfa_assert_true(strpos($codex_restart_markup, 'Create or update `.codex/config.toml`') !== false, 'remote Codex setup prompt should tell Codex to write the local project config');
+lcfa_assert_true(strpos($codex_restart_markup, 'project is trusted') !== false, 'remote Codex setup should explain that untrusted projects ignore project MCP config');
 lcfa_assert_true(strpos($codex_restart_markup, '/var/www/example.com/.codex/config.toml') === false, 'remote Codex setup should not show the remote server path as the Codex project config');
 lcfa_assert_true(strpos($codex_restart_markup, 'get_connection_handoff') !== false, 'remote Codex restart fallback should still show the first handoff tool');
+
+LCFA_MCP_Session_Manager::$pending = [[
+    'pairing_id' => 'pair_test',
+    'project_label' => 'Remote Example',
+    'user_code' => 'ABCD-1234',
+    'client' => 'codex',
+    'expires_at' => '2030-01-01T00:00:00+00:00',
+]];
+ob_start();
+$codex_fast_path_panel_method->invoke(
+    $admin_instance,
+    $complete_remote_state,
+    [
+        'client' => 'codex',
+        'mode' => 'remote',
+        'connection_strategy' => 'ai-bridge-session',
+        'agent_start_tool' => 'get_connection_handoff',
+        'codex_config_snippet' => '[mcp_servers.livecanvas-ai-bridge]',
+    ],
+    ['remote_site_url' => 'https://remote.example', 'remote_project_label' => 'Remote Example'],
+    'remote',
+    ['available' => false, 'reason' => 'missing', 'path' => '']
+);
+$codex_pairing_markup = (string) ob_get_clean();
+LCFA_MCP_Session_Manager::$pending = [];
+lcfa_assert_true(strpos($codex_pairing_markup, 'Approve the matching Codex pairing') !== false, 'pending pairing should replace restart instructions with the immediate authorization step');
+lcfa_assert_true(strpos($codex_pairing_markup, 'Review pending Codex pairing') !== false, 'pending pairing should become the primary CTA');
+lcfa_assert_true(strpos($codex_pairing_markup, 'href="#lcfa-secure-codex-pairing-sessions"') !== false, 'pending pairing CTA should jump directly to the matching session panel');
+lcfa_assert_false(strpos($codex_pairing_markup, 'lcfa-codex-setup-command" open') !== false, 'technical setup prompt should collapse after Codex reaches WordPress');
 
 ob_start();
 $power_mode_status_card_method->invoke($admin_instance, [
@@ -828,7 +878,7 @@ $codex_other_clients_panel_method->invoke($admin_instance, [
     'workspace_root' => '/Users/commander/Studio/consultala',
 ], 'local');
 $other_clients_markup = (string) ob_get_clean();
-lcfa_assert_true(strpos($other_clients_markup, 'Other clients') !== false, 'Codex fast path should keep a secondary Other clients entry');
+lcfa_assert_true(strpos($other_clients_markup, 'Other coding agents') !== false, 'Codex fast path should keep a secondary coding-agent entry');
 lcfa_assert_true(strpos($other_clients_markup, 'OpenCode') !== false && strpos($other_clients_markup, 'Claude') !== false && strpos($other_clients_markup, 'Cursor') !== false, 'Other clients should keep the existing wizard choices available');
 lcfa_assert_false(strpos($other_clients_markup, 'value="codex"') !== false, 'Other clients should not duplicate the primary Codex fast path');
 

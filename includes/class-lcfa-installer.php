@@ -4,6 +4,7 @@ defined('ABSPATH') || exit;
 
 final class LCFA_Installer {
     private const PICOWIND_LATEST_RELEASE_API = 'https://api.github.com/repos/livecanvas-team/picowind/releases/latest';
+    private const MCP_ADAPTER_RELEASE_ZIP = 'https://github.com/WordPress/mcp-adapter/releases/latest/download/mcp-adapter.zip';
 
     private LCFA_Environment $environment;
 
@@ -115,6 +116,58 @@ final class LCFA_Installer {
         }
 
         return 'activated';
+    }
+
+    public function ensure_mcp_adapter_active() {
+        $plugin_file = $this->environment->find_plugin_file_by_slug('mcp-adapter');
+
+        if (!$plugin_file) {
+            $package_url = (string) apply_filters(
+                'lcfa_mcp_adapter_package_url',
+                self::MCP_ADAPTER_RELEASE_ZIP
+            );
+            $package_url = $this->normalize_package_url($package_url);
+            if ($package_url === '') {
+                return new WP_Error(
+                    'lcfa_mcp_adapter_package_missing',
+                    __('The official WordPress MCP Adapter package URL is unavailable.', 'livecanvas-forge-ai')
+                );
+            }
+
+            $this->load_upgrader_dependencies();
+            $upgrader = new Plugin_Upgrader(new Automatic_Upgrader_Skin());
+            $result = $upgrader->install($package_url);
+            if (is_wp_error($result)) {
+                return $result;
+            }
+            if (!$result) {
+                return new WP_Error(
+                    'lcfa_mcp_adapter_install_failed',
+                    __('WordPress MCP Adapter installation failed.', 'livecanvas-forge-ai')
+                );
+            }
+
+            if (method_exists($this->environment, 'refresh_plugin_caches')) {
+                $this->environment->refresh_plugin_caches();
+            }
+            $plugin_file = $this->environment->find_plugin_file_by_slug('mcp-adapter');
+        }
+
+        if (!$plugin_file) {
+            return new WP_Error(
+                'lcfa_mcp_adapter_missing',
+                __('WordPress MCP Adapter is still unavailable after installation.', 'livecanvas-forge-ai')
+            );
+        }
+
+        if ($this->environment->is_plugin_active($plugin_file)) {
+            return 'already-active';
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        $result = activate_plugin($plugin_file);
+
+        return is_wp_error($result) ? $result : 'activated';
     }
 
     private function install_framework_package(string $framework) {

@@ -1,0 +1,31 @@
+{
+  "framework": "picostrap",
+  "colors": {
+    "primary": "#7047a8",
+    "secondary": "#c38fca",
+    "success": "#5c8f73",
+    "info": "#8f78c5",
+    "warning": "#e2a33b",
+    "danger": "#b64e62",
+    "light": "#faf6ef",
+    "dark": "#211a32",
+    "body_bg": "#fbf8f2",
+    "body_color": "#272032"
+  },
+  "typography": {
+    "font_family_base": "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "headings_font_family": "Playfair Display, Georgia, serif",
+    "font_size_base": "1rem",
+    "line_height_base": "1.65"
+  },
+  "radius": {
+    "border_radius": "1rem",
+    "border_radius_sm": "0.75rem",
+    "border_radius_lg": "1.75rem"
+  },
+  "buttons": {
+    "btn_padding_y": "0.8rem",
+    "btn_padding_x": "1.5rem",
+    "btn_border_radius": "999px"
+  }
+}

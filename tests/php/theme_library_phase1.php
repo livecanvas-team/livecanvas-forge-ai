@@ -236,12 +236,18 @@ lcfa_theme_assert_false(!empty($rollback_missing['ok']), 'rollback should fail w
 $rest_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-rest-api.php');
 $ability_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-ability-registry.php');
 $importer_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-importer.php');
+$admin_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-admin.php');
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "register_rest_route('lcfa/v1', '/theme-library/import'"), 'REST API should register Theme Library import endpoint');
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "'permission_callback' => [\$this, 'can_manage']"), 'Theme Library REST endpoints should use admin-only can_manage permission');
 lcfa_theme_assert_true(is_string($ability_source) && !str_contains($ability_source, 'theme-library'), 'Theme Library endpoints should not be MCP-public abilities in v1');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, "'status'     => 'failed'"), 'failed Theme Library imports should be tracked for rollback visibility');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'ensure_picowind_runtime'), 'Theme Library import should initialize the Picowind/WindPress runtime');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'windpress_source_css_ready'), 'Theme Library import should not store Tailwind source CSS as compiled WindPress cache');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'THEME_LIBRARY_PREVIEW_TRANSIENT_PREFIX'), 'Theme Library UI should remember a successful package preview per user');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Preview and validate the package before installing it.'), 'Theme Library UI should require preview before the first child-theme install');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$operation === \'import\' && $show_force'), 'Theme Library UI should show force update only for existing imports');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-filter="all"'), 'Theme Library category controls should be functional buttons');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-category='), 'Theme Library cards should expose their filter category');
 
 @unlink($valid_zip);
 @unlink($not_picowind_zip);

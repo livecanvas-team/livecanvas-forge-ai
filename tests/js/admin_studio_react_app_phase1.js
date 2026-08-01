@@ -8,6 +8,10 @@ const admin = fs.readFileSync(
   '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/includes/class-lcfa-admin.php',
   'utf8'
 );
+const adminV2Css = fs.readFileSync(
+  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/admin-v2.css',
+  'utf8'
+);
 
 const scriptTokens = [
   'wp.element',
@@ -22,6 +26,11 @@ const scriptTokens = [
   'STORAGE_PREFIX',
   'useStoredState',
   'clearStoredViewPreferences',
+  'StudioViewNavigation',
+  'DeveloperToolsPanel',
+  "useStoredState('activeView', 'overview')",
+  'data-lcfa-studio-view',
+  'data-lcfa-studio-active-view',
   'AlertsPanel',
   'ContractPanel',
   'IntegrationTestPlanPanel',
@@ -223,6 +232,13 @@ const adminTokens = [
 for (const token of adminTokens) {
   if (!admin.includes(token)) {
     console.error(`admin should enqueue/localize Studio React shell token ${token}`);
+    process.exit(1);
+  }
+}
+
+for (const token of ['lcfa-workspace-viewbar', 'calc(50% - 4px)']) {
+  if (!adminV2Css.includes(token)) {
+    console.error(`admin-v2.css should include responsive Studio navigation token ${token}`);
     process.exit(1);
   }
 }

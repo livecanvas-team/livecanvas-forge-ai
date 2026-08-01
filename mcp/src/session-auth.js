@@ -45,9 +45,10 @@ class SessionAuth {
   }
 
   async startPairing() {
+    const agentLabel = formatAgentLabel(this.config.agent)
     const response = await this.request('POST', 'mcp/pairing/start', {
       client: this.config.agent || 'codex',
-      project_label: this.config.projectLabel || 'Codex project',
+      project_label: this.config.projectLabel || `${agentLabel} project`,
       site_fingerprint: this.config.siteFingerprint || '',
       scopes: normalizePairingScopes(this.config.pairingScopes)
     })
@@ -65,7 +66,7 @@ class SessionAuth {
     }
     writeCache(this.cachePath, cache)
 
-    return pairingPending(cache)
+    return pairingPending(cache, this.config.agent)
   }
 
   async checkPairing(cached) {
@@ -113,7 +114,7 @@ class SessionAuth {
       user_code: payload.user_code || cached.user_code || '',
       verification_url: cached.verification_url || '',
       pairing_expires_at: payload.expires_at || cached.pairing_expires_at || ''
-    })
+    }, this.config.agent)
   }
 
   async request(method, route, body = null) {
@@ -156,7 +157,9 @@ async function parseResponse(response) {
   }
 }
 
-function pairingPending(cache) {
+function pairingPending(cache, agent = 'codex') {
+  const agentLabel = formatAgentLabel(agent)
+
   return {
     ok: false,
     auth_required: true,
@@ -166,7 +169,7 @@ function pairingPending(cache) {
     user_code: cache.user_code || '',
     verification_url: cache.verification_url || '',
     expires_at: cache.pairing_expires_at || '',
-    message: `Approve Codex pairing in WordPress. User code: ${cache.user_code || 'pending'}`
+    message: `Approve ${agentLabel} pairing in WordPress. User code: ${cache.user_code || 'pending'}`
   }
 }
 
@@ -181,13 +184,27 @@ function pairingError(payload) {
 }
 
 function resolveCachePath(config) {
+  const agent = String(config.agent || 'codex').trim().toLowerCase()
+  const agentKey = agent === 'codex' ? '' : `|${agent}`
   const key = crypto
     .createHash('sha256')
-    .update(`${config.restBase}|${config.siteFingerprint || ''}|${config.projectLabel || ''}`)
+    .update(`${config.restBase}|${config.siteFingerprint || ''}|${config.projectLabel || ''}${agentKey}`)
     .digest('hex')
     .slice(0, 24)
 
   return path.join(os.homedir(), '.livecanvas-ai-bridge', `${key}.json`)
+}
+
+function formatAgentLabel(agent) {
+  const labels = {
+    codex: 'Codex',
+    opencode: 'OpenCode',
+    claude: 'Claude',
+    cursor: 'Cursor',
+    generic: 'coding agent'
+  }
+
+  return labels[String(agent || 'codex').trim().toLowerCase()] || 'coding agent'
 }
 
 function readCache(filePath) {
