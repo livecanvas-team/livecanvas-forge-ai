@@ -1,8 +1,9 @@
 const fs = require('fs');
 const vm = require('vm');
+const { repoPath } = require('./test-paths.cjs');
 
 const script = fs.readFileSync(
-  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/admin.js',
+  repoPath('assets', 'admin.js'),
   'utf8'
 );
 

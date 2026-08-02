@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 error_reporting(E_ALL);
 
-$css = file_get_contents('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/admin.css');
+$css = file_get_contents(dirname(__DIR__, 2) . '/assets/admin.css');
 
 if ($css === false) {
     fwrite(STDERR, "failed to read admin.css\n");

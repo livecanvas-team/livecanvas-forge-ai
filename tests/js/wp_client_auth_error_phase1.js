@@ -1,6 +1,7 @@
 const assert = require('assert')
 const http = require('http')
-const { WPClient } = require('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/src/wp-client.js')
+const { repoPath } = require('./test-paths.cjs')
+const { WPClient } = require(repoPath('mcp', 'src', 'wp-client.js'))
 
 const server = http.createServer((req, res) => {
   res.statusCode = 401

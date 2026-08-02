@@ -1,6 +1,7 @@
 const assert = require('assert')
+const { repoPath } = require('./test-paths.cjs')
 
-const { WPClient } = require('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/src/wp-client.js')
+const { WPClient } = require(repoPath('mcp', 'src', 'wp-client.js'))
 
 class CaptureClient extends WPClient {
   constructor(config = {}) {

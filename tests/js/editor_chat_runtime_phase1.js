@@ -1,9 +1,10 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const { repoPath } = require('./test-paths.cjs');
 
 const script = fs.readFileSync(
-  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/editor-chat.js',
+  repoPath('assets', 'editor-chat.js'),
   'utf8'
 );
 

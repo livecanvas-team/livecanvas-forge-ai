@@ -1,15 +1,16 @@
 const fs = require('fs');
+const { repoPath } = require('./test-paths.cjs');
 
 const script = fs.readFileSync(
-  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/studio-app.js',
+  repoPath('assets', 'studio-app.js'),
   'utf8'
 );
 const admin = fs.readFileSync(
-  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/includes/class-lcfa-admin.php',
+  repoPath('includes', 'class-lcfa-admin.php'),
   'utf8'
 );
 const adminV2Css = fs.readFileSync(
-  '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/assets/admin-v2.css',
+  repoPath('assets', 'admin-v2.css'),
   'utf8'
 );
 

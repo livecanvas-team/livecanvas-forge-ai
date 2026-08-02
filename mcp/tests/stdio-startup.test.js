@@ -1,9 +1,19 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const http = require('node:http')
+const os = require('node:os')
 const { spawn } = require('node:child_process')
+const path = require('node:path')
 const packageVersion = require('../package.json').version
 const initializeTimeoutMs = 6000
 const delayedPreflightMs = 10000
+const repoRoot = path.resolve(__dirname, '..', '..')
+const mcpScript = path.join(repoRoot, 'mcp', 'bin', 'livecanvas-forge-mcp.js')
+const wpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lcfa-stdio-wordpress-'))
+
+fs.mkdirSync(path.join(wpRoot, 'wp-content'))
+fs.writeFileSync(path.join(wpRoot, 'wp-config.php'), '<?php // MCP startup fixture.\n')
+process.on('exit', () => fs.rmSync(wpRoot, { recursive: true, force: true }))
 
 async function run() {
   const requests = []
@@ -36,17 +46,17 @@ async function run() {
   const address = server.address()
   const restBase = `http://127.0.0.1:${address.port}/wp-json/lcfa/v1/`
 
-  const child = spawn('node', [
-    '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js',
+  const child = spawn(process.execPath, [
+    mcpScript,
     '--transport=stdio',
     '--agent=opencode'
   ], {
-    cwd: '/Users/commander/Studio/consultala',
+    cwd: repoRoot,
     env: {
       ...process.env,
       LCFA_REST_BASE: restBase,
       LCFA_MCP_TOKEN: 'test-token',
-      LCFA_WP_ROOT: '/Users/commander/Studio/consultala'
+      LCFA_WP_ROOT: wpRoot
     },
     stdio: ['pipe', 'pipe', 'pipe']
   })
@@ -77,17 +87,17 @@ async function run() {
   assert.match(output, new RegExp(`"version":"${packageVersion.replace(/\./g, '\\.')}"`), 'stdio server should report the package version instead of a hardcoded stale value')
   assert.ok(requests.includes('/wp-json/lcfa/v1/mcp/workspace-root') || requests.includes('/wp-json/lcfa/v1/mcp/workspace-root/'), 'bridge should still attempt workspace sync')
 
-  const lfChild = spawn('node', [
-    '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js',
+  const lfChild = spawn(process.execPath, [
+    mcpScript,
     '--transport=stdio',
     '--agent=opencode'
   ], {
-    cwd: '/Users/commander/Studio/consultala',
+    cwd: repoRoot,
     env: {
       ...process.env,
       LCFA_REST_BASE: restBase,
       LCFA_MCP_TOKEN: 'test-token',
-      LCFA_WP_ROOT: '/Users/commander/Studio/consultala'
+      LCFA_WP_ROOT: wpRoot
     },
     stdio: ['pipe', 'pipe', 'pipe']
   })
@@ -102,17 +112,17 @@ async function run() {
 
   assert.match(lfOutput, /"protocolVersion":"2024-11-05"/, 'stdio server should also accept LF-only headers used by some MCP clients')
 
-  const ndjsonChild = spawn('node', [
-    '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js',
+  const ndjsonChild = spawn(process.execPath, [
+    mcpScript,
     '--transport=stdio',
     '--agent=opencode'
   ], {
-    cwd: '/Users/commander/Studio/consultala',
+    cwd: repoRoot,
     env: {
       ...process.env,
       LCFA_REST_BASE: restBase,
       LCFA_MCP_TOKEN: 'test-token',
-      LCFA_WP_ROOT: '/Users/commander/Studio/consultala'
+      LCFA_WP_ROOT: wpRoot
     },
     stdio: ['pipe', 'pipe', 'pipe']
   })

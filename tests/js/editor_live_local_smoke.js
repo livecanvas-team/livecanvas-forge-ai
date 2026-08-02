@@ -1,10 +1,11 @@
 const assert = require('assert');
 const { execFileSync } = require('child_process');
+const { repoPath } = require('./test-paths.cjs');
 
 const loginUrl = process.env.LCFA_LOGIN_URL || 'http://localhost:8887/studio-auto-login?redirect_to=http%3A%2F%2Flocalhost%3A8887%2Fwp-admin%2F';
 const editorUrl = process.env.LCFA_EDITOR_URL || 'http://localhost:8887/?page_id=137&lc_action_launch_editing=1&from_url=%2Fwp-admin%2Fedit.php%3Fpost_type%3Dpage&from_page_edit=1';
 const prompt = process.env.LCFA_EDITOR_PROMPT || 'fammi una hero più chiara per questa pagina';
-const artifactsDir = '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/tests/artifacts';
+const artifactsDir = repoPath('tests', 'artifacts');
 
 function run(command, args = []) {
   return execFileSync(command, args, { encoding: 'utf8' }).trim();

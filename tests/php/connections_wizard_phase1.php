@@ -281,7 +281,7 @@ function trailingslashit(string $value): string { return rtrim($value, '/\\') . 
 function untrailingslashit(string $value): string { return rtrim($value, '/\\'); }
 function wp_json_encode($value, int $flags = 0): string { return (string) json_encode($value, $flags); }
 function wp_normalize_path(string $value): string { return str_replace('\\', '/', $value); }
-require '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/includes/class-lcfa-connection-bundle-builder.php';
+require '__LCFA_CONNECTION_BUNDLE_BUILDER__';
 $builder = new LCFA_Connection_Bundle_Builder();
 $bundle = $builder->build([
     'client' => 'opencode',
@@ -303,6 +303,12 @@ $bundle = $builder->build([
 ]);
 echo json_encode($bundle, JSON_UNESCAPED_SLASHES);
 PHP;
+
+$runtime_only_script = str_replace(
+    '__LCFA_CONNECTION_BUNDLE_BUILDER__',
+    addslashes(LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php'),
+    $runtime_only_script
+);
 
 $runtime_only_output = shell_exec('php <<\'PHP\'' . "\n" . $runtime_only_script . "\nPHP\n");
 $runtime_only_bundle = json_decode((string) $runtime_only_output, true);
