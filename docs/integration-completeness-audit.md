@@ -1,7 +1,7 @@
 # LiveCanvas Stack Integration Completeness Audit
 
 Last reviewed: 2026-08-02
-Plugin baseline: LiveCanvas AI Bridge 0.1.28
+Plugin baseline: LiveCanvas AI Bridge 0.1.31 release candidate
 
 ## Purpose
 
@@ -64,7 +64,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 |---|---|---|---|
 | Detect Picostrap parent/child theme and Bootstrap editor | Local E2E | environment detection and Houseflow fixture | Version matrix beyond the inspected 3.8.6 release |
 | Generate Bootstrap/LiveCanvas markup | Local E2E | framework validator and Houseflow generation flow | More component fixtures and accessibility assertions |
-| Preview/apply design system | Contract tested | Picostrap design-system executor | Verify Customizer values and Sass variables remain bidirectionally coherent |
+| Preview/apply design system | Contract tested | Native `SCSSvar_*` registry validation, deterministic Sass manifest, optimistic fingerprints, MCP compile-before-apply, atomic Customizer/`bundle.css` write, and unified rollback tests | Real LocalWP and remote E2E across supported Picostrap layouts |
 | Read/write SCSS in allowed child-theme paths | Contract tested | theme file bridge and Picostrap compile service | Restrictive-host filesystem E2E |
 | Compile Sass without committing a failed bundle | Contract tested + local E2E | compile service and Houseflow scripts | Test different Sass/Picostrap build layouts |
 | Prevent Tailwind runtime from hiding Bootstrap components | Local E2E | `LCFA_Framework_Compatibility`, visible nav/accordion checks | Regression matrix with cache plugins and minifiers |
@@ -133,7 +133,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 
 ### P1: Required For Complete Editorial Coverage
 
-1. Verify Picostrap Customizer/Sass/design-token synchronization rather than treating file compilation alone as completion.
+1. Run the now contract-tested Picostrap Customizer/Sass/bundle transaction on real LocalWP and paired remote sites, including injected compile and stale-preview failures.
 2. Add a managed browser readiness check and guided Chromium install for `visual_check`.
 3. Add remote build orchestration or a cloud runner for hosts where PHP cannot compile or write build artifacts.
 4. Add backup retention and orphan cleanup for abandoned Theme Library installs.
@@ -160,3 +160,17 @@ The 2026-08-02 LocalWP acceptance run used LiveCanvas, Picowind, WindPress 3.2.8
 7. Baseline `main.css` remained present; imported `theme.json` and compiled cache files were absent again after rollback, and the import state changed to `rolled_back`.
 
 This run closes the deterministic local build gate. If the compiler or cache verification is unavailable, the importer now returns `build_required` or `build_failed` and never reports the theme as ready.
+
+## Picostrap Design-System Contract Evidence
+
+The 0.1.31 contract suite closes the previous code-level synchronization gap:
+
+1. Preview reads the active Picostrap Customizer registry and produces deterministic current/proposed Sass manifests.
+2. Unsafe, unknown, or unregistered `SCSSvar_*` values are rejected before compilation.
+3. The MCP runtime compiles the proposed manifest before any WordPress write.
+4. Apply rejects stale previews and mismatched compile fingerprints.
+5. Customizer theme mods and the child-theme `css-output/bundle.css` are applied as one guarded operation.
+6. A failed bundle write restores the previous Customizer state.
+7. The audit rollback restores both Customizer values and the previous compiled bundle/version metadata.
+
+This is contract evidence, not production qualification. Real-site Picostrap E2E and host/version matrix work remain open.

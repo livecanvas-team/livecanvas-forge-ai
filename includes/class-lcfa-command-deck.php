@@ -1273,7 +1273,23 @@ final class LCFA_Command_Deck {
             ],
         ];
 
-        if ($restore_type === 'global_shell_parts') {
+        if ($restore_type === 'picostrap_design_system') {
+            $snapshot = is_array($restore['snapshot'] ?? null)
+                ? $this->sanitize_picostrap_design_system_snapshot((array) $restore['snapshot'])
+                : [];
+            $restore_result = $this->design_system_apply->restore($snapshot, $dry_run);
+
+            $result['ok'] = !empty($restore_result['ok']);
+            $result['target_type'] = 'design_system';
+            $result['target_title'] = sanitize_text_field((string) ($record['target_title'] ?? 'Picostrap design system'));
+            $result['proposed_html'] = (string) wp_json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            $result['diff_html'] = $this->build_diff('', $result['proposed_html']);
+            $result['data']['restore_result'] = $restore_result;
+
+            if (empty($result['ok'])) {
+                $result['message'] = (string) ($restore_result['message'] ?? __('Picostrap design-system rollback failed.', 'livecanvas-forge-ai'));
+            }
+        } elseif ($restore_type === 'global_shell_parts') {
             $parts = is_array($restore['parts'] ?? null) ? $restore['parts'] : [];
             $current_parts = [];
             $previous_parts = [];
@@ -1748,6 +1764,23 @@ final class LCFA_Command_Deck {
             ])));
             $ok = $ok && !empty($steps['design_system_apply']['ok']);
             $warnings = array_merge($warnings, (array) ($steps['design_system_apply']['warnings'] ?? []));
+
+            if (!$dry_run && empty($steps['design_system_apply']['ok'])) {
+                return [
+                    'ok' => false,
+                    'action' => 'site_foundation_run',
+                    'mode' => 'apply',
+                    'execution_target' => 'local',
+                    'target_type' => 'site_foundation',
+                    'message' => __('Site foundation stopped before content writes because the design system did not apply safely.', 'livecanvas-forge-ai'),
+                    'summary' => __('Picostrap design-system validation or compilation failed; global shell and pages were left unchanged.', 'livecanvas-forge-ai'),
+                    'warnings' => array_values(array_unique($warnings)),
+                    'data' => [
+                        'steps' => $steps,
+                        'stopped_at' => 'design_system_apply',
+                    ],
+                ];
+            }
         }
 
         if (empty($payload['skip_global_shell'])) {
@@ -2288,13 +2321,13 @@ HTML,
     private function extract_foundation_design_payload(array $payload): array {
         $design_payload = is_array($payload['design_system'] ?? null) ? (array) $payload['design_system'] : [];
 
-        foreach (['framework', 'preset', 'colors', 'typography', 'radius', 'buttons', 'font_assets'] as $key) {
+        foreach (['framework', 'preset', 'colors', 'typography', 'radius', 'buttons', 'components', 'forms', 'navbars', 'scss_variables', 'unset_scss_variables', 'clear_existing_scss_variables', 'font_assets', 'compiled_css', 'compiled_source_fingerprint', 'expected_state_fingerprint'] as $key) {
             if (array_key_exists($key, $payload) && !array_key_exists($key, $design_payload)) {
                 $design_payload[$key] = $payload[$key];
             }
         }
 
-        foreach (['preset', 'colors', 'typography', 'radius', 'buttons', 'font_assets'] as $key) {
+        foreach (['preset', 'colors', 'typography', 'radius', 'buttons', 'components', 'forms', 'navbars', 'scss_variables', 'unset_scss_variables', 'clear_existing_scss_variables', 'font_assets'] as $key) {
             if (!empty($design_payload[$key])) {
                 return $design_payload;
             }
@@ -3213,6 +3246,16 @@ HTML,
             return $record;
         }
 
+        if (($rollback['type'] ?? '') === 'picostrap_design_system') {
+            $record['restore']['snapshot'] = $this->sanitize_picostrap_design_system_snapshot(
+                is_array($result['data']['picostrap_design_system_rollback'] ?? null)
+                    ? (array) $result['data']['picostrap_design_system_rollback']
+                    : []
+            );
+
+            return $record;
+        }
+
         $record['restore'] = array_merge($record['restore'], [
             'target_type'      => sanitize_key((string) ($rollback['target_type'] ?? ($result['target_type'] ?? ''))),
             'target_id'        => absint($rollback['target_id'] ?? ($result['target_id'] ?? 0)),
@@ -3240,6 +3283,16 @@ HTML,
         $target_type = sanitize_key((string) ($result['target_type'] ?? ''));
         $target_id = absint($result['target_id'] ?? 0);
         $existing_html = (string) ($result['existing_html'] ?? '');
+
+        if ($target_type === 'design_system' && is_array($result['data']['picostrap_design_system_rollback'] ?? null)) {
+            $snapshot = $this->sanitize_picostrap_design_system_snapshot((array) $result['data']['picostrap_design_system_rollback']);
+
+            return [
+                'available' => $snapshot !== [],
+                'type' => 'picostrap_design_system',
+                'framework' => 'picostrap',
+            ];
+        }
 
         if ($target_type === 'global_shell') {
             $parts = is_array($result['data']['parts'] ?? null) ? $result['data']['parts'] : [];
@@ -3287,6 +3340,67 @@ HTML,
         return [
             'available' => false,
             'type'      => '',
+        ];
+    }
+
+    private function sanitize_picostrap_design_system_snapshot(array $snapshot): array {
+        if (sanitize_key((string) ($snapshot['framework'] ?? '')) !== 'picostrap') {
+            return [];
+        }
+
+        $sanitize_theme_mods = static function (array $theme_mods): array {
+            $sanitized = [];
+
+            foreach ($theme_mods as $key => $state) {
+                $key = (string) $key;
+                if (!preg_match('/^[A-Za-z0-9_-]{1,160}$/', $key) || !is_array($state)) {
+                    continue;
+                }
+
+                $value = $state['value'] ?? null;
+                if (!is_scalar($value) && $value !== null) {
+                    continue;
+                }
+
+                $sanitized[$key] = [
+                    'exists' => !empty($state['exists']),
+                    'value' => is_string($value) ? substr($value, 0, 10000) : $value,
+                ];
+            }
+
+            ksort($sanitized, SORT_STRING);
+
+            return $sanitized;
+        };
+
+        $theme_mods = $sanitize_theme_mods((array) ($snapshot['theme_mods'] ?? []));
+        $bundle_source = is_array($snapshot['bundle'] ?? null) ? (array) $snapshot['bundle'] : [];
+        $bundle_relative_path = ltrim(wp_normalize_path((string) ($bundle_source['bundle_relative_path'] ?? '')), '/');
+        $backup_id = ltrim(wp_normalize_path((string) ($bundle_source['backup_id'] ?? '')), '/');
+
+        if (str_contains($bundle_relative_path, '..') || str_contains($backup_id, '..')) {
+            return [];
+        }
+
+        $bundle = [];
+        if ($bundle_source !== []) {
+            $bundle = [
+                'bundle_relative_path' => substr($bundle_relative_path, 0, 500),
+                'bundle_existed' => !empty($bundle_source['bundle_existed']),
+                'bundle_created' => !empty($bundle_source['bundle_created']),
+                'backup_id' => substr($backup_id, 0, 1000),
+                'theme_mods' => $sanitize_theme_mods((array) ($bundle_source['theme_mods'] ?? [])),
+            ];
+        }
+
+        if ($theme_mods === [] && $bundle === []) {
+            return [];
+        }
+
+        return [
+            'framework' => 'picostrap',
+            'theme_mods' => $theme_mods,
+            'bundle' => $bundle,
         ];
     }
 

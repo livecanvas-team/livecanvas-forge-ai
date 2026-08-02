@@ -27,6 +27,7 @@ These areas have implemented runtime code and automated regression coverage:
 - Audit IDs and rollback for supported Command Deck writes.
 - Targeted content patch preview/apply with failure on missing or ambiguous selectors.
 - Guarded theme-file, media, Picostrap compile, debug/cache, Polylang, and SEO tools behind Full Access scopes.
+- Picostrap design-system preview/compile/apply now uses native Customizer variables, deterministic fingerprints, an atomic bundle write, and unified rollback.
 - GitHub/LiveCanvas-gated plugin update metadata and distribution checks.
 - Theme Library catalog, package validation, child-theme installation, starter-data import, idempotency, and import rollback.
 - Theme Library rollback now preserves the theme active before installation and backs up WindPress options, source CSS, generated CSS, sourcemap, and `theme.json` on disk with checksum verification.
@@ -62,10 +63,10 @@ The following work remains intentionally open:
 
 The current automated baseline contains:
 
-- 64 PHP regression scripts.
+- 67 PHP regression scripts.
 - 12 non-GUI admin/runtime JavaScript unit checks.
-- 7 MCP Node test files.
-- PHP lint across 133 PHP files, including tests and bundled compatibility code.
+- 8 MCP Node test files.
+- PHP lint across 138 tracked PHP files, including tests and bundled compatibility code.
 - `git diff --check`.
 - Distribution build and package validation.
 - Manual desktop and 390 px mobile review of the coding-agent setup guide.

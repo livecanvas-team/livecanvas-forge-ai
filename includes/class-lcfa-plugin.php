@@ -87,7 +87,12 @@ final class LCFA_Plugin {
             ? new LCFA_OAuth_Server()
             : null;
         $design_system_build_gateway = new LCFA_Design_System_Build_Gateway($this->local_mcp_bridge);
-        $picostrap_design_system = new LCFA_Design_System_Picostrap_Executor();
+        $picostrap_compile_service = new LCFA_Picostrap_Compile_Service(
+            $this->environment,
+            null,
+            new LCFA_Picostrap_Bundle_Store($this->environment, $this->theme_files_bridge)
+        );
+        $picostrap_design_system = new LCFA_Design_System_Picostrap_Executor($this->environment, $picostrap_compile_service);
         $picowind_design_system = new LCFA_Design_System_Picowind_Executor(
             $this->windpress_bridge,
             $this->theme_files_bridge,
@@ -110,8 +115,8 @@ final class LCFA_Plugin {
         $this->command_deck = new LCFA_Command_Deck($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->remote_client, $design_system_apply, $design_system_compose);
         $this->genesis_executor = new LCFA_Genesis_Executor($this->environment, $this->command_deck);
         $this->block_patterns = new LCFA_Block_Patterns($this->environment);
-        $this->ability_registry = new LCFA_Ability_Registry($this->environment, $this->inventory, $this->context_builder, $this->command_deck, $this->windpress_bridge, $this->ai_client, $this->block_patterns, $this->theme_files_bridge);
-        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor, $this->ability_registry);
+        $this->ability_registry = new LCFA_Ability_Registry($this->environment, $this->inventory, $this->context_builder, $this->command_deck, $this->windpress_bridge, $this->ai_client, $this->block_patterns, $this->theme_files_bridge, $picostrap_compile_service);
+        $this->rest_api    = new LCFA_Rest_Api($this->environment, $this->inventory, $this->windpress_bridge, $this->theme_files_bridge, $this->local_mcp_bridge, $this->context_builder, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor, $this->ability_registry, $picostrap_compile_service);
         $this->admin       = new LCFA_Admin($this->environment, $this->installer, $this->inventory, $this->theme_files_bridge, $this->connection_tester, $this->remote_client, $this->context_builder, $this->connection_onboarding, $this->command_deck, $this->prompt_suggester, $this->genesis_planner, $this->genesis_executor, $this->ability_registry, $design_system_build_gateway);
 
         add_action('plugins_loaded', [$this, 'boot']);

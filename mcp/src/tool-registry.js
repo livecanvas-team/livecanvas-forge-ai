@@ -594,7 +594,20 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           colors: { type: 'object' },
           typography: { type: 'object' },
           radius: { type: 'object' },
-          buttons: { type: 'object' }
+          buttons: { type: 'object' },
+          components: { type: 'object' },
+          forms: { type: 'object' },
+          navbars: { type: 'object' },
+          scss_variables: { type: 'object' },
+          unset_scss_variables: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          clear_existing_scss_variables: { type: 'boolean' },
+          font_assets: { type: 'object' },
+          compiled_css: { type: 'string' },
+          compiled_source_fingerprint: { type: 'string' },
+          expected_state_fingerprint: { type: 'string' }
         }
       },
       invoke: async (argumentsMap = {}) => invokeRunLcCommand(argumentsMap, client, picostrapCompiler)
@@ -1081,34 +1094,229 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
 
 async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {
   const hydratedArguments = await hydrateFrameworkArgument(argumentsMap, client)
-  const response = await client.runCommand(hydratedArguments)
-  const payload = unwrapResultEnvelope(response)
+  const isPicostrap = hydratedArguments.framework === 'picostrap'
 
-  if (!shouldAutoCompilePicostrap(hydratedArguments, payload) || !picostrapCompiler) {
-    return response
+  if (!isPicostrap || hydratedArguments.dry_run === true || hydratedArguments.compiled_css) {
+    return client.runCommand(hydratedArguments)
   }
 
+  if (hydratedArguments.action === 'design_system_compose' && hydratedArguments.auto_apply === true) {
+    const composeResponse = await client.runCommand({
+      ...hydratedArguments,
+      auto_apply: false,
+      dry_run: true
+    })
+    const composePayload = unwrapResultEnvelope(composeResponse)
+
+    if (!composePayload || composePayload.ok === false) {
+      return composeResponse
+    }
+
+    const applyPayload = composePayload.apply_payload && typeof composePayload.apply_payload === 'object'
+      ? composePayload.apply_payload
+      : null
+
+    if (!applyPayload) {
+      return wrapResultEnvelope(composeResponse, transactionFailure(
+        composePayload,
+        'The Picostrap compose preview did not return an apply payload.'
+      ))
+    }
+
+    const applyResponse = await invokePicostrapApplyTransaction({
+      ...applyPayload,
+      action: 'design_system_apply',
+      framework: 'picostrap'
+    }, client, picostrapCompiler)
+    const applyResult = unwrapResultEnvelope(applyResponse)
+    const merged = {
+      ...composePayload,
+      ...applyResult,
+      action: 'design_system_compose',
+      mode: 'apply',
+      preview: composePayload.preview || {},
+      apply_payload: applyPayload,
+      preview_url: composePayload.preview_url || applyResult.preview_url || '',
+      message: applyResult.ok === false
+        ? (applyResult.message || 'Picostrap design system compilation or apply failed.')
+        : 'Design system preview compiled and applied atomically.',
+      summary: applyResult.ok === false
+        ? 'The Picostrap design system was not changed.'
+        : 'Composed, compiled, and applied a synchronized Picostrap design system.',
+      data: {
+        ...(composePayload.data || {}),
+        ...(applyResult.data || {}),
+        supports_apply: true,
+        preview_only: false,
+        auto_applied: applyResult.ok !== false,
+        compose_preview: {
+          preview_url: composePayload.preview_url || '',
+          warnings: normalizeWarnings(composePayload.warnings)
+        }
+      }
+    }
+
+    return wrapResultEnvelope(composeResponse, merged)
+  }
+
+  if (hydratedArguments.action === 'design_system_apply') {
+    return invokePicostrapApplyTransaction(hydratedArguments, client, picostrapCompiler)
+  }
+
+  if (hydratedArguments.action === 'site_foundation_run' && hasPicostrapDesignPayload(hydratedArguments)) {
+    return invokePicostrapFoundationTransaction(hydratedArguments, client, picostrapCompiler)
+  }
+
+  return client.runCommand(hydratedArguments)
+}
+
+async function invokePicostrapFoundationTransaction(argumentsMap, client, picostrapCompiler) {
+  const previewResponse = await client.runCommand({
+    ...argumentsMap,
+    dry_run: true
+  })
+  const previewPayload = unwrapResultEnvelope(previewResponse)
+  const designPreview = previewPayload && previewPayload.data && previewPayload.data.steps
+    ? previewPayload.data.steps.design_system_apply
+    : null
+
+  if (!previewPayload || previewPayload.ok === false || !designPreview || designPreview.ok === false) {
+    return previewResponse
+  }
+
+  if (!picostrapCompiler || typeof picostrapCompiler.compileBundle !== 'function') {
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      'The MCP runtime cannot compile the Picostrap foundation Sass. No foundation writes were made.'
+    ))
+  }
+
+  const manifest = designPreview.data && designPreview.data.compile_manifest
+  if (!manifest || typeof manifest !== 'object') {
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      'The foundation preview did not return a Picostrap compile manifest. No foundation writes were made.'
+    ))
+  }
+
+  let compiled
   try {
-    const compileResult = await picostrapCompiler.buildBundle({
-      force: hydratedArguments.force === true,
-      label: hydratedArguments.label || 'design_system_compose_auto_apply'
-    })
-    const merged = mergeCommandAndCompileResults(payload, compileResult)
-    return wrapResultEnvelope(response, merged)
+    compiled = await picostrapCompiler.compileBundle({ manifest })
   } catch (error) {
-    const merged = mergeCommandAndCompileResults(payload, {
-      ok: false,
-      build_strategy: 'bridge_dart_sass',
-      build_required: true,
-      build_executed: false,
-      warnings: [error instanceof Error ? error.message : String(error)]
-    })
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      `Picostrap foundation Sass compilation failed before apply: ${error instanceof Error ? error.message : String(error)}`
+    ))
+  }
 
-    merged.ok = false
-    merged.message = merged.message || 'Design system applied, but Picostrap bundle compilation failed.'
-    merged.summary = merged.summary || 'Picostrap design system applied, but the bundle was not compiled automatically.'
+  const finalResponse = await client.runCommand({
+    ...argumentsMap,
+    dry_run: false,
+    compiled_css: compiled.css,
+    compiled_source_fingerprint: compiled.source_fingerprint || String(manifest.source_fingerprint || ''),
+    expected_state_fingerprint: String(designPreview.data.current_state_fingerprint || '')
+  })
+  const finalPayload = unwrapResultEnvelope(finalResponse)
 
-    return wrapResultEnvelope(response, merged)
+  return wrapResultEnvelope(finalResponse, {
+    ...finalPayload,
+    data: {
+      ...((finalPayload && finalPayload.data) || {}),
+      compile: {
+        ok: true,
+        build_strategy: compiled.build_strategy || 'bridge_dart_sass_transaction',
+        source_fingerprint: compiled.source_fingerprint || '',
+        compiled_bytes: compiled.compiled_bytes || 0
+      }
+    }
+  })
+}
+
+function hasPicostrapDesignPayload(argumentsMap) {
+  if (argumentsMap.design_system && typeof argumentsMap.design_system === 'object' && Object.keys(argumentsMap.design_system).length > 0) {
+    return true
+  }
+
+  return ['preset', 'colors', 'typography', 'radius', 'buttons', 'components', 'forms', 'navbars', 'scss_variables', 'font_assets']
+    .some((key) => argumentsMap[key] && typeof argumentsMap[key] === 'object' && Object.keys(argumentsMap[key]).length > 0)
+}
+
+async function invokePicostrapApplyTransaction(argumentsMap, client, picostrapCompiler) {
+  const previewArguments = {
+    ...argumentsMap,
+    dry_run: true
+  }
+  delete previewArguments.compiled_css
+  delete previewArguments.compiled_source_fingerprint
+  delete previewArguments.expected_state_fingerprint
+
+  const previewResponse = await client.runCommand(previewArguments)
+  const previewPayload = unwrapResultEnvelope(previewResponse)
+
+  if (!previewPayload || previewPayload.ok === false || previewPayload.target_stack !== 'picostrap') {
+    return previewResponse
+  }
+
+  if (!picostrapCompiler || typeof picostrapCompiler.compileBundle !== 'function') {
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      'The MCP runtime cannot compile Picostrap Sass. No Customizer values were changed.'
+    ))
+  }
+
+  const manifest = previewPayload.data && previewPayload.data.compile_manifest
+  if (!manifest || typeof manifest !== 'object') {
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      'The Picostrap preview did not return a compile manifest. No Customizer values were changed.'
+    ))
+  }
+
+  let compiled
+  try {
+    compiled = await picostrapCompiler.compileBundle({ manifest })
+  } catch (error) {
+    return wrapResultEnvelope(previewResponse, transactionFailure(
+      previewPayload,
+      `Picostrap Sass compilation failed before apply: ${error instanceof Error ? error.message : String(error)}`
+    ))
+  }
+
+  const finalResponse = await client.runCommand({
+    ...argumentsMap,
+    dry_run: false,
+    compiled_css: compiled.css,
+    compiled_source_fingerprint: compiled.source_fingerprint || String(manifest.source_fingerprint || ''),
+    expected_state_fingerprint: String(previewPayload.data.current_state_fingerprint || '')
+  })
+  const finalPayload = unwrapResultEnvelope(finalResponse)
+  const compileMetadata = {
+    ok: true,
+    build_strategy: compiled.build_strategy || 'bridge_dart_sass_transaction',
+    source_fingerprint: compiled.source_fingerprint || '',
+    compiled_bytes: compiled.compiled_bytes || 0
+  }
+
+  return wrapResultEnvelope(finalResponse, {
+    ...finalPayload,
+    data: {
+      ...((finalPayload && finalPayload.data) || {}),
+      compile: compileMetadata
+    }
+  })
+}
+
+function transactionFailure(payload, message) {
+  return {
+    ...(payload || {}),
+    ok: false,
+    mode: 'apply',
+    message,
+    summary: 'Picostrap design system was left unchanged.',
+    build_strategy: 'bridge_dart_sass_transaction',
+    build_required: true,
+    build_executed: false,
+    warnings: uniqueStrings(normalizeWarnings(payload && payload.warnings).concat([message]))
   }
 }
 
@@ -1149,44 +1357,6 @@ async function hydrateFrameworkArgument(argumentsMap, client) {
     }
   } catch (error) {
     return argumentsMap
-  }
-}
-
-function shouldAutoCompilePicostrap(argumentsMap, payload) {
-  if (!payload || payload.ok === false || payload.target_stack !== 'picostrap') {
-    return false
-  }
-
-  if (argumentsMap.action === 'design_system_compose') {
-    return argumentsMap.auto_apply === true && payload.mode === 'apply'
-  }
-
-  if (argumentsMap.action === 'design_system_apply') {
-    return argumentsMap.dry_run !== true && payload.mode === 'apply'
-  }
-
-  return false
-}
-
-function mergeCommandAndCompileResults(commandPayload, compilePayload) {
-  const payload = commandPayload && typeof commandPayload === 'object' ? { ...commandPayload } : {}
-  const warnings = normalizeWarnings(payload.warnings).concat(normalizeWarnings(compilePayload.warnings))
-
-  return {
-    ...payload,
-    ok: Boolean(payload.ok !== false && compilePayload.ok !== false),
-    build_strategy: compilePayload.build_strategy || payload.build_strategy || '',
-    build_required: compilePayload.build_required !== undefined ? compilePayload.build_required : true,
-    build_executed: compilePayload.build_executed === true,
-    bundle_path: compilePayload.bundle_path || '',
-    bundle_url: compilePayload.bundle_url || '',
-    bundle_version: compilePayload.bundle_version || 0,
-    compiled_at: compilePayload.compiled_at || '',
-    warnings: uniqueStrings(warnings),
-    data: {
-      ...(payload.data || {}),
-      compile: compilePayload
-    }
   }
 }
 

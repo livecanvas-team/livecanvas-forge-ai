@@ -83,9 +83,9 @@ final class LCFA_Design_System_Compose {
         ], (array) ($result['data'] ?? []));
 
         $preview_url = $this->design_system_preview->store($composed);
+        $composed['preview_url'] = $preview_url;
 
         if (!$auto_apply) {
-            $composed['preview_url'] = $preview_url;
             return $composed;
         }
 

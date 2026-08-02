@@ -65,7 +65,7 @@ final class LCFA_Rest_Api {
     private LCFA_Theme_Library_Rollback $theme_library_rollback;
     private ?LCFA_Ability_Registry $ability_registry = null;
 
-    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null, ?LCFA_Ability_Registry $ability_registry = null) {
+    public function __construct(LCFA_Environment $environment, LCFA_Inventory $inventory, LCFA_WindPress_Bridge $windpress_bridge, LCFA_Theme_Files_Bridge $theme_files_bridge, LCFA_Local_MCP_Bridge $local_mcp_bridge, LCFA_Context_Builder $context_builder, LCFA_Command_Deck $command_deck, LCFA_Prompt_Suggester $prompt_suggester, LCFA_Genesis_Planner $genesis_planner, ?LCFA_Genesis_Executor $genesis_executor = null, ?LCFA_Ability_Registry $ability_registry = null, ?LCFA_Picostrap_Compile_Service $picostrap_compile_service = null) {
         $this->environment        = $environment;
         $this->inventory          = $inventory;
         $this->windpress_bridge   = $windpress_bridge;
@@ -76,7 +76,7 @@ final class LCFA_Rest_Api {
         $this->prompt_suggester   = $prompt_suggester;
         $this->genesis_planner    = $genesis_planner;
         $this->genesis_executor   = $genesis_executor ?: new LCFA_Genesis_Executor($environment, $command_deck);
-        $this->picostrap_compile_service = new LCFA_Picostrap_Compile_Service($environment);
+        $this->picostrap_compile_service = $picostrap_compile_service ?: new LCFA_Picostrap_Compile_Service($environment);
         $this->content_patch_service = new LCFA_Content_Patch_Service($inventory, $command_deck);
         $this->media_tools = new LCFA_Media_Tools($command_deck);
         $this->debug_cache_tools = new LCFA_Debug_Cache_Tools($environment);
@@ -2202,16 +2202,20 @@ final class LCFA_Rest_Api {
 
         $css = (string) ($payload['css'] ?? '');
 
-        if ($css === '') {
+        if ($css === '' || strlen($css) > 8 * 1024 * 1024) {
             return new WP_REST_Response([
                 'result' => [
                     'ok' => false,
-                    'message' => __('A compiled CSS payload is required.', 'livecanvas-forge-ai'),
+                    'message' => $css === ''
+                        ? __('A compiled CSS payload is required.', 'livecanvas-forge-ai')
+                        : __('The compiled CSS exceeds the 8 MB safety limit.', 'livecanvas-forge-ai'),
                 ],
             ], 400);
         }
 
-        $result = $this->picostrap_compile_service->store_bundle($css);
+        $result = $this->picostrap_compile_service->store_bundle($css, [
+            'source_fingerprint' => sanitize_text_field((string) ($payload['source_fingerprint'] ?? '')),
+        ]);
         $status = !empty($result['ok']) ? 200 : 400;
 
         return new WP_REST_Response([

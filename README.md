@@ -25,6 +25,7 @@ Usable today:
 - create and update LiveCanvas pages with `page_upsert`
 - create and update header/footer partials with `global_shell_apply`
 - apply design-system tokens for Picostrap, Picowind/WindPress, or a custom-theme fallback
+- preview Picostrap Customizer/Sass changes, compile them in the MCP runtime, then apply Customizer values and `bundle.css` atomically with fingerprint checks and rollback
 - run first-pass site foundation workflows with `site_foundation_run`
 - create/update LiveCanvas dynamic templates with native `is_*` conditions, `menu_order` priority, Polylang language, post-specific `lc_use_template_of_slug`, real target preview URLs, and rollback
 - use the AI Bridge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references

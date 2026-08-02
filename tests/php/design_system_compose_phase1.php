@@ -77,7 +77,7 @@ function test_vague_prompt_fails_cleanly(): void {
     lcfa_assert_true(stripos((string) $result['message'], 'more direction') !== false, 'Failure should ask for more direction');
 }
 
-function test_compose_roundtrip_into_apply(): void {
+function test_compose_roundtrip_requires_compiled_bundle(): void {
     $compose = lcfa_compose_service();
 
     $preview = $compose->run([
@@ -97,10 +97,13 @@ function test_compose_roundtrip_into_apply(): void {
         )
     );
 
+    $apply_preview = $apply->run($preview['apply_payload'], true);
     $result = $apply->run($preview['apply_payload'], false);
 
-    lcfa_assert_true(!empty($result['ok']), 'Apply should accept the compose payload without translation');
-    lcfa_assert_same('picosass_handoff', $result['build_strategy'], 'Compose roundtrip should still use Picostrap handoff');
+    lcfa_assert_true(!empty($apply_preview['ok']), 'The compose payload should pass directly into Picostrap apply preview');
+    lcfa_assert_true(empty($result['ok']), 'Direct Picostrap apply should stop until the preview manifest is compiled');
+    lcfa_assert_true(!empty($result['build_required']), 'The rejected direct apply should report that a build is required');
+    lcfa_assert_same('bridge_dart_sass_transaction', $result['build_strategy'], 'Compose roundtrip should require the guarded MCP compile transaction');
 }
 
 function test_command_deck_exposes_and_executes_design_system_compose(): void {
@@ -176,7 +179,7 @@ function test_apply_payload_contains_only_supported_picostrap_buckets(): void {
     );
 }
 
-function test_auto_apply_returns_preview_and_compiler_urls(): void {
+function test_direct_auto_apply_stops_before_uncompiled_write(): void {
     $compose = lcfa_compose_service();
 
     $result = $compose->run([
@@ -186,25 +189,24 @@ function test_auto_apply_returns_preview_and_compiler_urls(): void {
         'auto_apply' => true,
     ]);
 
-    lcfa_assert_true(!empty($result['ok']), 'Auto-apply should succeed');
-    lcfa_assert_same('design_system_compose', $result['action'], 'Auto-apply should preserve compose action');
-    lcfa_assert_same('apply', $result['mode'], 'Auto-apply should switch the mode to apply');
-    lcfa_assert_same('http://localhost:8887/?lcfa_design_preview=1', $result['preview_url'], 'Auto-apply should expose the preview board URL');
-    lcfa_assert_same('http://localhost:8887/', $result['frontend_url'], 'Auto-apply should mirror the preview URL in frontend_url');
-    lcfa_assert_same('http://localhost:8887/?compile_sass=1&sass_nocache=1', $result['compile_url'], 'Auto-apply should expose the compiler URL');
-    lcfa_assert_true(isset($result['preview']['palette']['primary']), 'Auto-apply should keep the preview payload');
-    lcfa_assert_same('#ff2d55', get_theme_mod('SCSSvar_primary', ''), 'Auto-apply should write Picostrap theme mods');
+    lcfa_assert_true(empty($result['ok']), 'Direct PHP auto-apply should stop before an uncompiled write');
+    lcfa_assert_same('design_system_compose', $result['action'], 'Rejected auto-apply should preserve the compose action');
+    lcfa_assert_same('apply', $result['mode'], 'Rejected auto-apply should report the attempted apply mode');
+    lcfa_assert_same('http://localhost:8887/?lcfa_design_preview=1', $result['preview_url'], 'Rejected auto-apply should keep the preview board URL');
+    lcfa_assert_true(isset($result['preview']['palette']['primary']), 'Rejected auto-apply should keep the preview payload');
+    lcfa_assert_true(!empty($result['data']['apply_result']['build_required']), 'Rejected auto-apply should direct the caller to the MCP compile transaction');
+    lcfa_assert_same('', get_theme_mod('SCSSvar_primary', ''), 'Rejected auto-apply must not write Picostrap theme mods');
 }
 
 function run_all_tests(): void {
     test_picostrap_compose_preview();
     test_unsupported_concepts_are_warned_and_dropped();
     test_vague_prompt_fails_cleanly();
-    test_compose_roundtrip_into_apply();
+    test_compose_roundtrip_requires_compiled_bundle();
     test_command_deck_exposes_and_executes_design_system_compose();
     test_unsupported_stack_fails_cleanly();
     test_apply_payload_contains_only_supported_picostrap_buckets();
-    test_auto_apply_returns_preview_and_compiler_urls();
+    test_direct_auto_apply_stops_before_uncompiled_write();
     echo "PASS\n";
 }
 

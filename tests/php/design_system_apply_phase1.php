@@ -324,7 +324,7 @@ if ($scenario === 'picostrap' || $scenario === 'all') {
     ], true);
 
     lcfa_assert_same('design_system_apply', $preview['action'], 'Picostrap preview should expose the action name');
-    lcfa_assert_same('theme_mods', $preview['source_of_truth'], 'Picostrap preview should resolve theme_mods');
+    lcfa_assert_same('picostrap_customizer_theme_mods', $preview['source_of_truth'], 'Picostrap preview should expose the native Customizer source of truth');
     lcfa_assert_true(in_array('SCSSvar_primary', $preview['changed_keys'] ?? [], true), 'Picostrap preview should report SCSSvar_primary');
     lcfa_assert_same([], $GLOBALS['lcfa_test_theme_mods'], 'Picostrap preview must not write theme mods');
 }
@@ -418,7 +418,7 @@ if ($scenario === 'command' || $scenario === 'all') {
 
     lcfa_assert_true(!empty($commandResult['ok']), 'Command deck should execute design_system_apply');
     lcfa_assert_same('design_system_apply', $commandResult['action'], 'Command deck should preserve the design_system_apply action');
-    lcfa_assert_same('theme_mods', $commandResult['source_of_truth'] ?? '', 'Command deck should return the Picostrap source of truth');
+    lcfa_assert_same('picostrap_customizer_theme_mods', $commandResult['source_of_truth'] ?? '', 'Command deck should return the Picostrap source of truth');
     lcfa_assert_true(in_array('SCSSvar_primary', $commandResult['changed_keys'] ?? [], true), 'Command deck should bubble up changed_keys from the design system service');
 }
 

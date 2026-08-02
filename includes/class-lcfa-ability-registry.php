@@ -597,6 +597,9 @@ final class LCFA_Ability_Registry {
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
             'stack_compatibility' => $stack_compatibility,
+            'picostrap_design_system' => is_array($snapshot['snapshot']['picostrap_design_system'] ?? null)
+                ? $snapshot['snapshot']['picostrap_design_system']
+                : [],
         ];
 
         return [
@@ -636,6 +639,9 @@ final class LCFA_Ability_Registry {
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
             'stack_compatibility' => $stack_compatibility,
+            'picostrap_design_system' => is_array($snapshot['snapshot']['picostrap_design_system'] ?? null)
+                ? $snapshot['snapshot']['picostrap_design_system']
+                : [],
         ];
         $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
 
@@ -678,6 +684,9 @@ final class LCFA_Ability_Registry {
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
             'stack_compatibility' => $stack_compatibility,
+            'picostrap_design_system' => is_array($snapshot['snapshot']['picostrap_design_system'] ?? null)
+                ? $snapshot['snapshot']['picostrap_design_system']
+                : [],
         ];
         $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
         $connection_handoff = $this->build_agent_handoff_connection_handoff($summary);
@@ -1461,7 +1470,9 @@ final class LCFA_Ability_Registry {
         }
 
         try {
-            $bundle = $this->picostrap_compile_service->store_bundle($compiled_css);
+            $bundle = $this->picostrap_compile_service->store_bundle($compiled_css, [
+                'source_fingerprint' => sanitize_text_field((string) ($payload['source_fingerprint'] ?? '')),
+            ]);
         } catch (Throwable $throwable) {
             return [
                 'picostrap_compile_apply' => $this->tool_error($throwable->getMessage()),
@@ -2217,6 +2228,7 @@ final class LCFA_Ability_Registry {
                 'source_path'    => ['type' => 'string', 'description' => __('Optional child-theme SCSS path to write before storing the bundle.', 'livecanvas-forge-ai')],
                 'source_content' => ['type' => 'string', 'description' => __('Optional SCSS source content.', 'livecanvas-forge-ai')],
                 'compiled_css'   => ['type' => 'string', 'description' => __('Compiled CSS bundle produced by the MCP runtime.', 'livecanvas-forge-ai')],
+                'source_fingerprint' => ['type' => 'string', 'description' => __('Fingerprint of the Customizer and Sass state used to compile this bundle.', 'livecanvas-forge-ai')],
             ],
         ];
     }
@@ -2460,6 +2472,9 @@ final class LCFA_Ability_Registry {
             ? $summary['stack_compatibility']
             : [];
         $stack_status = sanitize_key((string) ($stack_compatibility['status'] ?? 'unknown'));
+        $picostrap_design_system = is_array($summary['picostrap_design_system'] ?? null)
+            ? $summary['picostrap_design_system']
+            : [];
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
@@ -2473,6 +2488,7 @@ final class LCFA_Ability_Registry {
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
             __('For small edits, prefer content-patch-preview/content-patch-apply over rewriting an entire page.', 'livecanvas-forge-ai'),
+            __('On Picostrap, inspect picostrap_design_system synchronization and let the MCP runtime compile Sass before apply; never write Customizer tokens without the matching bundle.', 'livecanvas-forge-ai'),
             __('For media, theme files, cache, debug, SEO, or Polylang work, require the matching Full Access scope and review rollback output.', 'livecanvas-forge-ai'),
             __('Do not modify files or raw post content directly when a dedicated LiveCanvas preview/apply ability exists for the request.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
@@ -2517,6 +2533,7 @@ final class LCFA_Ability_Registry {
             'agent_start_prompt_lines' => $prompt_lines,
             'guardrail'      => 'read_only_first',
             'stack_compatibility' => $stack_compatibility,
+            'picostrap_design_system' => $picostrap_design_system,
             'preferred_abilities' => [
                 'read' => [
                     'livecanvas-forge-ai/get-context',
@@ -2582,6 +2599,7 @@ final class LCFA_Ability_Registry {
             '- Source: WordPress Ability',
             '- Framework: ' . ((string) ($summary['framework'] ?: 'auto')),
             '- Stack compatibility: ' . sanitize_key((string) ($stack_compatibility['status'] ?? 'unknown')) . ' (profile ' . sanitize_text_field((string) ($stack_compatibility['profile_version'] ?? 'n/a')) . ')',
+            '- Picostrap design system: ' . sanitize_key((string) ($summary['picostrap_design_system']['synchronization']['status'] ?? 'not_applicable')),
             '- Abilities: ' . (int) ($summary['abilities'] ?? 0) . ' total, ' . (int) ($summary['mcp_public'] ?? 0) . ' MCP-public',
             '- MCP-public writes: ' . (int) ($summary['public_writes'] ?? 0),
             '- Recent runs: ' . (int) ($summary['runs'] ?? 0) . ', errors: ' . (int) ($summary['run_errors'] ?? 0) . ', rollback-ready: ' . (int) ($summary['rollbacks'] ?? 0),
@@ -2926,9 +2944,50 @@ final class LCFA_Ability_Registry {
                 'type'        => 'object',
                 'description' => __('Optional button token shortcut.', 'livecanvas-forge-ai'),
             ],
+            'components' => [
+                'type'        => 'object',
+                'description' => __('Optional Picostrap component and Bootstrap feature tokens.', 'livecanvas-forge-ai'),
+            ],
+            'forms' => [
+                'type'        => 'object',
+                'description' => __('Optional Picostrap form-control tokens.', 'livecanvas-forge-ai'),
+            ],
+            'navbars' => [
+                'type'        => 'object',
+                'description' => __('Optional Picostrap navigation tokens.', 'livecanvas-forge-ai'),
+            ],
             'radius' => [
                 'type'        => 'object',
                 'description' => __('Optional radius token shortcut.', 'livecanvas-forge-ai'),
+            ],
+            'scss_variables' => [
+                'type'        => 'object',
+                'description' => __('Raw variables registered by the active Picostrap Customizer.', 'livecanvas-forge-ai'),
+            ],
+            'unset_scss_variables' => [
+                'type'        => 'array',
+                'items'       => ['type' => 'string'],
+                'description' => __('Registered Picostrap variables to reset to their theme defaults.', 'livecanvas-forge-ai'),
+            ],
+            'clear_existing_scss_variables' => [
+                'type'        => 'boolean',
+                'description' => __('Reset existing Picostrap Customizer Sass variables not present in this payload.', 'livecanvas-forge-ai'),
+            ],
+            'font_assets' => [
+                'type'        => 'object',
+                'description' => __('Picostrap body/headings font metadata and optional safe font header markup.', 'livecanvas-forge-ai'),
+            ],
+            'compiled_css' => [
+                'type'        => 'string',
+                'description' => __('CSS compiled by the AI Bridge MCP runtime from the returned preview manifest.', 'livecanvas-forge-ai'),
+            ],
+            'compiled_source_fingerprint' => [
+                'type'        => 'string',
+                'description' => __('Fingerprint returned by the Picostrap preview manifest.', 'livecanvas-forge-ai'),
+            ],
+            'expected_state_fingerprint' => [
+                'type'        => 'string',
+                'description' => __('Current-state fingerprint used to reject stale apply requests.', 'livecanvas-forge-ai'),
             ],
             'framework' => [
                 'type'        => 'string',

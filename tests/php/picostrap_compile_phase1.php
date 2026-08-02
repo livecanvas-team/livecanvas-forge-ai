@@ -57,6 +57,12 @@ if (!function_exists('get_theme_mods')) {
     }
 }
 
+if (!function_exists('remove_theme_mod')) {
+    function remove_theme_mod(string $name): void {
+        unset($GLOBALS['lcfa_test_theme_mods'][$name]);
+    }
+}
+
 if (!function_exists('get_stylesheet_directory_uri')) {
     function get_stylesheet_directory_uri(): string {
         return 'http://localhost:8887/wp-content/themes/' . $GLOBALS['lcfa_test_stylesheet'];
@@ -96,6 +102,21 @@ if (!function_exists('picostrap_get_css_optional_subfolder_name')) {
 if (!function_exists('picostrap_get_complete_css_filename')) {
     function picostrap_get_complete_css_filename(): string {
         return 'bundle.css';
+    }
+}
+
+if (!function_exists('picostrap_get_scss_variables_array')) {
+    function picostrap_get_scss_variables_array(): array {
+        return [
+            'colors' => [
+                'primary' => ['type' => 'color'],
+                'body-bg' => ['type' => 'color'],
+            ],
+            'components' => [
+                'enable-rounded' => ['type' => 'boolean'],
+                'border-radius' => ['type' => 'text'],
+            ],
+        ];
     }
 }
 
@@ -152,6 +173,8 @@ function test_manifest_uses_active_stylesheet_target(): void {
     lcfa_assert_same('picostrap5', $manifest['template'], 'Manifest should expose the parent template');
     lcfa_assert_same('wp-content/themes/picostrap-child/css-output/bundle.css', $manifest['target_bundle_relative_path'], 'Manifest should point at child-theme bundle');
     lcfa_assert_true(!empty($manifest['main_sass']), 'Manifest should expose main Sass');
+    lcfa_assert_true(!empty($manifest['source_fingerprint']), 'Manifest should fingerprint Customizer variables and Sass sources');
+    lcfa_assert_true(isset($manifest['synchronization']['status']), 'Manifest should report bundle synchronization');
 }
 
 function test_store_writes_bundle_and_bumps_version(): void {
@@ -202,12 +225,87 @@ function test_store_bundle_endpoint_returns_bundle_metadata(): void {
     lcfa_assert_contains('css-output/bundle.css?ver=', $payload['bundle_url'] ?? '', 'Bundle endpoint should expose bundle URL');
 }
 
+function test_picostrap_apply_is_atomic_and_rollbackable(): void {
+    $service = lcfa_make_design_system_service_for_picostrap();
+    $bundle_path = get_stylesheet_directory() . '/css-output/bundle.css';
+    file_put_contents($bundle_path, 'body{color:#111;}');
+    $GLOBALS['lcfa_test_theme_mods']['SCSSvar_primary'] = '#111111';
+    $GLOBALS['lcfa_test_theme_mods']['css_bundle_version_number'] = 30;
+    unset(
+        $GLOBALS['lcfa_test_theme_mods']['lcfa_picostrap_compiled_source_fingerprint'],
+        $GLOBALS['lcfa_test_theme_mods']['lcfa_picostrap_compiled_at']
+    );
+
+    $tokens = [
+        'action' => 'design_system_apply',
+        'framework' => 'picostrap',
+        'colors' => ['primary' => '#224466'],
+        'components' => ['enable_rounded' => true],
+    ];
+    $preview = $service->run($tokens, true);
+    $manifest = (array) ($preview['data']['compile_manifest'] ?? []);
+
+    lcfa_assert_true(!empty($preview['ok']), 'Picostrap transaction preview should succeed');
+    lcfa_assert_same('#111111', get_theme_mod('SCSSvar_primary'), 'Preview must not change Customizer variables');
+    lcfa_assert_same('#224466', $manifest['theme_mods']['SCSSvar_primary'] ?? '', 'Preview manifest should contain proposed variables');
+
+    $without_bundle = $service->run($tokens, false);
+    lcfa_assert_true(empty($without_bundle['ok']), 'Picostrap apply without compiled CSS should be rejected');
+    lcfa_assert_same('#111111', get_theme_mod('SCSSvar_primary'), 'Rejected apply must not change Customizer variables');
+
+    $apply = $service->run($tokens + [
+        'compiled_css' => 'body{color:#224466;}',
+        'compiled_source_fingerprint' => (string) ($manifest['source_fingerprint'] ?? ''),
+        'expected_state_fingerprint' => (string) ($preview['data']['current_state_fingerprint'] ?? ''),
+    ], false);
+
+    lcfa_assert_true(!empty($apply['ok']), 'Compiled Picostrap transaction should apply');
+    lcfa_assert_same('#224466', get_theme_mod('SCSSvar_primary'), 'Atomic apply should update the Customizer variable');
+    lcfa_assert_same('body{color:#224466;}', (string) file_get_contents($bundle_path), 'Atomic apply should replace the bundle');
+    lcfa_assert_same('synchronized', $apply['data']['synchronization_after']['status'] ?? '', 'Atomic apply should report synchronized state');
+    lcfa_assert_true(!empty($apply['data']['picostrap_design_system_rollback']), 'Atomic apply should return a rollback snapshot');
+
+    $restore = $service->restore((array) $apply['data']['picostrap_design_system_rollback'], false);
+    lcfa_assert_true(!empty($restore['ok']), 'Picostrap design-system rollback should succeed');
+    lcfa_assert_same('#111111', get_theme_mod('SCSSvar_primary'), 'Rollback should restore the previous Customizer variable');
+    lcfa_assert_same('body{color:#111;}', (string) file_get_contents($bundle_path), 'Rollback should restore the previous bundle');
+    lcfa_assert_same(30, (int) get_theme_mod('css_bundle_version_number'), 'Rollback should restore the previous bundle version');
+}
+
+function test_picostrap_apply_rejects_stale_and_unsafe_payloads(): void {
+    $service = lcfa_make_design_system_service_for_picostrap();
+    $preview = $service->run([
+        'framework' => 'picostrap',
+        'scss_variables' => [
+            'primary' => '#445566',
+            'unknown-variable' => '10px',
+            'body-bg' => '#fff; @import "evil"',
+        ],
+    ], true);
+
+    lcfa_assert_same('#445566', $preview['data']['compile_manifest']['theme_mods']['SCSSvar_primary'] ?? '', 'Registered raw variable should be accepted');
+    lcfa_assert_true(isset($preview['data']['rejected_scss_variables']['SCSSvar_unknown-variable']), 'Unknown raw variable should be rejected');
+    lcfa_assert_true(isset($preview['data']['rejected_scss_variables']['SCSSvar_body-bg']), 'Unsafe Sass value should be rejected');
+
+    $stale = $service->run([
+        'framework' => 'picostrap',
+        'colors' => ['primary' => '#445566'],
+        'compiled_css' => 'body{color:#445566;}',
+        'compiled_source_fingerprint' => (string) ($preview['data']['proposed_source_fingerprint'] ?? ''),
+        'expected_state_fingerprint' => str_repeat('0', 64),
+    ], false);
+
+    lcfa_assert_true(empty($stale['ok']), 'A stale Picostrap apply must be rejected');
+}
+
 function run_all_tests(): void {
     test_manifest_uses_active_stylesheet_target();
     test_store_writes_bundle_and_bumps_version();
     test_compile_source_rejects_parent_escape();
     test_compile_source_reads_parent_scss_file();
     test_store_bundle_endpoint_returns_bundle_metadata();
+    test_picostrap_apply_is_atomic_and_rollbackable();
+    test_picostrap_apply_rejects_stale_and_unsafe_payloads();
     echo "PASS\n";
 }
 

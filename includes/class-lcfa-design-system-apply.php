@@ -44,6 +44,19 @@ final class LCFA_Design_System_Apply {
         ];
     }
 
+    public function restore(array $snapshot, bool $dry_run = false): array {
+        $framework = sanitize_key((string) ($snapshot['framework'] ?? ''));
+
+        if ($framework === 'picostrap') {
+            return $this->picostrap_executor->restore($snapshot, $dry_run);
+        }
+
+        return [
+            'ok' => false,
+            'message' => __('The design-system rollback framework is not supported.', 'livecanvas-forge-ai'),
+        ];
+    }
+
     private function resolve_framework(array $payload): string {
         $explicit = sanitize_key((string) ($payload['framework'] ?? ''));
 

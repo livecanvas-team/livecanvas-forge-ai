@@ -272,9 +272,12 @@ class WPClient {
     })
   }
 
-  async storePicostrapBundle(css) {
+  async storePicostrapBundle(css, metadata = {}) {
     return this.request('POST', 'picostrap/bundle', {
-      body: { css }
+      body: {
+        css,
+        source_fingerprint: metadata.sourceFingerprint || metadata.source_fingerprint || ''
+      }
     })
   }
 
@@ -294,7 +297,8 @@ class WPClient {
   async applyPicostrapCompile(payload = {}) {
     return this.request('POST', 'picostrap/bundle', {
       body: {
-        css: payload.compiled_css || payload.css || ''
+        css: payload.compiled_css || payload.css || '',
+        source_fingerprint: payload.source_fingerprint || ''
       }
     })
   }

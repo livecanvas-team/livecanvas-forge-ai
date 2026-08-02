@@ -271,6 +271,7 @@ final class LCFA_Theme_Files_Bridge {
             'created'      => $created,
             'changed'      => $changed,
             'backup_file'  => $backup_file,
+            'backup_id'    => $backup_file !== null ? $this->get_backup_id_from_path($backup_file) : '',
             'bytes_before' => strlen($previous),
             'bytes_after'  => strlen($content),
             'modified_at'  => gmdate('c', filemtime($absolute_path) ?: time()),
@@ -529,6 +530,17 @@ final class LCFA_Theme_Files_Bridge {
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         return wp_normalize_path($backup_path);
+    }
+
+    private function get_backup_id_from_path(string $backup_path): string {
+        $backups_directory = wp_normalize_path($this->get_backups_directory());
+        $normalized_path = wp_normalize_path($backup_path);
+
+        if (strpos($normalized_path, trailingslashit($backups_directory)) !== 0) {
+            return '';
+        }
+
+        return ltrim(substr($normalized_path, strlen($backups_directory)), '/');
     }
 
     private function collect_backup_files(string $directory, array &$files): void {

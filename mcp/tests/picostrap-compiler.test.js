@@ -265,16 +265,65 @@ async function testRemoteCompileFetchesScssSourcesThroughClient() {
 }
 
 async function testRunLcCommandAutoCompileOrchestration() {
+  const calls = []
   const client = {
     async runCommand(payload) {
+      calls.push(payload)
+
+      if (payload.action === 'design_system_compose') {
+        return {
+          result: {
+            ok: true,
+            action: 'design_system_compose',
+            mode: 'preview',
+            target_stack: 'picostrap',
+            preview_url: 'http://localhost:8887/?lcfa_design_preview=1',
+            apply_payload: {
+              action: 'design_system_apply',
+              framework: 'picostrap',
+              colors: { primary: '#ff2d55' }
+            },
+            warnings: [],
+            data: {}
+          }
+        }
+      }
+
+      if (payload.dry_run === true) {
+        return {
+          result: {
+            ok: true,
+            action: 'design_system_apply',
+            mode: 'preview',
+            target_stack: 'picostrap',
+            warnings: [],
+            data: {
+              current_state_fingerprint: 'current-state',
+              compile_manifest: {
+                framework: 'picostrap',
+                source_fingerprint: 'proposed-state',
+                main_sass: '$primary: #ff2d55; @import "main";'
+              }
+            }
+          }
+        }
+      }
+
+      assert.match(payload.compiled_css, /#ff2d55/)
+      assert.equal(payload.compiled_source_fingerprint, 'proposed-state')
+      assert.equal(payload.expected_state_fingerprint, 'current-state')
+
       return {
         result: {
           ok: true,
           action: payload.action,
           mode: 'apply',
           target_stack: 'picostrap',
-          preview_url: 'http://localhost:8887/?lcfa_design_preview=1',
           frontend_url: 'http://localhost:8887/',
+          build_executed: true,
+          bundle_version: 24,
+          audit_id: 'audit-design-system',
+          rollback_available: true,
           warnings: [],
           data: {}
         }
@@ -287,15 +336,16 @@ async function testRunLcCommandAutoCompileOrchestration() {
     {},
     { async buildCache() { return { ok: true } } },
     {
-      async buildBundle() {
+      async compileBundle({ manifest }) {
+        assert.equal(manifest.source_fingerprint, 'proposed-state')
         return {
           ok: true,
-          build_strategy: 'bridge_dart_sass',
+          css: 'body{color:#ff2d55;}',
+          source_fingerprint: 'proposed-state',
+          compiled_bytes: 23,
+          build_strategy: 'bridge_dart_sass_transaction',
           build_required: true,
-          build_executed: true,
-          bundle_url: 'http://localhost:8887/wp-content/themes/picostrap-child/css-output/bundle.css?ver=24',
-          bundle_version: 24,
-          compiled_at: '2026-04-14 10:32:00',
+          build_executed: false,
           warnings: []
         }
       }
@@ -304,6 +354,7 @@ async function testRunLcCommandAutoCompileOrchestration() {
 
   const result = await registry.invoke('run_lc_command', {
     action: 'design_system_compose',
+    framework: 'picostrap',
     auto_apply: true
   })
 
@@ -312,6 +363,138 @@ async function testRunLcCommandAutoCompileOrchestration() {
   assert.equal(payload.ok, true)
   assert.equal(payload.build_executed, true)
   assert.equal(payload.bundle_version, 24)
+  assert.equal(payload.audit_id, 'audit-design-system')
+  assert.equal(payload.rollback_available, true)
+  assert.equal(payload.data.compile.source_fingerprint, 'proposed-state')
+  assert.equal(calls.length, 3)
+  assert.equal(calls[0].auto_apply, false)
+  assert.equal(calls[1].dry_run, true)
+  assert.equal(calls[2].dry_run, false)
+}
+
+async function testRunLcCommandCompileFailureDoesNotApply() {
+  const calls = []
+  const client = {
+    async runCommand(payload) {
+      calls.push(payload)
+      return {
+        result: {
+          ok: true,
+          action: 'design_system_apply',
+          mode: 'preview',
+          target_stack: 'picostrap',
+          warnings: [],
+          data: {
+            current_state_fingerprint: 'current-state',
+            compile_manifest: {
+              framework: 'picostrap',
+              source_fingerprint: 'proposed-state',
+              main_sass: '@import "missing";'
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const registry = createToolRegistry(client, {}, {}, {
+    async compileBundle() {
+      throw new Error('SCSS import not found: missing.scss')
+    }
+  })
+  const result = await registry.invoke('run_lc_command', {
+    action: 'design_system_apply',
+    framework: 'picostrap',
+    colors: { primary: '#ff2d55' }
+  })
+  const payload = result.result || result
+
+  assert.equal(payload.ok, false)
+  assert.match(payload.message, /failed before apply/i)
+  assert.equal(payload.build_executed, false)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].dry_run, true)
+}
+
+async function testSiteFoundationCompilesBeforeApply() {
+  const calls = []
+  const client = {
+    async runCommand(payload) {
+      calls.push(payload)
+
+      if (payload.dry_run === true) {
+        return {
+          result: {
+            ok: true,
+            action: 'site_foundation_run',
+            mode: 'preview',
+            data: {
+              steps: {
+                design_system_apply: {
+                  ok: true,
+                  target_stack: 'picostrap',
+                  data: {
+                    current_state_fingerprint: 'foundation-current',
+                    compile_manifest: {
+                      framework: 'picostrap',
+                      source_fingerprint: 'foundation-proposed',
+                      main_sass: '$primary: #112233; @import "main";'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      assert.equal(payload.dry_run, false)
+      assert.match(payload.compiled_css, /#112233/)
+      assert.equal(payload.compiled_source_fingerprint, 'foundation-proposed')
+      assert.equal(payload.expected_state_fingerprint, 'foundation-current')
+
+      return {
+        result: {
+          ok: true,
+          action: 'site_foundation_run',
+          mode: 'apply',
+          audit_id: 'foundation-audit',
+          data: { steps: {} }
+        }
+      }
+    }
+  }
+
+  const registry = createToolRegistry(client, {}, {}, {
+    async compileBundle({ manifest }) {
+      assert.equal(manifest.source_fingerprint, 'foundation-proposed')
+      return {
+        ok: true,
+        css: 'body{color:#112233;}',
+        source_fingerprint: 'foundation-proposed',
+        compiled_bytes: 20,
+        build_strategy: 'bridge_dart_sass_transaction'
+      }
+    }
+  })
+
+  const result = await registry.invoke('run_lc_command', {
+    action: 'site_foundation_run',
+    framework: 'picostrap',
+    design_system: {
+      colors: { primary: '#112233' }
+    },
+    skip_global_shell: true,
+    skip_pages: true
+  })
+  const payload = result.result || result
+
+  assert.equal(payload.ok, true)
+  assert.equal(payload.audit_id, 'foundation-audit')
+  assert.equal(payload.data.compile.source_fingerprint, 'foundation-proposed')
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].dry_run, true)
+  assert.equal(calls[1].dry_run, false)
 }
 
 async function run() {
@@ -320,6 +503,8 @@ async function run() {
   await testLocalCompileTriesUnderscoredCandidatesBeforeRemoteFallback()
   await testRemoteCompileFetchesScssSourcesThroughClient()
   await testRunLcCommandAutoCompileOrchestration()
+  await testRunLcCommandCompileFailureDoesNotApply()
+  await testSiteFoundationCompilesBeforeApply()
 }
 
 run()

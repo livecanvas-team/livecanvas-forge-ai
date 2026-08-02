@@ -66,6 +66,22 @@ final class LCFA_Environment {
                 : [],
         ];
 
+        if ($framework === 'picostrap' && class_exists('LCFA_Picostrap_Compile_Service', false)) {
+            try {
+                $snapshot['picostrap_design_system'] = (new LCFA_Picostrap_Compile_Service($this))->get_status();
+            } catch (Throwable $throwable) {
+                $snapshot['picostrap_design_system'] = [
+                    'framework' => 'picostrap',
+                    'synchronization' => [
+                        'status' => 'unavailable',
+                        'synchronized' => false,
+                        'build_required' => true,
+                        'message' => $throwable->getMessage(),
+                    ],
+                ];
+            }
+        }
+
         if (class_exists('LCFA_Stack_Capabilities', false)) {
             $snapshot['stack_capabilities'] = (new LCFA_Stack_Capabilities())->evaluate($snapshot);
         }

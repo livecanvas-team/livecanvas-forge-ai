@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.1.30
+ * Version: 0.1.31
  * Requires PHP: 8.0
  * Update URI: https://livecanvas.com/ai-bridge
  * Author: The LiveCanvas Team
@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.1.30');
+define('LCFA_VERSION', '0.1.31');
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
 define('LCFA_URL', plugin_dir_url(__FILE__));
@@ -51,6 +51,9 @@ require_once LCFA_DIR . 'includes/class-lcfa-connection-tester.php';
 require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';
 require_once LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
+require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-manifest.php';
+require_once LCFA_DIR . 'includes/class-lcfa-picostrap-bundle-store.php';
+require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picowind-executor.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-fallback-executor.php';
@@ -58,9 +61,6 @@ require_once LCFA_DIR . 'includes/class-lcfa-design-system-apply.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-design-system-compose.php';
-require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-manifest.php';
-require_once LCFA_DIR . 'includes/class-lcfa-picostrap-bundle-store.php';
-require_once LCFA_DIR . 'includes/class-lcfa-picostrap-compile-service.php';
 require_once LCFA_DIR . 'includes/class-lcfa-content-patch-service.php';
 require_once LCFA_DIR . 'includes/class-lcfa-media-tools.php';
 require_once LCFA_DIR . 'includes/class-lcfa-debug-cache-tools.php';

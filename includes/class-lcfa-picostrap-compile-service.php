@@ -13,8 +13,24 @@ final class LCFA_Picostrap_Compile_Service {
         $this->bundle_store = $bundle_store ?: new LCFA_Picostrap_Bundle_Store($environment);
     }
 
-    public function get_manifest(): array {
-        return $this->manifest->build();
+    public function get_manifest(array $theme_mod_overrides = []): array {
+        return $this->manifest->build($theme_mod_overrides);
+    }
+
+    public function get_status(): array {
+        $manifest = $this->get_manifest();
+
+        return [
+            'framework' => 'picostrap',
+            'stylesheet' => (string) ($manifest['stylesheet'] ?? ''),
+            'template' => (string) ($manifest['template'] ?? ''),
+            'bundle_exists' => !empty($manifest['bundle_exists']),
+            'bundle_version' => (int) ($manifest['current_bundle_version'] ?? 0),
+            'source_fingerprint' => (string) ($manifest['source_fingerprint'] ?? ''),
+            'compiled_source_fingerprint' => (string) ($manifest['compiled_source_fingerprint'] ?? ''),
+            'compiled_at' => (string) ($manifest['compiled_at'] ?? ''),
+            'synchronization' => (array) ($manifest['synchronization'] ?? []),
+        ];
     }
 
     public function get_source(string $import_path): array {
@@ -40,8 +56,12 @@ final class LCFA_Picostrap_Compile_Service {
         ];
     }
 
-    public function store_bundle(string $css): array {
-        return $this->bundle_store->store($css);
+    public function store_bundle(string $css, array $metadata = []): array {
+        return $this->bundle_store->store($css, $metadata);
+    }
+
+    public function restore_bundle(array $snapshot, bool $dry_run = false): array {
+        return $this->bundle_store->restore($snapshot, $dry_run);
     }
 
     public function get_compile_url(): string {

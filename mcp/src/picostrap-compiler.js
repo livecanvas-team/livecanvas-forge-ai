@@ -11,9 +11,40 @@ class PicostrapCompiler {
   }
 
   async buildBundle(options = {}) {
+    const compiled = await this.compileBundle(options)
+    const storedResponse = await this.client.storePicostrapBundle(compiled.css, {
+      sourceFingerprint: compiled.source_fingerprint
+    })
+    const stored = unwrapResultEnvelope(storedResponse)
+
+    if (!stored || stored.ok === false) {
+      throw new Error(stored && stored.message ? stored.message : 'Failed to store the Picostrap bundle.')
+    }
+
+    return {
+      ok: true,
+      action: 'picostrap_compile_bundle',
+      mode: 'apply',
+      target_stack: 'picostrap',
+      source_of_truth: 'picostrap_customizer_theme_mods',
+      build_strategy: 'bridge_dart_sass',
+      build_required: false,
+      build_executed: true,
+      source_fingerprint: compiled.source_fingerprint,
+      compiled_bytes: compiled.compiled_bytes,
+      bundle_path: stored.bundle_path || '',
+      bundle_url: stored.bundle_url || '',
+      bundle_version: stored.bundle_version || 0,
+      compiled_at: stored.compiled_at || '',
+      warnings: []
+    }
+  }
+
+  async compileBundle(options = {}) {
     const sass = loadSassCompiler()
-    const manifestResponse = await this.client.getPicostrapCompileManifest()
-    const manifest = unwrapResultEnvelope(manifestResponse)
+    const manifest = options.manifest && typeof options.manifest === 'object'
+      ? unwrapResultEnvelope(options.manifest)
+      : unwrapResultEnvelope(await this.client.getPicostrapCompileManifest())
 
     if (!manifest || manifest.framework !== 'picostrap') {
       throw new Error('Picostrap compile manifest is not available for the current site.')
@@ -34,26 +65,19 @@ class PicostrapCompiler {
       }
     })
 
-    const storedResponse = await this.client.storePicostrapBundle(result.css)
-    const stored = unwrapResultEnvelope(storedResponse)
-
-    if (!stored || stored.ok === false) {
-      throw new Error(stored && stored.message ? stored.message : 'Failed to store the Picostrap bundle.')
-    }
-
     return {
       ok: true,
-      action: 'picostrap_compile_bundle',
-      mode: 'apply',
+      action: 'picostrap_compile_preview',
+      mode: 'preview',
       target_stack: 'picostrap',
-      source_of_truth: 'theme_mods',
+      source_of_truth: 'picostrap_customizer_theme_mods',
       build_strategy: 'bridge_dart_sass',
       build_required: true,
-      build_executed: true,
-      bundle_path: stored.bundle_path || '',
-      bundle_url: stored.bundle_url || '',
-      bundle_version: stored.bundle_version || 0,
-      compiled_at: stored.compiled_at || '',
+      build_executed: false,
+      css: result.css,
+      compiled_bytes: Buffer.byteLength(result.css, 'utf8'),
+      source_fingerprint: String(manifest.source_fingerprint || ''),
+      manifest,
       warnings: []
     }
   }
