@@ -21,7 +21,7 @@ Secure remote Direct Mode:
 LCFA_SITE_URL="https://example.test/" \
 LCFA_SITE_FINGERPRINT="site-fingerprint" \
 LCFA_PROJECT_LABEL="Example Site" \
-npx -y @livecanvas/ai-bridge-mcp@latest
+npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1
 ```
 
 On first use, the MCP asks WordPress for a short-lived pairing request. Approve the pending Codex session in `AI Bridge > Connections`; the MCP receives a plugin-scoped session token once and caches it locally with restricted file permissions.

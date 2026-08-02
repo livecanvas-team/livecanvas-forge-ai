@@ -164,16 +164,24 @@ final class LCFA_Connection_Tester {
 
             if ($active !== []) {
                 $session = $active[0];
+                $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.1';
+                $package_detected = sanitize_text_field((string) ($session['mcp_package_version'] ?? ''));
+                $package_matches = $package_detected !== '' && hash_equals($package_expected, $package_detected);
                 return [
                     'label'   => __('Secure coding-agent pairing session', 'livecanvas-forge-ai'),
-                    'ok'      => true,
+                    'ok'      => $package_matches,
                     'skipped' => false,
-                    'message' => __('A scoped AI Bridge session has connected to this site.', 'livecanvas-forge-ai'),
+                    'message' => $package_matches
+                        ? __('A scoped AI Bridge session has connected with the expected MCP package version.', 'livecanvas-forge-ai')
+                        : __('The paired coding agent is connected, but its MCP package version is missing or stale. Install the exact package shown by Connections, reload the MCP server, and retry.', 'livecanvas-forge-ai'),
                     'details' => [
                         'session_id'    => (string) ($session['session_id'] ?? ''),
                         'project_label' => (string) ($session['project_label'] ?? ''),
                         'last_seen_at'  => (string) ($session['last_seen_at'] ?? ''),
                         'auth_method'   => 'ai_bridge_session',
+                        'mcp_package_expected' => $package_expected,
+                        'mcp_package_detected' => $package_detected,
+                        'package_version_matches' => $package_matches,
                     ],
                 ];
             }

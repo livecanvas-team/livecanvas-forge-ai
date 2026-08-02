@@ -2476,6 +2476,12 @@ final class LCFA_Ability_Registry {
         $picostrap_design_system = is_array($summary['picostrap_design_system'] ?? null)
             ? $summary['picostrap_design_system']
             : [];
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.1';
+        $package_detected = sanitize_text_field((string) ($_SERVER['HTTP_X_LCFA_MCP_PACKAGE_VERSION'] ?? ''));
+        $package_matches = $package_detected === '' ? null : hash_equals($package_expected, $package_detected);
+        $theme_library_build_state = class_exists('LCFA_Theme_Library_Importer', false) && method_exists('LCFA_Theme_Library_Importer', 'get_build_state_summary')
+            ? LCFA_Theme_Library_Importer::get_build_state_summary()
+            : ['status' => 'unavailable', 'counts' => [], 'pending' => []];
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
@@ -2520,6 +2526,11 @@ final class LCFA_Ability_Registry {
             'status'         => $status,
             'transport'      => $oauth_direct ? 'wordpress_mcp_oauth' : 'wordpress_ability',
             'auth_method'    => $auth_method,
+            'wordpress_mode' => sanitize_key((string) ($stack_compatibility['wordpress_mode'] ?? 'legacy_rest')),
+            'mcp_package_expected' => $package_expected,
+            'mcp_package_detected' => $package_detected,
+            'package_version_matches' => $package_matches,
+            'theme_library_build_state' => $theme_library_build_state,
             'client_id'      => sanitize_text_field((string) ($oauth_identity['client_id'] ?? '')),
             'scopes'         => array_values(array_map('sanitize_key', (array) ($oauth_identity['scopes'] ?? []))),
             'oauth_resource' => $oauth_direct && class_exists('LCFA_OAuth_Storage', false)

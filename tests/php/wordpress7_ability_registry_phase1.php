@@ -92,6 +92,7 @@ final class LCFA_Environment {
                 'schema_version' => 'stack-capabilities.v1',
                 'profile_version' => '2026.08.1',
                 'status' => 'supported',
+                'wordpress_mode' => 'abilities',
                 'missing_capabilities' => [],
             ],
         ];
@@ -332,6 +333,9 @@ lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['handoff_package
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-connection-handoff'), 'connection handoff ability should expose a first prompt that starts lightweight');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-agent-handoff-package'), 'connection handoff ability should mention the full package follow-up');
 lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['stack_compatibility']['status'] ?? '') === 'supported', 'connection handoff should expose the evaluated stack compatibility status');
+lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['wordpress_mode'] ?? '') === 'abilities', 'WordPress 7 connection handoff should expose its native Abilities operating mode');
+lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['mcp_package_expected'] ?? '') === '0.2.0-beta.1', 'connection handoff should expose the exact expected beta MCP package version');
+lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['theme_library_build_state']['status'] ?? '') === 'unavailable', 'connection handoff should expose Theme Library build readiness even when the importer is not loaded in isolation');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'stack_compatibility'), 'connection handoff should instruct agents to inspect compatibility before writes');
 lcfa_wp7_assert_true(in_array('visual_check_status', $connection_handoff['connection_handoff']['runtime_tools'] ?? [], true), 'local/pairing handoff should advertise the visual-check readiness tool');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['quick_prompts']['visual_check'] ?? '', 'visual_check_status'), 'local/pairing visual prompt should verify browser readiness before visual QA');

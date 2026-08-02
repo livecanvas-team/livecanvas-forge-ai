@@ -1098,6 +1098,13 @@ final class LCFA_Admin {
 
         LCFA_Settings::update_connections($connections);
 
+        if (isset($_POST['lcfa_update_channel'])) {
+            $update_channel = sanitize_key((string) $_POST['lcfa_update_channel']);
+            update_option('lcfa_update_channel', in_array($update_channel, ['stable', 'beta'], true) ? $update_channel : 'stable', false);
+            delete_transient('lcfa_livecanvas_update_release');
+            delete_transient('lcfa_livecanvas_update_release_beta');
+        }
+
         if (!empty($_POST['rotate_mcp_token'])) {
             LCFA_Settings::rotate_mcp_token();
         }
@@ -1655,9 +1662,13 @@ final class LCFA_Admin {
             $pairing_scopes !== '' ? 'LCFA_PAIRING_SCOPES=' . $pairing_scopes : '',
         ]));
 
+        $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
+            ? (string) LCFA_MCP_PACKAGE_SPEC
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+
         return [
             'client_payload' => [
-                'command' => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+                'command' => 'npx -y ' . $mcp_package_spec,
                 'env'     => $env,
             ],
             'common' => [
@@ -1665,7 +1676,7 @@ final class LCFA_Admin {
                 'remote_site_url'     => $remote_site_url,
                 'mcp_adapter_url'     => $mcp_adapter_url,
                 'mcp_adapter_available' => $mcp_adapter_url !== '',
-                'mcp_proxy_package'   => '@livecanvas/ai-bridge-mcp',
+                'mcp_proxy_package'   => $mcp_package_spec,
                 'mcp_proxy_log_file'  => '',
                 'agent'               => $client_key,
                 'site_fingerprint'    => $site_fingerprint,
@@ -5609,6 +5620,16 @@ final class LCFA_Admin {
         echo '<label><span>' . esc_html__('Remote username', 'livecanvas-forge-ai') . '</span><input type="text" name="remote_username" value="' . esc_attr($connections['remote_username']) . '"></label>';
         echo '<label><span>' . esc_html__('Remote application password', 'livecanvas-forge-ai') . '</span><input type="password" name="remote_application_password" value="" placeholder="' . esc_attr($connections['remote_application_password'] !== '' ? __('Stored. Leave blank to keep current value.', 'livecanvas-forge-ai') : __('xxxx xxxx xxxx xxxx xxxx xxxx', 'livecanvas-forge-ai')) . '"></label>';
         echo '<label><span>' . esc_html__('MCP server command', 'livecanvas-forge-ai') . '</span><textarea name="mcp_server_command" rows="4" placeholder="npx @livecanvas/forge-mcp">' . esc_textarea($connections['mcp_server_command']) . '</textarea></label>';
+
+        $update_channel = sanitize_key((string) get_option('lcfa_update_channel', str_contains((string) LCFA_VERSION, '-') ? 'beta' : 'stable'));
+        if (!in_array($update_channel, ['stable', 'beta'], true)) {
+            $update_channel = 'stable';
+        }
+        echo '<label><span>' . esc_html__('AI Bridge update channel', 'livecanvas-forge-ai') . '</span><select name="lcfa_update_channel">';
+        echo '<option value="stable"' . selected($update_channel, 'stable', false) . '>' . esc_html__('Stable releases only', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="beta"' . selected($update_channel, 'beta', false) . '>' . esc_html__('Beta and stable releases', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></label>';
+        echo '<p class="description">' . esc_html__('Stable installations ignore prereleases until an administrator explicitly opts into the beta channel.', 'livecanvas-forge-ai') . '</p>';
 
         $power_mode = LCFA_Settings::sanitize_power_mode((string) ($connections['power_mode'] ?? 'auto'));
         echo '<label><span>' . esc_html__('Power Mode policy', 'livecanvas-forge-ai') . '</span><select name="power_mode">';

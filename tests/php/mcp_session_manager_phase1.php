@@ -34,6 +34,22 @@ class WP_Error {
     }
 }
 
+class WP_REST_Request {
+    private array $headers;
+
+    public function __construct(array $headers = []) {
+        $this->headers = array_change_key_case($headers, CASE_LOWER);
+    }
+
+    public function get_header(string $name): string {
+        return (string) ($this->headers[strtolower($name)] ?? '');
+    }
+
+    public function get_param(string $name) {
+        return null;
+    }
+}
+
 function __(string $text, string $domain = ''): string {
     return $text;
 }
@@ -163,6 +179,14 @@ lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string
 lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'valid session usage should mark the connection ready');
 lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_current_step'] ?? '', 'valid session usage should move the connection to ready');
 lcfa_assert_same('ai-bridge-session', $GLOBALS['lcfa_test_connections']['connection_strategy'] ?? '', 'valid session usage should store the secure strategy');
+
+$reported = LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $status['session_token'],
+    'X-LCFA-MCP-Package-Version' => '0.2.0-beta.1',
+]), 'read');
+lcfa_assert_same('0.2.0-beta.1', $reported['mcp_package_version'] ?? '', 'session requests should record the detected MCP package version');
+$reported_sessions = LCFA_MCP_Session_Manager::get_public_sessions();
+lcfa_assert_same('0.2.0-beta.1', $reported_sessions[0]['mcp_package_version'] ?? '', 'public session diagnostics should expose the detected MCP package version without exposing the token');
 
 $second_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $pairing['pairing_id'], (string) $pairing['device_secret']);
 lcfa_assert_same('consumed', $second_status['status'] ?? '', 'pairing status should not return the session token twice');

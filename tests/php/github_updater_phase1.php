@@ -21,6 +21,7 @@ $GLOBALS['lcfa_test_release_payload'] = [];
 $GLOBALS['lcfa_test_get_release_payload'] = [];
 $GLOBALS['lcfa_test_response_code'] = 200;
 $GLOBALS['lcfa_test_get_response_code'] = 200;
+$GLOBALS['lcfa_test_update_channel'] = '';
 
 function lcfa_updater_assert_true(bool $condition, string $message): void {
     if (!$condition) {
@@ -106,6 +107,10 @@ function get_option(string $option, $default = false) {
         return ['livecanvas/livecanvas-plugin-index.php'];
     }
 
+    if ($option === 'lcfa_update_channel') {
+        return $GLOBALS['lcfa_test_update_channel'] !== '' ? $GLOBALS['lcfa_test_update_channel'] : $default;
+    }
+
     return $default;
 }
 
@@ -143,6 +148,7 @@ function lcfa_updater_reset(array $release_payload = [], string $api_key = '', b
     $GLOBALS['lcfa_test_last_post_args'] = [];
     $GLOBALS['lcfa_test_get_release_payload'] = [];
     $GLOBALS['lcfa_test_get_response_code'] = 200;
+    $GLOBALS['lcfa_test_update_channel'] = '';
     unset($_GET['force-check'], $_GET['lcfa-refresh-updates']);
 }
 
@@ -299,5 +305,18 @@ lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true, 403);
 $state = $updater->get_update_state();
 lcfa_updater_assert_false((bool) ($state['update_available'] ?? true), 'license rejection should not expose an update');
 lcfa_updater_assert_same(0, $GLOBALS['lcfa_test_get_calls'], 'license rejection should not fall back to GitHub');
+
+lcfa_updater_reset(lcfa_updater_release('0.1.8'), 'valid-api-key', true, 500);
+$GLOBALS['lcfa_test_update_channel'] = 'beta';
+$GLOBALS['lcfa_test_get_release_payload'] = [
+    lcfa_updater_github_release('v0.2.0-beta.2', 'livecanvas-forge-ai.zip', false, true),
+    lcfa_updater_github_release('v0.1.9'),
+];
+$state = $updater->get_update_state();
+lcfa_updater_assert_same('beta', $state['channel'] ?? '', 'explicit beta opt-in should be reported in update state');
+lcfa_updater_assert_same('0.2.0-beta.2', $state['latest_version'] ?? '', 'beta channel should select the newest semver prerelease from the GitHub release list');
+lcfa_updater_assert_true((bool) ($state['update_available'] ?? false), 'beta channel should expose newer beta releases');
+lcfa_updater_assert_same('beta', $GLOBALS['lcfa_test_last_post_args']['body']['update_channel'] ?? '', 'licensed update requests should tell the LiveCanvas endpoint which channel is selected');
+lcfa_updater_assert_same(21600, $GLOBALS['lcfa_test_transient_expirations']['lcfa_livecanvas_update_release_beta'] ?? 0, 'beta metadata should use a channel-specific cache key');
 
 echo "PASS\n";

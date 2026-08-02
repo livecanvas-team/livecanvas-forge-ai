@@ -345,7 +345,7 @@ $remote_codex_bundle = $builder->build([
         'remote_site_url'     => 'https://remote.example/',
     ],
     'client_payload' => [
-        'command' => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+        'command' => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
         'env'     => [
             'LCFA_SITE_URL=https://remote.example/',
             'LCFA_SITE_FINGERPRINT=test-fingerprint',
@@ -359,7 +359,7 @@ lcfa_assert_same('ai-bridge-session', $remote_codex_bundle['connection_strategy'
 lcfa_assert_same('https://remote.example/wp-json/lcfa/v1/', $remote_codex_bundle['mcp_adapter_url'] ?? '', 'remote Codex bundle should expose the AI Bridge REST URL');
 lcfa_assert_true(empty($remote_codex_bundle['workspace_files']), 'remote Codex bundle should not propose local workspace writes');
 lcfa_assert_false(isset($remote_codex_bundle['environment']['LCFA_WP_ROOT']), 'remote Codex bundle should strip local filesystem environment');
-lcfa_assert_same('@livecanvas/ai-bridge-mcp@latest', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the secure AI Bridge MCP package');
+lcfa_assert_same('@livecanvas/ai-bridge-mcp@0.2.0-beta.1', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the secure AI Bridge MCP package');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env LCFA_SITE_URL=') !== false, 'remote Codex shortcut should register LCFA_SITE_URL with Codex');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_PASSWORD=') === false, 'remote Codex shortcut should not register an Application Password with Codex');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'secure LiveCanvas AI Bridge pairing') !== false, 'remote Codex shortcut should explain secure pairing');
@@ -571,10 +571,10 @@ $codex_remote_bundle_view = $presenter->build([
         'connection_strategy' => 'ai-bridge-session',
         'mcp_adapter_url'     => 'https://remote.example/wp-json/lcfa/v1/',
         'workspace_root'      => '',
-        'command_string'      => "'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
-        'copy_command_string' => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+        'command_string'      => "'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
         'shortcut_title'      => 'Codex shortcut',
-        'shortcut_command'    => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
+        'shortcut_command'    => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
         'workspace_files'     => [],
         'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
     ],
@@ -681,7 +681,7 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
     ],
 ]);
 
-lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@latest', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
+lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
 lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point LCFA_SITE_URL at the target site');
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
@@ -695,7 +695,7 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     $remote_env = (array) ($remote_agent_payload['client_payload']['env'] ?? []);
 
     lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
-    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@latest', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
+    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
     lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
     lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {
         return strpos($entry, 'LCFA_MCP_TOKEN=') === 0 || strpos($entry, 'WP_API_PASSWORD=') === 0;
@@ -736,7 +736,7 @@ $missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, 
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
     'copy_command_string' => '',
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
     'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('missing_credentials', $missing_remote_state['status'] ?? '', 'remote Codex state should report missing_credentials while prerequisites are incomplete');
@@ -755,10 +755,10 @@ $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance,
     'client'              => 'codex',
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
-    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
     'agent_start_tool'    => 'get_connection_handoff',
-    'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@latest\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
+    'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.1\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
     'codex_project_config_path' => '.codex/config.toml',
 ], 'remote', []);
 lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
@@ -779,8 +779,8 @@ $ready_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
     'client'              => 'codex',
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
-    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
     'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('ready', $ready_remote_state['status'] ?? '', 'remote Codex state should become ready only after a passed smoke test timestamp exists');
@@ -796,7 +796,7 @@ $codex_fast_path_panel_method->invoke(
         'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '',
         'copy_command_string' => '',
-        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
     ],
     [
         'workspace_root' => '',
@@ -829,10 +829,10 @@ $codex_fast_path_panel_method->invoke(
         'mode'                => 'remote',
         'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '/var/www/example.com',
-        'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@latest'",
-        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@latest',
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
         'agent_start_tool'    => 'get_connection_handoff',
-        'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@latest\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
+        'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.1\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
         'codex_project_config_path' => '.codex/config.toml',
     ],
     [

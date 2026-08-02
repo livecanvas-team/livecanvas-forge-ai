@@ -6,6 +6,7 @@ final class LCFA_GitHub_Updater {
     private const SLUG = 'livecanvas-forge-ai';
     private const ASSET_NAME = 'livecanvas-forge-ai.zip';
     private const REPO_API = 'https://api.github.com/repos/livecanvas-team/livecanvas-forge-ai/releases/latest';
+    private const REPO_RELEASES_API = 'https://api.github.com/repos/livecanvas-team/livecanvas-forge-ai/releases?per_page=20';
     private const UPDATE_API = 'https://livecanvas.com/wp-json/livecanvas-ai-bridge/v1/update';
     private const UPDATE_URI = 'https://livecanvas.com/ai-bridge';
     private const ICON_128_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png';
@@ -13,7 +14,7 @@ final class LCFA_GitHub_Updater {
     private const CACHE_KEY = 'lcfa_livecanvas_update_release';
     private const CACHE_TTL = 21600;
     private const NO_UPDATE_CACHE_TTL = 600;
-    private const CACHE_SCHEMA = 5;
+    private const CACHE_SCHEMA = 6;
 
     private ?LCFA_Environment $environment;
 
@@ -32,6 +33,7 @@ final class LCFA_GitHub_Updater {
         $eligible = $this->is_livecanvas_update_eligible();
         $state = [
             'eligible'         => $eligible,
+            'channel'          => $this->get_update_channel(),
             'current_version'  => $this->get_current_version(),
             'latest_version'   => '',
             'update_available' => false,
@@ -110,9 +112,9 @@ final class LCFA_GitHub_Updater {
             'author'        => '<a href="https://livecanvas.com/">The LiveCanvas Team</a>',
             'author_profile'=> 'https://livecanvas.com/',
             'homepage'      => self::UPDATE_URI,
-            'requires'      => (string) ($release['requires'] ?? '6.0'),
+            'requires'      => (string) ($release['requires'] ?? '6.8'),
             'tested'        => (string) ($release['tested'] ?? ''),
-            'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
+            'requires_php'  => (string) ($release['requires_php'] ?? '8.0'),
             'download_link' => (string) ($release['download_url'] ?? ''),
             'last_updated'  => (string) ($release['published_at'] ?? ''),
             'icons'         => $this->get_plugin_icons(),
@@ -142,8 +144,8 @@ final class LCFA_GitHub_Updater {
             'url'           => (string) ($release['release_url'] ?? self::UPDATE_URI),
             'package'       => (string) ($release['download_url'] ?? ''),
             'tested'        => (string) ($release['tested'] ?? ''),
-            'requires'      => (string) ($release['requires'] ?? '6.0'),
-            'requires_php'  => (string) ($release['requires_php'] ?? '7.4'),
+            'requires'      => (string) ($release['requires'] ?? '6.8'),
+            'requires_php'  => (string) ($release['requires_php'] ?? '8.0'),
             'icons'         => $this->get_plugin_icons(),
             'banners'       => [],
             'compatibility' => new stdClass(),
@@ -159,7 +161,7 @@ final class LCFA_GitHub_Updater {
     }
 
     private function get_latest_release(bool $force = false): array {
-        $cached = get_transient(self::CACHE_KEY);
+        $cached = get_transient($this->get_cache_key());
         if (!$force && $this->is_valid_cached_release($cached)) {
             return $cached;
         }
@@ -276,7 +278,7 @@ final class LCFA_GitHub_Updater {
             ];
         }
 
-        $response = wp_remote_get(self::REPO_API, [
+        $response = wp_remote_get($this->get_update_channel() === 'beta' ? self::REPO_RELEASES_API : self::REPO_API, [
             'timeout' => 10,
             'headers' => [
                 'Accept'     => 'application/vnd.github+json',
@@ -353,16 +355,43 @@ final class LCFA_GitHub_Updater {
             'release_url'  => (string) ($payload['release_url'] ?? $payload['url'] ?? self::UPDATE_URI),
             'published_at' => (string) ($payload['published_at'] ?? $payload['last_updated'] ?? ''),
             'body'         => (string) ($payload['body'] ?? $payload['changelog'] ?? ''),
-            'requires'     => (string) ($payload['requires'] ?? '6.0'),
+            'requires'     => (string) ($payload['requires'] ?? '6.8'),
             'tested'       => (string) ($payload['tested'] ?? '7.0'),
-            'requires_php' => (string) ($payload['requires_php'] ?? '7.4'),
+            'requires_php' => (string) ($payload['requires_php'] ?? '8.0'),
             'message'      => (string) ($payload['message'] ?? ''),
             'source'       => 'livecanvas_license_endpoint',
         ];
     }
 
     private function normalize_github_payload(array $payload): array {
-        if (!empty($payload['draft']) || !empty($payload['prerelease'])) {
+        if (isset($payload[0]) && is_array($payload[0])) {
+            $selected = [];
+            foreach ($payload as $release) {
+                if (!is_array($release)) {
+                    continue;
+                }
+
+                $normalized = $this->normalize_github_release($release);
+                if (empty($normalized['ok'])) {
+                    continue;
+                }
+
+                if (!$selected || version_compare((string) $normalized['version'], (string) $selected['version'], '>')) {
+                    $selected = $normalized;
+                }
+            }
+
+            return $selected ?: [
+                'ok'      => false,
+                'message' => 'No release matches the selected update channel',
+            ];
+        }
+
+        return $this->normalize_github_release($payload);
+    }
+
+    private function normalize_github_release(array $payload): array {
+        if (!empty($payload['draft']) || (!empty($payload['prerelease']) && $this->get_update_channel() !== 'beta')) {
             return [
                 'ok'      => false,
                 'message' => 'Draft or prerelease ignored',
@@ -403,19 +432,21 @@ final class LCFA_GitHub_Updater {
             'release_url'  => (string) ($payload['html_url'] ?? self::UPDATE_URI),
             'published_at' => (string) ($payload['published_at'] ?? ''),
             'body'         => (string) ($payload['body'] ?? ''),
-            'requires'     => '6.0',
+            'requires'     => '6.8',
             'tested'       => '7.0',
-            'requires_php' => '7.4',
+            'requires_php' => '8.0',
             'source'       => 'github_release',
+            'prerelease'   => !empty($payload['prerelease']),
         ];
     }
 
     private function cache_release_result(array $result): array {
         $result['cache_schema'] = self::CACHE_SCHEMA;
         $result['checked_plugin_version'] = $this->get_current_version();
+        $result['update_channel'] = $this->get_update_channel();
         $result['checked_at'] = function_exists('time') ? time() : 0;
 
-        set_transient(self::CACHE_KEY, $result, $this->get_release_cache_ttl($result));
+        set_transient($this->get_cache_key(), $result, $this->get_release_cache_ttl($result));
 
         return $result;
     }
@@ -423,7 +454,8 @@ final class LCFA_GitHub_Updater {
     private function is_valid_cached_release($cached): bool {
         return is_array($cached)
             && (int) ($cached['cache_schema'] ?? 0) === self::CACHE_SCHEMA
-            && (string) ($cached['checked_plugin_version'] ?? '') === $this->get_current_version();
+            && (string) ($cached['checked_plugin_version'] ?? '') === $this->get_current_version()
+            && (string) ($cached['update_channel'] ?? '') === $this->get_update_channel();
     }
 
     private function get_release_cache_ttl(array $result): int {
@@ -452,6 +484,7 @@ final class LCFA_GitHub_Updater {
             'site_url'       => function_exists('home_url') ? home_url('/') : '',
             'wp_version'     => function_exists('get_bloginfo') ? (string) get_bloginfo('version') : '',
             'php_version'    => PHP_VERSION,
+            'update_channel' => $this->get_update_channel(),
         ];
     }
 
@@ -476,8 +509,25 @@ final class LCFA_GitHub_Updater {
 
     private function normalize_version_string(string $version): string {
         $version = trim($version);
+        $pattern = $this->get_update_channel() === 'beta'
+            ? '/^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/'
+            : '/^v?(\d+\.\d+\.\d+)$/';
 
-        return preg_match('/^v?(\d+\.\d+\.\d+)$/', $version, $matches) ? $matches[1] : '';
+        return preg_match($pattern, $version, $matches) ? $matches[1] : '';
+    }
+
+    public function get_update_channel(): string {
+        $current = $this->get_current_version();
+        $default = str_contains($current, '-') ? 'beta' : 'stable';
+        $channel = function_exists('get_option')
+            ? strtolower((string) preg_replace('/[^a-z0-9_-]/i', '', (string) get_option('lcfa_update_channel', $default)))
+            : $default;
+
+        return in_array($channel, ['stable', 'beta'], true) ? $channel : $default;
+    }
+
+    private function get_cache_key(): string {
+        return $this->get_update_channel() === 'beta' ? self::CACHE_KEY . '_beta' : self::CACHE_KEY;
     }
 
     private function is_valid_package_url(string $url): bool {

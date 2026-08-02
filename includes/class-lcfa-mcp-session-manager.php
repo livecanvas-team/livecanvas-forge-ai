@@ -302,7 +302,25 @@ final class LCFA_MCP_Session_Manager {
             return false;
         }
 
-        return self::validate_session_token($token, $required_scope);
+        $session = self::validate_session_token($token, $required_scope);
+        if (!is_array($session)) {
+            return $session;
+        }
+
+        $package_version = sanitize_text_field((string) $request->get_header('x-lcfa-mcp-package-version'));
+        if ($package_version !== '' && preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/', $package_version)) {
+            $sessions = self::get_sessions();
+            $session_id = sanitize_key((string) ($session['session_id'] ?? ''));
+            if ($session_id !== '' && isset($sessions[$session_id])) {
+                $sessions[$session_id]['mcp_package_version'] = $package_version;
+                $sessions[$session_id]['mcp_package_seen_at'] = gmdate('c');
+                update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
+                $session['mcp_package_version'] = $package_version;
+                $session['mcp_package_seen_at'] = $sessions[$session_id]['mcp_package_seen_at'];
+            }
+        }
+
+        return $session;
     }
 
     public static function validate_session_token(string $token, string $required_scope = 'read') {

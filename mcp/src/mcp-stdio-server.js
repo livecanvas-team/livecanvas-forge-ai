@@ -1,5 +1,5 @@
 const PROTOCOL_VERSION = '2024-11-05'
-const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-11-25', '2026-07-28']
+const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-11-25']
 const fs = require('node:fs')
 const PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
 
