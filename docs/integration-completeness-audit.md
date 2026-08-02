@@ -34,7 +34,7 @@ The running reference site reported WindPress 3.2.86 in `hybrid` mode with Tailw
 ## Executive Result
 
 - **LiveCanvas core operations:** strong alpha, with broad contract coverage and real local/remote use.
-- **Picostrap:** strongest framework path; site generation, Sass compilation, header behavior, and visual checks have a dedicated E2E fixture.
+- **Picostrap:** strongest framework path; site generation, Sass compilation, targeted patch rollback, header behavior, and desktop/mobile visual checks pass on the LocalWP reference stack.
 - **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. Cross-host and Tailwind 3 qualification remain open.
 - **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, runtime rollback, and automatic failed-import recovery are implemented; the main flow passes on a real LocalWP stack.
 - **Secure agent transport:** functional beta. Pairing, site identity, scopes, preview-first writes, revocation, five-client setup generation, and exact MCP package detection are implemented; multi-host/five-client qualification remains open.
@@ -64,11 +64,11 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 |---|---|---|---|
 | Detect Picostrap parent/child theme and Bootstrap editor | Local E2E | environment detection and Houseflow fixture | Version matrix beyond the inspected 3.8.6 release |
 | Generate Bootstrap/LiveCanvas markup | Local E2E | framework validator and Houseflow generation flow | More component fixtures and accessibility assertions |
-| Preview/apply design system | Contract tested | Native `SCSSvar_*` registry validation, deterministic Sass manifest, optimistic fingerprints, MCP compile-before-apply, atomic Customizer/`bundle.css` write, and unified rollback tests | Real LocalWP and remote E2E across supported Picostrap layouts |
+| Preview/apply design system | Contract tested + local E2E | Native `SCSSvar_*` registry validation, deterministic Sass manifest, optimistic fingerprints, MCP compile-before-apply, atomic Customizer/`bundle.css` write, unified rollback tests, and the Houseflow LocalWP transaction | Remote E2E and additional supported Picostrap layouts |
 | Read/write SCSS in allowed child-theme paths | Contract tested | theme file bridge and Picostrap compile service | Restrictive-host filesystem E2E |
 | Compile Sass without committing a failed bundle | Contract tested + local E2E | compile service and Houseflow scripts | Test different Sass/Picostrap build layouts |
 | Prevent Tailwind runtime from hiding Bootstrap components | Local E2E | `LCFA_Framework_Compatibility`, visible nav/accordion checks | Regression matrix with cache plugins and minifiers |
-| Desktop/mobile visual verification | Local E2E | `tests/e2e/houseflow` | Automate this fixture in CI with managed browser installation |
+| Desktop/mobile visual verification | Local E2E + multi-OS runtime CI | `tests/e2e/houseflow` plus Chromium launch tests on macOS, Linux, and Windows | Add the full WordPress fixture to a managed disposable CI site |
 
 ### Picowind And WindPress
 
@@ -108,7 +108,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Site fingerprint and project identity | Local/remote E2E | handoff and session checks | Stronger warning when a project config targets a migrated domain |
 | Scoped read/preview/write/full access | Contract tested + field use | ability registry and session scopes | Per-operation approval policies for production |
 | Theme files, media, debug, cache, SEO, Polylang | Contract tested | Full Power services | Production E2E across plugin combinations |
-| Visual check | Contract tested + local launch probe | `visual_check_status`, guided repair, handoff runtime metadata, real macOS Chromium launch | Windows/Linux and remote-agent runtime qualification |
+| Visual check | Contract tested + local E2E + multi-OS runtime CI | `visual_check_status`, guided repair, handoff runtime metadata, Houseflow desktop/mobile checks, and Chromium launch tests on macOS, Linux, and Windows | Remote and restricted coding-agent host qualification |
 | MCP schema/caching metadata | Contract tested | Node registry tests | Complete migration after the MCP 2026 release candidate stabilizes |
 | Versioned stack capability profile | Contract tested | `stack-capabilities.v1`, snapshot, admin hero, and agent handoff | Validate the profile against second-host and future-version fixtures |
 
@@ -134,8 +134,8 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 
 ### P1: Required For Complete Editorial Coverage
 
-1. Run the now contract-tested Picostrap Customizer/Sass/bundle transaction on real LocalWP and paired remote sites, including injected compile and stale-preview failures.
-2. Qualify `visual_check_status` and `visual_check` on Windows/Linux coding-agent runtimes and document host-specific browser sandbox failures.
+1. Repeat the passing Picostrap Customizer/Sass/bundle transaction on a paired remote site, including injected compile and stale-preview failures.
+2. Qualify `visual_check_status` and `visual_check` inside real Windows/Linux coding-agent installations and document host-specific browser sandbox failures; bare Chromium launch is already covered in CI.
 3. Add remote build orchestration or a cloud runner for hosts where PHP cannot compile or write build artifacts.
 4. Qualify the seven-day inactive Theme Library handoff/backup cleanup on long-running and restrictive hosts; active-theme handoffs remain protected.
 5. Run real multilingual dynamic-template assignment and rollback tests with Polylang active.
@@ -162,9 +162,9 @@ The 2026-08-02 LocalWP acceptance run used LiveCanvas, Picowind, WindPress 3.2.8
 
 This run closes the deterministic local build gate. If the compiler or cache verification is unavailable, the importer now returns `build_required` or `build_failed` and never reports the theme as ready.
 
-## Picostrap Design-System Contract Evidence
+## Picostrap Design-System And Local E2E Evidence
 
-The design-system contract suite first stabilized in 0.1.31 and remains part of the 0.2 beta baseline:
+The design-system contract suite first stabilized in 0.1.31 and remains part of the 0.2 beta baseline. On 2026-08-02, the Houseflow fixture also passed against the real `test-ai-forge.local` LocalWP stack:
 
 1. Preview reads the active Picostrap Customizer registry and produces deterministic current/proposed Sass manifests.
 2. Unsafe, unknown, or unregistered `SCSSvar_*` values are rejected before compilation.
@@ -173,5 +173,9 @@ The design-system contract suite first stabilized in 0.1.31 and remains part of 
 5. Customizer theme mods and the child-theme `css-output/bundle.css` are applied as one guarded operation.
 6. A failed bundle write restores the previous Customizer state.
 7. The audit rollback restores both Customizer values and the previous compiled bundle/version metadata.
+8. The fixture created or updated the homepage, journal page, three sample posts, separate header/footer partials, and two dynamic templates without duplicating the shell inside page content.
+9. A targeted homepage patch returned an `audit_id`; rollback restored the exact original SHA-256 content hash and preserved published status.
+10. Sass compilation stored the active child-theme bundle and cache flush completed successfully. Picostrap's upstream legacy Sass emitted deprecation warnings but no compile error.
+11. Desktop and 390 px mobile checks across the homepage, journal, and single post returned HTTP 200 with no horizontal overflow, broken images, or page errors.
 
-This is contract evidence, not production qualification. Real-site Picostrap E2E and host/version matrix work remain open.
+This closes the first real-site Picostrap beta gate. Remote-host and multi-version qualification remain open, so it is not yet a production guarantee.

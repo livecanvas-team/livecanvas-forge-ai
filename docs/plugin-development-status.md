@@ -37,7 +37,7 @@ These areas have implemented runtime code and automated regression coverage:
 - Remote Theme Library builds remain `build_required` until the paired MCP runtime stores CSS and WordPress verifies the audit ID, import checksum, active theme, and cache checksum. Tailwind 4 is fully supported; Tailwind 3 is guided degraded mode.
 - Asteria 1.0.1 now passes a real LocalWP preview/install/import/desktop/mobile/rollback run with separate LiveCanvas header/footer rendering and exact previous theme/homepage recovery.
 - Progressive admin workspaces: three-step Setup, focused Connections, four-view Abilities & Runs, and five-view Command Deck.
-- Local MCP visual QA now reports Playwright/browser readiness, verifies Chromium launch on demand, and distinguishes its runtime from Direct OAuth WordPress-only abilities.
+- Local MCP visual QA now reports Playwright/browser readiness, verifies Chromium launch on demand, distinguishes its runtime from Direct OAuth WordPress-only abilities, and passes the Houseflow desktop/mobile LocalWP workflow.
 - Stable/beta updater channels, exact prerelease selection, and a CI matrix for PHP 8.0-8.4, Node 18/20/22, Chromium, package build, and secret scanning.
 
 ## Beta: Needs More Real-Site Verification
@@ -47,7 +47,7 @@ These features are implemented, but should still be treated as beta:
 - Direct OAuth discovery and authorization across different hosts, proxies, security plugins, and WordPress MCP Adapter versions.
 - Remote Full Access writes across restrictive hosting filesystems.
 - Picostrap Sass and WindPress/Picowind compilation across plugin versions.
-- Visual checks across Windows/Linux and restricted agent hosts; the readiness/repair contract and a real macOS Chromium launch are verified.
+- Visual checks inside real Windows/Linux and restricted coding-agent installations; Chromium launch itself is verified by CI on macOS, Linux, and Windows.
 - Theme Library import across migrated, multilingual, cache-heavy, and restrictive remote sites. The first LocalWP Picowind/Tailwind 4 transaction now passes.
 - Polylang and SEOPress operations across different content models and language assignments.
 - The React Abilities & Runs shell and its progressive fallback to the PHP interface.
@@ -80,6 +80,9 @@ The current automated baseline contains:
 - Manual desktop and 390 px mobile review of the coding-agent setup guide.
 - Manual desktop and 390 px mobile review of Setup, Connections, Build Plan, Theme Library, Abilities & Runs, and Command Deck.
 - Real MCP discovery from Codex and OpenCode against a clean local WordPress site.
+- Passing LocalWP Picostrap Houseflow generation, compile, targeted patch, exact rollback, and six-view visual check.
+- Passing LocalWP Picowind Asteria import, Tailwind 4 cache verification, desktop/mobile visual check, and rollback to the original Picostrap theme/homepage.
+- Passing GitHub Actions run `30746638733` across PHP 8.0-8.4, Node 18/20/22, Chromium on macOS/Linux/Windows, Gitleaks, and the distribution ZIP.
 
 The legacy GUI smoke script is not part of this passing baseline. It contains stale localhost assumptions and requires interactive macOS/Chrome access; current onboarding QA is performed through the controlled browser workflow instead.
 
@@ -93,7 +96,7 @@ Before calling a release production-ready, complete all of the following:
 4. Verify Full Access tools on at least two hosting environments with different filesystem policies.
 5. Publish a compatibility matrix and document known host/plugin conflicts.
 
-The `0.2.0-beta.1` prerelease additionally requires the automated matrix to pass, a local Tailwind 4 E2E run, a guided Tailwind 3 degraded run, and one remote staging pairing/build run. Publishing the npm beta package is allowed earlier because clients need it to perform that qualification.
+For `0.2.0-beta.1`, the automated matrix and local Picostrap/Tailwind 4 gates now pass. The remaining prerelease gates are a guided Tailwind 3 degraded run, one remote staging pairing/build run, and the five-client handoff matrix. Publishing the npm beta package is allowed earlier because clients need it to perform that qualification.
 
 The detailed stack-by-stack matrix and remaining production gates are maintained in [Integration Completeness Audit](integration-completeness-audit.md).
 
