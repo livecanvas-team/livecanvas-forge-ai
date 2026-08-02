@@ -1,7 +1,7 @@
 # LiveCanvas Stack Integration Completeness Audit
 
 Last reviewed: 2026-08-02
-Plugin baseline: LiveCanvas AI Bridge 0.1.27
+Plugin baseline: LiveCanvas AI Bridge 0.1.28
 
 ## Purpose
 
@@ -35,8 +35,8 @@ The running reference site reported WindPress 3.2.86 in `hybrid` mode with Tailw
 
 - **LiveCanvas core operations:** strong alpha, with broad contract coverage and real local/remote use.
 - **Picostrap:** strongest framework path; site generation, Sass compilation, header behavior, and visual checks have a dedicated E2E fixture.
-- **Picowind/WindPress:** broad API coverage with a passing local Asteria import, desktop/mobile visual check, and rollback. Deterministic Tailwind cache compilation remains the main incomplete gate.
-- **Theme Library:** functional beta. Package validation, install, import, separate LiveCanvas shell rendering, media, and runtime rollback now pass on a real LocalWP stack.
+- **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. Cross-host and Tailwind 3 qualification remain open.
+- **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, and runtime rollback now pass on a real LocalWP stack.
 - **Secure agent transport:** strong alpha. Pairing, site identity, scopes, preview-first writes, and revocation are implemented; multi-host qualification remains open.
 
 The plugin is not yet “perfectly integrated” in the production sense. Its main remaining risk is not missing CRUD endpoints; it is proving that build output, framework state, and rollback remain coherent across versions and hosts.
@@ -79,8 +79,8 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Initialize Picowind runtime | Contract tested + source parity | `ensure_picowind_runtime()` matches Picowind's WindPress setup behavior | Verify Tailwind 3 and Tailwind 4 variants on real sites |
 | Scan providers and volume entries | Contract tested | REST/MCP WindPress endpoints | Large-volume pagination and payload limits |
 | Store `theme.json` and compiled CSS | Contract tested | WindPress bridge and design-system executor | Remote E2E and cache-plugin matrix |
-| Build WindPress cache locally | Contract tested | local MCP build gateway | Deterministic remote build strategy when no local filesystem bridge exists |
-| Import Tailwind source from Theme Library | Local E2E | Asteria 1.0.1 imported and rendered through WindPress hybrid mode | Trigger and verify a persistent compiled cache before reporting the imported site ready |
+| Build WindPress cache locally | Local E2E | Asteria build produced and verified a 59,097-byte Tailwind 4 cache through the local MCP gateway | Deterministic remote build strategy when no local filesystem bridge exists |
+| Import Tailwind source from Theme Library | Local E2E | Asteria 1.0.1 imported, compiled, persisted, and rendered through WindPress hybrid mode | Remote-host and Tailwind 3 qualification |
 | Backup and restore runtime/options/cache | Local E2E | focused tests plus Asteria import/rollback on LocalWP | Retention cleanup and multi-version/host matrix |
 | Prevent WindPress runtime on Picostrap | Local E2E | framework compatibility filter | Confirm behavior across WindPress releases |
 
@@ -95,7 +95,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Import settings, media, partials, homepage, menus | Local E2E | Asteria created separate header/footer, homepage, and four media items | Atomic failure recovery and multilingual fixtures |
 | Idempotent re-import | Contract tested | import key/version/checksum logic | Force-update migration rules between manifest versions |
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
-| Automatic compile after source import | Partial | runtime initialization exists | A successful build must become an import completion gate |
+| Automatic compile after source import | Local E2E | explicit `ready`, `build_required`, and `build_failed`; persistent cache checksum verification; admin retry endpoint; passing Asteria import/build/rollback | Remote-host fallback matrix |
 
 ### Agent, Security, And Developer Operations
 
@@ -113,9 +113,9 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 
 ### P0: Required Before A Production Claim
 
-1. **Deterministic Theme Library build gate**
-   - Source CSS containing `@import` or Tailwind directives cannot be treated as finished merely because it was copied.
-   - Import must finish with a compiled cache or an explicit `build_required` state and one guided action.
+1. **Multi-host Theme Library build gate qualification**
+   - The deterministic LocalWP compile/import/visual-check/rollback run passes.
+   - Production evidence still requires remote-host `build_required` verification and a second supported WindPress host/version.
 
 2. **Transaction recovery**
    - A failed import currently stores rollback information but does not automatically restore partial writes.
@@ -153,8 +153,9 @@ The 2026-08-02 LocalWP acceptance run used LiveCanvas, Picowind, WindPress 3.2.8
 1. `Asteria Search` 1.0.1 passed ZIP preview and checksum validation.
 2. The child theme installed and activated from a Picostrap baseline.
 3. Import created a homepage, separate LiveCanvas header/footer partials, and four media attachments.
-4. Desktop 1440 px and mobile 390 px checks found exactly one header, main, and footer, no printed CSS, and no horizontal overflow.
-5. Rollback restored `picostrap5-child-base`, front page ID 25, WindPress options, and runtime files with no errors.
-6. Baseline `main.css` remained present; imported `theme.json` and compiled cache files were absent again after rollback.
+4. The local MCP/WindPress build compiled 3,923 candidates from seven providers and stored a 59,097-byte `tailwind.css` cache with SHA-256 `d8571f467de2ed63d6791b7be8d6fc18943d8238b67d57d40c843397e3712efc`.
+5. Desktop 1440 px and mobile 390 px checks found exactly one header, main, and footer, no broken images, no console errors, and no horizontal overflow.
+6. Rollback restored `picostrap5-child-base`, front page ID 25, WindPress options, and runtime files with no errors.
+7. Baseline `main.css` remained present; imported `theme.json` and compiled cache files were absent again after rollback, and the import state changed to `rolled_back`.
 
-The same run confirmed the remaining build gap: hybrid runtime rendered the Tailwind page, but no persistent `tailwind.css` cache was produced. The next acceptance block is therefore a deterministic compile gate that either produces and verifies that cache or returns `build_required` instead of claiming full readiness.
+This run closes the deterministic local build gate. If the compiler or cache verification is unavailable, the importer now returns `build_required` or `build_failed` and never reports the theme as ready.

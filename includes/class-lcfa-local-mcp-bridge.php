@@ -68,6 +68,13 @@ final class LCFA_Local_MCP_Bridge {
         return $this->status_cache;
     }
 
+    public function refresh_status(): array {
+        $this->status_cache = null;
+        delete_transient($this->get_status_cache_key());
+
+        return $this->get_status();
+    }
+
     public function build_windpress_cache(array $arguments = []): array {
         return $this->run_tool('build_windpress_cache', $arguments);
     }

@@ -339,26 +339,20 @@ Every listed option is backed up before update and restored on rollback.
 
 Path: `starter-data/design-system.json`.
 
-The current importer stores the design system payload in:
+The importer stores the design system payload through the WindPress `theme.json` cache API when WindPress is active.
 
 ```text
-lcfa_theme_library_design_system
+starter-data/design-system.json -> WindPress theme.json cache
 ```
 
-If `windpress_css` is present, AI Bridge attempts to import it through the WindPress bridge:
+The required `public/styles/tailwind.css` file can contain either Tailwind source imports/directives or already compiled CSS:
 
-```json
-{
-  "tokens": {
-    "colors": {
-      "primary": "#30c7d9"
-    }
-  },
-  "windpress_css": "/* generated CSS */"
-}
+```css
+@import "./presets/daisyui.css";
+@import "./presets/example.css";
 ```
 
-If WindPress import is unavailable, the importer records a warning and continues.
+Tailwind source is compiled after the homepage and partials are written, so provider scans see the final imported content. Already compiled CSS is stored directly. In both cases AI Bridge verifies the persistent WindPress cache before declaring the import ready.
 
 ## Menus
 
@@ -403,9 +397,20 @@ The importer creates missing menus, adds menu items, and assigns `nav_menu_locat
 6. Homepage page with `_lc_livecanvas_enabled=1`.
 7. Menus.
 8. `show_on_front=page` and `page_on_front={homepage_id}`.
-9. WindPress cache rebuild/flush when available.
-10. AI Bridge cache flush.
+9. WindPress compile and persistent cache verification.
+10. WindPress and AI Bridge cache flush.
 11. Rollback metadata storage.
+
+## Import Completion States
+
+Theme Library uses explicit completion states:
+
+- `ready`: starter data is imported and the persistent CSS cache is verified;
+- `build_required`: starter data is imported, but a compatible local build runtime is unavailable;
+- `build_failed`: the compiler failed or returned without producing a verifiable cache;
+- `failed`: the import failed before or outside the build stage.
+
+`POST /wp-json/lcfa/v1/theme-library/build` retries only the CSS build for an existing import. It does not duplicate pages, partials, media, or menus. The route is admin-only and is not MCP-public in v1.
 
 ## Idempotency
 
@@ -415,7 +420,7 @@ An import key is built from:
 theme.slug:theme.version:zip_sha256
 ```
 
-Re-importing the same key returns `already_imported` unless `force=true`.
+Re-importing the same ready key returns `already_imported` unless `force=true`. Imports in `build_required` or `build_failed` keep their existing content and direct the admin to the build retry action instead of duplicating starter data.
 
 Existing imported records are found by:
 

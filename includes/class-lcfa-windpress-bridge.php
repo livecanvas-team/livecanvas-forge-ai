@@ -324,6 +324,67 @@ final class LCFA_WindPress_Bridge {
         ];
     }
 
+    /**
+     * Verify that WindPress has a persistent, compiled CSS cache rather than a
+     * Tailwind source entrypoint that only works through the browser compiler.
+     */
+    public function get_compiled_cache_state(): array {
+        if (!$this->is_available()) {
+            return [
+                'ready'   => false,
+                'status'  => 'unavailable',
+                'message' => __('WindPress is not active on this site.', 'livecanvas-forge-ai'),
+                'cache'   => [],
+            ];
+        }
+
+        $summary = $this->get_cache_summary();
+        $cache   = is_array($summary['css'] ?? null) ? $summary['css'] : [];
+        $path    = (string) ($cache['path'] ?? '');
+
+        if (empty($cache['exists']) || $path === '' || !is_readable($path) || (int) ($cache['bytes'] ?? 0) <= 0) {
+            return [
+                'ready'   => false,
+                'status'  => 'missing',
+                'message' => __('WindPress has no persistent compiled CSS cache yet.', 'livecanvas-forge-ai'),
+                'cache'   => $cache,
+            ];
+        }
+
+        $contents = file_get_contents($path);
+        if (!is_string($contents) || trim($contents) === '') {
+            return [
+                'ready'   => false,
+                'status'  => 'unreadable',
+                'message' => __('The WindPress CSS cache exists but could not be read.', 'livecanvas-forge-ai'),
+                'cache'   => $cache,
+            ];
+        }
+
+        $has_source_directives = (bool) preg_match(
+            '~@tailwind\b|@import\s+(?:url\()?\s*["\']?(?:tailwindcss(?:/|["\'])|\./@picowind/)~i',
+            $contents
+        );
+
+        if ($has_source_directives) {
+            return [
+                'ready'   => false,
+                'status'  => 'source_css',
+                'message' => __('The WindPress cache still contains Tailwind source directives and must be compiled.', 'livecanvas-forge-ai'),
+                'cache'   => $cache,
+            ];
+        }
+
+        $cache['sha256'] = hash_file('sha256', $path) ?: '';
+
+        return [
+            'ready'   => true,
+            'status'  => 'ready',
+            'message' => __('WindPress compiled CSS cache is present and verified.', 'livecanvas-forge-ai'),
+            'cache'   => $cache,
+        ];
+    }
+
     public function flush_runtime_cache(): array {
         if (!$this->is_available()) {
             return [

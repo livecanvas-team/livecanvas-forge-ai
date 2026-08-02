@@ -8,11 +8,13 @@ final class LCFA_Theme_Library_Importer {
     private LCFA_Theme_Library_Installer $installer;
     private LCFA_Theme_Library_Validator $validator;
     private LCFA_WindPress_Bridge $windpress_bridge;
+    private ?LCFA_Design_System_Build_Gateway $build_gateway;
 
-    public function __construct(LCFA_Theme_Library_Installer $installer, LCFA_Theme_Library_Validator $validator, LCFA_WindPress_Bridge $windpress_bridge) {
+    public function __construct(LCFA_Theme_Library_Installer $installer, LCFA_Theme_Library_Validator $validator, LCFA_WindPress_Bridge $windpress_bridge, ?LCFA_Design_System_Build_Gateway $build_gateway = null) {
         $this->installer = $installer;
         $this->validator = $validator;
         $this->windpress_bridge = $windpress_bridge;
+        $this->build_gateway = $build_gateway;
     }
 
     public function import(array $theme, bool $force = false): array {
@@ -37,13 +39,26 @@ final class LCFA_Theme_Library_Importer {
         $imports = $this->get_imports();
         $existing_import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
         $existing_status = (string) ($existing_import['status'] ?? 'imported');
-        if (!$force && $existing_import && $existing_status !== 'failed' && (string) ($existing_import['import_key'] ?? '') === $import_key) {
+        if (!$force && $existing_import && in_array($existing_status, ['ready', 'imported'], true) && (string) ($existing_import['import_key'] ?? '') === $import_key) {
             $this->delete_file($zip_path);
             return [
                 'ok'       => true,
                 'status'   => 'already_imported',
                 'message'  => __('This Theme Library item is already imported at the same version and checksum.', 'livecanvas-forge-ai'),
                 'import'   => $existing_import,
+                'manifest' => $manifest,
+            ];
+        }
+
+        if (!$force && $existing_import && in_array($existing_status, ['build_required', 'build_failed'], true) && (string) ($existing_import['import_key'] ?? '') === $import_key) {
+            $this->delete_file($zip_path);
+            return [
+                'ok'       => true,
+                'ready'    => false,
+                'status'   => $existing_status,
+                'message'  => __('Starter data is already imported. Complete the pending Tailwind CSS build instead of importing it again.', 'livecanvas-forge-ai'),
+                'import'   => $existing_import,
+                'build'    => is_array($existing_import['build'] ?? null) ? $existing_import['build'] : [],
                 'manifest' => $manifest,
             ];
         }
@@ -142,7 +157,7 @@ final class LCFA_Theme_Library_Importer {
 
             $this->import_options($base_dir, (string) ($manifest['livecanvas_settings'] ?? ''), $rollback, $result);
             $this->ensure_livecanvas_partial_settings($rollback, $result);
-            $this->import_design_system($base_dir, $manifest, $rollback, $result);
+            $design_system_state = $this->import_design_system($base_dir, $manifest, $rollback, $result);
             $media_map = $this->import_media($base_dir, (string) ($manifest['media_manifest'] ?? ''), $slug, $checksum, $rollback, $result);
 
             $header = $this->read_content_file($base_dir, (string) ($manifest['header']['content_file'] ?? ''), $media_map);
@@ -165,6 +180,22 @@ final class LCFA_Theme_Library_Importer {
             $this->import_menus($base_dir, (string) ($manifest['menus_file'] ?? ''), $rollback, $result);
             $this->set_homepage($page_id, $rollback, $result);
 
+            $build = $this->finalize_build($is_picowind, $design_system_state);
+            $result['build'] = $build;
+            $result['ready'] = !empty($build['ready']);
+            $result['status'] = (string) ($build['status'] ?? 'ready');
+
+            if ($result['status'] === 'ready') {
+                $result['message'] = __('Theme Library starter data imported and its compiled CSS cache was verified.', 'livecanvas-forge-ai');
+                $result['steps'][] = 'windpress_compiled_cache_verified';
+            } elseif ($result['status'] === 'build_failed') {
+                $result['message'] = __('Starter data was imported, but the Tailwind CSS build failed. Retry the build or roll back the import.', 'livecanvas-forge-ai');
+                $result['warnings'][] = (string) ($build['message'] ?? '');
+            } else {
+                $result['message'] = __('Starter data was imported. Build Tailwind CSS before treating this theme as ready.', 'livecanvas-forge-ai');
+                $result['warnings'][] = (string) ($build['message'] ?? '');
+            }
+
             $flush = $this->windpress_bridge->flush_runtime_cache();
             if (empty($flush['ok'])) {
                 $result['warnings'][] = (string) ($flush['message'] ?? __('WindPress cache flush was not available.', 'livecanvas-forge-ai'));
@@ -180,13 +211,15 @@ final class LCFA_Theme_Library_Importer {
                 'slug'       => $slug,
                 'version'    => $version,
                 'checksum'   => $checksum,
-                'status'     => 'imported',
+                'status'     => $result['status'],
                 'import_key' => $import_key,
                 'audit_id'   => $audit_id,
                 'imported_at'=> current_time('mysql', true),
                 'homepage_id'=> $page_id,
                 'header_id'  => $header_id,
                 'footer_id'  => $footer_id,
+                'stylesheet' => $stylesheet,
+                'build'      => $build,
             ];
             update_option(self::IMPORTS_OPTION, $imports, false);
 
@@ -221,6 +254,71 @@ final class LCFA_Theme_Library_Importer {
         $imports = get_option(self::IMPORTS_OPTION, []);
 
         return is_array($imports) ? $imports : [];
+    }
+
+    public function get_build_capability(): array {
+        if (!$this->build_gateway) {
+            return [
+                'build_available' => false,
+                'message'         => __('The local WindPress build gateway is not configured.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return $this->build_gateway->get_status();
+    }
+
+    public function build(string $slug): array {
+        $slug = sanitize_key($slug);
+        $imports = self::get_imports();
+        $import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
+
+        if ($slug === '' || !$import) {
+            return [
+                'ok'      => false,
+                'status'  => 'missing_import',
+                'message' => __('Import starter data before building its Tailwind CSS.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ((string) ($import['status'] ?? '') === 'failed') {
+            return [
+                'ok'      => false,
+                'status'  => 'failed',
+                'message' => __('This import failed before the build stage. Roll it back or force a new import.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $stylesheet = sanitize_key((string) ($import['stylesheet'] ?? ''));
+        if ($stylesheet !== '' && function_exists('wp_get_theme')) {
+            $active_stylesheet = sanitize_key((string) wp_get_theme()->get_stylesheet());
+            if ($active_stylesheet !== $stylesheet) {
+                return [
+                    'ok'              => false,
+                    'ready'           => false,
+                    'status'          => 'build_required',
+                    'message'         => __('Activate the imported child theme before building its Tailwind CSS.', 'livecanvas-forge-ai'),
+                    'theme_slug'      => $slug,
+                    'import_audit_id' => (string) ($import['audit_id'] ?? ''),
+                ];
+            }
+        }
+
+        $build = $this->execute_windpress_build();
+        $import['status'] = (string) ($build['status'] ?? 'build_failed');
+        $import['build'] = $build;
+        $import['build_updated_at'] = current_time('mysql', true);
+        $imports[$slug] = $import;
+        update_option(self::IMPORTS_OPTION, $imports, false);
+
+        return [
+            'ok'              => !empty($build['ready']),
+            'ready'           => !empty($build['ready']),
+            'status'          => $import['status'],
+            'message'         => (string) ($build['message'] ?? ''),
+            'theme_slug'      => $slug,
+            'import_audit_id' => (string) ($import['audit_id'] ?? ''),
+            'build'           => $build,
+        ];
     }
 
     private function import_options(string $base_dir, string $relative_path, array &$rollback, array &$result): void {
@@ -271,7 +369,12 @@ final class LCFA_Theme_Library_Importer {
         ];
     }
 
-    private function import_design_system(string $base_dir, array $manifest, array &$rollback, array &$result): void {
+    private function import_design_system(string $base_dir, array $manifest, array &$rollback, array &$result): array {
+        $state = [
+            'source'      => 'none',
+            'cache_ready' => false,
+            'error'       => '',
+        ];
         $design_path = (string) ($manifest['design_system_file'] ?? '');
         $design = $this->read_json_file($base_dir, $design_path);
         if ($design) {
@@ -289,16 +392,136 @@ final class LCFA_Theme_Library_Importer {
             if ($css !== '') {
                 if (preg_match('/@(import|tailwind)\b/', $css)) {
                     $result['steps'][] = 'windpress_source_css_ready';
+                    $state['source'] = 'tailwind_source';
                 } else {
                     $saved_css = $this->windpress_bridge->save_cache_css($css);
                     if (empty($saved_css['ok'])) {
-                        $result['warnings'][] = (string) ($saved_css['message'] ?? __('WindPress CSS cache import was not available.', 'livecanvas-forge-ai'));
+                        $state['source'] = 'compiled_css';
+                        $state['error'] = (string) ($saved_css['message'] ?? __('WindPress CSS cache import was not available.', 'livecanvas-forge-ai'));
+                        $result['warnings'][] = $state['error'];
                     } else {
                         $result['steps'][] = 'windpress_css_imported';
+                        $state['source'] = 'compiled_css';
+                        $cache = $this->windpress_bridge->get_compiled_cache_state();
+                        $state['cache_ready'] = !empty($cache['ready']);
+                        $state['cache'] = $cache;
                     }
                 }
             }
         }
+
+        return $state;
+    }
+
+    private function finalize_build(bool $is_picowind, array $design_system_state): array {
+        if (!$is_picowind) {
+            return [
+                'ready'    => true,
+                'status'   => 'ready',
+                'strategy' => 'not_required',
+                'message'  => __('No WindPress build is required for this theme.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!empty($design_system_state['cache_ready'])) {
+            return [
+                'ready'        => true,
+                'status'       => 'ready',
+                'strategy'     => 'packaged_compiled_css',
+                'message'      => __('The packaged compiled CSS was stored and verified.', 'livecanvas-forge-ai'),
+                'verification' => $design_system_state['cache'] ?? [],
+            ];
+        }
+
+        if (!empty($design_system_state['error'])) {
+            return [
+                'ready'    => false,
+                'status'   => 'build_failed',
+                'strategy' => 'packaged_compiled_css',
+                'message'  => (string) $design_system_state['error'],
+            ];
+        }
+
+        return $this->execute_windpress_build();
+    }
+
+    private function execute_windpress_build(): array {
+        if (!$this->build_gateway) {
+            return [
+                'ready'       => false,
+                'status'      => 'build_required',
+                'strategy'    => 'windpress_local_mcp',
+                'next_action' => 'configure_build_gateway',
+                'message'     => __('A persistent Tailwind build is required, but the local build gateway is not configured.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $gateway_status = $this->build_gateway->refresh_status();
+        if (empty($gateway_status['build_available'])) {
+            return [
+                'ready'       => false,
+                'status'      => 'build_required',
+                'strategy'    => 'windpress_local_mcp',
+                'next_action' => 'make_local_build_available',
+                'message'     => (string) ($gateway_status['message'] ?? __('A persistent Tailwind build is required, but it is unavailable from this runtime.', 'livecanvas-forge-ai')),
+                'gateway'     => $this->summarize_gateway_status($gateway_status),
+            ];
+        }
+
+        $build = $this->build_gateway->build_windpress_cache([
+            'kind'       => 'full',
+            'store'      => true,
+            'source_map' => false,
+        ]);
+
+        if (empty($build['ok'])) {
+            return [
+                'ready'       => false,
+                'status'      => 'build_failed',
+                'strategy'    => 'windpress_local_mcp',
+                'next_action' => 'retry_build',
+                'message'     => (string) ($build['message'] ?? __('The local WindPress build failed.', 'livecanvas-forge-ai')),
+                'gateway'     => $this->summarize_gateway_status($gateway_status),
+            ];
+        }
+
+        $verification = $this->windpress_bridge->get_compiled_cache_state();
+        if (empty($verification['ready'])) {
+            return [
+                'ready'        => false,
+                'status'       => 'build_failed',
+                'strategy'     => 'windpress_local_mcp',
+                'next_action'  => 'retry_build',
+                'message'      => (string) ($verification['message'] ?? __('WindPress reported a successful build, but no compiled cache could be verified.', 'livecanvas-forge-ai')),
+                'verification' => $verification,
+                'gateway'      => $this->summarize_gateway_status($gateway_status),
+            ];
+        }
+
+        $build_result = is_array($build['result'] ?? null) ? $build['result'] : [];
+
+        return [
+            'ready'           => true,
+            'status'          => 'ready',
+            'strategy'        => 'windpress_local_mcp',
+            'message'         => __('Tailwind CSS was compiled, stored, and verified in the WindPress cache.', 'livecanvas-forge-ai'),
+            'tailwind_version'=> (int) ($build_result['tailwind_version'] ?? 0),
+            'provider_count'  => (int) ($build_result['provider_count'] ?? 0),
+            'candidate_count' => (int) ($build_result['candidate_count'] ?? 0),
+            'verification'    => $verification,
+            'gateway'         => $this->summarize_gateway_status($gateway_status),
+        ];
+    }
+
+    private function summarize_gateway_status(array $status): array {
+        return [
+            'build_available' => !empty($status['build_available']),
+            'local_site'      => !empty($status['local_site']),
+            'windpress_active'=> !empty($status['windpress_active']),
+            'node_available'  => !empty($status['node_available']),
+            'node_version'    => (string) ($status['node_version'] ?? ''),
+            'rest_reachable'  => !empty($status['rest_reachable']),
+        ];
     }
 
     private function import_media(string $base_dir, string $relative_path, string $theme_slug, string $checksum, array &$rollback, array &$result): array {

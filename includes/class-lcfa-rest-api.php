@@ -38,6 +38,9 @@ if (!class_exists('LCFA_Theme_Library_Importer', false)) {
 if (!class_exists('LCFA_Theme_Library_Rollback', false)) {
     require_once __DIR__ . '/class-lcfa-theme-library-rollback.php';
 }
+if (!class_exists('LCFA_Design_System_Build_Gateway', false)) {
+    require_once __DIR__ . '/class-lcfa-design-system-build-gateway.php';
+}
 
 final class LCFA_Rest_Api {
     private const COMMAND_EXECUTION_TRANSIENT_PREFIX = 'lcfa_command_execution_';
@@ -81,7 +84,12 @@ final class LCFA_Rest_Api {
         $theme_library_validator = new LCFA_Theme_Library_Validator();
         $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
         $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator, $windpress_bridge);
-        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $windpress_bridge);
+        $this->theme_library_importer = new LCFA_Theme_Library_Importer(
+            $this->theme_library_installer,
+            $theme_library_validator,
+            $windpress_bridge,
+            new LCFA_Design_System_Build_Gateway($local_mcp_bridge)
+        );
         $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($windpress_bridge);
         $this->ability_registry = $ability_registry;
     }
@@ -300,6 +308,12 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/theme-library/import', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'import_theme_library_item'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/build', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'build_theme_library_item'],
             'permission_callback' => [$this, 'can_manage'],
         ]);
 
@@ -2577,6 +2591,15 @@ final class LCFA_Rest_Api {
         }
 
         $result = $this->theme_library_importer->import($theme['theme'], !empty($payload['force']));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
+    public function build_theme_library_item(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $result = $this->theme_library_importer->build((string) ($payload['slug'] ?? $payload['theme_slug'] ?? ''));
 
         return new WP_REST_Response([
             'result' => $result,

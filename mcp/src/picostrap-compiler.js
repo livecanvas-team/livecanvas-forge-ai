@@ -1,7 +1,6 @@
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
-const sass = require('sass')
 
 class PicostrapCompiler {
   constructor({ client, config, themeFiles }) {
@@ -12,6 +11,7 @@ class PicostrapCompiler {
   }
 
   async buildBundle(options = {}) {
+    const sass = loadSassCompiler()
     const manifestResponse = await this.client.getPicostrapCompileManifest()
     const manifest = unwrapResultEnvelope(manifestResponse)
 
@@ -283,6 +283,17 @@ class PicostrapCompiler {
     }
 
     return roots
+  }
+}
+
+function loadSassCompiler() {
+  try {
+    return require('sass')
+  } catch (error) {
+    const detail = error && error.code === 'MODULE_NOT_FOUND'
+      ? 'The AI Bridge distribution is missing its bundled Sass runtime.'
+      : String(error && error.message ? error.message : error)
+    throw new Error(`Picostrap compilation requires Dart Sass. ${detail}`)
   }
 }
 

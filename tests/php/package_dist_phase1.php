@@ -60,11 +60,41 @@ package_assert_true(!in_array('.git/', $entries, true), 'distribution zip should
 package_assert_true(!in_array('.claude/', $entries, true), 'distribution zip should not include local assistant metadata');
 package_assert_true(!in_array('tests/', $entries, true), 'distribution zip should not expose tests at the archive root');
 package_assert_true(!in_array('livecanvas-forge-ai/tests/', $entries, true), 'distribution zip should not include tests inside the plugin package');
+
+$allowed_mcp_runtime_packages = [
+    'chokidar',
+    'immutable',
+    'readdirp',
+    'sass',
+    'source-map-js',
+];
+
+foreach ($allowed_mcp_runtime_packages as $runtime_package) {
+    package_assert_true(
+        in_array('livecanvas-forge-ai/mcp/node_modules/' . $runtime_package . '/package.json', $entries, true),
+        'distribution zip should include the required MCP runtime package: ' . $runtime_package
+    );
+}
+
 foreach ($entries as $entry) {
-    package_assert_true(strpos((string) $entry, 'livecanvas-forge-ai/mcp/node_modules/') !== 0, 'distribution zip should not include bundled MCP node_modules');
+    $node_modules_prefix = 'livecanvas-forge-ai/mcp/node_modules/';
+    if (strpos((string) $entry, $node_modules_prefix) === 0) {
+        $relative_entry = substr((string) $entry, strlen($node_modules_prefix));
+        if ($relative_entry === '') {
+            continue;
+        }
+        $package_name = strtok($relative_entry, '/');
+        package_assert_true(
+            in_array($package_name, $allowed_mcp_runtime_packages, true),
+            'distribution zip should include only the allowlisted MCP runtime packages, found: ' . $package_name
+        );
+    }
     package_assert_true(strpos((string) $entry, 'livecanvas-forge-ai/vendor/bin/') !== 0, 'distribution zip should not include Composer executable shims');
     package_assert_true(strpos((string) $entry, 'livecanvas-forge-ai/docs/screenshots/') !== 0, 'distribution zip should not include documentation screenshots');
     package_assert_true(substr((string) $entry, -9) !== '.DS_Store', 'distribution zip should not include macOS metadata files');
 }
+
+package_assert_true(!in_array('livecanvas-forge-ai/mcp/node_modules/playwright/package.json', $entries, true), 'distribution zip should not bundle Playwright');
+package_assert_true(!in_array('livecanvas-forge-ai/mcp/node_modules/playwright-core/package.json', $entries, true), 'distribution zip should not bundle Playwright Core');
 
 echo "PASS\n";

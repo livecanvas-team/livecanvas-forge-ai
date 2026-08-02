@@ -3,6 +3,8 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Rollback {
+    private const IMPORTS_OPTION = 'lcfa_theme_library_imports';
+
     private ?LCFA_WindPress_Bridge $windpress_bridge;
 
     public function __construct(?LCFA_WindPress_Bridge $windpress_bridge = null) {
@@ -149,12 +151,34 @@ final class LCFA_Theme_Library_Rollback {
             'message' => empty($errors) ? __('Theme Library rollback restored.', 'livecanvas-forge-ai') : implode(' ', $errors),
         ]);
 
+        $this->update_import_state($audit_id, empty($errors), $errors);
+
         return [
             'ok'      => empty($errors),
             'message' => empty($errors) ? __('Theme Library rollback restored.', 'livecanvas-forge-ai') : __('Theme Library rollback completed with errors.', 'livecanvas-forge-ai'),
             'errors'  => $errors,
             'plan'    => $plan,
         ];
+    }
+
+    private function update_import_state(string $audit_id, bool $restored, array $errors): void {
+        $imports = get_option(self::IMPORTS_OPTION, []);
+        if (!is_array($imports)) {
+            return;
+        }
+
+        foreach ($imports as $slug => $import) {
+            if (!is_array($import) || (string) ($import['audit_id'] ?? '') !== $audit_id) {
+                continue;
+            }
+
+            $import['status'] = $restored ? 'rolled_back' : 'rollback_failed';
+            $import['rolled_back_at'] = current_time('mysql', true);
+            $import['rollback_errors'] = array_values(array_filter(array_map('strval', $errors)));
+            $imports[$slug] = $import;
+            update_option(self::IMPORTS_OPTION, $imports, false);
+            break;
+        }
     }
 
     private function with_unfiltered_post_content(callable $operation) {

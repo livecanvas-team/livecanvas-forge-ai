@@ -46,6 +46,28 @@ rm -rf \
   "${PACKAGE_DIR}/mcp/.DS_Store" \
   "${PACKAGE_DIR}/vendor/bin"
 
+# Picostrap compilation runs from the bundled local MCP bridge. Ship only the
+# pure-JavaScript Dart Sass runtime and its required dependencies; browser and
+# development dependencies remain excluded from the WordPress package.
+SASS_RUNTIME_PACKAGES=(
+  sass
+  chokidar
+  readdirp
+  immutable
+  source-map-js
+)
+
+mkdir -p "${PACKAGE_DIR}/mcp/node_modules"
+for package_name in "${SASS_RUNTIME_PACKAGES[@]}"; do
+  source_path="${ROOT_DIR}/mcp/node_modules/${package_name}"
+  if [ ! -d "${source_path}" ]; then
+    echo "Missing MCP Sass runtime dependency: ${package_name}. Run 'cd mcp && npm ci' before building." >&2
+    exit 1
+  fi
+
+  cp -R "${source_path}" "${PACKAGE_DIR}/mcp/node_modules/${package_name}"
+done
+
 mkdir -p "${DIST_DIR}"
 rm -f "${ZIP_PATH}"
 
