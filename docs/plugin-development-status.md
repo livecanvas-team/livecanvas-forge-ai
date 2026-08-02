@@ -1,6 +1,6 @@
 # LiveCanvas AI Bridge Development Status
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 ## Product Status
 
@@ -29,6 +29,8 @@ These areas have implemented runtime code and automated regression coverage:
 - Guarded theme-file, media, Picostrap compile, debug/cache, Polylang, and SEO tools behind Full Access scopes.
 - GitHub/LiveCanvas-gated plugin update metadata and distribution checks.
 - Theme Library catalog, package validation, child-theme installation, starter-data import, idempotency, and import rollback.
+- Theme Library rollback now preserves the theme active before installation and backs up WindPress options, source CSS, generated CSS, sourcemap, and `theme.json` on disk with checksum verification.
+- Asteria 1.0.1 now passes a real LocalWP preview/install/import/desktop/mobile/rollback run with separate LiveCanvas header/footer rendering and exact previous theme/homepage recovery.
 - Progressive admin workspaces: three-step Setup, focused Connections, four-view Abilities & Runs, and five-view Command Deck.
 
 ## Beta: Needs More Real-Site Verification
@@ -39,7 +41,7 @@ These features are implemented, but should still be treated as beta:
 - Remote Full Access writes across restrictive hosting filesystems.
 - Picostrap Sass and WindPress/Picowind compilation across plugin versions.
 - Visual checks, because the local MCP runtime must provide Playwright and a compatible Chromium installation.
-- Theme Library import across clean, migrated, multilingual, and cache-heavy sites.
+- Theme Library import across migrated, multilingual, cache-heavy, and restrictive remote sites. The first LocalWP Picowind/Tailwind 4 transaction now passes.
 - Polylang and SEOPress operations across different content models and language assignments.
 - The React Abilities & Runs shell and its progressive fallback to the PHP interface.
 - End-to-end onboarding for Claude Code, Claude Desktop, Cursor, and generic MCP clients.
@@ -58,12 +60,12 @@ The following work remains intentionally open:
 
 ## Current Verification Baseline
 
-The 2026-08-01 local baseline passed:
+The current automated baseline contains:
 
-- 61 PHP regression scripts.
+- 64 PHP regression scripts.
 - 12 non-GUI admin/runtime JavaScript unit checks.
-- 6 MCP Node test files.
-- PHP lint across 126 PHP files, including tests and bundled compatibility code.
+- 7 MCP Node test files.
+- PHP lint across 133 PHP files, including tests and bundled compatibility code.
 - `git diff --check`.
 - Distribution build and package validation.
 - Manual desktop and 390 px mobile review of the coding-agent setup guide.
@@ -81,5 +83,7 @@ Before calling a release production-ready, complete all of the following:
 3. Run Theme Library import and rollback on clean Picowind and existing-content sites.
 4. Verify Full Access tools on at least two hosting environments with different filesystem policies.
 5. Publish a compatibility matrix and document known host/plugin conflicts.
+
+The detailed stack-by-stack matrix and remaining production gates are maintained in [Integration Completeness Audit](integration-completeness-audit.md).
 
 Until those gates pass, use staging, confirm the site URL and fingerprint, preview every change, and keep rollback available.

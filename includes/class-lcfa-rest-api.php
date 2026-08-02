@@ -80,9 +80,9 @@ final class LCFA_Rest_Api {
         $this->polylang_seo_tools = new LCFA_Polylang_SEO_Tools();
         $theme_library_validator = new LCFA_Theme_Library_Validator();
         $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
-        $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator);
+        $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator, $windpress_bridge);
         $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $windpress_bridge);
-        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback();
+        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($windpress_bridge);
         $this->ability_registry = $ability_registry;
     }
 

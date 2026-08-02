@@ -8,6 +8,32 @@
  * Align-wide support for WordPress blocks
  */
 @layer base {
+  body {
+    background: #f7f7f3;
+  }
+
+  #wrapper-navbar {
+    display: none !important;
+  }
+
+  #theme-main {
+    margin-top: 0 !important;
+  }
+
+  #lc-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid #deded6;
+    background: rgba(247, 247, 243, 0.9);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  #lc-header a {
+    text-decoration: none;
+  }
+
   .alignwide {
     max-width: var(--wp--style--global--wide-size, 1280px);
     margin-left: auto;

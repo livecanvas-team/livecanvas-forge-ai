@@ -66,7 +66,7 @@ function lcfa_theme_create_zip(array $manifest_overrides = [], array $omit_files
         'functions.php' => "<?php\n",
         'screenshot.jpg' => 'fake-jpg',
         'page-templates/empty.php' => "<?php\n/* Template Name: Empty Page Template */\n",
-        'views/page-templates/empty.twig' => '<!doctype html>{{ function("wp_head") }}{{ post.content }}{{ function("wp_footer") }}',
+        'views/page-templates/empty.twig' => '<!doctype html>{{ function("wp_head") }}{{ function("wp_body_open") }}{{ function("lc_get_header", 1) }}<main>{{ post.content }}</main>{{ function("lc_get_footer", 1) }}{{ function("wp_footer") }}',
         'livecanvas/configuration.php' => "<?php\n",
         'public/styles/presets/daisyui.css' => '/* daisyui */',
         'public/styles/tailwind.css' => 'body{}',
@@ -76,8 +76,8 @@ function lcfa_theme_create_zip(array $manifest_overrides = [], array $omit_files
         'starter-data/menus.json' => '{"menus":[]}',
         'starter-data/qa-report.json' => '{"ok":true}',
         'starter-data/home.html' => '<section>Home {{media:hero}}</section>',
-        'starter-data/header.html' => '<header>Header</header>',
-        'starter-data/footer.html' => '<footer>Footer</footer>',
+        'starter-data/header.html' => '<nav>Header</nav>',
+        'starter-data/footer.html' => '<div>Footer</div>',
     ];
     foreach ($file_overrides as $path => $contents) {
         if ($contents === null) {
@@ -189,6 +189,18 @@ $inline_shell_zip = lcfa_theme_create_zip([], [], [
 $inline_shell = $validator->validate_zip($inline_shell_zip, ['checksum' => hash_file('sha256', $inline_shell_zip)]);
 lcfa_theme_assert_false(!empty($inline_shell['ok']), 'homepage files with inline header/footer markup should fail validation');
 
+$missing_partial_shell_zip = lcfa_theme_create_zip([], [], [
+    'views/page-templates/empty.twig' => '<!doctype html>{{ function("wp_head") }}{{ function("wp_body_open") }}<main>{{ post.content }}</main>{{ function("wp_footer") }}',
+]);
+$missing_partial_shell = $validator->validate_zip($missing_partial_shell_zip, ['checksum' => hash_file('sha256', $missing_partial_shell_zip)]);
+lcfa_theme_assert_false(!empty($missing_partial_shell['ok']), 'page templates that omit LiveCanvas header/footer partials should fail validation');
+
+$wrapped_partial_zip = lcfa_theme_create_zip([], [], [
+    'starter-data/header.html' => '<header><nav>Wrong shell</nav></header>',
+]);
+$wrapped_partial = $validator->validate_zip($wrapped_partial_zip, ['checksum' => hash_file('sha256', $wrapped_partial_zip)]);
+lcfa_theme_assert_false(!empty($wrapped_partial['ok']), 'partial files with duplicate outer header/footer shells should fail validation');
+
 $missing_media_zip = lcfa_theme_create_zip([], [], [
     'starter-data/media-manifest.json' => '{"items":[{"id":"hero","file":"starter-data/media/missing.jpg"}]}',
 ]);
@@ -225,11 +237,19 @@ LCFA_Settings::$rollback_record = [
         'created_posts' => [102],
         'created_media' => [103],
         'created_menus' => [104],
+        'windpress_runtime' => [
+            'available' => true,
+            'files' => [
+                'main_css' => ['exists' => true],
+                'cache_css' => ['exists' => false],
+            ],
+        ],
     ],
 ];
 $rollback_preview = (new LCFA_Theme_Library_Rollback())->rollback('theme-import-sample-theme-abc123', true);
 lcfa_theme_assert_true(!empty($rollback_preview['ok']), 'rollback dry-run should prepare a plan for Theme Library import records');
 lcfa_theme_assert_same([102], $rollback_preview['plan']['created_posts'] ?? [], 'rollback dry-run should list created posts');
+lcfa_theme_assert_same(['main_css', 'cache_css'], $rollback_preview['plan']['windpress_runtime']['files'] ?? [], 'rollback dry-run should disclose the WindPress runtime files that will be restored');
 $rollback_missing = (new LCFA_Theme_Library_Rollback())->rollback('missing-audit', true);
 lcfa_theme_assert_false(!empty($rollback_missing['ok']), 'rollback should fail when no Theme Library import record exists');
 

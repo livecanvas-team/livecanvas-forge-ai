@@ -3,6 +3,12 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Rollback {
+    private ?LCFA_WindPress_Bridge $windpress_bridge;
+
+    public function __construct(?LCFA_WindPress_Bridge $windpress_bridge = null) {
+        $this->windpress_bridge = $windpress_bridge;
+    }
+
     public function rollback(string $audit_id, bool $dry_run = false): array {
         $audit_id = sanitize_key($audit_id);
         if ($audit_id === '') {
@@ -27,6 +33,11 @@ final class LCFA_Theme_Library_Rollback {
             'created_posts'  => array_map('intval', (array) ($record['created_posts'] ?? [])),
             'created_media'  => array_map('intval', (array) ($record['created_media'] ?? [])),
             'created_menus'  => array_map('intval', (array) ($record['created_menus'] ?? [])),
+            'windpress_runtime' => [
+                'available' => !empty($record['windpress_runtime']['available']),
+                'files'     => array_keys((array) ($record['windpress_runtime']['files'] ?? [])),
+                'options'   => !empty($record['windpress_runtime']['available']),
+            ],
         ];
 
         if ($dry_run) {
@@ -57,19 +68,36 @@ final class LCFA_Theme_Library_Rollback {
             }
         }
 
+        $windpress_runtime = is_array($record['windpress_runtime'] ?? null) ? $record['windpress_runtime'] : [];
+        if (!empty($windpress_runtime['available'])) {
+            if (!$this->windpress_bridge) {
+                $errors[] = __('The WindPress bridge is unavailable, so its runtime state could not be restored.', 'livecanvas-forge-ai');
+            } else {
+                $windpress_restore = $this->windpress_bridge->restore_runtime_state($windpress_runtime);
+                if (empty($windpress_restore['ok'])) {
+                    $restore_errors = array_filter(array_map('strval', (array) ($windpress_restore['errors'] ?? [])));
+                    $errors = array_merge($errors, $restore_errors ?: [
+                        (string) ($windpress_restore['message'] ?? __('WindPress runtime state could not be restored.', 'livecanvas-forge-ai')),
+                    ]);
+                }
+            }
+        }
+
         foreach ((array) ($record['updated_posts'] ?? []) as $post_id => $post_record) {
             $post_id = absint($post_id);
             if ($post_id <= 0 || !is_array($post_record)) {
                 continue;
             }
 
-            $restore = wp_update_post([
-                'ID'           => $post_id,
-                'post_title'   => (string) ($post_record['post_title'] ?? ''),
-                'post_name'    => (string) ($post_record['post_name'] ?? ''),
-                'post_status'  => (string) ($post_record['post_status'] ?? 'draft'),
-                'post_content' => (string) ($post_record['post_content'] ?? ''),
-            ], true);
+            $restore = $this->with_unfiltered_post_content(static function () use ($post_id, $post_record) {
+                return wp_update_post([
+                    'ID'           => $post_id,
+                    'post_title'   => (string) ($post_record['post_title'] ?? ''),
+                    'post_name'    => (string) ($post_record['post_name'] ?? ''),
+                    'post_status'  => (string) ($post_record['post_status'] ?? 'draft'),
+                    'post_content' => (string) ($post_record['post_content'] ?? ''),
+                ], true);
+            });
 
             if (is_wp_error($restore)) {
                 $errors[] = $restore->get_error_message();
@@ -127,5 +155,30 @@ final class LCFA_Theme_Library_Rollback {
             'errors'  => $errors,
             'plan'    => $plan,
         ];
+    }
+
+    private function with_unfiltered_post_content(callable $operation) {
+        if ((function_exists('current_user_can') && current_user_can('unfiltered_html')) || !function_exists('remove_filter') || !function_exists('add_filter')) {
+            return $operation();
+        }
+
+        $removed = [];
+        foreach ([
+            ['content_save_pre', 'wp_filter_post_kses', 10, 1],
+            ['content_filtered_save_pre', 'wp_filter_post_kses', 10, 1],
+        ] as $filter) {
+            [$hook, $callback, $priority, $accepted_args] = $filter;
+            if (remove_filter($hook, $callback, $priority)) {
+                $removed[] = [$hook, $callback, $priority, $accepted_args];
+            }
+        }
+
+        try {
+            return $operation();
+        } finally {
+            foreach ($removed as [$hook, $callback, $priority, $accepted_args]) {
+                add_filter($hook, $callback, $priority, $accepted_args);
+            }
+        }
     }
 }

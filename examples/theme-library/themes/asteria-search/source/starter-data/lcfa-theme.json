@@ -3,7 +3,7 @@
   "theme": {
     "slug": "asteria-search",
     "name": "Asteria Search",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "stylesheet": "asteria-search"
   },
   "compatibility": {

@@ -170,7 +170,15 @@ starter-data/qa-report.json
 starter-data/media/*
 ```
 
-If `starter-data/lcfa-theme.json` declares another `homepage.template`, that template file must exist in the ZIP. The default `page-templates/empty.php` should render a standalone `page-templates/empty.twig` with a complete HTML shell, including `wp_head()`, `wp_body_open()`, `{{ post.content }}`, and `wp_footer()`. Do not rely on a parent `base.twig` unless the ZIP also ships the full child-theme view scaffold.
+If `starter-data/lcfa-theme.json` declares another `homepage.template`, that template file must exist in the ZIP. The default `page-templates/empty.php` must render a standalone `page-templates/empty.twig` with:
+
+- `wp_head()` and `wp_footer()`;
+- `wp_body_open()`;
+- one `<main>` containing `{{ post.content }}`;
+- `lc_custom_header()` or `lc_get_header()` before the main content;
+- `lc_custom_footer()` or `lc_get_footer()` after the main content.
+
+Do not rely on a parent `base.twig` unless the ZIP also ships the full child-theme view scaffold. Header and footer content files must contain only the inner partial markup; do not add outer `<header>` or `<footer>` elements because LiveCanvas supplies those shells. The homepage must not contain inline header/footer markup. Put global CSS in `public/styles/tailwind.css` rather than a `<style>` block inside starter content.
 
 The importer accepts a ZIP with either:
 
@@ -434,7 +442,10 @@ Rollback restores or removes:
 - created menus;
 - previous `nav_menu_locations`;
 - options touched by LiveCanvas settings import;
-- design system option.
+- WindPress options changed by Picowind runtime initialization;
+- the previous WindPress `main.css`, compiled CSS, sourcemap, and `theme.json` state.
+
+The install step stores a short pending activation record before switching themes. The import consumes that record so rollback refers to the theme and menu locations that were active before installation, not the newly activated child theme. Large WindPress files are backed up under the AI Bridge uploads directory and verified with SHA-256; only metadata is stored in the WordPress rollback option.
 
 Rollback records are dedicated Theme Library import records and are separate from normal AI Bridge command rollback records.
 

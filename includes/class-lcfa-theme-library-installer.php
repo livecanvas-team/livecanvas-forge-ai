@@ -3,10 +3,14 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Installer {
-    private LCFA_Theme_Library_Validator $validator;
+    private const PENDING_INSTALLS_OPTION = 'lcfa_theme_library_pending_installs';
 
-    public function __construct(LCFA_Theme_Library_Validator $validator) {
+    private LCFA_Theme_Library_Validator $validator;
+    private ?LCFA_WindPress_Bridge $windpress_bridge;
+
+    public function __construct(LCFA_Theme_Library_Validator $validator, ?LCFA_WindPress_Bridge $windpress_bridge = null) {
         $this->validator = $validator;
+        $this->windpress_bridge = $windpress_bridge;
     }
 
     public function preview(array $theme): array {
@@ -52,7 +56,15 @@ final class LCFA_Theme_Library_Installer {
             $existing_theme = wp_get_theme($installed_stylesheet);
             if ($existing_theme->exists()) {
                 $this->delete_file($zip_path);
-                switch_theme($installed_stylesheet);
+                $activation = $this->activate_theme_with_rollback(
+                    $installed_stylesheet,
+                    $manifest,
+                    $theme,
+                    (string) ($validation['checksum'] ?? '')
+                );
+                if (empty($activation['ok'])) {
+                    return $activation;
+                }
 
                 return [
                     'ok'               => true,
@@ -88,7 +100,15 @@ final class LCFA_Theme_Library_Installer {
         if ($installed_stylesheet !== '') {
             $theme_object = wp_get_theme($installed_stylesheet);
             if ($theme_object->exists()) {
-                switch_theme($installed_stylesheet);
+                $activation = $this->activate_theme_with_rollback(
+                    $installed_stylesheet,
+                    $manifest,
+                    $theme,
+                    (string) ($validation['checksum'] ?? '')
+                );
+                if (empty($activation['ok'])) {
+                    return $activation;
+                }
             }
         }
 
@@ -99,6 +119,67 @@ final class LCFA_Theme_Library_Installer {
             'manifest'        => $manifest,
             'theme_stylesheet'=> $installed_stylesheet !== '' ? $installed_stylesheet : $stylesheet,
         ];
+    }
+
+    public function get_pending_install_state(string $stylesheet, string $theme_slug = ''): array {
+        $pending = get_option(self::PENDING_INSTALLS_OPTION, []);
+        if (!is_array($pending)) {
+            return [];
+        }
+
+        $stylesheet = sanitize_key($stylesheet);
+        if ($stylesheet !== '' && is_array($pending[$stylesheet] ?? null)) {
+            return $pending[$stylesheet];
+        }
+
+        $theme_slug = sanitize_key($theme_slug);
+        if ($theme_slug === '') {
+            return [];
+        }
+
+        foreach ($pending as $state) {
+            if (is_array($state) && sanitize_key((string) ($state['theme_slug'] ?? '')) === $theme_slug) {
+                return $state;
+            }
+        }
+
+        return [];
+    }
+
+    public function consume_pending_install_state(string $stylesheet, string $theme_slug = ''): array {
+        $pending = get_option(self::PENDING_INSTALLS_OPTION, []);
+        if (!is_array($pending)) {
+            return [];
+        }
+
+        $stylesheet = sanitize_key($stylesheet);
+        $theme_slug = sanitize_key($theme_slug);
+        $matched_key = '';
+
+        if ($stylesheet !== '' && is_array($pending[$stylesheet] ?? null)) {
+            $matched_key = $stylesheet;
+        } elseif ($theme_slug !== '') {
+            foreach ($pending as $key => $state) {
+                if (is_array($state) && sanitize_key((string) ($state['theme_slug'] ?? '')) === $theme_slug) {
+                    $matched_key = (string) $key;
+                    break;
+                }
+            }
+        }
+
+        if ($matched_key === '' || !is_array($pending[$matched_key] ?? null)) {
+            return [];
+        }
+
+        $state = $pending[$matched_key];
+        unset($pending[$matched_key]);
+        if ($pending) {
+            update_option(self::PENDING_INSTALLS_OPTION, $pending, false);
+        } else {
+            delete_option(self::PENDING_INSTALLS_OPTION);
+        }
+
+        return $state;
     }
 
     public function download_theme_zip(array $theme): array {
@@ -203,6 +284,62 @@ final class LCFA_Theme_Library_Installer {
         }
 
         return $stylesheet;
+    }
+
+    private function activate_theme_with_rollback(string $stylesheet, array $manifest, array $theme, string $checksum): array {
+        $stylesheet = sanitize_key($stylesheet);
+        $current_stylesheet = sanitize_key((string) wp_get_theme()->get_stylesheet());
+        if ($stylesheet === '' || $current_stylesheet === $stylesheet) {
+            return [
+                'ok'      => true,
+                'changed' => false,
+            ];
+        }
+
+        $theme_slug = sanitize_key((string) ($manifest['theme']['slug'] ?? $theme['slug'] ?? $stylesheet));
+        $audit_id = sanitize_key('theme-install-' . $theme_slug . '-' . strtolower(wp_generate_password(8, false, false)));
+        $runtime_state = [
+            'ok'        => true,
+            'available' => false,
+            'audit_id'  => $audit_id,
+        ];
+
+        if ($this->windpress_bridge) {
+            $runtime_state = $this->windpress_bridge->capture_runtime_state($audit_id);
+            if (empty($runtime_state['ok'])) {
+                return [
+                    'ok'      => false,
+                    'message' => (string) ($runtime_state['message'] ?? __('WindPress runtime backup failed; the child theme was not activated.', 'livecanvas-forge-ai')),
+                ];
+            }
+        }
+
+        $pending = get_option(self::PENDING_INSTALLS_OPTION, []);
+        if (!is_array($pending)) {
+            $pending = [];
+        }
+        $pending[$stylesheet] = [
+            'theme_slug'        => $theme_slug,
+            'theme_version'     => sanitize_text_field((string) ($manifest['theme']['version'] ?? $theme['version'] ?? '')),
+            'stylesheet'        => $stylesheet,
+            'previous_theme'    => $current_stylesheet,
+            'previous_theme_mods' => [
+                'nav_menu_locations' => get_theme_mod('nav_menu_locations', []),
+            ],
+            'checksum'          => sanitize_text_field($checksum),
+            'windpress_runtime' => $runtime_state,
+            'captured_at'       => current_time('mysql', true),
+        ];
+        $pending = array_slice($pending, -20, 20, true);
+        update_option(self::PENDING_INSTALLS_OPTION, $pending, false);
+
+        switch_theme($stylesheet);
+
+        return [
+            'ok'      => true,
+            'changed' => true,
+            'state'   => $pending[$stylesheet],
+        ];
     }
 
     private function delete_file(string $path): void {

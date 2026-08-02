@@ -10,7 +10,7 @@ Status: `alpha`
 
 Alpha / not production guaranteed: this repository is public for early testing and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use staging sites, backups, previews, and `dry_run` checks before applying agent-generated changes.
 
-See the current [development status and release gates](./docs/plugin-development-status.md) for the tested baseline, beta areas, and known incomplete work.
+See the current [development status and release gates](./docs/plugin-development-status.md) and the stack-by-stack [integration completeness audit](./docs/integration-completeness-audit.md) for verified capabilities, evidence levels, and remaining work.
 
 Usable today:
 
@@ -256,7 +256,7 @@ starter-data/qa-report.json
 starter-data/media/*
 ```
 
-The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. The default page template must include `wp_head()` and `wp_footer()` so Picowind/WindPress assets load on imported pages. Header and footer are imported as separate LiveCanvas `lc_partial` posts; they are never inserted inline into the homepage. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
+The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. The default page template must include WordPress head/body/footer hooks, one main content shell, and the separate LiveCanvas header/footer calls. Header and footer starter files contain only inner partial markup; AI Bridge enables the required LiveCanvas partial settings during import and restores the previous settings during rollback. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
 
 Marketplace covers:
 

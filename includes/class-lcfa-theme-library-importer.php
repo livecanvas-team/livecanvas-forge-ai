@@ -72,6 +72,17 @@ final class LCFA_Theme_Library_Importer {
         }
 
         $audit_id = sanitize_key('theme-import-' . $slug . '-' . strtolower(wp_generate_password(8, false, false)));
+        $is_picowind = ($manifest['compatibility']['picowind'] ?? null) !== null || ($theme['framework'] ?? '') === 'picowind';
+        $pending_install = $this->installer->consume_pending_install_state($stylesheet, $slug);
+        $previous_theme = sanitize_key((string) ($pending_install['previous_theme'] ?? wp_get_theme()->get_stylesheet()));
+        $previous_theme_mods = is_array($pending_install['previous_theme_mods'] ?? null)
+            ? $pending_install['previous_theme_mods']
+            : [
+                'nav_menu_locations' => get_theme_mod('nav_menu_locations', []),
+            ];
+        $windpress_runtime = is_array($pending_install['windpress_runtime'] ?? null)
+            ? $pending_install['windpress_runtime']
+            : [];
         $rollback = [
             'type'              => 'theme_library_import',
             'audit_id'          => $audit_id,
@@ -83,11 +94,10 @@ final class LCFA_Theme_Library_Importer {
             'updated_posts'     => [],
             'created_media'     => [],
             'updated_options'   => [],
-            'previous_theme'    => wp_get_theme()->get_stylesheet(),
-            'previous_theme_mods'=> [
-                'nav_menu_locations' => get_theme_mod('nav_menu_locations', []),
-            ],
+            'previous_theme'    => $previous_theme,
+            'previous_theme_mods'=> $previous_theme_mods,
             'created_menus'     => [],
+            'windpress_runtime' => $windpress_runtime,
         ];
 
         $result = [
@@ -103,12 +113,25 @@ final class LCFA_Theme_Library_Importer {
         ];
 
         try {
+            if ($is_picowind && empty($rollback['windpress_runtime']['available'])) {
+                $runtime_backup = $this->windpress_bridge->capture_runtime_state($audit_id);
+                if (empty($runtime_backup['ok'])) {
+                    throw new RuntimeException((string) ($runtime_backup['message'] ?? __('WindPress runtime backup failed.', 'livecanvas-forge-ai')));
+                }
+                $rollback['windpress_runtime'] = $runtime_backup;
+                if (!empty($runtime_backup['available'])) {
+                    $result['steps'][] = 'windpress_runtime_backup_captured';
+                }
+            } elseif ($is_picowind && !empty($rollback['windpress_runtime']['available'])) {
+                $result['steps'][] = 'windpress_runtime_backup_reused';
+            }
+
             if ($stylesheet !== '' && wp_get_theme($stylesheet)->exists() && wp_get_theme()->get_stylesheet() !== $stylesheet) {
                 switch_theme($stylesheet);
                 $result['steps'][] = 'theme_activated';
             }
 
-            if (($manifest['compatibility']['picowind'] ?? null) !== null || ($theme['framework'] ?? '') === 'picowind') {
+            if ($is_picowind) {
                 $runtime = $this->windpress_bridge->ensure_picowind_runtime();
                 if (empty($runtime['ok'])) {
                     $result['warnings'][] = (string) ($runtime['message'] ?? __('WindPress Picowind runtime could not be initialized.', 'livecanvas-forge-ai'));
@@ -118,6 +141,7 @@ final class LCFA_Theme_Library_Importer {
             }
 
             $this->import_options($base_dir, (string) ($manifest['livecanvas_settings'] ?? ''), $rollback, $result);
+            $this->ensure_livecanvas_partial_settings($rollback, $result);
             $this->import_design_system($base_dir, $manifest, $rollback, $result);
             $media_map = $this->import_media($base_dir, (string) ($manifest['media_manifest'] ?? ''), $slug, $checksum, $rollback, $result);
 
@@ -208,12 +232,7 @@ final class LCFA_Theme_Library_Importer {
                 continue;
             }
 
-            if (!array_key_exists($option_name, $rollback['updated_options'])) {
-                $rollback['updated_options'][$option_name] = [
-                    'exists' => get_option($option_name, '__lcfa_missing__') !== '__lcfa_missing__',
-                    'value'  => get_option($option_name),
-                ];
-            }
+            $this->record_option_rollback($option_name, $rollback);
 
             update_option($option_name, $value, false);
         }
@@ -221,6 +240,35 @@ final class LCFA_Theme_Library_Importer {
         if ($options) {
             $result['steps'][] = 'livecanvas_settings_imported';
         }
+    }
+
+    private function ensure_livecanvas_partial_settings(array &$rollback, array &$result): void {
+        $settings = get_option('lc_settings', []);
+        $settings = is_array($settings) ? $settings : [];
+        $updated = $settings;
+        $updated['header'] = '1';
+        $updated['footerV2'] = '1';
+
+        if ($updated === $settings) {
+            return;
+        }
+
+        $this->record_option_rollback('lc_settings', $rollback);
+        update_option('lc_settings', $updated, false);
+        $result['steps'][] = 'livecanvas_header_footer_enabled';
+    }
+
+    private function record_option_rollback(string $option_name, array &$rollback): void {
+        if ($option_name === '' || array_key_exists($option_name, $rollback['updated_options'])) {
+            return;
+        }
+
+        $missing = new stdClass();
+        $value = get_option($option_name, $missing);
+        $rollback['updated_options'][$option_name] = [
+            'exists' => $value !== $missing,
+            'value'  => $value !== $missing ? $value : null,
+        ];
     }
 
     private function import_design_system(string $base_dir, array $manifest, array &$rollback, array &$result): void {
@@ -351,12 +399,18 @@ final class LCFA_Theme_Library_Importer {
         if ($post_id > 0) {
             $this->record_post_rollback($post_id, $rollback);
             $postarr['ID'] = $post_id;
-            wp_update_post($postarr, true);
+            $saved = $this->persist_content_post($postarr, true);
         } else {
-            $post_id = (int) wp_insert_post($postarr, true);
-            if ($post_id <= 0 || is_wp_error($post_id)) {
-                throw new RuntimeException(__('LiveCanvas partial could not be created.', 'livecanvas-forge-ai'));
-            }
+            $saved = $this->persist_content_post($postarr, false);
+        }
+
+        if (is_wp_error($saved) || (int) $saved <= 0) {
+            $message = is_wp_error($saved) ? $saved->get_error_message() : __('LiveCanvas partial could not be created.', 'livecanvas-forge-ai');
+            throw new RuntimeException($message);
+        }
+
+        $post_id = (int) $saved;
+        if (!isset($postarr['ID'])) {
             $rollback['created_posts'][] = $post_id;
         }
 
@@ -393,12 +447,18 @@ final class LCFA_Theme_Library_Importer {
         if ($post_id > 0) {
             $this->record_post_rollback($post_id, $rollback);
             $postarr['ID'] = $post_id;
-            wp_update_post($postarr, true);
+            $saved = $this->persist_content_post($postarr, true);
         } else {
-            $post_id = (int) wp_insert_post($postarr, true);
-            if ($post_id <= 0 || is_wp_error($post_id)) {
-                throw new RuntimeException(__('Homepage could not be created.', 'livecanvas-forge-ai'));
-            }
+            $saved = $this->persist_content_post($postarr, false);
+        }
+
+        if (is_wp_error($saved) || (int) $saved <= 0) {
+            $message = is_wp_error($saved) ? $saved->get_error_message() : __('Homepage could not be created.', 'livecanvas-forge-ai');
+            throw new RuntimeException($message);
+        }
+
+        $post_id = (int) $saved;
+        if (!isset($postarr['ID'])) {
             $rollback['created_posts'][] = $post_id;
         }
 
@@ -412,6 +472,39 @@ final class LCFA_Theme_Library_Importer {
         }
 
         return $post_id;
+    }
+
+    private function persist_content_post(array $postarr, bool $is_update) {
+        return $this->with_unfiltered_post_content(static function () use ($postarr, $is_update) {
+            return $is_update
+                ? wp_update_post($postarr, true)
+                : wp_insert_post($postarr, true);
+        });
+    }
+
+    private function with_unfiltered_post_content(callable $operation) {
+        if ((function_exists('current_user_can') && current_user_can('unfiltered_html')) || !function_exists('remove_filter') || !function_exists('add_filter')) {
+            return $operation();
+        }
+
+        $removed = [];
+        foreach ([
+            ['content_save_pre', 'wp_filter_post_kses', 10, 1],
+            ['content_filtered_save_pre', 'wp_filter_post_kses', 10, 1],
+        ] as $filter) {
+            [$hook, $callback, $priority, $accepted_args] = $filter;
+            if (remove_filter($hook, $callback, $priority)) {
+                $removed[] = [$hook, $callback, $priority, $accepted_args];
+            }
+        }
+
+        try {
+            return $operation();
+        } finally {
+            foreach ($removed as [$hook, $callback, $priority, $accepted_args]) {
+                add_filter($hook, $callback, $priority, $accepted_args);
+            }
+        }
     }
 
     private function import_menus(string $base_dir, string $relative_path, array &$rollback, array &$result): void {

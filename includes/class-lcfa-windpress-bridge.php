@@ -3,6 +3,8 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_WindPress_Bridge {
+    private const RUNTIME_BACKUP_SUBDIRECTORY = 'livecanvas-forge-ai/windpress-runtime-backups';
+
     private LCFA_Environment $environment;
 
     public function __construct(LCFA_Environment $environment) {
@@ -367,7 +369,7 @@ final class LCFA_WindPress_Bridge {
             }
         }
 
-        $main_css_path = trailingslashit(WP_CONTENT_DIR) . 'uploads/windpress/data/main.css';
+        $main_css_path = trailingslashit($this->get_windpress_data_directory()) . 'main.css';
         $main_css_dir  = dirname($main_css_path);
 
         if (!is_dir($main_css_dir) && !wp_mkdir_p($main_css_dir)) {
@@ -437,10 +439,281 @@ final class LCFA_WindPress_Bridge {
         ];
     }
 
+    /**
+     * Capture the mutable WindPress runtime before a Theme Library import.
+     * Large files stay on disk; rollback records only keep metadata and hashes.
+     */
+    public function capture_runtime_state(string $audit_id): array {
+        $audit_id = sanitize_key($audit_id);
+        if ($audit_id === '') {
+            return [
+                'ok'      => false,
+                'message' => __('A valid audit ID is required for the WindPress runtime backup.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!$this->is_available()) {
+            return [
+                'ok'        => true,
+                'available' => false,
+                'audit_id'  => $audit_id,
+                'message'   => __('WindPress is unavailable; no runtime state needed to be captured.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $backup_root = $this->get_runtime_backup_root();
+        if ($backup_root === '') {
+            return [
+                'ok'      => false,
+                'message' => __('The AI Bridge backup directory is unavailable.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $backup_directory = wp_normalize_path(trailingslashit($backup_root) . $audit_id);
+        if (!is_dir($backup_directory) && !wp_mkdir_p($backup_directory)) {
+            return [
+                'ok'      => false,
+                'message' => __('The WindPress runtime backup directory could not be created.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $this->protect_runtime_backup_root($backup_root);
+
+        $option_name = $this->get_windpress_options_name();
+        $missing     = new \stdClass();
+        $option_value = get_option($option_name, $missing);
+        $state = [
+            'ok'               => true,
+            'available'        => true,
+            'audit_id'         => $audit_id,
+            'captured_at'      => current_time('mysql', true),
+            'backup_directory' => $audit_id,
+            'option'           => [
+                'exists' => $option_value !== $missing,
+                'value'  => $option_value !== $missing ? $option_value : null,
+            ],
+            'files'            => [],
+        ];
+
+        foreach ($this->get_runtime_file_paths() as $key => $path) {
+            $path = wp_normalize_path($path);
+            $exists = is_file($path);
+            $file_state = [
+                'exists'      => $exists,
+                'bytes'       => 0,
+                'sha256'      => '',
+                'backup_file' => '',
+            ];
+
+            if ($exists) {
+                if (!is_readable($path)) {
+                    return [
+                        'ok'      => false,
+                        'message' => sprintf(__('WindPress runtime file is not readable: %s', 'livecanvas-forge-ai'), basename($path)),
+                    ];
+                }
+
+                $backup_file = sanitize_key((string) $key) . '.bak';
+                $backup_path = wp_normalize_path(trailingslashit($backup_directory) . $backup_file);
+                if (!copy($path, $backup_path)) {
+                    return [
+                        'ok'      => false,
+                        'message' => sprintf(__('WindPress runtime file could not be backed up: %s', 'livecanvas-forge-ai'), basename($path)),
+                    ];
+                }
+
+                @chmod($backup_path, 0600);
+                $file_state['bytes'] = (int) filesize($backup_path);
+                $file_state['sha256'] = (string) hash_file('sha256', $backup_path);
+                $file_state['backup_file'] = $backup_file;
+            }
+
+            $state['files'][$key] = $file_state;
+        }
+
+        return $state;
+    }
+
+    public function restore_runtime_state(array $state): array {
+        if (empty($state['available'])) {
+            return [
+                'ok'       => true,
+                'skipped'  => true,
+                'restored' => [],
+                'message'  => __('No WindPress runtime state needed to be restored.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $audit_id = sanitize_key((string) ($state['audit_id'] ?? ''));
+        $backup_root = $this->get_runtime_backup_root();
+        if ($audit_id === '' || $backup_root === '') {
+            return [
+                'ok'      => false,
+                'message' => __('The WindPress runtime backup reference is invalid.', 'livecanvas-forge-ai'),
+                'errors'  => [__('The WindPress runtime backup reference is invalid.', 'livecanvas-forge-ai')],
+            ];
+        }
+
+        $backup_directory = wp_normalize_path(trailingslashit($backup_root) . $audit_id);
+        $runtime_files = $this->get_runtime_file_paths();
+        $errors = [];
+        $restored = [];
+
+        foreach ((array) ($state['files'] ?? []) as $key => $file_state) {
+            $key = sanitize_key((string) $key);
+            if ($key === '' || !isset($runtime_files[$key]) || !is_array($file_state)) {
+                $errors[] = __('A WindPress runtime backup contains an unsupported file reference.', 'livecanvas-forge-ai');
+                continue;
+            }
+
+            $target_path = wp_normalize_path($runtime_files[$key]);
+            if (empty($file_state['exists'])) {
+                if (is_file($target_path) && !@unlink($target_path)) {
+                    $errors[] = sprintf(__('WindPress runtime file could not be removed: %s', 'livecanvas-forge-ai'), basename($target_path));
+                } else {
+                    $restored[] = $key;
+                }
+                continue;
+            }
+
+            $expected_backup_file = $key . '.bak';
+            $backup_file = sanitize_file_name((string) ($file_state['backup_file'] ?? ''));
+            if ($backup_file !== $expected_backup_file) {
+                $errors[] = sprintf(__('WindPress runtime backup reference is invalid for %s.', 'livecanvas-forge-ai'), $key);
+                continue;
+            }
+
+            $backup_path = wp_normalize_path(trailingslashit($backup_directory) . $backup_file);
+            if (!is_file($backup_path) || !is_readable($backup_path)) {
+                $errors[] = sprintf(__('WindPress runtime backup file is missing: %s', 'livecanvas-forge-ai'), $backup_file);
+                continue;
+            }
+
+            $expected_hash = strtolower((string) ($file_state['sha256'] ?? ''));
+            $actual_hash = (string) hash_file('sha256', $backup_path);
+            if ($expected_hash === '' || !hash_equals($expected_hash, $actual_hash)) {
+                $errors[] = sprintf(__('WindPress runtime backup checksum failed: %s', 'livecanvas-forge-ai'), $backup_file);
+                continue;
+            }
+
+            $target_directory = dirname($target_path);
+            if (!is_dir($target_directory) && !wp_mkdir_p($target_directory)) {
+                $errors[] = sprintf(__('WindPress runtime directory could not be created: %s', 'livecanvas-forge-ai'), basename($target_directory));
+                continue;
+            }
+
+            $temporary_path = $target_path . '.lcfa-restore-' . uniqid('', true);
+            if (!copy($backup_path, $temporary_path)) {
+                @unlink($temporary_path);
+                $errors[] = sprintf(__('WindPress runtime file could not be restored: %s', 'livecanvas-forge-ai'), basename($target_path));
+                continue;
+            }
+
+            if (!@rename($temporary_path, $target_path) && !copy($backup_path, $target_path)) {
+                @unlink($temporary_path);
+                $errors[] = sprintf(__('WindPress runtime file could not be restored: %s', 'livecanvas-forge-ai'), basename($target_path));
+                continue;
+            }
+            @unlink($temporary_path);
+
+            $restored[] = $key;
+        }
+
+        $option = is_array($state['option'] ?? null) ? $state['option'] : [];
+        $option_name = $this->get_windpress_options_name();
+        if (!empty($option['exists'])) {
+            update_option($option_name, $option['value'] ?? null, false);
+        } else {
+            delete_option($option_name);
+        }
+        $restored[] = 'options';
+
+        if (class_exists('\WindPress\WindPress\Utils\Cache')) {
+            \WindPress\WindPress\Utils\Cache::flush_cache_plugin();
+        }
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
+
+        return [
+            'ok'       => empty($errors),
+            'message'  => empty($errors)
+                ? __('WindPress runtime state restored.', 'livecanvas-forge-ai')
+                : __('WindPress runtime state was restored with errors.', 'livecanvas-forge-ai'),
+            'errors'   => $errors,
+            'restored' => array_values(array_unique($restored)),
+        ];
+    }
+
     private function is_available(): bool {
         return $this->environment->is_windpress_active()
             && class_exists('\WindPress\WindPress\Core\Volume')
             && class_exists('\WindPress\WindPress\Core\Cache');
+    }
+
+    private function get_windpress_options_name(): string {
+        if (defined('WIND_PRESS::WP_OPTION')) {
+            return (string) constant('WIND_PRESS::WP_OPTION') . '_options';
+        }
+
+        return 'windpress_options';
+    }
+
+    private function get_runtime_file_paths(): array {
+        $files = [
+            'main_css' => trailingslashit($this->get_windpress_data_directory()) . 'main.css',
+        ];
+
+        if (!class_exists('\WindPress\WindPress\Core\Cache')) {
+            return $files;
+        }
+
+        $cache_class = '\WindPress\WindPress\Core\Cache';
+        $files['cache_css'] = $cache_class::get_cache_path($cache_class::CSS_CACHE_FILE);
+        $files['theme_json'] = $cache_class::get_cache_path($cache_class::THEME_JSON_FILE);
+
+        if (defined($cache_class . '::CSS_SOURCEMAP_FILE')) {
+            $files['cache_sourcemap'] = $cache_class::get_cache_path(constant($cache_class . '::CSS_SOURCEMAP_FILE'));
+        }
+
+        return array_map('wp_normalize_path', $files);
+    }
+
+    private function get_windpress_data_directory(): string {
+        if (class_exists('\WindPress\WindPress\Core\Volume') && method_exists('\WindPress\WindPress\Core\Volume', 'data_dir_path')) {
+            return wp_normalize_path((string) \WindPress\WindPress\Core\Volume::data_dir_path());
+        }
+
+        $uploads = wp_upload_dir(null, false);
+        $base = !empty($uploads['basedir']) ? (string) $uploads['basedir'] : trailingslashit(WP_CONTENT_DIR) . 'uploads';
+        $relative = defined('WIND_PRESS::DATA_DIR') ? (string) constant('WIND_PRESS::DATA_DIR') : '/windpress/data/';
+
+        return wp_normalize_path(rtrim($base, '/\\') . '/' . trim($relative, '/\\'));
+    }
+
+    private function get_runtime_backup_root(): string {
+        $uploads = wp_upload_dir(null, false);
+        if (!empty($uploads['error']) || empty($uploads['basedir'])) {
+            return '';
+        }
+
+        return wp_normalize_path(trailingslashit((string) $uploads['basedir']) . self::RUNTIME_BACKUP_SUBDIRECTORY);
+    }
+
+    private function protect_runtime_backup_root(string $backup_root): void {
+        if (!is_dir($backup_root) && !wp_mkdir_p($backup_root)) {
+            return;
+        }
+
+        $index_path = trailingslashit($backup_root) . 'index.php';
+        if (!is_file($index_path)) {
+            @file_put_contents($index_path, "<?php\n// Silence is golden.\n");
+        }
+
+        $htaccess_path = trailingslashit($backup_root) . '.htaccess';
+        if (!is_file($htaccess_path)) {
+            @file_put_contents($htaccess_path, "Require all denied\nDeny from all\n");
+        }
     }
 
     private function get_config(): array {

@@ -4,7 +4,7 @@
     {
       "slug": "bridge-starter",
       "name": "Bridge Starter",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Minimal Picowind child theme package for Theme Library beta testing.",
       "category": "beta",
       "framework": "picowind",
@@ -15,13 +15,13 @@
       "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/screenshots/home.svg",
       "package_path": "examples/theme-library/themes/bridge-starter/bridge-starter.zip",
       "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/bridge-starter.zip",
-      "checksum": "sha256:508e6f7baca76cf9ff9b394caa29d7314b1362211fa70ce90cf9a770ca60989a",
+      "checksum": "sha256:f99da5730d96bea4f04f3b13f5df83ad85956a87f346af74b8db9b22636d2fa6",
       "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/metadata.json"
     },
     {
       "slug": "asteria-search",
       "name": "Asteria Search",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "One-page Picowind theme exported from the wordpress-theme-test local site.",
       "category": "onepage",
       "framework": "picowind",
@@ -32,7 +32,7 @@
       "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/screenshots/cover.jpg",
       "package_path": "examples/theme-library/themes/asteria-search/asteria-search.zip",
       "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/asteria-search.zip",
-      "checksum": "sha256:d1f8997837c6417626f7ed293802cb993318e33497e45db90e0e5488809b556f",
+      "checksum": "sha256:6777a52607d60e421068337a8b367e391b6ad413e8dcbcd04109c80d17fc3310",
       "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/metadata.json"
     },
     {
@@ -49,7 +49,7 @@
       "screenshot": "",
       "package_path": "examples/theme-library/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
       "package_url": "",
-      "checksum": "sha256:9c6dc748947ba18028eaa3f8f6b43e705eb1ee7c5cbde761d903fec032606849",
+      "checksum": "sha256:beda9cd4dad5443e5462a430230b9bc55ffb780c2385f49b04f118d0ef457757",
       "metadata_url": ""
     }
   ]

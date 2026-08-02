@@ -3,7 +3,7 @@
   "theme": {
     "slug": "bridge-starter",
     "name": "Bridge Starter",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "stylesheet": "bridge-starter"
   },
   "compatibility": {

@@ -7,7 +7,19 @@
 </head>
 <body class="{{ body_class }}" data-template="lcfa-empty.twig">
     {{ function('wp_body_open') }}
-    {{ post.content }}
+    {% if function('function_exists', 'lc_custom_header') %}
+        {{ function('lc_custom_header', 1) }}
+    {% else %}
+        {{ function('lc_get_header', 1) }}
+    {% endif %}
+    <main id="theme-main">
+        {{ post.content }}
+    </main>
+    {% if function('function_exists', 'lc_custom_footer') %}
+        {{ function('lc_custom_footer', 1) }}
+    {% else %}
+        {{ function('lc_get_footer', 1) }}
+    {% endif %}
     {{ function('wp_footer') }}
 </body>
 </html>

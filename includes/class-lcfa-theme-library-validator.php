@@ -286,8 +286,10 @@ final class LCFA_Theme_Library_Validator {
 
         $required = [
             'wp_head' => 'wp_head',
-            'wp_footer' => 'wp_footer',
+            'wp_body_open' => 'wp_body_open',
+            'main' => '<main',
             'post.content' => 'post.content',
+            'wp_footer' => 'wp_footer',
         ];
         $missing = [];
         foreach ($required as $label => $needle) {
@@ -296,8 +298,16 @@ final class LCFA_Theme_Library_Validator {
             }
         }
 
+        if (strpos($twig, 'lc_custom_header') === false && strpos($twig, 'lc_get_header') === false) {
+            $missing[] = 'LiveCanvas header';
+        }
+
+        if (strpos($twig, 'lc_custom_footer') === false && strpos($twig, 'lc_get_footer') === false) {
+            $missing[] = 'LiveCanvas footer';
+        }
+
         if ($missing) {
-            return $this->error(__('Theme page template must include wp_head(), wp_footer(), and post.content so Picowind/WindPress assets load.', 'livecanvas-forge-ai'), [
+            return $this->error(__('Theme page template must render a complete Picowind shell with WordPress hooks, a main content element, and separate LiveCanvas header/footer partials.', 'livecanvas-forge-ai'), [
                 'missing_template_calls' => $missing,
             ]);
         }
@@ -353,6 +363,26 @@ final class LCFA_Theme_Library_Validator {
 
         if (preg_match('/<\\/?(?:header|footer)\\b/i', $homepage)) {
             return $this->error(__('Homepage content must not contain inline header or footer markup.', 'livecanvas-forge-ai'));
+        }
+
+        $header_path = (string) ($manifest['header']['content_file'] ?? '');
+        $header = $zip->getFromName($root . $header_path);
+        if (!is_string($header) || trim($header) === '') {
+            return $this->error(__('Header partial content file could not be read or is empty.', 'livecanvas-forge-ai'));
+        }
+
+        if (preg_match('/<\\/?header\\b/i', $header)) {
+            return $this->error(__('Header partial content must not include an outer header element because LiveCanvas supplies that shell.', 'livecanvas-forge-ai'));
+        }
+
+        $footer_path = (string) ($manifest['footer']['content_file'] ?? '');
+        $footer = $zip->getFromName($root . $footer_path);
+        if (!is_string($footer) || trim($footer) === '') {
+            return $this->error(__('Footer partial content file could not be read or is empty.', 'livecanvas-forge-ai'));
+        }
+
+        if (preg_match('/<\\/?footer\\b/i', $footer)) {
+            return $this->error(__('Footer partial content must not include an outer footer element because LiveCanvas supplies that shell.', 'livecanvas-forge-ai'));
         }
 
         return ['ok' => true];

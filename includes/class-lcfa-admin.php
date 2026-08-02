@@ -77,10 +77,11 @@ final class LCFA_Admin {
         $this->genesis_executor = $genesis_executor;
         $this->ability_registry = $ability_registry;
         $theme_library_validator = new LCFA_Theme_Library_Validator();
+        $theme_library_windpress_bridge = new LCFA_WindPress_Bridge($environment);
         $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
-        $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator);
-        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, new LCFA_WindPress_Bridge($environment));
-        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback();
+        $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator, $theme_library_windpress_bridge);
+        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $theme_library_windpress_bridge);
+        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($theme_library_windpress_bridge);
     }
 
     public function hooks(): void {
