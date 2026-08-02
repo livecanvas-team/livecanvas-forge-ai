@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -138,13 +140,13 @@ lcfa_assert_same('Check the LiveCanvas stack, confirm this project, then connect
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-$environment_property = new ReflectionProperty('LCFA_Admin', 'environment');
+$environment_property = lcfa_test_reflection_property('LCFA_Admin', 'environment');
 $environment_property->setValue($admin, new LCFA_Environment());
 
-$hero_presenter_property = new ReflectionProperty('LCFA_Admin', 'admin_hero_presenter');
+$hero_presenter_property = lcfa_test_reflection_property('LCFA_Admin', 'admin_hero_presenter');
 $hero_presenter_property->setValue($admin, $presenter);
 
-$render_method = new ReflectionMethod('LCFA_Admin', 'render_page_header');
+$render_method = lcfa_test_reflection_method('LCFA_Admin', 'render_page_header');
 
 ob_start();
 $render_method->invoke($admin, 'connections', [

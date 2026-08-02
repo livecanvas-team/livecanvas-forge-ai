@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -66,10 +68,10 @@ function lcfa_assert_contains(string $needle, string $haystack, string $message)
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-$environment_property = new ReflectionProperty('LCFA_Admin', 'environment');
+$environment_property = lcfa_test_reflection_property('LCFA_Admin', 'environment');
 $environment_property->setValue($admin, new LCFA_Environment());
 
-$method = new ReflectionMethod('LCFA_Admin', 'get_agent_icon_url');
+$method = lcfa_test_reflection_method('LCFA_Admin', 'get_agent_icon_url');
 
 $expectations = [
     'codex' => 'assets/agent-icons/codex-color.svg',

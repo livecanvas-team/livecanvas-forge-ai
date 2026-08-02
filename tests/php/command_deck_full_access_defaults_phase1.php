@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -49,7 +51,7 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-command-deck.php';
 
 $reflection = new ReflectionClass('LCFA_Command_Deck');
 $instance = $reflection->newInstanceWithoutConstructor();
-$method = new ReflectionMethod('LCFA_Command_Deck', 'evaluate_policy');
+$method = lcfa_test_reflection_method('LCFA_Command_Deck', 'evaluate_policy');
 
 $pagePolicy = $method->invoke($instance, 'page_upsert', false);
 lcfa_assert_same('advanced_templates', $pagePolicy['profile'] ?? null, 'command deck should default to advanced_templates when settings are missing');

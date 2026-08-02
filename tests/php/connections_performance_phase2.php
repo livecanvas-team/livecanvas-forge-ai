@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -300,13 +302,13 @@ $admin = $admin_reflection->newInstanceWithoutConstructor();
 $remote_client = new LCFA_Remote_Client();
 $context_builder = new LCFA_Context_Builder();
 
-(new ReflectionProperty('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
-(new ReflectionProperty('LCFA_Admin', 'remote_client'))->setValue($admin, $remote_client);
-(new ReflectionProperty('LCFA_Admin', 'context_builder'))->setValue($admin, $context_builder);
-(new ReflectionProperty('LCFA_Admin', 'connection_onboarding'))->setValue($admin, new LCFA_Connection_Onboarding(new LCFA_Connection_Bundle_Builder()));
-(new ReflectionProperty('LCFA_Admin', 'connection_wizard_presenter'))->setValue($admin, new LCFA_Connection_Wizard_Presenter());
+(lcfa_test_reflection_property('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
+(lcfa_test_reflection_property('LCFA_Admin', 'remote_client'))->setValue($admin, $remote_client);
+(lcfa_test_reflection_property('LCFA_Admin', 'context_builder'))->setValue($admin, $context_builder);
+(lcfa_test_reflection_property('LCFA_Admin', 'connection_onboarding'))->setValue($admin, new LCFA_Connection_Onboarding(new LCFA_Connection_Bundle_Builder()));
+(lcfa_test_reflection_property('LCFA_Admin', 'connection_wizard_presenter'))->setValue($admin, new LCFA_Connection_Wizard_Presenter());
 
-$render_connections_tab = new ReflectionMethod('LCFA_Admin', 'render_connections_tab');
+$render_connections_tab = lcfa_test_reflection_method('LCFA_Admin', 'render_connections_tab');
 
 $settings = LCFA_Settings::get();
 $snapshot = (new LCFA_Environment())->get_snapshot();

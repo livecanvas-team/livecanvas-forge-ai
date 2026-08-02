@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -345,22 +347,22 @@ LCFA_Settings::update_genesis_progress([
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-(new ReflectionProperty('LCFA_Admin', 'environment'))->setValue($admin, $environment);
-(new ReflectionProperty('LCFA_Admin', 'installer'))->setValue($admin, new LCFA_Installer());
-(new ReflectionProperty('LCFA_Admin', 'inventory'))->setValue($admin, new LCFA_Inventory());
-(new ReflectionProperty('LCFA_Admin', 'theme_files_bridge'))->setValue($admin, new LCFA_Theme_Files_Bridge());
-(new ReflectionProperty('LCFA_Admin', 'connection_tester'))->setValue($admin, new LCFA_Connection_Tester());
-(new ReflectionProperty('LCFA_Admin', 'remote_client'))->setValue($admin, new LCFA_Remote_Client());
-(new ReflectionProperty('LCFA_Admin', 'context_builder'))->setValue($admin, new LCFA_Context_Builder());
-(new ReflectionProperty('LCFA_Admin', 'connection_onboarding'))->setValue($admin, new LCFA_Connection_Onboarding());
-(new ReflectionProperty('LCFA_Admin', 'connection_wizard_presenter'))->setValue($admin, new LCFA_Connection_Wizard_Presenter());
-(new ReflectionProperty('LCFA_Admin', 'admin_hero_presenter'))->setValue($admin, new LCFA_Admin_Hero_Presenter());
-(new ReflectionProperty('LCFA_Admin', 'command_deck'))->setValue($admin, $command_deck);
-(new ReflectionProperty('LCFA_Admin', 'prompt_suggester'))->setValue($admin, new LCFA_Prompt_Suggester());
-(new ReflectionProperty('LCFA_Admin', 'genesis_planner'))->setValue($admin, new LCFA_Genesis_Planner());
-(new ReflectionProperty('LCFA_Admin', 'genesis_executor'))->setValue($admin, $executor);
+(lcfa_test_reflection_property('LCFA_Admin', 'environment'))->setValue($admin, $environment);
+(lcfa_test_reflection_property('LCFA_Admin', 'installer'))->setValue($admin, new LCFA_Installer());
+(lcfa_test_reflection_property('LCFA_Admin', 'inventory'))->setValue($admin, new LCFA_Inventory());
+(lcfa_test_reflection_property('LCFA_Admin', 'theme_files_bridge'))->setValue($admin, new LCFA_Theme_Files_Bridge());
+(lcfa_test_reflection_property('LCFA_Admin', 'connection_tester'))->setValue($admin, new LCFA_Connection_Tester());
+(lcfa_test_reflection_property('LCFA_Admin', 'remote_client'))->setValue($admin, new LCFA_Remote_Client());
+(lcfa_test_reflection_property('LCFA_Admin', 'context_builder'))->setValue($admin, new LCFA_Context_Builder());
+(lcfa_test_reflection_property('LCFA_Admin', 'connection_onboarding'))->setValue($admin, new LCFA_Connection_Onboarding());
+(lcfa_test_reflection_property('LCFA_Admin', 'connection_wizard_presenter'))->setValue($admin, new LCFA_Connection_Wizard_Presenter());
+(lcfa_test_reflection_property('LCFA_Admin', 'admin_hero_presenter'))->setValue($admin, new LCFA_Admin_Hero_Presenter());
+(lcfa_test_reflection_property('LCFA_Admin', 'command_deck'))->setValue($admin, $command_deck);
+(lcfa_test_reflection_property('LCFA_Admin', 'prompt_suggester'))->setValue($admin, new LCFA_Prompt_Suggester());
+(lcfa_test_reflection_property('LCFA_Admin', 'genesis_planner'))->setValue($admin, new LCFA_Genesis_Planner());
+(lcfa_test_reflection_property('LCFA_Admin', 'genesis_executor'))->setValue($admin, $executor);
 
-$render_genesis_tab = $admin_reflection->getMethod('render_genesis_tab');
+$render_genesis_tab = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_genesis_tab'));
 
 ob_start();
 $render_genesis_tab->invoke(
@@ -391,7 +393,7 @@ lcfa_assert_contains('Next task: Create or refresh the global header shell', $ma
 lcfa_assert_contains('Pending: 2', $markup, 'Genesis summary chips should include the pending count from execution state');
 lcfa_assert_contains('Failed: 1', $markup, 'Genesis summary chips should include failed execution count');
 
-$get_command_form_context = $admin_reflection->getMethod('get_command_form_context');
+$get_command_form_context = lcfa_test_accessible_reflector($admin_reflection->getMethod('get_command_form_context'));
 $_GET = [
     'genesis_task_id' => 'foundation-header',
 ];

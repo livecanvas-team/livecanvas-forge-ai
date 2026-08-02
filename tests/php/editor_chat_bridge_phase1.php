@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -334,11 +336,11 @@ $post = new WP_Post([
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-(new ReflectionProperty('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
-(new ReflectionProperty('LCFA_Admin', 'inventory'))->setValue($admin, new LCFA_Inventory());
-(new ReflectionProperty('LCFA_Admin', 'remote_client'))->setValue($admin, new LCFA_Remote_Client());
-(new ReflectionProperty('LCFA_Admin', 'context_builder'))->setValue($admin, new LCFA_Context_Builder());
-(new ReflectionProperty('LCFA_Admin', 'command_deck'))->setValue($admin, new LCFA_Command_Deck());
+(lcfa_test_reflection_property('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
+(lcfa_test_reflection_property('LCFA_Admin', 'inventory'))->setValue($admin, new LCFA_Inventory());
+(lcfa_test_reflection_property('LCFA_Admin', 'remote_client'))->setValue($admin, new LCFA_Remote_Client());
+(lcfa_test_reflection_property('LCFA_Admin', 'context_builder'))->setValue($admin, new LCFA_Context_Builder());
+(lcfa_test_reflection_property('LCFA_Admin', 'command_deck'))->setValue($admin, new LCFA_Command_Deck());
 
 ob_start();
 $admin->render_editor_bridge_styles();
@@ -479,7 +481,7 @@ if ($session_position === false || $codex_model_position >= $session_position) {
     exit(1);
 }
 
-$render_editor_thread = $admin_reflection->getMethod('render_editor_bridge_thread_message');
+$render_editor_thread = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_editor_bridge_thread_message'));
 ob_start();
 $render_editor_thread->invoke($admin, [
     'role' => 'suggestion_result',
@@ -551,11 +553,11 @@ lcfa_assert_contains('Edit page', $editor_thread_markup, 'editor thread renderer
 lcfa_assert_contains('Retry', $editor_thread_markup, 'editor thread renderer should output persisted recovery actions for failed or retryable tool_result messages');
 lcfa_assert_contains('data-lcfa-editor-thread-apply', $editor_thread_markup, 'editor thread renderer should expose tool_result apply actions for JS handling');
 
-$render_command_thread = $admin_reflection->getMethod('render_command_thread_message');
-$render_command_thread_panel = $admin_reflection->getMethod('render_command_thread_panel');
-$get_thread_actions = $admin_reflection->getMethod('get_thread_message_actions');
-$render_command_result = $admin_reflection->getMethod('render_command_result');
-$render_command_suggestion = $admin_reflection->getMethod('render_command_suggestion');
+$render_command_thread = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_command_thread_message'));
+$render_command_thread_panel = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_command_thread_panel'));
+$get_thread_actions = lcfa_test_accessible_reflector($admin_reflection->getMethod('get_thread_message_actions'));
+$render_command_result = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_command_result'));
+$render_command_suggestion = lcfa_test_accessible_reflector($admin_reflection->getMethod('render_command_suggestion'));
 ob_start();
 $render_command_thread->invoke($admin, [
     'role' => 'tool_result',
@@ -722,7 +724,7 @@ try {
 }
 $_POST = [];
 
-$get_command_request_payload = $admin_reflection->getMethod('get_command_request_payload');
+$get_command_request_payload = lcfa_test_accessible_reflector($admin_reflection->getMethod('get_command_request_payload'));
 $structured_command_payload = $get_command_request_payload->invoke($admin, [
     'action'  => 'site_foundation_run',
     'content' => wp_json_encode([

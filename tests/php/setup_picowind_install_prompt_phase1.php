@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -81,8 +83,8 @@ function lcfa_assert_contains(string $needle, string $haystack, string $message)
 require LCFA_DIR . 'includes/class-lcfa-admin.php';
 
 $admin = (new ReflectionClass('LCFA_Admin'))->newInstanceWithoutConstructor();
-(new ReflectionProperty('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
-$render_method = new ReflectionMethod('LCFA_Admin', 'render_framework_step');
+(lcfa_test_reflection_property('LCFA_Admin', 'environment'))->setValue($admin, new LCFA_Environment());
+$render_method = lcfa_test_reflection_method('LCFA_Admin', 'render_framework_step');
 
 $snapshot = [
     'detected_framework'   => 'picostrap',

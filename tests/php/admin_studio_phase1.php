@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -124,7 +126,7 @@ $diagnostics = [
     ],
 ];
 
-$abilities_method = new ReflectionMethod('LCFA_Admin', 'render_studio_abilities_panel');
+$abilities_method = lcfa_test_reflection_method('LCFA_Admin', 'render_studio_abilities_panel');
 ob_start();
 $abilities_method->invoke($admin, $diagnostics);
 $abilities_markup = (string) ob_get_clean();
@@ -136,7 +138,7 @@ lcfa_assert_true(strpos($abilities_markup, 'data-lcfa-studio-ability-search') !=
 lcfa_assert_true(strpos($abilities_markup, 'data-lcfa-studio-ability-filter="write"') !== false, 'studio abilities panel should render a write filter');
 lcfa_assert_true(strpos($abilities_markup, 'data-lcfa-studio-ability-item') !== false, 'studio abilities panel should mark filterable ability rows');
 
-$policy_method = new ReflectionMethod('LCFA_Admin', 'render_studio_write_policy_panel');
+$policy_method = lcfa_test_reflection_method('LCFA_Admin', 'render_studio_write_policy_panel');
 ob_start();
 $policy_method->invoke($admin, $diagnostics, [
     'mcp_write_abilities_enabled' => true,
@@ -147,7 +149,7 @@ lcfa_assert_true(strpos($policy_markup, 'Allowed: 1') !== false, 'studio write p
 lcfa_assert_true(strpos($policy_markup, 'Exposed: 1') !== false, 'studio write policy should show exposed write count');
 lcfa_assert_true(strpos($policy_markup, 'tab=connections') !== false, 'studio write policy should link back to Connections');
 
-$runs_method = new ReflectionMethod('LCFA_Admin', 'render_studio_runs_panel');
+$runs_method = lcfa_test_reflection_method('LCFA_Admin', 'render_studio_runs_panel');
 ob_start();
 $runs_method->invoke($admin, [
     [

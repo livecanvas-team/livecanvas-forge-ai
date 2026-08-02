@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 define('ABSPATH', '/tmp/lcfa-theme-library-failure-injection/');
 define('LCFA_E2E_MODE', true);
 
@@ -17,7 +19,7 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-importer.php';
 
 $reflection = new ReflectionClass(LCFA_Theme_Library_Importer::class);
 $importer = $reflection->newInstanceWithoutConstructor();
-$inject = $reflection->getMethod('maybe_inject_e2e_failure');
+$inject = lcfa_test_accessible_reflector($reflection->getMethod('maybe_inject_e2e_failure'));
 
 foreach (['after_media', 'after_partials', 'after_homepage', 'after_build'] as $stage) {
     $GLOBALS['lcfa_failure_stage'] = $stage;

@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Signed updater URL fixture from the historical PHP test"
+condition = "AND"
+paths = ['''tests/php/github_updater_phase1\.php''']
+regexTarget = "match"
+regexes = ['''token=signed-v0\.1\.8''']

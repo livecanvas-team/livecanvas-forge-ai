@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -1132,7 +1134,7 @@ lcfa_assert_same('tool_result', (string) ($async_status_last_message['role'] ?? 
 lcfa_assert_same('preview', (string) ($async_status_last_message['meta']['mode'] ?? ''), 'async preview executions should persist preview mode in the thread');
 
 $rest_api_reflection = new ReflectionClass('LCFA_Rest_Api');
-$build_command_result_message = $rest_api_reflection->getMethod('build_command_result_message');
+$build_command_result_message = lcfa_test_accessible_reflector($rest_api_reflection->getMethod('build_command_result_message'));
 $decorated_result_message = $build_command_result_message->invoke($rest_api, [
     'ok'           => true,
     'action'       => 'page_upsert',
@@ -1218,7 +1220,7 @@ lcfa_assert_same('validate_markup_for_framework', $picowind_suggestion['workflow
 lcfa_assert_same('page_upsert', $picowind_suggestion['workflow'][1]['action'] ?? '', 'Picowind workflow should continue with page_upsert after validation');
 
 $context_reflection = new ReflectionClass($context_builder);
-$picowind_rules_method = $context_reflection->getMethod('get_output_rules');
+$picowind_rules_method = lcfa_test_accessible_reflector($context_reflection->getMethod('get_output_rules'));
 $picowind_rules = $picowind_rules_method->invoke($context_builder, 'picowind');
 
 lcfa_assert_true(($picowind_rules['html_only'] ?? null) === false, 'Picowind output rules should not force HTML-only output');
@@ -2177,7 +2179,7 @@ $GLOBALS['lcfa_test_remote_get_map']['https://example.test/wp-json/lcfa/v1/mcp/h
 
 $connection_tester = new LCFA_Connection_Tester($environment, $local_mcp_bridge, $remote_client);
 $local_mcp_reflection = new ReflectionObject($local_mcp_bridge);
-$status_cache_property = $local_mcp_reflection->getProperty('status_cache');
+$status_cache_property = lcfa_test_accessible_reflector($local_mcp_reflection->getProperty('status_cache'));
 
 $status_cache_property->setValue($local_mcp_bridge, [
     'available'        => false,

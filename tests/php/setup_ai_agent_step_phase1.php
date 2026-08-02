@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -87,8 +89,8 @@ require LCFA_DIR . 'includes/class-lcfa-admin.php';
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-$render_ai_tool_step = new ReflectionMethod('LCFA_Admin', 'render_ai_tool_step');
-$render_step_nav = new ReflectionMethod('LCFA_Admin', 'render_step_nav');
+$render_ai_tool_step = lcfa_test_reflection_method('LCFA_Admin', 'render_ai_tool_step');
+$render_step_nav = lcfa_test_reflection_method('LCFA_Admin', 'render_step_nav');
 
 ob_start();
 $render_ai_tool_step->invoke($admin, [

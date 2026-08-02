@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -618,29 +620,29 @@ lcfa_assert_true(strpos((string) ($codex_smoke['active_panel']['description'] ??
 
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin_instance = $admin_reflection->newInstanceWithoutConstructor();
-$default_tab_method = new ReflectionMethod('LCFA_Admin', 'get_default_dashboard_tab');
-$post_setup_redirect_method = new ReflectionMethod('LCFA_Admin', 'get_post_setup_redirect_tab');
-$hero_content_method = new ReflectionMethod('LCFA_Admin', 'get_dashboard_hero_content');
-$internal_tabs_method = new ReflectionMethod('LCFA_Admin', 'render_internal_tabs');
-$reconfigure_connections_method = new ReflectionMethod('LCFA_Admin', 'get_reconfigured_connections');
-$visual_help_method = new ReflectionMethod('LCFA_Admin', 'render_connection_visual_help_strip');
-$admin_codex_command_method = new ReflectionMethod('LCFA_Admin', 'build_codex_register_command');
-$stepper_method = new ReflectionMethod('LCFA_Admin', 'render_connection_stepper');
-$connection_wizard_method = new ReflectionMethod('LCFA_Admin', 'render_connection_wizard');
-$active_step_panel_method = new ReflectionMethod('LCFA_Admin', 'render_connection_active_step_panel');
-$connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_onboarding_hero');
-$connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
-$framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
-$remote_codex_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
-$remote_agent_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_agent_mcp_payload');
-$remote_codex_test_prompt_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_test_prompt');
-$codex_onboarding_state_method = new ReflectionMethod('LCFA_Admin', 'get_codex_onboarding_state');
-$remote_codex_prerequisites_method = new ReflectionMethod('LCFA_Admin', 'get_remote_codex_prerequisites');
-$codex_fast_path_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_fast_path_panel');
-$codex_other_clients_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_other_clients_panel');
-$secondary_panels_method = new ReflectionMethod('LCFA_Admin', 'render_connections_secondary_panels');
-$ability_diagnostics_card_method = new ReflectionMethod('LCFA_Admin', 'render_ability_diagnostics_card');
-$power_mode_status_card_method = new ReflectionMethod('LCFA_Admin', 'render_power_mode_status_card');
+$default_tab_method = lcfa_test_reflection_method('LCFA_Admin', 'get_default_dashboard_tab');
+$post_setup_redirect_method = lcfa_test_reflection_method('LCFA_Admin', 'get_post_setup_redirect_tab');
+$hero_content_method = lcfa_test_reflection_method('LCFA_Admin', 'get_dashboard_hero_content');
+$internal_tabs_method = lcfa_test_reflection_method('LCFA_Admin', 'render_internal_tabs');
+$reconfigure_connections_method = lcfa_test_reflection_method('LCFA_Admin', 'get_reconfigured_connections');
+$visual_help_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_visual_help_strip');
+$admin_codex_command_method = lcfa_test_reflection_method('LCFA_Admin', 'build_codex_register_command');
+$stepper_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_stepper');
+$connection_wizard_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_wizard');
+$active_step_panel_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_active_step_panel');
+$connection_hero_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_onboarding_hero');
+$connection_ready_card_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_ready_card');
+$framework_change_decision_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_framework_change_decision_card');
+$remote_codex_payload_method = lcfa_test_reflection_method('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
+$remote_agent_payload_method = lcfa_test_reflection_method('LCFA_Admin', 'build_remote_agent_mcp_payload');
+$remote_codex_test_prompt_method = lcfa_test_reflection_method('LCFA_Admin', 'build_remote_codex_test_prompt');
+$codex_onboarding_state_method = lcfa_test_reflection_method('LCFA_Admin', 'get_codex_onboarding_state');
+$remote_codex_prerequisites_method = lcfa_test_reflection_method('LCFA_Admin', 'get_remote_codex_prerequisites');
+$codex_fast_path_panel_method = lcfa_test_reflection_method('LCFA_Admin', 'render_codex_fast_path_panel');
+$codex_other_clients_panel_method = lcfa_test_reflection_method('LCFA_Admin', 'render_codex_other_clients_panel');
+$secondary_panels_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connections_secondary_panels');
+$ability_diagnostics_card_method = lcfa_test_reflection_method('LCFA_Admin', 'render_ability_diagnostics_card');
+$power_mode_status_card_method = lcfa_test_reflection_method('LCFA_Admin', 'render_power_mode_status_card');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,

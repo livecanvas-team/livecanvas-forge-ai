@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 $wp_admin_includes = '/tmp/lcfa-tests/wp-admin/includes';
@@ -115,7 +117,7 @@ function lcfa_assert_true(bool $condition, string $message): void {
 require LCFA_DIR . 'includes/class-lcfa-installer.php';
 
 $installer = new LCFA_Installer(new LCFA_Environment());
-$method = new ReflectionMethod('LCFA_Installer', 'install_framework_package');
+$method = lcfa_test_reflection_method('LCFA_Installer', 'install_framework_package');
 $result = $method->invoke($installer, 'picowind');
 
 lcfa_assert_same(true, $result, 'Picowind installation should succeed with a GitHub latest release asset URL');

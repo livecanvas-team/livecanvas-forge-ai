@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 define('ABSPATH', '/tmp/lcfa-tests/');
 
 function __(string $text, string $domain = ''): string {
@@ -72,8 +74,8 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-command-deck.php';
 
 $reflection = new ReflectionClass('LCFA_Command_Deck');
 $instance = $reflection->newInstanceWithoutConstructor();
-$attach_audit = new ReflectionMethod('LCFA_Command_Deck', 'attach_audit_envelope');
-$get_provenance = new ReflectionMethod('LCFA_Command_Deck', 'get_payload_provenance');
+$attach_audit = lcfa_test_reflection_method('LCFA_Command_Deck', 'attach_audit_envelope');
+$get_provenance = lcfa_test_reflection_method('LCFA_Command_Deck', 'get_payload_provenance');
 
 $provenance = $get_provenance->invoke($instance, [
     '_lcfa_origin'       => 'wp_ability',

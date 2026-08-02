@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
@@ -100,11 +102,11 @@ require LCFA_DIR . 'includes/class-lcfa-admin.php';
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin = $admin_reflection->newInstanceWithoutConstructor();
 
-$environment_property = new ReflectionProperty('LCFA_Admin', 'environment');
+$environment_property = lcfa_test_reflection_property('LCFA_Admin', 'environment');
 $environment_property->setValue($admin, new LCFA_Environment());
 
-$render_code_block = new ReflectionMethod('LCFA_Admin', 'render_code_block');
-$render_bundle_details = new ReflectionMethod('LCFA_Admin', 'render_connection_bundle_details');
+$render_code_block = lcfa_test_reflection_method('LCFA_Admin', 'render_code_block');
+$render_bundle_details = lcfa_test_reflection_method('LCFA_Admin', 'render_connection_bundle_details');
 
 ob_start();
 $render_code_block->invoke($admin, "echo 'hello';", [

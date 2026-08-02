@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 define('ABSPATH', '/tmp/lcfa-tests/');
 
 $GLOBALS['lcfa_test_posts'] = [
@@ -205,10 +207,10 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-command-deck.php';
 $reflection = new ReflectionClass('LCFA_Command_Deck');
 $instance = $reflection->newInstanceWithoutConstructor();
 $design_system_apply = new LCFA_Design_System_Apply();
-$design_system_property = new ReflectionProperty('LCFA_Command_Deck', 'design_system_apply');
+$design_system_property = lcfa_test_reflection_property('LCFA_Command_Deck', 'design_system_apply');
 $design_system_property->setValue($instance, $design_system_apply);
-$attach_audit = new ReflectionMethod('LCFA_Command_Deck', 'attach_audit_envelope');
-$restore_rollback = new ReflectionMethod('LCFA_Command_Deck', 'restore_audit_rollback');
+$attach_audit = lcfa_test_reflection_method('LCFA_Command_Deck', 'attach_audit_envelope');
+$restore_rollback = lcfa_test_reflection_method('LCFA_Command_Deck', 'restore_audit_rollback');
 
 $apply_result = [
     'ok'               => true,

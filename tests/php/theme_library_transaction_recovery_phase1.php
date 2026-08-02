@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-theme-library-recovery-tests/');
@@ -68,9 +70,9 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-importer.php';
 
 $importer_reflection = new ReflectionClass(LCFA_Theme_Library_Importer::class);
 $importer = $importer_reflection->newInstanceWithoutConstructor();
-$rollback_property = $importer_reflection->getProperty('rollback_service');
+$rollback_property = lcfa_test_accessible_reflector($importer_reflection->getProperty('rollback_service'));
 $rollback_property->setValue($importer, new LCFA_Theme_Library_Rollback());
-$recover = $importer_reflection->getMethod('recover_failed_import');
+$recover = lcfa_test_accessible_reflector($importer_reflection->getMethod('recover_failed_import'));
 
 $success = $recover->invoke($importer, 'auto-success', true);
 lcfa_recovery_assert(!empty($success['attempted']) && !empty($success['ok']), 'Automatic recovery should apply a valid rollback record.');
