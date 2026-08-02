@@ -1568,22 +1568,10 @@ final class LCFA_Admin {
             ? $mcp_bootstrap['clients'][$client_key]
             : (is_array($mcp_bootstrap['clients']['codex'] ?? null) ? $mcp_bootstrap['clients']['codex'] : ['command' => '', 'env' => []]);
 
-        if ($mode === 'remote' && $client_key === 'codex') {
-            $remote_codex_payload = $this->build_remote_codex_mcp_adapter_payload($connections, $remote_status);
-            $client_payload = $remote_codex_payload['client_payload'];
-            $common = array_merge($common, $remote_codex_payload['common']);
-        } elseif ($mode === 'remote') {
-            $remote_rest_base = (string) ($remote_status['mcp']['rest_base'] ?? ($remote_status['endpoint'] ?? ''));
-            $remote_token = (string) ($remote_status['mcp']['token'] ?? '');
-
-            $client_payload['env'] = array_values(array_filter([
-                $remote_rest_base !== '' ? 'LCFA_REST_BASE=' . $remote_rest_base : '',
-                $remote_token !== '' ? 'LCFA_MCP_TOKEN=' . $remote_token : '',
-            ]));
-            $common = array_merge($common, [
-                'connection_strategy' => 'remote-rest',
-                'remote_site_url'     => trim((string) ($connections['remote_site_url'] ?? '')),
-            ]);
+        if ($mode === 'remote') {
+            $remote_agent_payload = $this->build_remote_agent_mcp_payload($client_key, $connections, $remote_status);
+            $client_payload = $remote_agent_payload['client_payload'];
+            $common = array_merge($common, $remote_agent_payload['common']);
         }
 
         return $this->connection_onboarding->build_bundle([
@@ -1600,6 +1588,11 @@ final class LCFA_Admin {
     }
 
     private function build_remote_codex_mcp_adapter_payload(array $connections, array $remote_status): array {
+        return $this->build_remote_agent_mcp_payload('codex', $connections, $remote_status);
+    }
+
+    private function build_remote_agent_mcp_payload(string $client_key, array $connections, array $remote_status): array {
+        $client_key = $this->normalize_connection_client($client_key);
         $remote_site_url = trim((string) ($connections['remote_site_url'] ?? ''));
         if ($remote_site_url === '' && function_exists('home_url')) {
             $remote_site_url = home_url('/');
@@ -1611,7 +1604,7 @@ final class LCFA_Admin {
             $project_label = (string) parse_url($remote_site_url, PHP_URL_HOST);
         }
         if ($project_label === '') {
-            $project_label = __('Codex project', 'livecanvas-forge-ai');
+            $project_label = sprintf(__('%s project', 'livecanvas-forge-ai'), $this->get_connection_client_label($client_key));
         }
         $snapshot = isset($this->environment) ? $this->environment->get_snapshot() : [];
         $adapter_status = is_array($snapshot['mcp_adapter'] ?? null) ? $snapshot['mcp_adapter'] : [];
@@ -1628,7 +1621,7 @@ final class LCFA_Admin {
             ? LCFA_Settings::get_site_fingerprint()
             : '';
 
-        if (!empty($oauth_status['available']) && $targets_current_site) {
+        if ($client_key === 'codex' && !empty($oauth_status['available']) && $targets_current_site) {
             $direct_mcp_url = esc_url_raw((string) ($oauth_status['resource_url'] ?? ''));
 
             return [
@@ -1658,6 +1651,7 @@ final class LCFA_Admin {
             $remote_site_url !== '' ? 'LCFA_SITE_URL=' . $remote_site_url : '',
             'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
             'LCFA_PROJECT_LABEL=' . $project_label,
+            'LCFA_AGENT=' . $client_key,
             $pairing_scopes !== '' ? 'LCFA_PAIRING_SCOPES=' . $pairing_scopes : '',
         ]));
 
@@ -1673,10 +1667,23 @@ final class LCFA_Admin {
                 'mcp_adapter_available' => $mcp_adapter_url !== '',
                 'mcp_proxy_package'   => '@livecanvas/ai-bridge-mcp',
                 'mcp_proxy_log_file'  => '',
+                'agent'               => $client_key,
                 'site_fingerprint'    => $site_fingerprint,
                 'oauth_status'        => $oauth_status,
             ],
         ];
+    }
+
+    private function get_connection_client_label(string $client_key): string {
+        $labels = [
+            'codex'    => 'Codex',
+            'opencode' => 'OpenCode',
+            'claude'   => 'Claude',
+            'cursor'   => 'Cursor',
+            'generic'  => __('Coding agent', 'livecanvas-forge-ai'),
+        ];
+
+        return (string) ($labels[$client_key] ?? $labels['generic']);
     }
 
     private function get_remote_mcp_adapter_url(string $remote_site_url, array $remote_status): string {

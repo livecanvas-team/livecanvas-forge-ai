@@ -45,7 +45,7 @@ final class LCFA_Connection_Bundle_Builder {
             'environment'         => $environment,
             'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment, $server_name),
             'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment, $server_name, $mcp_url, $oauth_resource),
-            'smoke_test_command'  => $this->build_smoke_test_command($environment, $command, $server_name, $mcp_url),
+            'smoke_test_command'  => $this->build_smoke_test_command($environment, $command, $server_name, $mcp_url, $client),
             'agent_start_tool'    => $agent_start_tool,
             'connection_handoff_tool' => $agent_start_tool,
             'handoff_package_tool' => $handoff_package_tool,
@@ -100,7 +100,7 @@ final class LCFA_Connection_Bundle_Builder {
             return substr('livecanvas-' . ($host !== '' ? $host : 'site') . $suffix, 0, 64);
         }
 
-        if ($client === 'codex' && $mode === 'remote' && (string) ($common['connection_strategy'] ?? '') === 'ai-bridge-session') {
+        if ($mode === 'remote' && (string) ($common['connection_strategy'] ?? '') === 'ai-bridge-session') {
             return 'livecanvas-ai-bridge';
         }
 
@@ -703,7 +703,7 @@ final class LCFA_Connection_Bundle_Builder {
         return implode("\n", $lines) . "\n";
     }
 
-    private function build_smoke_test_command(array $environment, array $command, string $server_name = 'livecanvas-forge', string $mcp_url = ''): string {
+    private function build_smoke_test_command(array $environment, array $command, string $server_name = 'livecanvas-forge', string $mcp_url = '', string $client = 'codex'): string {
         if ($mcp_url !== '') {
             return "codex mcp get " . $server_name
                 . " || /Applications/Codex.app/Contents/Resources/codex mcp get " . $server_name
@@ -712,7 +712,19 @@ final class LCFA_Connection_Bundle_Builder {
         }
 
         if ($this->uses_secure_ai_bridge_remote($environment, $command)) {
-            return "codex mcp get " . $server_name . " || /Applications/Codex.app/Contents/Resources/codex mcp get " . $server_name . "\n# Then reopen Codex, approve the pending AI Bridge session in WordPress, and ask Codex to call get_connection_handoff.";
+            if ($client === 'codex') {
+                return "codex mcp get " . $server_name . " || /Applications/Codex.app/Contents/Resources/codex mcp get " . $server_name . "\n# Then reopen Codex, approve the pending AI Bridge session in WordPress, and ask Codex to call get_connection_handoff.";
+            }
+
+            $labels = [
+                'opencode' => 'OpenCode',
+                'claude'   => 'Claude',
+                'cursor'   => 'Cursor',
+                'generic'  => 'the coding agent',
+            ];
+            $label = $labels[$client] ?? $labels['generic'];
+
+            return '# Restart or reload ' . $label . ', approve the pending AI Bridge session in WordPress, then call get_connection_handoff.';
         }
 
         if ($this->uses_wordpress_mcp_remote_proxy($environment, $command)) {

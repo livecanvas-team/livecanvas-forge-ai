@@ -4,7 +4,7 @@ defined('ABSPATH') || exit;
 
 final class LCFA_Stack_Capabilities {
     private const SCHEMA_VERSION = 'stack-capabilities.v1';
-    private const PROFILE_VERSION = '2026.08.1';
+    private const PROFILE_VERSION = '2026.08.2';
 
     public function evaluate(array $snapshot, ?array $runtime = null): array {
         $framework = sanitize_key((string) ($snapshot['detected_framework'] ?? 'unknown'));
@@ -12,17 +12,25 @@ final class LCFA_Stack_Capabilities {
         $profiles = $this->get_profiles();
         $components = [];
 
+        $wordpress_version = (string) ($snapshot['wordpress_version'] ?? '');
+        $wordpress_runtime = (array) ($runtime['wordpress'] ?? []);
+        $wordpress_optional_capabilities = version_compare($wordpress_version, '7.0.0', '>=')
+            ? ['abilities_api']
+            : [];
         $components['wordpress'] = $this->evaluate_component(
             'wordpress',
             true,
             true,
             true,
-            (string) ($snapshot['wordpress_version'] ?? ''),
-            (array) ($runtime['wordpress'] ?? []),
+            $wordpress_version,
+            $wordpress_runtime,
             ['rest_api'],
-            ['abilities_api'],
+            $wordpress_optional_capabilities,
             $profiles
         );
+        $components['wordpress']['operation_mode'] = !empty($wordpress_runtime['abilities_api'])
+            ? 'abilities'
+            : 'legacy_rest';
         $components['livecanvas'] = $this->evaluate_component(
             'livecanvas',
             true,
@@ -144,6 +152,7 @@ final class LCFA_Stack_Capabilities {
             'status'               => $status,
             'message'              => $messages[$status],
             'framework'            => $framework,
+            'wordpress_mode'       => (string) ($components['wordpress']['operation_mode'] ?? 'legacy_rest'),
             'components'           => $components,
             'missing_capabilities' => array_values(array_unique($missing)),
             'warnings'             => array_values(array_filter(array_unique($warnings))),
@@ -153,8 +162,8 @@ final class LCFA_Stack_Capabilities {
     public function get_profiles(): array {
         $profiles = [
             'wordpress' => [
-                'operational_min' => '6.7.0',
-                'tested_min'      => '7.0.0',
+                'operational_min' => '6.8.0',
+                'tested_min'      => '6.8.0',
                 'tested_max'      => '8.0.0',
             ],
             'livecanvas' => [

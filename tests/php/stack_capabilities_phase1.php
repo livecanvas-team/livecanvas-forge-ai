@@ -70,8 +70,22 @@ $capabilities = new LCFA_Stack_Capabilities();
 
 $picowind = $capabilities->evaluate(lcfa_stack_snapshot('picowind'), lcfa_stack_runtime('picowind'));
 lcfa_stack_assert(($picowind['status'] ?? '') === 'supported', 'A tested Picowind/WindPress stack should be supported.');
-lcfa_stack_assert(($picowind['profile_version'] ?? '') === '2026.08.1', 'The versioned compatibility profile should be exposed.');
+lcfa_stack_assert(($picowind['profile_version'] ?? '') === '2026.08.2', 'The versioned compatibility profile should be exposed.');
+lcfa_stack_assert(($picowind['wordpress_mode'] ?? '') === 'abilities', 'WordPress 7 should expose the Abilities operating mode when available.');
 lcfa_stack_assert(($picowind['components']['windpress']['status'] ?? '') === 'supported', 'WindPress should be supported inside its tested range.');
+
+$wordpress68_snapshot = lcfa_stack_snapshot('picostrap');
+$wordpress68_snapshot['wordpress_version'] = '6.8.0';
+$wordpress68_runtime = lcfa_stack_runtime('picostrap');
+$wordpress68_runtime['wordpress']['abilities_api'] = false;
+$wordpress68 = $capabilities->evaluate($wordpress68_snapshot, $wordpress68_runtime);
+lcfa_stack_assert(($wordpress68['status'] ?? '') === 'supported', 'WordPress 6.8 REST mode should be fully supported without the Abilities API.');
+lcfa_stack_assert(($wordpress68['wordpress_mode'] ?? '') === 'legacy_rest', 'WordPress 6.8 should identify the supported legacy REST operating mode.');
+
+$wordpress7_without_abilities_runtime = lcfa_stack_runtime('picostrap');
+$wordpress7_without_abilities_runtime['wordpress']['abilities_api'] = false;
+$wordpress7_without_abilities = $capabilities->evaluate(lcfa_stack_snapshot('picostrap'), $wordpress7_without_abilities_runtime);
+lcfa_stack_assert(($wordpress7_without_abilities['status'] ?? '') === 'degraded', 'WordPress 7 without its expected Abilities API should be reported as degraded.');
 
 $future_windpress_snapshot = lcfa_stack_snapshot('picowind');
 $future_windpress_snapshot['windpress_version'] = '4.1.0';

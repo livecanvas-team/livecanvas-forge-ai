@@ -626,6 +626,7 @@ $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_
 $connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
 $framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
 $remote_codex_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
+$remote_agent_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_agent_mcp_payload');
 $remote_codex_test_prompt_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_test_prompt');
 $codex_onboarding_state_method = new ReflectionMethod('LCFA_Admin', 'get_codex_onboarding_state');
 $remote_codex_prerequisites_method = new ReflectionMethod('LCFA_Admin', 'get_remote_codex_prerequisites');
@@ -685,6 +686,21 @@ lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
 lcfa_assert_same('ai-bridge-session', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the secure AI Bridge session strategy');
+
+foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
+    $remote_agent_payload = $remote_agent_payload_method->invoke($admin_instance, $remote_client, [
+        'remote_site_url' => 'https://remote.example',
+        'remote_project_label' => 'Remote Example',
+    ], []);
+    $remote_env = (array) ($remote_agent_payload['client_payload']['env'] ?? []);
+
+    lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
+    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@latest', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
+    lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
+    lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {
+        return strpos($entry, 'LCFA_MCP_TOKEN=') === 0 || strpos($entry, 'WP_API_PASSWORD=') === 0;
+    }), $remote_client . ' remote setup must not expose legacy WordPress or MCP credentials');
+}
 
 $pairing_test_prompt = (string) $remote_codex_test_prompt_method->invoke($admin_instance, [
     'connection_strategy' => 'ai-bridge-session',
