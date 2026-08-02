@@ -21,6 +21,7 @@ final class WP_Post {
     public string $post_name = '';
     public string $post_content = '';
     public string $post_modified_gmt = '';
+    public int $menu_order = 0;
 
     public function __construct(array $data = []) {
         foreach ($data as $key => $value) {
@@ -131,6 +132,7 @@ $GLOBALS['lcfa_test_partial_type_terms'] = [
     'utility' => ['term_id' => 5, 'name' => 'Utility', 'slug' => 'utility', 'parent' => 0],
 ];
 $GLOBALS['lcfa_test_partial_type_assignments'] = [];
+$GLOBALS['lcfa_test_post_languages'] = [];
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates', 0777, true);
@@ -485,6 +487,47 @@ function get_permalink(int $post_id): string {
     return 'https://example.test/' . trim($post->post_name, '/') . '/';
 }
 
+function get_post_type_archive_link(string $post_type): string {
+    return 'https://example.test/' . sanitize_title($post_type) . '/';
+}
+
+function get_term_by(string $field, string $value, string $taxonomy) {
+    if ($field !== 'slug' || $value === '') {
+        return false;
+    }
+
+    return (object) [
+        'term_id'  => 88,
+        'slug'     => sanitize_title($value),
+        'name'     => ucwords(str_replace('-', ' ', $value)),
+        'taxonomy' => sanitize_key($taxonomy),
+    ];
+}
+
+function get_term_link($term, string $taxonomy = ''): string {
+    return 'https://example.test/' . sanitize_title($taxonomy) . '/' . sanitize_title((string) ($term->slug ?? '')) . '/';
+}
+
+function get_search_link(string $query = ''): string {
+    return 'https://example.test/?s=' . rawurlencode($query);
+}
+
+function wc_get_page_permalink(string $page): string {
+    return 'https://example.test/' . sanitize_title($page) . '/';
+}
+
+function pll_languages_list(array $args = []): array {
+    return ['en', 'it'];
+}
+
+function pll_set_post_language(int $post_id, string $language): void {
+    $GLOBALS['lcfa_test_post_languages'][$post_id] = sanitize_key($language);
+}
+
+function pll_get_post_language(int $post_id, string $field = 'slug'): string {
+    return (string) ($GLOBALS['lcfa_test_post_languages'][$post_id] ?? '');
+}
+
 function update_post_meta(int $post_id, string $meta_key, $meta_value): bool {
     $GLOBALS['lcfa_test_post_meta'][$post_id][$meta_key] = $meta_value;
     return true;
@@ -666,6 +709,7 @@ function wp_insert_post(array $postarr, bool $wp_error = false) {
         'post_name'         => $slug,
         'post_content'      => $content,
         'post_modified_gmt' => gmdate('Y-m-d H:i:s'),
+        'menu_order'        => (int) ($postarr['menu_order'] ?? 0),
     ]);
 
     $GLOBALS['lcfa_test_posts'][$post_id] = $post;
@@ -681,11 +725,15 @@ function wp_update_post(array $postarr, bool $wp_error = false) {
         return new WP_Error('missing_post', 'Missing post');
     }
 
-    foreach (['post_title', 'post_name', 'post_status', 'post_content'] as $field) {
+    foreach (['post_title', 'post_name', 'post_status', 'post_content', 'menu_order'] as $field) {
         if (array_key_exists($field, $postarr)) {
-            $post->{$field} = $field === 'post_content'
-                ? apply_filters('content_save_pre', (string) $postarr[$field])
-                : (string) $postarr[$field];
+            if ($field === 'post_content') {
+                $post->{$field} = apply_filters('content_save_pre', (string) $postarr[$field]);
+            } elseif ($field === 'menu_order') {
+                $post->{$field} = (int) $postarr[$field];
+            } else {
+                $post->{$field} = (string) $postarr[$field];
+            }
         }
     }
 
@@ -693,6 +741,18 @@ function wp_update_post(array $postarr, bool $wp_error = false) {
     $GLOBALS['lcfa_test_posts'][$post_id] = $post;
 
     return $post_id;
+}
+
+function wp_trash_post(int $post_id) {
+    $post = get_post($post_id);
+    if (!$post instanceof WP_Post) {
+        return false;
+    }
+
+    $post->post_status = 'trash';
+    $GLOBALS['lcfa_test_posts'][$post_id] = $post;
+
+    return $post;
 }
 
 function wp_text_diff(string $left, string $right, array $args = []): string {
@@ -1316,6 +1376,14 @@ $GLOBALS['lcfa_test_posts'][45] = new WP_Post([
     'post_status'  => 'publish',
     'post_content' => '<main>Dynamic template</main>',
 ]);
+$GLOBALS['lcfa_test_posts'][47] = new WP_Post([
+    'ID'           => 47,
+    'post_title'   => 'Consulting Service',
+    'post_name'    => 'consulting-service',
+    'post_type'    => 'service',
+    'post_status'  => 'publish',
+    'post_content' => '<article>Service content</article>',
+]);
 
 $target_inventory = new LCFA_Inventory($environment);
 $target_context_builder = new LCFA_Context_Builder($environment, $target_inventory);
@@ -1444,6 +1512,8 @@ $dynamic_assignment_result = $command_deck->execute([
     'template_assignment' => [
         'target'    => 'single',
         'post_type' => 'service',
+        'priority'  => 20,
+        'language'  => 'en',
         'source'    => 'contract_test',
     ],
 ]);
@@ -1455,6 +1525,9 @@ lcfa_assert_same('single', (string) ($dynamic_assignment_result['data']['templat
 lcfa_assert_same('is_single_service', (string) ($dynamic_assignment_result['data']['native_template_keys'][0] ?? ''), 'dynamic template results should expose the native LiveCanvas single-template meta key');
 lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_single_service'] ?? null, 'dynamic template assignments should sync to native LiveCanvas single-template meta');
 lcfa_assert_same('is_single_service', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_native_keys'][0] ?? ''), 'dynamic template assignments should persist generated native template keys');
+lcfa_assert_same(20, (int) $GLOBALS['lcfa_test_posts'][45]->menu_order, 'dynamic template priority should persist to native WordPress menu_order');
+lcfa_assert_same('en', (string) ($GLOBALS['lcfa_test_post_languages'][45] ?? ''), 'dynamic template language should sync through Polylang when available');
+lcfa_assert_same('https://example.test/consulting-service/', (string) ($dynamic_assignment_result['frontend_url'] ?? ''), 'single dynamic template results should resolve a real sample content URL');
 
 $dynamic_taxonomy_assignment_result = $command_deck->execute([
     'action'      => 'update_dynamic_template',
@@ -1473,6 +1546,79 @@ lcfa_assert_same('is_archive_for_tax_category__news', (string) ($dynamic_taxonom
 lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_archive_for_tax_category__news'] ?? null, 'taxonomy assignments should sync to native LiveCanvas archive meta');
 lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['is_single_service']), 'changing dynamic template assignment should remove stale native LiveCanvas meta keys');
 lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_post_type']), 'changing dynamic template assignment should remove stale AI Bridge scalar assignment metadata');
+lcfa_assert_same(20, (int) $GLOBALS['lcfa_test_posts'][45]->menu_order, 'changing only the assignment target should preserve dynamic template priority');
+lcfa_assert_same('en', (string) ($GLOBALS['lcfa_test_post_languages'][45] ?? ''), 'changing only the assignment target should preserve dynamic template language');
+lcfa_assert_same('https://example.test/category/news/', (string) ($dynamic_taxonomy_assignment_result['frontend_url'] ?? ''), 'taxonomy assignments should expose their real archive preview URL');
+
+$dynamic_post_assignment_result = $command_deck->execute([
+    'action'      => 'update_dynamic_template',
+    'target_id'   => 45,
+    'content'     => '<main>Post-specific service template</main>',
+    'template_assignment' => [
+        'target'           => 'post',
+        'assigned_post_id' => 47,
+        'priority'         => 5,
+        'language'         => 'it',
+        'source'           => 'contract_test',
+    ],
+]);
+
+lcfa_assert_true($dynamic_post_assignment_result['ok'] === true, 'update_dynamic_template should support a post-specific native assignment');
+lcfa_assert_same('single-service-template', (string) ($GLOBALS['lcfa_test_post_meta'][47]['lc_use_template_of_slug'] ?? ''), 'post-specific assignments should use the native lc_use_template_of_slug field');
+lcfa_assert_same(5, (int) $GLOBALS['lcfa_test_posts'][45]->menu_order, 'post-specific assignment should update native template priority');
+lcfa_assert_same('it', (string) ($GLOBALS['lcfa_test_post_languages'][45] ?? ''), 'post-specific assignment should update the Polylang language');
+lcfa_assert_same('assigned_post', (string) ($dynamic_post_assignment_result['data']['preview_target']['source'] ?? ''), 'post-specific assignment should identify the real preview target source');
+lcfa_assert_same('https://example.test/consulting-service/', (string) ($dynamic_post_assignment_result['frontend_url'] ?? ''), 'post-specific assignment should return the assigned post URL');
+
+$dynamic_post_assignment_audit_id = (string) ($dynamic_post_assignment_result['audit_id'] ?? '');
+lcfa_assert_true($dynamic_post_assignment_audit_id !== '', 'post-specific dynamic template writes should produce an audit ID');
+$dynamic_post_assignment_rollback = $command_deck->execute([
+    'action'   => 'restore_audit_rollback',
+    'audit_id' => $dynamic_post_assignment_audit_id,
+]);
+lcfa_assert_true($dynamic_post_assignment_rollback['ok'] === true, 'dynamic template rollback should restore content and assignment runtime metadata');
+lcfa_assert_same('<main>Assigned taxonomy archive template</main>', (string) $GLOBALS['lcfa_test_posts'][45]->post_content, 'dynamic template rollback should restore previous template content');
+lcfa_assert_same(20, (int) $GLOBALS['lcfa_test_posts'][45]->menu_order, 'dynamic template rollback should restore native priority');
+lcfa_assert_same('en', (string) ($GLOBALS['lcfa_test_post_languages'][45] ?? ''), 'dynamic template rollback should restore the previous language');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][47]['lc_use_template_of_slug']), 'dynamic template rollback should restore the previous post-specific relation');
+lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_archive_for_tax_category__news'] ?? null, 'dynamic template rollback should restore native LiveCanvas assignment keys');
+
+$dynamic_content_only_result = $command_deck->execute([
+    'action'    => 'update_dynamic_template',
+    'target_id' => 45,
+    'content'   => '<main>Content-only taxonomy template update</main>',
+]);
+lcfa_assert_true($dynamic_content_only_result['ok'] === true, 'content-only dynamic template updates should remain supported');
+lcfa_assert_same('taxonomy', (string) ($GLOBALS['lcfa_test_post_meta'][45]['_lcfa_template_target'] ?? ''), 'content-only dynamic template updates must preserve the existing assignment');
+lcfa_assert_same(1, $GLOBALS['lcfa_test_post_meta'][45]['is_archive_for_tax_category__news'] ?? null, 'content-only dynamic template updates must preserve native LiveCanvas keys');
+lcfa_assert_same(20, (int) $GLOBALS['lcfa_test_posts'][45]->menu_order, 'content-only dynamic template updates must preserve priority');
+
+$next_post_id_before_dynamic_create = $GLOBALS['lcfa_test_next_post_id'];
+$created_post_template_result = $command_deck->execute([
+    'action'  => 'create_dynamic_template',
+    'title'   => 'Specific Service Override',
+    'slug'    => 'specific-service-override',
+    'status'  => 'publish',
+    'content' => '<main>Specific service override</main>',
+    'template_assignment' => [
+        'target'           => 'post',
+        'assigned_post_id' => 47,
+        'priority'         => 1,
+        'language'         => 'en',
+    ],
+]);
+$created_post_template_id = (int) ($created_post_template_result['target_id'] ?? 0);
+lcfa_assert_true($created_post_template_id > 0, 'create_dynamic_template should create a post-specific template');
+lcfa_assert_same('specific-service-override', (string) ($GLOBALS['lcfa_test_post_meta'][47]['lc_use_template_of_slug'] ?? ''), 'created post-specific templates should assign their native slug to the target post');
+$created_post_template_rollback = $command_deck->execute([
+    'action'   => 'restore_audit_rollback',
+    'audit_id' => (string) ($created_post_template_result['audit_id'] ?? ''),
+]);
+lcfa_assert_true($created_post_template_rollback['ok'] === true, 'created post-specific dynamic template rollback should succeed');
+lcfa_assert_same('trash', (string) $GLOBALS['lcfa_test_posts'][$created_post_template_id]->post_status, 'created dynamic template rollback should move the template to trash');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_post_meta'][47]['lc_use_template_of_slug']), 'created dynamic template rollback should restore the target post relation');
+unset($GLOBALS['lcfa_test_posts'][$created_post_template_id], $GLOBALS['lcfa_test_post_meta'][$created_post_template_id], $GLOBALS['lcfa_test_post_languages'][$created_post_template_id]);
+$GLOBALS['lcfa_test_next_post_id'] = $next_post_id_before_dynamic_create;
 
 $dynamic_shop_preview = $command_deck->execute([
     'action'          => 'create_dynamic_template',
@@ -1496,6 +1642,9 @@ lcfa_assert_true(count((array) ($metadata_inventory['partial_types'] ?? [])) >= 
 lcfa_assert_same('taxonomy', (string) ($metadata_dynamic_template['template_assignment']['target'] ?? ''), 'inventory should expose stored dynamic template assignment metadata');
 lcfa_assert_same('category', (string) ($metadata_dynamic_template['template_assignment']['taxonomy'] ?? ''), 'inventory should expose stored dynamic template assignment taxonomy metadata');
 lcfa_assert_same('is_archive_for_tax_category__news', (string) ($metadata_dynamic_template['native_template_keys'][0] ?? ''), 'inventory should expose native LiveCanvas template assignment keys');
+lcfa_assert_same(20, (int) ($metadata_dynamic_template['priority'] ?? -1), 'inventory should expose native dynamic template menu_order priority');
+lcfa_assert_same('en', (string) ($metadata_dynamic_template['language'] ?? ''), 'inventory should expose the dynamic template Polylang language');
+lcfa_assert_same('https://example.test/category/news/', (string) ($metadata_dynamic_template['preview_url'] ?? ''), 'inventory should expose a real preview target URL for taxonomy templates');
 
 $foundation_preview = $command_deck->execute([
     'action'        => 'site_foundation_run',

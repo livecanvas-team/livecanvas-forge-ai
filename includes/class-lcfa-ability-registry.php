@@ -1863,8 +1863,25 @@ final class LCFA_Ability_Registry {
                 'description' => __('Generated LiveCanvas-safe template HTML.', 'livecanvas-forge-ai'),
             ],
             'template_assignment' => [
-                'type'        => 'object',
-                'description' => __('Optional dynamic template assignment metadata.', 'livecanvas-forge-ai'),
+                'type'                 => 'object',
+                'additionalProperties' => true,
+                'description'          => __('Optional native LiveCanvas assignment metadata. Omitted fields preserve the existing assignment on update.', 'livecanvas-forge-ai'),
+                'properties'           => [
+                    'target' => [
+                        'type' => 'string',
+                        'enum' => ['single', 'archive', 'taxonomy', 'post_type', 'post', 'acf', 'global'],
+                    ],
+                    'post_type'       => ['type' => 'string'],
+                    'taxonomy'        => ['type' => 'string'],
+                    'term'            => ['type' => 'string'],
+                    'specialty'       => ['type' => 'string'],
+                    'native_key'      => ['type' => 'string'],
+                    'language'        => ['type' => 'string'],
+                    'priority'        => ['type' => 'integer', 'minimum' => 0, 'maximum' => 9999],
+                    'assigned_post_id'=> ['type' => 'integer', 'minimum' => 1],
+                    'preview_url'     => ['type' => 'string', 'format' => 'uri'],
+                    'conditions'      => ['type' => 'object'],
+                ],
             ],
             'template_target' => [
                 'type'        => 'string',
@@ -1873,6 +1890,34 @@ final class LCFA_Ability_Registry {
             'native_key' => [
                 'type'        => 'string',
                 'description' => __('Optional LiveCanvas native template meta key such as is_single_post.', 'livecanvas-forge-ai'),
+            ],
+            'language' => [
+                'type'        => 'string',
+                'description' => __('Optional Polylang language slug for the dynamic template.', 'livecanvas-forge-ai'),
+            ],
+            'priority' => [
+                'type'        => 'integer',
+                'minimum'     => 0,
+                'maximum'     => 9999,
+                'description' => __('Native WordPress menu_order priority. Lower values win when LiveCanvas selects a matching template.', 'livecanvas-forge-ai'),
+            ],
+            'assigned_post_id' => [
+                'type'        => 'integer',
+                'minimum'     => 1,
+                'description' => __('Optional post ID that should use this template through lc_use_template_of_slug and act as the real preview target.', 'livecanvas-forge-ai'),
+            ],
+            'preview_url' => [
+                'type'        => 'string',
+                'format'      => 'uri',
+                'description' => __('Optional explicit public URL used to preview the dynamic template against real content.', 'livecanvas-forge-ai'),
+            ],
+            'clear_assignment' => [
+                'type'        => 'boolean',
+                'description' => __('Explicitly remove AI Bridge and native LiveCanvas assignment metadata. Content-only updates preserve assignments by default.', 'livecanvas-forge-ai'),
+            ],
+            'replace_assignment' => [
+                'type'        => 'boolean',
+                'description' => __('Replace the complete assignment instead of patching supplied fields into the current assignment.', 'livecanvas-forge-ai'),
             ],
         ];
 

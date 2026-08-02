@@ -259,6 +259,12 @@ lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/
 lcfa_wp7_assert_true(empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/cache-flush']['meta']['mcp']['public']), 'cache flush should not be public on MCP by default');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-command']['meta']['annotations']['destructive']), 'apply command should be marked as destructive');
 lcfa_wp7_assert_true(!empty($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-page-upsert']['meta']['annotations']['destructive']), 'dedicated apply abilities should be marked as destructive');
+$dynamic_template_schema = (array) ($GLOBALS['lcfa_test_abilities']['livecanvas-forge-ai/apply-dynamic-template']['input_schema']['properties'] ?? []);
+lcfa_wp7_assert_true(isset($dynamic_template_schema['priority']), 'dynamic template ability schema should expose native menu_order priority');
+lcfa_wp7_assert_true(isset($dynamic_template_schema['language']), 'dynamic template ability schema should expose Polylang language');
+lcfa_wp7_assert_true(isset($dynamic_template_schema['assigned_post_id']), 'dynamic template ability schema should expose post-specific assignment');
+lcfa_wp7_assert_true(isset($dynamic_template_schema['preview_url']), 'dynamic template ability schema should expose an explicit preview target URL');
+lcfa_wp7_assert_true(isset($dynamic_template_schema['clear_assignment']), 'dynamic template ability schema should require an explicit assignment-clear signal');
 
 $snapshot = $registry->get_snapshot();
 lcfa_wp7_assert_true(($snapshot['snapshot']['detected_framework'] ?? '') === 'picostrap', 'snapshot ability should return environment data');

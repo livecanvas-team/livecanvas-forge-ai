@@ -48,12 +48,12 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Capability | Current level | Evidence | Remaining work |
 |---|---|---|---|
 | Detect installation, activation, license, editor configuration | Contract tested | `LCFA_Environment`, environment and setup tests | Verify unusual LiveCanvas installation paths and multisite |
-| Inventory pages, headers, footers, partials, dynamic templates, blocks, sections | Contract tested + field use | `LCFA_Inventory`, handoff/inventory tests | Add `lc_partial_type` taxonomy data to normalized inventory |
+| Inventory pages, headers, footers, partials, dynamic templates, blocks, sections | Contract tested + field use | `LCFA_Inventory`, handoff/inventory tests, normalized `lc_partial_type` terms | Large-inventory performance and multisite fixtures |
 | Read complete page HTML | Local/remote E2E | page HTML ability and real paired-site tests | Add large-page performance thresholds |
 | Preview/apply page upsert | Local/remote E2E | ability registry, Command Deck, audit records | Production qualification on cache-heavy hosts |
 | Targeted content patch | Contract tested | `LCFA_Content_Patch_Service` | Visual E2E for editable boundaries and nested LiveCanvas blocks |
-| Header/footer partial preview/apply | Local/remote E2E | global shell abilities and real partial edits | Add partial taxonomy and assignment controls |
-| Dynamic template preview/apply | Contract tested + field use | dynamic template executor and command tests | Expose per-post template selection and assignment priority as first-class operations |
+| Header/footer partial preview/apply | Local/remote E2E + contract tested taxonomy | global shell abilities, real partial edits, `lc_partial_type` apply/rollback tests | Production taxonomy-assignment E2E |
+| Dynamic template preview/apply | Contract tested + field use | native `is_*`, `menu_order`, `lc_use_template_of_slug`, language, preview-target, and rollback tests | Real Polylang and remote-site E2E |
 | Page-only CSS, JS, SEO/noindex, public draft preview | Contract tested | page asset and preview services | Cross-plugin SEO verification and preview expiry E2E |
 | Selected-section insertion | Implemented + contract tested | `LCFA_Command_Deck::insert_section_after_selected_anchor()` | Browser E2E inside the LiveCanvas editor |
 | Revision/audit rollback | Contract tested | audit store and restore actions | Transaction-level recovery when an apply fails midway |
@@ -75,7 +75,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Capability | Current level | Evidence | Remaining work |
 |---|---|---|---|
 | Detect Picowind and Tailwind editor mode | Contract tested | `LCFA_Environment` | Running E2E on clean and migrated Picowind sites |
-| Discover WindPress version, Tailwind version, performance mode, providers, handlers, cache | Runtime inspected | `LCFA_WindPress_Bridge::get_status()` | Introduce explicit version/capability profiles instead of class-existence assumptions |
+| Discover WindPress version, Tailwind version, performance mode, providers, handlers, cache | Runtime inspected + versioned profile | `LCFA_WindPress_Bridge::get_status()`, `stack-capabilities.v1` | Validate supported/degraded outcomes across multiple WindPress releases |
 | Initialize Picowind runtime | Contract tested + source parity | `ensure_picowind_runtime()` matches Picowind's WindPress setup behavior | Verify Tailwind 3 and Tailwind 4 variants on real sites |
 | Scan providers and volume entries | Contract tested | REST/MCP WindPress endpoints | Large-volume pagination and payload limits |
 | Store `theme.json` and compiled CSS | Contract tested | WindPress bridge and design-system executor | Remote E2E and cache-plugin matrix |
@@ -133,12 +133,11 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 
 ### P1: Required For Complete Editorial Coverage
 
-1. Add LiveCanvas `lc_partial_type` taxonomy to inventory and partial creation/update.
-2. Add per-post dynamic-template assignment, language, priority, and target URL preview.
-3. Verify Picostrap Customizer/Sass/design-token synchronization rather than treating file compilation alone as completion.
-4. Add a managed browser readiness check and guided Chromium install for `visual_check`.
-5. Add remote build orchestration or a cloud runner for hosts where PHP cannot compile or write build artifacts.
-6. Add backup retention and orphan cleanup for abandoned Theme Library installs.
+1. Verify Picostrap Customizer/Sass/design-token synchronization rather than treating file compilation alone as completion.
+2. Add a managed browser readiness check and guided Chromium install for `visual_check`.
+3. Add remote build orchestration or a cloud runner for hosts where PHP cannot compile or write build artifacts.
+4. Add backup retention and orphan cleanup for abandoned Theme Library installs.
+5. Run real multilingual dynamic-template assignment and rollback tests with Polylang active.
 
 ### P2: Product Expansion
 

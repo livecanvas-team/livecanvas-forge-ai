@@ -97,11 +97,11 @@ final class LCFA_Command_Deck {
             ],
             'create_dynamic_template' => [
                 'label'       => __('Create dynamic template', 'livecanvas-forge-ai'),
-                'description' => __('Creates a new LiveCanvas dynamic template entry.', 'livecanvas-forge-ai'),
+                'description' => __('Creates a LiveCanvas dynamic template with native assignment, priority, language, and preview-target metadata.', 'livecanvas-forge-ai'),
             ],
             'update_dynamic_template' => [
                 'label'       => __('Update dynamic template', 'livecanvas-forge-ai'),
-                'description' => __('Updates an existing LiveCanvas dynamic template.', 'livecanvas-forge-ai'),
+                'description' => __('Updates a LiveCanvas dynamic template without clearing its native assignment unless explicitly requested.', 'livecanvas-forge-ai'),
             ],
             'windpress_audit' => [
                 'label'       => __('Inspect WindPress runtime', 'livecanvas-forge-ai'),
@@ -564,33 +564,59 @@ final class LCFA_Command_Deck {
                     return $this->error_result(__('A dynamic template title is required.', 'livecanvas-forge-ai'));
                 }
 
+                $assignment_provided = $this->dynamic_template_assignment_was_provided($payload);
                 $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
+                $assignment_error = $this->validate_dynamic_template_assignment($template_assignment);
+                if ($assignment_error !== '') {
+                    return $this->error_result($assignment_error);
+                }
+
                 $native_template_keys = $this->get_dynamic_template_native_meta_keys($template_assignment);
+                $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
+                $runtime_rollback = $this->get_dynamic_template_runtime_snapshot(
+                    0,
+                    absint($template_assignment['assigned_post_id'] ?? 0)
+                );
                 $result['target_type']  = 'dynamic_template';
                 $result['target_title'] = $title;
                 $result['summary']      = sprintf(__('Create dynamic template "%s".', 'livecanvas-forge-ai'), $title);
                 $result['diff_html']    = $this->build_diff('', $content);
                 $result['data']['operation'] = 'create';
+                $result['data']['assignment_provided'] = $assignment_provided;
                 $result['data']['template_assignment'] = $template_assignment;
                 $result['data']['native_template_keys'] = $native_template_keys;
+                $result['data']['preview_target'] = $preview_target;
+                $result['data']['dynamic_template_runtime_rollback'] = $runtime_rollback;
+                $result['frontend_url'] = (string) ($preview_target['url'] ?? '');
+                $result['preview_url'] = $result['frontend_url'];
 
                 if (!$dry_run) {
-                    $post_id = wp_insert_post([
+                    $post_data = [
                         'post_type'    => 'lc_dynamic_template',
                         'post_title'   => $title,
                         'post_name'    => $slug !== '' ? $slug : '',
                         'post_status'  => $status,
                         'post_content' => $content,
-                    ], true);
+                    ];
+                    if (array_key_exists('priority', $template_assignment)) {
+                        $post_data['menu_order'] = (int) $template_assignment['priority'];
+                    }
+
+                    $post_id = wp_insert_post($post_data, true);
 
                     if (is_wp_error($post_id)) {
                         return $this->error_result($post_id->get_error_message());
                     }
 
                     $result['target_id'] = (int) $post_id;
-                    if ($template_assignment) {
-                        $this->persist_dynamic_template_assignment((int) $post_id, $template_assignment);
+                    if ($assignment_provided) {
+                        $result['data']['assignment_write'] = $this->persist_dynamic_template_assignment((int) $post_id, $template_assignment);
                     }
+                    $result['edit_url'] = function_exists('get_edit_post_link') ? (string) get_edit_post_link((int) $post_id, 'raw') : '';
+                    $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
+                    $result['data']['preview_target'] = $preview_target;
+                    $result['frontend_url'] = (string) ($preview_target['url'] ?? '');
+                    $result['preview_url'] = $result['frontend_url'];
                     $result['message']   = __('Dynamic template created.', 'livecanvas-forge-ai');
                 }
                 break;
@@ -601,12 +627,32 @@ final class LCFA_Command_Deck {
                 }
 
                 $existing = $this->inventory->get_target_content('dynamic_template', $target_id);
-                $template_assignment = $this->sanitize_dynamic_template_assignment($payload);
-                $native_template_keys = $this->get_dynamic_template_native_meta_keys($template_assignment);
 
                 if (!$existing['post']) {
                     return $this->error_result(__('The requested dynamic template was not found.', 'livecanvas-forge-ai'));
                 }
+
+                $assignment_provided = $this->dynamic_template_assignment_was_provided($payload);
+                $existing_assignment = is_array($existing['post']['template_assignment'] ?? null)
+                    ? (array) $existing['post']['template_assignment']
+                    : [];
+                $incoming_assignment = $assignment_provided
+                    ? $this->sanitize_dynamic_template_assignment($payload)
+                    : [];
+                $template_assignment = $assignment_provided
+                    ? $this->merge_dynamic_template_assignment($existing_assignment, $incoming_assignment, $payload)
+                    : $existing_assignment;
+                $assignment_error = $this->validate_dynamic_template_assignment($template_assignment);
+                if ($assignment_error !== '') {
+                    return $this->error_result($assignment_error);
+                }
+
+                $native_template_keys = $this->get_dynamic_template_native_meta_keys($template_assignment);
+                $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
+                $runtime_rollback = $this->get_dynamic_template_runtime_snapshot(
+                    $target_id,
+                    absint($template_assignment['assigned_post_id'] ?? 0)
+                );
 
                 $result['target_type']   = 'dynamic_template';
                 $result['target_id']     = $target_id;
@@ -615,22 +661,39 @@ final class LCFA_Command_Deck {
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['summary']       = sprintf(__('Update dynamic template #%d.', 'livecanvas-forge-ai'), $target_id);
                 $result['data']['operation'] = 'update';
+                $result['data']['assignment_provided'] = $assignment_provided;
                 $result['data']['template_assignment'] = $template_assignment;
                 $result['data']['native_template_keys'] = $native_template_keys;
+                $result['data']['preview_target'] = $preview_target;
+                $result['data']['dynamic_template_runtime_rollback'] = $runtime_rollback;
+                $result['frontend_url'] = (string) ($preview_target['url'] ?? '');
+                $result['preview_url'] = $result['frontend_url'];
+                $result['edit_url'] = (string) ($existing['post']['edit_url'] ?? '');
 
                 if (!$dry_run) {
-                    $updated = wp_update_post([
+                    $post_data = [
                         'ID'           => $target_id,
                         'post_content' => $content,
-                    ], true);
+                    ];
+                    if ($assignment_provided && array_key_exists('priority', $template_assignment)) {
+                        $post_data['menu_order'] = (int) $template_assignment['priority'];
+                    } elseif ($assignment_provided && (!empty($payload['clear_assignment']) || !empty($payload['replace_assignment']))) {
+                        $post_data['menu_order'] = 0;
+                    }
+
+                    $updated = wp_update_post($post_data, true);
 
                     if (is_wp_error($updated)) {
                         return $this->error_result($updated->get_error_message());
                     }
 
-                    if ($template_assignment) {
-                        $this->persist_dynamic_template_assignment($target_id, $template_assignment);
+                    if ($assignment_provided) {
+                        $result['data']['assignment_write'] = $this->persist_dynamic_template_assignment($target_id, $template_assignment);
                     }
+                    $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
+                    $result['data']['preview_target'] = $preview_target;
+                    $result['frontend_url'] = (string) ($preview_target['url'] ?? '');
+                    $result['preview_url'] = $result['frontend_url'];
                     $result['message'] = __('Dynamic template updated.', 'livecanvas-forge-ai');
                 }
                 break;
@@ -1288,6 +1351,9 @@ final class LCFA_Command_Deck {
             $result['diff_html'] = $this->build_diff($result['existing_html'], $result['proposed_html']);
             $result['data']['restore_operation'] = $created_post ? 'trash_created_post' : 'restore_previous_content';
             $runtime_snapshot = is_array($restore['page_runtime'] ?? null) ? $this->sanitize_page_runtime_snapshot((array) $restore['page_runtime']) : [];
+            $dynamic_template_runtime = is_array($restore['dynamic_template_runtime'] ?? null)
+                ? $this->sanitize_dynamic_template_runtime_snapshot((array) $restore['dynamic_template_runtime'])
+                : [];
 
             if (!empty($runtime_snapshot)) {
                 $result['data']['page_runtime_restore'] = [
@@ -1296,7 +1362,20 @@ final class LCFA_Command_Deck {
                 ];
             }
 
+            if (!empty($dynamic_template_runtime)) {
+                $result['data']['dynamic_template_runtime_restore'] = [
+                    'current'  => $this->get_dynamic_template_runtime_snapshot($target_id),
+                    'previous' => $dynamic_template_runtime,
+                ];
+            }
+
             if (!$dry_run) {
+                $created_dynamic_runtime_restore = [];
+                if ($created_post && !empty($dynamic_template_runtime)) {
+                    $created_dynamic_runtime_restore = $this->restore_dynamic_template_runtime_snapshot($target_id, $dynamic_template_runtime, false);
+                    $result['data']['dynamic_template_runtime_restore']['result'] = $created_dynamic_runtime_restore;
+                }
+
                 $restore_result = $created_post
                     ? $this->trash_post_for_rollback($target_id)
                     : $this->update_post_content_for_rollback($target_id, $previous_content);
@@ -1306,12 +1385,26 @@ final class LCFA_Command_Deck {
 
                 if (empty($result['ok'])) {
                     $result['message'] = (string) ($restore_result['message'] ?? __('Audit rollback restore failed.', 'livecanvas-forge-ai'));
-                } elseif (!$created_post && !empty($runtime_snapshot)) {
+                } elseif (!empty($created_dynamic_runtime_restore) && empty($created_dynamic_runtime_restore['ok'])) {
+                    $result['ok'] = false;
+                    $result['message'] = (string) ($created_dynamic_runtime_restore['message'] ?? __('Post-specific dynamic template relations could not be restored.', 'livecanvas-forge-ai'));
+                }
+
+                if (!empty($result['ok']) && !$created_post && !empty($runtime_snapshot)) {
                     $runtime_restore = $this->restore_page_runtime_snapshot($target_id, $runtime_snapshot);
                     $result['data']['page_runtime_restore']['result'] = $runtime_restore;
                     if (empty($runtime_restore['ok'])) {
                         $result['ok'] = false;
                         $result['message'] = (string) ($runtime_restore['message'] ?? __('Previous page status or runtime metadata could not be restored.', 'livecanvas-forge-ai'));
+                    }
+                }
+
+                if (!empty($result['ok']) && !$created_post && !empty($dynamic_template_runtime)) {
+                    $dynamic_runtime_restore = $this->restore_dynamic_template_runtime_snapshot($target_id, $dynamic_template_runtime, true);
+                    $result['data']['dynamic_template_runtime_restore']['result'] = $dynamic_runtime_restore;
+                    if (empty($dynamic_runtime_restore['ok'])) {
+                        $result['ok'] = false;
+                        $result['message'] = (string) ($dynamic_runtime_restore['message'] ?? __('Previous dynamic template metadata could not be restored.', 'livecanvas-forge-ai'));
                     }
                 }
 
@@ -2264,10 +2357,28 @@ HTML,
         return $pages;
     }
 
+    private function dynamic_template_assignment_was_provided(array $payload): bool {
+        if (array_key_exists('template_assignment', $payload) || array_key_exists('clear_assignment', $payload) || array_key_exists('replace_assignment', $payload)) {
+            return true;
+        }
+
+        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source', 'native_key', 'specialty', 'conditions', 'language', 'priority', 'assigned_post_id', 'preview_url'] as $key) {
+            if (array_key_exists($key, $payload)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function sanitize_dynamic_template_assignment(array $payload): array {
+        if (!$this->dynamic_template_assignment_was_provided($payload) || !empty($payload['clear_assignment'])) {
+            return [];
+        }
+
         $assignment = is_array($payload['template_assignment'] ?? null) ? (array) $payload['template_assignment'] : [];
 
-        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source', 'native_key', 'specialty'] as $key) {
+        foreach (['template_target', 'target', 'post_type', 'taxonomy', 'term', 'archive', 'single', 'acf_field_group', 'source', 'native_key', 'specialty', 'language', 'priority', 'assigned_post_id', 'preview_url'] as $key) {
             if (array_key_exists($key, $payload) && !array_key_exists($key, $assignment)) {
                 $assignment[$key] = $payload[$key];
             }
@@ -2288,12 +2399,17 @@ HTML,
             $specialty = $template_target;
         }
 
+        $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
         $target = sanitize_key((string) ($assignment['target'] ?? ''));
         if ($target === '' && $template_target !== '' && $native_key === '') {
             $target = $template_target;
         }
 
-        if (!in_array($target, ['single', 'archive', 'taxonomy', 'post_type', 'acf', 'global'], true)) {
+        if ($target === '' && $assigned_post_id > 0) {
+            $target = 'post';
+        }
+
+        if (!in_array($target, ['single', 'archive', 'taxonomy', 'post_type', 'post', 'acf', 'global'], true)) {
             if ($this->get_dynamic_template_specialty_meta_key($target) !== '') {
                 $specialty = $target;
                 $target = 'global';
@@ -2321,7 +2437,9 @@ HTML,
             }
         }
 
-        return array_filter([
+        $priority_provided = array_key_exists('priority', $assignment);
+        $priority = $priority_provided ? max(0, min(9999, (int) $assignment['priority'])) : null;
+        $normalized = array_filter([
             'target'          => $target,
             'template_target' => $template_target,
             'native_key'      => $native_key,
@@ -2330,11 +2448,244 @@ HTML,
             'taxonomy'        => sanitize_key((string) ($assignment['taxonomy'] ?? '')),
             'term'            => sanitize_text_field((string) ($assignment['term'] ?? '')),
             'acf_field_group' => sanitize_text_field((string) ($assignment['acf_field_group'] ?? '')),
-            'source'          => sanitize_key((string) ($assignment['source'] ?? 'forge')),
             'conditions'      => $conditions,
+            'language'        => sanitize_key((string) ($assignment['language'] ?? '')),
+            'priority'        => $priority,
+            'assigned_post_id'=> $assigned_post_id,
+            'preview_url'     => esc_url_raw((string) ($assignment['preview_url'] ?? '')),
         ], static function ($value): bool {
             return $value !== '' && $value !== [] && $value !== null;
         });
+
+        if (!$normalized) {
+            return [];
+        }
+
+        $normalized['source'] = sanitize_key((string) ($assignment['source'] ?? 'forge')) ?: 'forge';
+
+        return $normalized;
+    }
+
+    private function merge_dynamic_template_assignment(array $existing, array $incoming, array $payload): array {
+        if (!empty($payload['clear_assignment'])) {
+            return [];
+        }
+
+        if (!empty($payload['replace_assignment']) || !$existing) {
+            return $incoming;
+        }
+
+        $targeting_keys = ['target', 'template_target', 'native_key', 'specialty', 'post_type', 'taxonomy', 'term', 'acf_field_group', 'conditions', 'assigned_post_id', 'preview_url'];
+        $incoming_changes_target = false;
+        foreach ($targeting_keys as $key) {
+            if (array_key_exists($key, $incoming)) {
+                $incoming_changes_target = true;
+                break;
+            }
+        }
+
+        if ($incoming_changes_target) {
+            foreach ($targeting_keys as $key) {
+                unset($existing[$key]);
+            }
+        }
+
+        return array_replace($existing, $incoming);
+    }
+
+    private function validate_dynamic_template_assignment(array $assignment): string {
+        $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
+        if ($assigned_post_id > 0) {
+            $assigned_post = function_exists('get_post') ? get_post($assigned_post_id) : null;
+            if (!$assigned_post) {
+                return __('The assigned preview/content post does not exist.', 'livecanvas-forge-ai');
+            }
+
+            if (in_array(sanitize_key((string) ($assigned_post->post_type ?? '')), ['lc_dynamic_template', 'lc_partial', 'lc_block', 'lc_section'], true)) {
+                return __('Choose a real page, post, or public custom-post-type item as the dynamic template preview target.', 'livecanvas-forge-ai');
+            }
+        }
+
+        $language = sanitize_key((string) ($assignment['language'] ?? ''));
+        if ($language !== '' && function_exists('pll_languages_list')) {
+            $languages = pll_languages_list(['fields' => 'slug']);
+            if (is_array($languages) && $languages && !in_array($language, array_map('sanitize_key', $languages), true)) {
+                return sprintf(__('Polylang language "%s" is not registered on this site.', 'livecanvas-forge-ai'), $language);
+            }
+        }
+
+        return '';
+    }
+
+    private function resolve_dynamic_template_preview_target(array $assignment): array {
+        $target = [
+            'url'       => '',
+            'source'    => 'unavailable',
+            'post_id'   => 0,
+            'post_type' => '',
+            'title'     => '',
+        ];
+
+        $explicit_url = esc_url_raw((string) ($assignment['preview_url'] ?? ''));
+        if ($explicit_url !== '') {
+            $target['url'] = $explicit_url;
+            $target['source'] = 'explicit';
+
+            return $target;
+        }
+
+        $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
+        if ($assigned_post_id > 0 && function_exists('get_post')) {
+            $post = get_post($assigned_post_id);
+            if ($post) {
+                $target['url'] = function_exists('get_permalink') ? (string) get_permalink($assigned_post_id) : '';
+                $target['source'] = 'assigned_post';
+                $target['post_id'] = $assigned_post_id;
+                $target['post_type'] = sanitize_key((string) ($post->post_type ?? ''));
+                $target['title'] = sanitize_text_field((string) ($post->post_title ?? ''));
+
+                return $target;
+            }
+        }
+
+        $assignment_target = sanitize_key((string) ($assignment['target'] ?? ''));
+        $post_type = sanitize_key((string) ($assignment['post_type'] ?? ''));
+        if ($assignment_target === 'single' && $post_type !== '' && function_exists('get_posts')) {
+            $posts = get_posts([
+                'post_type'      => $post_type,
+                'post_status'    => 'publish',
+                'posts_per_page' => 1,
+                'orderby'        => 'modified',
+                'order'          => 'DESC',
+            ]);
+            if (!empty($posts[0])) {
+                $post = $posts[0];
+                $post_id = absint($post->ID ?? 0);
+                $target['url'] = $post_id > 0 && function_exists('get_permalink') ? (string) get_permalink($post_id) : '';
+                $target['source'] = 'sample_single';
+                $target['post_id'] = $post_id;
+                $target['post_type'] = $post_type;
+                $target['title'] = sanitize_text_field((string) ($post->post_title ?? ''));
+
+                return $target;
+            }
+        }
+
+        if (in_array($assignment_target, ['archive', 'post_type'], true) && $post_type !== '' && function_exists('get_post_type_archive_link')) {
+            $archive_url = get_post_type_archive_link($post_type);
+            if (is_string($archive_url) && $archive_url !== '') {
+                $target['url'] = esc_url_raw($archive_url);
+                $target['source'] = 'post_type_archive';
+                $target['post_type'] = $post_type;
+
+                return $target;
+            }
+        }
+
+        $taxonomy = sanitize_key((string) ($assignment['taxonomy'] ?? ''));
+        $term_slug = sanitize_key((string) ($assignment['term'] ?? ''));
+        if ($assignment_target === 'taxonomy' && $taxonomy !== '' && function_exists('get_term_link')) {
+            $term = null;
+            if ($term_slug !== '' && function_exists('get_term_by')) {
+                $term = get_term_by('slug', $term_slug, $taxonomy);
+            } elseif (function_exists('get_terms')) {
+                $terms = get_terms([
+                    'taxonomy'   => $taxonomy,
+                    'hide_empty' => false,
+                    'number'     => 1,
+                ]);
+                if (!is_wp_error($terms) && is_array($terms) && !empty($terms[0])) {
+                    $term = $terms[0];
+                }
+            }
+
+            if ($term && !is_wp_error($term)) {
+                $term_url = get_term_link($term, $taxonomy);
+                if (!is_wp_error($term_url) && is_string($term_url) && $term_url !== '') {
+                    $target['url'] = esc_url_raw($term_url);
+                    $target['source'] = $term_slug !== '' ? 'taxonomy_term' : 'sample_taxonomy_term';
+                    $target['title'] = sanitize_text_field((string) ($term->name ?? $term_slug));
+
+                    return $target;
+                }
+            }
+        }
+
+        $specialty = sanitize_key((string) ($assignment['specialty'] ?? $assignment['template_target'] ?? ''));
+        if (in_array($specialty, ['front', 'front_page', 'homepage', 'home'], true)) {
+            $front_id = function_exists('get_option') ? absint(get_option('page_on_front', 0)) : 0;
+            $target['url'] = $front_id > 0 && function_exists('get_permalink') ? (string) get_permalink($front_id) : (function_exists('home_url') ? home_url('/') : '');
+            $target['source'] = $front_id > 0 ? 'front_page' : 'site_home';
+            $target['post_id'] = $front_id;
+
+            return $target;
+        }
+
+        if (in_array($specialty, ['blog', 'blog_index', 'blog_posts_index', 'posts_index'], true)) {
+            $blog_id = function_exists('get_option') ? absint(get_option('page_for_posts', 0)) : 0;
+            $target['url'] = $blog_id > 0 && function_exists('get_permalink') ? (string) get_permalink($blog_id) : (function_exists('home_url') ? home_url('/') : '');
+            $target['source'] = $blog_id > 0 ? 'posts_page' : 'site_home';
+            $target['post_id'] = $blog_id;
+
+            return $target;
+        }
+
+        if (in_array($specialty, ['author', 'author_archive'], true) && function_exists('get_users') && function_exists('get_author_posts_url')) {
+            $users = get_users(['number' => 1, 'fields' => ['ID', 'display_name']]);
+            if (!empty($users[0])) {
+                $user = $users[0];
+                $user_id = absint(is_object($user) ? ($user->ID ?? 0) : ($user['ID'] ?? 0));
+                if ($user_id > 0) {
+                    $target['url'] = (string) get_author_posts_url($user_id);
+                    $target['source'] = 'author_archive';
+                    $target['title'] = sanitize_text_field((string) (is_object($user) ? ($user->display_name ?? '') : ($user['display_name'] ?? '')));
+
+                    return $target;
+                }
+            }
+        }
+
+        if (in_array($specialty, ['date', 'date_archive'], true) && function_exists('get_month_link')) {
+            $target['url'] = (string) get_month_link((int) gmdate('Y'), (int) gmdate('m'));
+            $target['source'] = 'date_archive';
+
+            return $target;
+        }
+
+        if ($specialty === 'search') {
+            $target['url'] = function_exists('get_search_link') ? (string) get_search_link('') : (function_exists('home_url') ? home_url('?s=') : '');
+            $target['source'] = 'search';
+
+            return $target;
+        }
+
+        if (in_array($specialty, ['404', 'not_found'], true)) {
+            $target['url'] = function_exists('home_url') ? home_url('/__lcfa-preview-404__/') : '';
+            $target['source'] = 'not_found';
+
+            return $target;
+        }
+
+        $woocommerce_pages = [
+            'shop'          => 'shop',
+            'shop_page'     => 'shop',
+            'cart'          => 'cart',
+            'cart_page'     => 'cart',
+            'checkout'      => 'checkout',
+            'checkout_page' => 'checkout',
+            'account'       => 'myaccount',
+            'my_account'    => 'myaccount',
+            'account_page'  => 'myaccount',
+        ];
+        if (isset($woocommerce_pages[$specialty]) && function_exists('wc_get_page_permalink')) {
+            $woocommerce_url = wc_get_page_permalink($woocommerce_pages[$specialty]);
+            if (is_string($woocommerce_url) && $woocommerce_url !== '') {
+                $target['url'] = esc_url_raw($woocommerce_url);
+                $target['source'] = 'woocommerce';
+            }
+        }
+
+        return $target;
     }
 
     private function get_dynamic_template_native_meta_keys(array $assignment): array {
@@ -2408,6 +2759,10 @@ HTML,
             'blog_index'       => 'is_blog_posts_index',
             'blog_posts_index' => 'is_blog_posts_index',
             'posts_index'      => 'is_blog_posts_index',
+            'author'           => 'is_archive_author',
+            'author_archive'   => 'is_archive_author',
+            'date'             => 'is_archive_date',
+            'date_archive'     => 'is_archive_date',
             'search'           => 'is_search',
             '404'              => 'is_404',
             'not_found'        => 'is_404',
@@ -2443,21 +2798,38 @@ HTML,
         return 'global';
     }
 
-    private function persist_dynamic_template_assignment(int $post_id, array $assignment): void {
-        update_post_meta($post_id, '_lcfa_template_assignment', $assignment);
-
+    private function persist_dynamic_template_assignment(int $post_id, array $assignment): array {
+        $post = function_exists('get_post') ? get_post($post_id) : null;
+        $template_slug = sanitize_title((string) ($post->post_name ?? ''));
+        $previous_assigned_post_id = absint(get_post_meta($post_id, '_lcfa_template_assigned_post_id', true));
+        $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
         $native_template_keys = $this->get_dynamic_template_native_meta_keys($assignment);
-        update_post_meta($post_id, '_lcfa_template_native_keys', $native_template_keys);
+
+        if ($assignment) {
+            update_post_meta($post_id, '_lcfa_template_assignment', $assignment);
+            update_post_meta($post_id, '_lcfa_template_native_keys', $native_template_keys);
+        } elseif (function_exists('delete_post_meta')) {
+            delete_post_meta($post_id, '_lcfa_template_assignment');
+            delete_post_meta($post_id, '_lcfa_template_native_keys');
+        }
 
         foreach ([
-            '_lcfa_template_target'      => 'target',
-            '_lcfa_template_post_type'   => 'post_type',
-            '_lcfa_template_taxonomy'    => 'taxonomy',
-            '_lcfa_template_term'        => 'term',
-            '_lcfa_template_acf_group'   => 'acf_field_group',
-        ] as $meta_key => $assignment_key) {
-            if (!empty($assignment[$assignment_key])) {
-                update_post_meta($post_id, $meta_key, (string) $assignment[$assignment_key]);
+            '_lcfa_template_target'           => ['key' => 'target', 'type' => 'string'],
+            '_lcfa_template_post_type'        => ['key' => 'post_type', 'type' => 'string'],
+            '_lcfa_template_taxonomy'         => ['key' => 'taxonomy', 'type' => 'string'],
+            '_lcfa_template_term'             => ['key' => 'term', 'type' => 'string'],
+            '_lcfa_template_acf_group'        => ['key' => 'acf_field_group', 'type' => 'string'],
+            '_lcfa_template_language'         => ['key' => 'language', 'type' => 'string'],
+            '_lcfa_template_priority'         => ['key' => 'priority', 'type' => 'integer'],
+            '_lcfa_template_assigned_post_id' => ['key' => 'assigned_post_id', 'type' => 'integer'],
+            '_lcfa_template_preview_url'      => ['key' => 'preview_url', 'type' => 'url'],
+        ] as $meta_key => $definition) {
+            $assignment_key = (string) $definition['key'];
+            if (array_key_exists($assignment_key, $assignment) && $assignment[$assignment_key] !== '') {
+                $value = $definition['type'] === 'integer'
+                    ? (int) $assignment[$assignment_key]
+                    : (string) $assignment[$assignment_key];
+                update_post_meta($post_id, $meta_key, $value);
             } elseif (function_exists('delete_post_meta')) {
                 delete_post_meta($post_id, $meta_key);
             }
@@ -2474,6 +2846,213 @@ HTML,
         foreach ($native_template_keys as $native_template_key) {
             update_post_meta($post_id, $native_template_key, 1);
         }
+
+        if ($previous_assigned_post_id > 0 && $previous_assigned_post_id !== $assigned_post_id && $template_slug !== '') {
+            $previous_relation = (string) get_post_meta($previous_assigned_post_id, 'lc_use_template_of_slug', true);
+            if ($previous_relation === $template_slug && function_exists('delete_post_meta')) {
+                delete_post_meta($previous_assigned_post_id, 'lc_use_template_of_slug');
+            }
+        }
+
+        if ($assigned_post_id > 0 && $template_slug !== '') {
+            update_post_meta($assigned_post_id, 'lc_use_template_of_slug', $template_slug);
+        }
+
+        $language = sanitize_key((string) ($assignment['language'] ?? ''));
+        if ($language !== '' && function_exists('pll_set_post_language')) {
+            pll_set_post_language($post_id, $language);
+        }
+
+        return [
+            'ok'                 => true,
+            'target_id'          => $post_id,
+            'native_keys'        => $native_template_keys,
+            'language'           => $language,
+            'priority'           => array_key_exists('priority', $assignment) ? (int) $assignment['priority'] : null,
+            'assigned_post_id'   => $assigned_post_id,
+            'previous_post_id'   => $previous_assigned_post_id,
+            'post_specific_meta' => $assigned_post_id > 0 ? 'lc_use_template_of_slug' : '',
+        ];
+    }
+
+    private function get_dynamic_template_runtime_snapshot(int $post_id, int $candidate_assigned_post_id = 0): array {
+        $post = $post_id > 0 && function_exists('get_post') ? get_post($post_id) : null;
+        $all_meta = $post_id > 0 && function_exists('get_post_meta') ? (array) get_post_meta($post_id) : [];
+        $known_meta_keys = [
+            '_lcfa_template_assignment',
+            '_lcfa_template_native_keys',
+            '_lcfa_template_target',
+            '_lcfa_template_post_type',
+            '_lcfa_template_taxonomy',
+            '_lcfa_template_term',
+            '_lcfa_template_acf_group',
+            '_lcfa_template_language',
+            '_lcfa_template_priority',
+            '_lcfa_template_assigned_post_id',
+            '_lcfa_template_preview_url',
+        ];
+        $scalar_meta = [];
+        foreach ($known_meta_keys as $meta_key) {
+            if (array_key_exists($meta_key, $all_meta)) {
+                $scalar_meta[$meta_key] = get_post_meta($post_id, $meta_key, true);
+            }
+        }
+
+        $native_template_keys = [];
+        foreach ($all_meta as $meta_key => $meta_value) {
+            if (strpos((string) $meta_key, 'is_') !== 0) {
+                continue;
+            }
+
+            $value = is_array($meta_value) ? reset($meta_value) : $meta_value;
+            if ((string) $value === '1' || $value === 1 || $value === true) {
+                $native_template_keys[] = sanitize_key((string) $meta_key);
+            }
+        }
+
+        $stored_assigned_post_id = $post_id > 0 ? absint(get_post_meta($post_id, '_lcfa_template_assigned_post_id', true)) : 0;
+        $relation_post_ids = array_values(array_unique(array_filter([$stored_assigned_post_id, $candidate_assigned_post_id])));
+        $target_relations = [];
+        foreach ($relation_post_ids as $relation_post_id) {
+            $target_relations[] = [
+                'post_id'       => absint($relation_post_id),
+                'template_slug' => (string) get_post_meta((int) $relation_post_id, 'lc_use_template_of_slug', true),
+            ];
+        }
+
+        $language = '';
+        if ($post_id > 0 && function_exists('pll_get_post_language')) {
+            $language = sanitize_key((string) pll_get_post_language($post_id, 'slug'));
+        }
+        if ($language === '' && isset($scalar_meta['_lcfa_template_language'])) {
+            $language = sanitize_key((string) $scalar_meta['_lcfa_template_language']);
+        }
+
+        return $this->sanitize_dynamic_template_runtime_snapshot([
+            'post_exists'         => (bool) $post,
+            'menu_order'          => (int) ($post->menu_order ?? 0),
+            'language'            => $language,
+            'scalar_meta'         => $scalar_meta,
+            'native_template_keys'=> array_values(array_unique($native_template_keys)),
+            'target_relations'    => $target_relations,
+        ]);
+    }
+
+    private function sanitize_dynamic_template_runtime_snapshot(array $snapshot): array {
+        $scalar_meta = [];
+        foreach ((array) ($snapshot['scalar_meta'] ?? []) as $meta_key => $value) {
+            $meta_key = sanitize_key((string) $meta_key);
+            if (strpos($meta_key, '_lcfa_template_') !== 0) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $scalar_meta[$meta_key] = $value;
+            } elseif (is_scalar($value) || $value === null) {
+                $scalar_meta[$meta_key] = $value;
+            }
+        }
+
+        $native_template_keys = array_values(array_unique(array_filter(array_map([$this, 'normalize_livecanvas_template_meta_key'], (array) ($snapshot['native_template_keys'] ?? [])))));
+        $target_relations = [];
+        foreach ((array) ($snapshot['target_relations'] ?? []) as $relation) {
+            if (!is_array($relation)) {
+                continue;
+            }
+
+            $relation_post_id = absint($relation['post_id'] ?? 0);
+            if ($relation_post_id < 1) {
+                continue;
+            }
+
+            $target_relations[] = [
+                'post_id'       => $relation_post_id,
+                'template_slug' => sanitize_title((string) ($relation['template_slug'] ?? '')),
+            ];
+        }
+
+        return [
+            'post_exists'          => !empty($snapshot['post_exists']),
+            'menu_order'           => max(0, min(9999, (int) ($snapshot['menu_order'] ?? 0))),
+            'language'             => sanitize_key((string) ($snapshot['language'] ?? '')),
+            'scalar_meta'          => $scalar_meta,
+            'native_template_keys' => $native_template_keys,
+            'target_relations'     => $target_relations,
+        ];
+    }
+
+    private function restore_dynamic_template_runtime_snapshot(int $post_id, array $snapshot, bool $restore_template = true): array {
+        if (!function_exists('update_post_meta') || !function_exists('delete_post_meta')) {
+            return [
+                'ok'      => false,
+                'message' => __('Post meta functions are not available in this runtime.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $snapshot = $this->sanitize_dynamic_template_runtime_snapshot($snapshot);
+        $template_ok = true;
+        if ($restore_template) {
+            $known_meta_keys = [
+                '_lcfa_template_assignment',
+                '_lcfa_template_native_keys',
+                '_lcfa_template_target',
+                '_lcfa_template_post_type',
+                '_lcfa_template_taxonomy',
+                '_lcfa_template_term',
+                '_lcfa_template_acf_group',
+                '_lcfa_template_language',
+                '_lcfa_template_priority',
+                '_lcfa_template_assigned_post_id',
+                '_lcfa_template_preview_url',
+            ];
+            foreach ($known_meta_keys as $meta_key) {
+                delete_post_meta($post_id, $meta_key);
+            }
+            foreach ((array) get_post_meta($post_id) as $meta_key => $meta_value) {
+                if (strpos((string) $meta_key, 'is_') === 0) {
+                    delete_post_meta($post_id, (string) $meta_key);
+                }
+            }
+            foreach ((array) $snapshot['scalar_meta'] as $meta_key => $value) {
+                update_post_meta($post_id, (string) $meta_key, $value);
+            }
+            foreach ((array) $snapshot['native_template_keys'] as $native_template_key) {
+                update_post_meta($post_id, (string) $native_template_key, 1);
+            }
+
+            if (function_exists('wp_update_post')) {
+                $priority_result = wp_update_post([
+                    'ID'         => $post_id,
+                    'menu_order' => (int) $snapshot['menu_order'],
+                ], true);
+                $template_ok = !is_wp_error($priority_result);
+            }
+
+            if ((string) $snapshot['language'] !== '' && function_exists('pll_set_post_language')) {
+                pll_set_post_language($post_id, (string) $snapshot['language']);
+            }
+        }
+
+        foreach ((array) $snapshot['target_relations'] as $relation) {
+            $relation_post_id = absint($relation['post_id'] ?? 0);
+            $template_slug = sanitize_title((string) ($relation['template_slug'] ?? ''));
+            if ($template_slug === '') {
+                delete_post_meta($relation_post_id, 'lc_use_template_of_slug');
+            } else {
+                update_post_meta($relation_post_id, 'lc_use_template_of_slug', $template_slug);
+            }
+        }
+
+        return [
+            'ok'                => $template_ok,
+            'target_id'         => $post_id,
+            'priority'          => (int) $snapshot['menu_order'],
+            'language'          => (string) $snapshot['language'],
+            'relations_restored'=> count((array) $snapshot['target_relations']),
+            'message'           => $template_ok
+                ? __('Previous dynamic template assignment, priority, language, and post-specific relations restored.', 'livecanvas-forge-ai')
+                : __('Dynamic template metadata was restored, but WordPress could not restore its priority.', 'livecanvas-forge-ai'),
+        ];
     }
 
     private function requires_livecanvas(string $action): bool {
@@ -2648,6 +3227,10 @@ HTML,
 
         if (($record['restore']['target_type'] ?? '') === 'page' && is_array($result['data']['page_runtime_rollback'] ?? null)) {
             $record['restore']['page_runtime'] = $this->sanitize_page_runtime_snapshot((array) $result['data']['page_runtime_rollback']);
+        }
+
+        if (($record['restore']['target_type'] ?? '') === 'dynamic_template' && is_array($result['data']['dynamic_template_runtime_rollback'] ?? null)) {
+            $record['restore']['dynamic_template_runtime'] = $this->sanitize_dynamic_template_runtime_snapshot((array) $result['data']['dynamic_template_runtime_rollback']);
         }
 
         return $record;

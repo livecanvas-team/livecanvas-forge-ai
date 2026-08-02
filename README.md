@@ -26,7 +26,7 @@ Usable today:
 - create and update header/footer partials with `global_shell_apply`
 - apply design-system tokens for Picostrap, Picowind/WindPress, or a custom-theme fallback
 - run first-pass site foundation workflows with `site_foundation_run`
-- create/update LiveCanvas dynamic templates and sync supported assignments to native `is_*` meta
+- create/update LiveCanvas dynamic templates with native `is_*` conditions, `menu_order` priority, Polylang language, post-specific `lc_use_template_of_slug`, real target preview URLs, and rollback
 - use the AI Bridge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references
 - queue LiveCanvas editor prompts with a preferred WordPress Ability contract for the connected coding agent
 - inspect recent runs with audit IDs and restore stored rollback records for local apply operations
@@ -516,8 +516,8 @@ Common `run_lc_command` actions:
 | `global_shell_apply` | Create or update LiveCanvas header/footer partials. |
 | `page_upsert` | Create or update a LiveCanvas page and return URLs. |
 | `update_partial` | Update a reusable LiveCanvas partial that is not header/footer. |
-| `create_dynamic_template` | Create a LiveCanvas dynamic template. |
-| `update_dynamic_template` | Update a LiveCanvas dynamic template. |
+| `create_dynamic_template` | Create a LiveCanvas dynamic template with optional native assignment, priority, language, post target, and preview URL. |
+| `update_dynamic_template` | Update template HTML or patch its assignment; HTML-only updates preserve the current native assignment. |
 | `site_foundation_run` | Orchestrate preflight, design system, shell, and starter pages. |
 | `restore_audit_rollback` | Restore stored previous content for a local apply audit ID. |
 

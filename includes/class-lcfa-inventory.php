@@ -244,9 +244,52 @@ final class LCFA_Inventory {
         if ($post->post_type === 'lc_dynamic_template') {
             $assignment = get_post_meta($post->ID, '_lcfa_template_assignment', true);
 
+            $priority = (int) ($post->menu_order ?? 0);
+            $item['priority'] = $priority;
+
             if (is_array($assignment)) {
+                if (!array_key_exists('priority', $assignment)) {
+                    $assignment['priority'] = $priority;
+                }
+                $item['template_assignment'] = $assignment;
+            } else {
+                $assignment = [];
+            }
+
+            $language = function_exists('pll_get_post_language')
+                ? sanitize_key((string) pll_get_post_language($post->ID, 'slug'))
+                : '';
+            if ($language === '') {
+                $language = sanitize_key((string) get_post_meta($post->ID, '_lcfa_template_language', true));
+            }
+            $item['language'] = $language;
+            if ($language !== '' && !array_key_exists('language', $assignment)) {
+                $assignment['language'] = $language;
+            }
+
+            $assigned_post_id = absint($assignment['assigned_post_id'] ?? get_post_meta($post->ID, '_lcfa_template_assigned_post_id', true));
+            $item['assigned_post_id'] = $assigned_post_id;
+            if ($assigned_post_id > 0 && !array_key_exists('assigned_post_id', $assignment)) {
+                $assignment['assigned_post_id'] = $assigned_post_id;
+            }
+            if ($assigned_post_id > 0) {
+                $assigned_post = get_post($assigned_post_id);
+                if ($assigned_post instanceof WP_Post) {
+                    $item['assigned_post'] = [
+                        'id'        => $assigned_post_id,
+                        'title'     => html_entity_decode(get_the_title($assigned_post_id) ?: __('Untitled', 'livecanvas-forge-ai')),
+                        'post_type' => sanitize_key((string) $assigned_post->post_type),
+                        'url'       => (string) get_permalink($assigned_post_id),
+                    ];
+                }
+            }
+
+            if ($assignment) {
                 $item['template_assignment'] = $assignment;
             }
+
+            $item['preview_target'] = $this->get_dynamic_template_preview_target($assignment);
+            $item['preview_url'] = (string) ($item['preview_target']['url'] ?? '');
 
             $native_template_keys = [];
             foreach ((array) get_post_meta($post->ID) as $meta_key => $meta_value) {
@@ -266,6 +309,156 @@ final class LCFA_Inventory {
         }
 
         return $item;
+    }
+
+    private function get_dynamic_template_preview_target(array $assignment): array {
+        $target = [
+            'url'       => '',
+            'source'    => 'unavailable',
+            'post_id'   => 0,
+            'post_type' => '',
+            'title'     => '',
+        ];
+
+        $explicit_url = esc_url_raw((string) ($assignment['preview_url'] ?? ''));
+        if ($explicit_url !== '') {
+            $target['url'] = $explicit_url;
+            $target['source'] = 'explicit';
+
+            return $target;
+        }
+
+        $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
+        if ($assigned_post_id > 0) {
+            $post = get_post($assigned_post_id);
+            if ($post instanceof WP_Post) {
+                $target['url'] = (string) get_permalink($assigned_post_id);
+                $target['source'] = 'assigned_post';
+                $target['post_id'] = $assigned_post_id;
+                $target['post_type'] = sanitize_key((string) $post->post_type);
+                $target['title'] = sanitize_text_field((string) $post->post_title);
+
+                return $target;
+            }
+        }
+
+        $assignment_target = sanitize_key((string) ($assignment['target'] ?? ''));
+        $post_type = sanitize_key((string) ($assignment['post_type'] ?? ''));
+        if ($assignment_target === 'single' && $post_type !== '') {
+            $posts = get_posts([
+                'post_type'      => $post_type,
+                'post_status'    => 'publish',
+                'posts_per_page' => 1,
+                'orderby'        => 'modified',
+                'order'          => 'DESC',
+            ]);
+            if (!empty($posts[0]) && $posts[0] instanceof WP_Post) {
+                $post = $posts[0];
+                $target['url'] = (string) get_permalink((int) $post->ID);
+                $target['source'] = 'sample_single';
+                $target['post_id'] = (int) $post->ID;
+                $target['post_type'] = $post_type;
+                $target['title'] = sanitize_text_field((string) $post->post_title);
+
+                return $target;
+            }
+        }
+
+        if (in_array($assignment_target, ['archive', 'post_type'], true) && $post_type !== '' && function_exists('get_post_type_archive_link')) {
+            $url = get_post_type_archive_link($post_type);
+            if (is_string($url) && $url !== '') {
+                $target['url'] = esc_url_raw($url);
+                $target['source'] = 'post_type_archive';
+                $target['post_type'] = $post_type;
+
+                return $target;
+            }
+        }
+
+        $taxonomy = sanitize_key((string) ($assignment['taxonomy'] ?? ''));
+        $term_slug = sanitize_key((string) ($assignment['term'] ?? ''));
+        if ($assignment_target === 'taxonomy' && $taxonomy !== '' && function_exists('get_term_link')) {
+            $term = null;
+            if ($term_slug !== '' && function_exists('get_term_by')) {
+                $term = get_term_by('slug', $term_slug, $taxonomy);
+            } elseif (function_exists('get_terms')) {
+                $terms = get_terms([
+                    'taxonomy'   => $taxonomy,
+                    'hide_empty' => false,
+                    'number'     => 1,
+                ]);
+                if (!is_wp_error($terms) && is_array($terms) && !empty($terms[0])) {
+                    $term = $terms[0];
+                }
+            }
+
+            if ($term && !is_wp_error($term)) {
+                $url = get_term_link($term, $taxonomy);
+                if (!is_wp_error($url) && is_string($url) && $url !== '') {
+                    $target['url'] = esc_url_raw($url);
+                    $target['source'] = $term_slug !== '' ? 'taxonomy_term' : 'sample_taxonomy_term';
+                    $target['title'] = sanitize_text_field((string) ($term->name ?? $term_slug));
+
+                    return $target;
+                }
+            }
+        }
+
+        $specialty = sanitize_key((string) ($assignment['specialty'] ?? $assignment['template_target'] ?? ''));
+        if (in_array($specialty, ['front', 'front_page', 'homepage', 'home'], true)) {
+            $front_id = absint(get_option('page_on_front', 0));
+            $target['url'] = $front_id > 0 ? (string) get_permalink($front_id) : home_url('/');
+            $target['source'] = $front_id > 0 ? 'front_page' : 'site_home';
+            $target['post_id'] = $front_id;
+        } elseif (in_array($specialty, ['blog', 'blog_index', 'blog_posts_index', 'posts_index'], true)) {
+            $blog_id = absint(get_option('page_for_posts', 0));
+            $target['url'] = $blog_id > 0 ? (string) get_permalink($blog_id) : home_url('/');
+            $target['source'] = $blog_id > 0 ? 'posts_page' : 'site_home';
+            $target['post_id'] = $blog_id;
+        } elseif (in_array($specialty, ['author', 'author_archive'], true) && function_exists('get_users') && function_exists('get_author_posts_url')) {
+            $users = get_users(['number' => 1, 'fields' => ['ID', 'display_name']]);
+            if (!empty($users[0])) {
+                $user = $users[0];
+                $user_id = absint(is_object($user) ? ($user->ID ?? 0) : ($user['ID'] ?? 0));
+                if ($user_id > 0) {
+                    $target['url'] = (string) get_author_posts_url($user_id);
+                    $target['source'] = 'author_archive';
+                    $target['title'] = sanitize_text_field((string) (is_object($user) ? ($user->display_name ?? '') : ($user['display_name'] ?? '')));
+                }
+            }
+        } elseif (in_array($specialty, ['date', 'date_archive'], true) && function_exists('get_month_link')) {
+            $target['url'] = (string) get_month_link((int) gmdate('Y'), (int) gmdate('m'));
+            $target['source'] = 'date_archive';
+        } elseif ($specialty === 'search') {
+            $target['url'] = function_exists('get_search_link') ? (string) get_search_link('') : home_url('?s=');
+            $target['source'] = 'search';
+        } elseif (in_array($specialty, ['404', 'not_found'], true)) {
+            $target['url'] = home_url('/__lcfa-preview-404__/');
+            $target['source'] = 'not_found';
+        }
+
+        if ($target['url'] === '') {
+            $woocommerce_pages = [
+                'shop'          => 'shop',
+                'shop_page'     => 'shop',
+                'cart'          => 'cart',
+                'cart_page'     => 'cart',
+                'checkout'      => 'checkout',
+                'checkout_page' => 'checkout',
+                'account'       => 'myaccount',
+                'my_account'    => 'myaccount',
+                'account_page'  => 'myaccount',
+            ];
+            if (isset($woocommerce_pages[$specialty]) && function_exists('wc_get_page_permalink')) {
+                $url = wc_get_page_permalink($woocommerce_pages[$specialty]);
+                if (is_string($url) && $url !== '') {
+                    $target['url'] = esc_url_raw($url);
+                    $target['source'] = 'woocommerce';
+                }
+            }
+        }
+
+        return $target;
     }
 
     private function get_partial_type_taxonomy_terms(): array {
