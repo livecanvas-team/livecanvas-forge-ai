@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
+const packageVersion = require('../package.json').version
 const initializeTimeoutMs = 6000
 const delayedPreflightMs = 10000
 
@@ -73,6 +74,7 @@ async function run() {
   server.close()
 
   assert.match(output, /"protocolVersion":"2024-11-05"/, 'stdio server should answer initialize without waiting for REST preflight calls')
+  assert.match(output, new RegExp(`"version":"${packageVersion.replace(/\./g, '\\.')}"`), 'stdio server should report the package version instead of a hardcoded stale value')
   assert.ok(requests.includes('/wp-json/lcfa/v1/mcp/workspace-root') || requests.includes('/wp-json/lcfa/v1/mcp/workspace-root/'), 'bridge should still attempt workspace sync')
 
   const lfChild = spawn('node', [

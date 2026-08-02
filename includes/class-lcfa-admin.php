@@ -4079,6 +4079,9 @@ final class LCFA_Admin {
                         'steps' => [
                             __('In Codex, call get_connection_handoff.', 'livecanvas-forge-ai'),
                             __('Ask for a read-only audit first.', 'livecanvas-forge-ai'),
+                            $oauth_direct
+                                ? __('For visual QA, use Codex browser tooling; Direct OAuth does not include the local visual_check runtime.', 'livecanvas-forge-ai')
+                                : __('Before visual QA, inspect mcp_runtime.visual_check and run visual_check_status if launch is not verified.', 'livecanvas-forge-ai'),
                             __('Enable apply abilities only when you want Codex to write pages or templates.', 'livecanvas-forge-ai'),
                         ],
                     ];
@@ -4132,6 +4135,7 @@ final class LCFA_Admin {
                     'steps' => [
                         __('In Codex, call get_connection_handoff.', 'livecanvas-forge-ai'),
                         __('Start with a read-only request before enabling writes.', 'livecanvas-forge-ai'),
+                        __('Before visual QA, inspect mcp_runtime.visual_check and call visual_check_status with probe_launch=true.', 'livecanvas-forge-ai'),
                     ],
                 ];
             default:
@@ -4444,6 +4448,9 @@ final class LCFA_Admin {
             $oauth_direct
                 ? 'If OAuth is not authenticated, stop and tell me to run the one-time Codex MCP login for this server.'
                 : 'If the response says pairing is pending, tell me the user code and ask me to approve it in WordPress, then retry.',
+            $oauth_direct
+                ? 'This Direct OAuth transport exposes WordPress abilities only. For visual QA, use Codex browser tooling or switch to the advanced local MCP runtime.'
+                : 'Read `mcp_runtime.visual_check`. If `launch_verified` is false, call `visual_check_status` with `{"probe_launch":true}` and report the exact next action.',
             'Summarize the connection status, transport, framework, guardrails, and available safe preview tools.',
             'Do not change anything.',
         ]);

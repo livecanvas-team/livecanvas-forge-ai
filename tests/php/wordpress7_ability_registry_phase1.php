@@ -12,6 +12,9 @@ $GLOBALS['lcfa_test_connections'] = [
     'mcp_write_abilities_enabled' => false,
     'mcp_public_write_abilities' => [],
 ];
+$GLOBALS['lcfa_test_public_connections'] = [
+    'preferred_client' => 'codex',
+];
 
 function __($text, $domain = null) { return $text; }
 function add_action($hook, $callback) { $GLOBALS['lcfa_test_actions'][$hook] = $callback; }
@@ -28,7 +31,7 @@ final class LCFA_Settings {
     }
 
     public static function get_public_connections(): array {
-        return ['preferred_client' => 'codex'];
+        return $GLOBALS['lcfa_test_public_connections'];
     }
 
     public static function get_history(): array {
@@ -330,7 +333,17 @@ lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['age
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-agent-handoff-package'), 'connection handoff ability should mention the full package follow-up');
 lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['stack_compatibility']['status'] ?? '') === 'supported', 'connection handoff should expose the evaluated stack compatibility status');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'stack_compatibility'), 'connection handoff should instruct agents to inspect compatibility before writes');
+lcfa_wp7_assert_true(in_array('visual_check_status', $connection_handoff['connection_handoff']['runtime_tools'] ?? [], true), 'local/pairing handoff should advertise the visual-check readiness tool');
+lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['quick_prompts']['visual_check'] ?? '', 'visual_check_status'), 'local/pairing visual prompt should verify browser readiness before visual QA');
 lcfa_wp7_assert_true(!isset($connection_handoff['agent_handoff_package']), 'connection handoff ability should not return the larger virtual package');
+
+$GLOBALS['lcfa_test_public_connections']['connection_strategy'] = 'oauth-direct';
+$oauth_connection_handoff = $registry->get_connection_handoff(['limit' => 1]);
+lcfa_wp7_assert_true(($oauth_connection_handoff['connection_handoff']['runtime_tools'] ?? []) === [], 'Direct OAuth handoff must not advertise local Node runtime tools');
+lcfa_wp7_assert_true(str_contains($oauth_connection_handoff['connection_handoff']['runtime_notes'] ?? '', 'WordPress abilities'), 'Direct OAuth handoff should explain its WordPress-only runtime boundary');
+lcfa_wp7_assert_true(str_contains($oauth_connection_handoff['connection_handoff']['quick_prompts']['visual_check'] ?? '', 'coding agent browser'), 'Direct OAuth visual prompt should direct the agent to its browser tooling');
+lcfa_wp7_assert_true(!str_contains($oauth_connection_handoff['connection_handoff']['quick_prompts']['visual_check'] ?? '', 'Call visual_check_status first'), 'Direct OAuth visual prompt must not claim that the local readiness tool is callable');
+unset($GLOBALS['lcfa_test_public_connections']['connection_strategy']);
 
 $handoff_summary = $registry->get_handoff_summary(['limit' => 1]);
 lcfa_wp7_assert_true(($handoff_summary['handoff_summary']['schema_version'] ?? '') === 'handoff-summary.v1', 'handoff summary ability should expose schema version');

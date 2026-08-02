@@ -177,7 +177,10 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           }
         }
       },
-      invoke: async (argumentsMap = {}) => client.getHandoffSummary(argumentsMap)
+      invoke: async (argumentsMap = {}) => attachMcpRuntimeStatus(
+        await client.getHandoffSummary(argumentsMap),
+        visualCheck
+      )
     },
     {
       name: 'get_connection_handoff',
@@ -192,7 +195,10 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           }
         }
       },
-      invoke: async (argumentsMap = {}) => client.getConnectionHandoff(argumentsMap)
+      invoke: async (argumentsMap = {}) => attachMcpRuntimeStatus(
+        await client.getConnectionHandoff(argumentsMap),
+        visualCheck
+      )
     },
     {
       name: 'get_block_pattern_library',
@@ -412,17 +418,25 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => client.runSeoTool(argumentsMap)
     },
     {
+      name: 'visual_check_status',
+      description: 'Check whether this MCP runtime has Playwright and a launchable Chromium browser before running visual_check. Returns guided install commands without changing the machine.',
+      inputSchema: visualCheckStatusSchema(),
+      outputSchema: objectOutputSchema(),
+      invoke: async (argumentsMap = {}) => {
+        if (!visualCheck || typeof visualCheck.getReadiness !== 'function') {
+          return visualCheckUnavailableStatus()
+        }
+        return visualCheck.getReadiness(argumentsMap)
+      }
+    },
+    {
       name: 'visual_check',
-      description: 'Run a local browser visual check with desktop/mobile screenshots, overflow checks, and optional computed style snapshots for selectors.',
+      description: 'Run a local browser visual check with desktop/mobile screenshots, shell counts, broken-image and console diagnostics, overflow checks, and optional computed style snapshots. Call visual_check_status first when readiness is unknown.',
       inputSchema: visualCheckSchema(),
       outputSchema: objectOutputSchema(),
       invoke: async (argumentsMap = {}) => {
         if (!visualCheck) {
-          return {
-            ok: false,
-            status: 'visual_check_unavailable',
-            message: 'The visual check runtime was not initialized.'
-          }
+          return visualCheckUnavailableStatus()
         }
         return visualCheck.run(argumentsMap)
       }
@@ -1598,9 +1612,15 @@ function visualCheckSchema() {
     properties: {
       url: { type: 'string' },
       full_page: { type: 'boolean' },
+      wait_until: {
+        type: 'string',
+        enum: ['load', 'domcontentloaded', 'networkidle', 'commit']
+      },
       wait_ms: { type: 'integer' },
       timeout_ms: { type: 'integer' },
       output_directory: { type: 'string' },
+      executable_path: { type: 'string' },
+      headless: { type: 'boolean' },
       selectors: {
         type: 'array',
         items: { type: 'string' }
@@ -1618,6 +1638,81 @@ function visualCheckSchema() {
       }
     }
   }
+}
+
+function visualCheckStatusSchema() {
+  return {
+    type: 'object',
+    properties: {
+      probe_launch: { type: 'boolean' },
+      executable_path: { type: 'string' },
+      headless: { type: 'boolean' }
+    }
+  }
+}
+
+function visualCheckUnavailableStatus() {
+  return {
+    schema_version: 'visual-check-readiness.v1',
+    ok: false,
+    ready: false,
+    status: 'visual_check_unavailable',
+    package_available: false,
+    browser_available: false,
+    launch_verified: false,
+    message: 'The visual check runtime was not initialized.',
+    next_action: 'Restart or update the LiveCanvas AI Bridge MCP server.',
+    install_guidance: {
+      package_command: 'npm install --save-dev playwright',
+      browser_command: 'npx playwright install chromium',
+      verify_tool: 'visual_check_status'
+    }
+  }
+}
+
+async function attachMcpRuntimeStatus(response, visualCheck) {
+  let visualStatus = visualCheckUnavailableStatus()
+
+  if (visualCheck && typeof visualCheck.getReadiness === 'function') {
+    try {
+      visualStatus = await visualCheck.getReadiness({ probe_launch: false })
+    } catch (error) {
+      visualStatus = {
+        ...visualCheckUnavailableStatus(),
+        status: 'visual_check_status_failed',
+        message: 'The MCP runtime could not inspect visual-check readiness.',
+        detail: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+
+  const runtime = {
+    schema_version: 'mcp-runtime-capabilities.v1',
+    visual_check: visualStatus
+  }
+
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    return {
+      result: response,
+      mcp_runtime: runtime
+    }
+  }
+
+  const next = {
+    ...response,
+    mcp_runtime: runtime
+  }
+
+  for (const key of ['connection_handoff', 'handoff_summary', 'result']) {
+    if (next[key] && typeof next[key] === 'object' && !Array.isArray(next[key])) {
+      next[key] = {
+        ...next[key],
+        mcp_runtime: runtime
+      }
+    }
+  }
+
+  return next
 }
 
 module.exports = {

@@ -1,6 +1,7 @@
 const PROTOCOL_VERSION = '2024-11-05'
 const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-11-25', '2026-07-28']
 const fs = require('node:fs')
+const PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
 
 async function runStdioServer({ client, tools, config }) {
   process.stdin.resume()
@@ -59,7 +60,7 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
       },
       serverInfo: {
         name: 'livecanvas-ai-bridge-mcp',
-        version: '0.1.2'
+        version: PACKAGE_VERSION
       }
     }, debugLogPath, format)
 
@@ -292,7 +293,7 @@ function buildServerDiscovery(tools) {
     },
     serverInfo: {
       name: 'livecanvas-ai-bridge-mcp',
-      version: '0.1.2'
+      version: PACKAGE_VERSION
     },
     tools: tools.list(),
     ttlMs: 30000,

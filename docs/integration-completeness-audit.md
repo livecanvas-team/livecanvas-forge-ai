@@ -97,6 +97,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
 | Automatic failed-import recovery | Contract tested | optional transaction rollback reports original failure plus recovery outcome | Real failure-injection E2E on local and restrictive remote hosts |
 | Automatic compile after source import | Local E2E | explicit `ready`, `build_required`, and `build_failed`; persistent cache checksum verification; admin retry endpoint; passing Asteria import/build/rollback | Remote-host fallback matrix |
+| Abandoned install retention | Contract tested | seven-day inactive handoff cleanup, active-theme protection, idempotent WindPress backup deletion | Long-running LocalWP and restrictive-host observation |
 
 ### Agent, Security, And Developer Operations
 
@@ -107,7 +108,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Site fingerprint and project identity | Local/remote E2E | handoff and session checks | Stronger warning when a project config targets a migrated domain |
 | Scoped read/preview/write/full access | Contract tested + field use | ability registry and session scopes | Per-operation approval policies for production |
 | Theme files, media, debug, cache, SEO, Polylang | Contract tested | Full Power services | Production E2E across plugin combinations |
-| Visual check | Contract tested | MCP tool and Playwright dependency | Managed Chromium readiness check during onboarding |
+| Visual check | Contract tested + local launch probe | `visual_check_status`, guided repair, handoff runtime metadata, real macOS Chromium launch | Windows/Linux and remote-agent runtime qualification |
 | MCP schema/caching metadata | Contract tested | Node registry tests | Complete migration after the MCP 2026 release candidate stabilizes |
 | Versioned stack capability profile | Contract tested | `stack-capabilities.v1`, snapshot, admin hero, and agent handoff | Validate the profile against second-host and future-version fixtures |
 
@@ -134,9 +135,9 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 ### P1: Required For Complete Editorial Coverage
 
 1. Run the now contract-tested Picostrap Customizer/Sass/bundle transaction on real LocalWP and paired remote sites, including injected compile and stale-preview failures.
-2. Add a managed browser readiness check and guided Chromium install for `visual_check`.
+2. Qualify `visual_check_status` and `visual_check` on Windows/Linux coding-agent runtimes and document host-specific browser sandbox failures.
 3. Add remote build orchestration or a cloud runner for hosts where PHP cannot compile or write build artifacts.
-4. Add backup retention and orphan cleanup for abandoned Theme Library installs.
+4. Qualify the seven-day inactive Theme Library handoff/backup cleanup on long-running and restrictive hosts; active-theme handoffs remain protected.
 5. Run real multilingual dynamic-template assignment and rollback tests with Polylang active.
 
 ### P2: Product Expansion

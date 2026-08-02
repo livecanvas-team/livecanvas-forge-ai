@@ -74,11 +74,25 @@ function getArrayBranches(schema, matches = []) {
 }
 
 async function run() {
+  const visualRuntime = {
+    async getReadiness() {
+      return {
+        schema_version: 'visual-check-readiness.v1',
+        ok: true,
+        ready: true,
+        status: 'ready'
+      }
+    },
+    async run() {
+      return { ok: true, status: 'completed' }
+    }
+  }
   const registry = createToolRegistry(
     createNoopClient(),
     createNoopThemeFiles(),
     createNoopWindPressCompiler(),
-    createNoopPicostrapCompiler()
+    createNoopPicostrapCompiler(),
+    visualRuntime
   )
 
   const tools = registry.list()
@@ -125,6 +139,8 @@ async function run() {
   )
   assert.equal(connectionHandoff.annotations.readOnlyHint, true, 'get_connection_handoff should be declared read-only to MCP clients')
   assert.equal(connectionHandoff.annotations.destructiveHint, false, 'get_connection_handoff should not require write approval')
+  const connectionResult = await registry.invoke('get_connection_handoff', { limit: 5 })
+  assert.equal(connectionResult.mcp_runtime.visual_check.status, 'ready', 'connection handoff should include local visual-check readiness')
 
   const blockPatternLibrary = tools.find((tool) => tool.name === 'get_block_pattern_library')
   assert.ok(blockPatternLibrary, 'get_block_pattern_library should be registered')
@@ -202,6 +218,14 @@ async function run() {
   const visualCheck = tools.find((tool) => tool.name === 'visual_check')
   assert.ok(visualCheck, 'visual_check should be registered')
   assert.ok(visualCheck.inputSchema.properties.viewports.items, 'visual_check should declare viewport item schema')
+  assert.ok(visualCheck.inputSchema.properties.wait_until, 'visual_check should expose its navigation readiness strategy')
+
+  const visualCheckStatus = tools.find((tool) => tool.name === 'visual_check_status')
+  assert.ok(visualCheckStatus, 'visual_check_status should be registered')
+  assert.ok(visualCheckStatus.inputSchema.properties.probe_launch, 'visual_check_status should expose the launch probe')
+  assert.equal(visualCheckStatus.annotations.readOnlyHint, true, 'visual_check_status should be read-only')
+  const readiness = await registry.invoke('visual_check_status', { probe_launch: false })
+  assert.equal(readiness.status, 'ready', 'visual_check_status should return the runtime readiness payload')
 
   const assetDiscovery = tools.find((tool) => tool.name === 'asset_discovery')
   assert.ok(assetDiscovery, 'asset_discovery should be registered')

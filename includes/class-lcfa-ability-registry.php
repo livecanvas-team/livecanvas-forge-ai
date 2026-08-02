@@ -2463,6 +2463,7 @@ final class LCFA_Ability_Registry {
             ? LCFA_OAuth_Server::get_current_identity()
             : [];
         $oauth_direct = $connection_strategy === 'oauth-direct' || $oauth_identity !== [];
+        $has_local_mcp_runtime = !$oauth_direct;
         $auth_method = $oauth_direct ? 'oauth_direct' : (
             $connection_strategy === 'ai-bridge-session'
                 ? 'ai_bridge_session'
@@ -2489,6 +2490,9 @@ final class LCFA_Ability_Registry {
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
             __('For small edits, prefer content-patch-preview/content-patch-apply over rewriting an entire page.', 'livecanvas-forge-ai'),
             __('On Picostrap, inspect picostrap_design_system synchronization and let the MCP runtime compile Sass before apply; never write Customizer tokens without the matching bundle.', 'livecanvas-forge-ai'),
+            $has_local_mcp_runtime
+                ? __('Before visual QA, inspect mcp_runtime.visual_check in this handoff and call visual_check_status with probe_launch=true when launch_verified is false.', 'livecanvas-forge-ai')
+                : __('Direct OAuth exposes WordPress abilities only. For visual QA, use the coding agent browser tooling or configure the advanced local MCP runtime.', 'livecanvas-forge-ai'),
             __('For media, theme files, cache, debug, SEO, or Polylang work, require the matching Full Access scope and review rollback output.', 'livecanvas-forge-ai'),
             __('Do not modify files or raw post content directly when a dedicated LiveCanvas preview/apply ability exists for the request.', 'livecanvas-forge-ai'),
             __('Stay read-only until a preview or dry-run has been reviewed.', 'livecanvas-forge-ai'),
@@ -2500,7 +2504,9 @@ final class LCFA_Ability_Registry {
             'targeted_text_patch' => __('Change one exact phrase in a LiveCanvas page or partial with content-patch-preview first, then content-patch-apply only if the match is unique and validation passes.', 'livecanvas-forge-ai'),
             'generate_page' => __('Create a draft LiveCanvas page from this brief. Use preview-page-upsert first, then apply-page-upsert only after confirmation.', 'livecanvas-forge-ai'),
             'upload_media' => __('Upload an image to the Media Library, set clean alt text, then preview replacing its old LiveCanvas reference before applying.', 'livecanvas-forge-ai'),
-            'visual_check' => __('Run desktop and mobile visual_check on this URL, report overflow, selector styles, screenshot paths, and no-write issues first.', 'livecanvas-forge-ai'),
+            'visual_check' => $has_local_mcp_runtime
+                ? __('Call visual_check_status first. When ready, run desktop and mobile visual_check on this URL and report shell counts, broken images, console errors, overflow, selector styles, and screenshot paths.', 'livecanvas-forge-ai')
+                : __('Use the coding agent browser tooling for desktop and mobile visual QA, or switch to the advanced local MCP runtime to enable visual_check_status and visual_check.', 'livecanvas-forge-ai'),
             'design_system_from_logo' => __('Build a design-system direction from the uploaded logo: colors, typography feel, buttons, spacing, and radius. Preview before applying.', 'livecanvas-forge-ai'),
             'bootstrap_tailwind_conversion' => __('Convert this LiveCanvas page from Bootstrap-style markup to the active Tailwind/DaisyUI or stack-native framework. Preview and validate before applying.', 'livecanvas-forge-ai'),
             'dynamic_template' => __('Create or update a LiveCanvas dynamic template with a large featured image, clear content hierarchy, and stack-native classes. Preview before applying.', 'livecanvas-forge-ai'),
@@ -2529,6 +2535,12 @@ final class LCFA_Ability_Registry {
             'agent_start_tool' => 'livecanvas-forge-ai/get-connection-handoff',
             'connection_handoff_tool' => 'livecanvas-forge-ai/get-connection-handoff',
             'handoff_package_tool' => 'livecanvas-forge-ai/get-agent-handoff-package',
+            'runtime_tools' => $has_local_mcp_runtime
+                ? ['visual_check_status', 'visual_check', 'asset_discovery', 'media_upload_local_assets']
+                : [],
+            'runtime_notes' => $has_local_mcp_runtime
+                ? __('Local MCP runtime tools execute on the coding-agent machine and report their readiness in mcp_runtime.', 'livecanvas-forge-ai')
+                : __('Direct OAuth exposes WordPress abilities; local browser and filesystem tools are not part of this transport.', 'livecanvas-forge-ai'),
             'agent_start_prompt' => implode("\n", $prompt_lines),
             'agent_start_prompt_lines' => $prompt_lines,
             'guardrail'      => 'read_only_first',

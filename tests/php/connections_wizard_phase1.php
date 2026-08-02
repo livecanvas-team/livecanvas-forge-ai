@@ -626,6 +626,7 @@ $connection_hero_method = new ReflectionMethod('LCFA_Admin', 'render_connection_
 $connection_ready_card_method = new ReflectionMethod('LCFA_Admin', 'render_connection_ready_card');
 $framework_change_decision_method = new ReflectionMethod('LCFA_Admin', 'render_connection_framework_change_decision_card');
 $remote_codex_payload_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_mcp_adapter_payload');
+$remote_codex_test_prompt_method = new ReflectionMethod('LCFA_Admin', 'build_remote_codex_test_prompt');
 $codex_onboarding_state_method = new ReflectionMethod('LCFA_Admin', 'get_codex_onboarding_state');
 $remote_codex_prerequisites_method = new ReflectionMethod('LCFA_Admin', 'get_remote_codex_prerequisites');
 $codex_fast_path_panel_method = new ReflectionMethod('LCFA_Admin', 'render_codex_fast_path_panel');
@@ -684,6 +685,19 @@ lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
 lcfa_assert_same('ai-bridge-session', $admin_remote_codex_payload['common']['connection_strategy'] ?? '', 'admin remote Codex payload should mark the secure AI Bridge session strategy');
+
+$pairing_test_prompt = (string) $remote_codex_test_prompt_method->invoke($admin_instance, [
+    'connection_strategy' => 'ai-bridge-session',
+], []);
+lcfa_assert_true(strpos($pairing_test_prompt, 'mcp_runtime.visual_check') !== false, 'pairing test prompt should ask Codex to inspect local visual-check readiness');
+lcfa_assert_true(strpos($pairing_test_prompt, 'visual_check_status') !== false, 'pairing test prompt should include the guided browser launch probe');
+
+$oauth_test_prompt = (string) $remote_codex_test_prompt_method->invoke($admin_instance, [
+    'connection_strategy' => 'oauth-direct',
+], []);
+lcfa_assert_true(strpos($oauth_test_prompt, 'WordPress abilities only') !== false, 'Direct OAuth test prompt should explain the transport boundary');
+lcfa_assert_true(strpos($oauth_test_prompt, 'Codex browser tooling') !== false, 'Direct OAuth test prompt should direct visual QA to Codex browser tooling');
+lcfa_assert_false(strpos($oauth_test_prompt, 'call `visual_check_status`') !== false, 'Direct OAuth test prompt must not ask Codex to call a local MCP tool');
 
 $missing_remote_prerequisites = $remote_codex_prerequisites_method->invoke($admin_instance, [
     'remote_site_url'             => '',

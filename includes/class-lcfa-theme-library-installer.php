@@ -4,6 +4,7 @@ defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Installer {
     private const PENDING_INSTALLS_OPTION = 'lcfa_theme_library_pending_installs';
+    private const PENDING_INSTALL_RETENTION_SECONDS = 604800;
 
     private LCFA_Theme_Library_Validator $validator;
     private ?LCFA_WindPress_Bridge $windpress_bridge;
@@ -36,6 +37,8 @@ final class LCFA_Theme_Library_Installer {
     }
 
     public function install(array $theme): array {
+        $this->cleanup_stale_pending_install_states();
+
         $download = $this->download_theme_zip($theme);
         if (empty($download['ok'])) {
             return $download;
@@ -122,6 +125,8 @@ final class LCFA_Theme_Library_Installer {
     }
 
     public function get_pending_install_state(string $stylesheet, string $theme_slug = ''): array {
+        $this->cleanup_stale_pending_install_states();
+
         $pending = get_option(self::PENDING_INSTALLS_OPTION, []);
         if (!is_array($pending)) {
             return [];
@@ -180,6 +185,76 @@ final class LCFA_Theme_Library_Installer {
         }
 
         return $state;
+    }
+
+    /**
+     * Remove abandoned install handoffs without invalidating the active theme.
+     * Runtime backups are deleted only after their pending record is no longer usable.
+     */
+    public function cleanup_stale_pending_install_states(int $max_age_seconds = self::PENDING_INSTALL_RETENTION_SECONDS, ?int $now = null): array {
+        $pending = get_option(self::PENDING_INSTALLS_OPTION, []);
+        if (!is_array($pending) || !$pending) {
+            return [
+                'ok'       => true,
+                'removed'  => 0,
+                'retained' => 0,
+                'errors'   => [],
+            ];
+        }
+
+        $max_age_seconds = max(3600, $max_age_seconds);
+        $now = $now ?? time();
+        $active_stylesheet = sanitize_key((string) wp_get_theme()->get_stylesheet());
+        $retained = [];
+        $removed = [];
+        $errors = [];
+
+        foreach ($pending as $key => $state) {
+            $key = sanitize_key((string) $key);
+            if ($key === '' || !is_array($state)) {
+                $removed[] = $key;
+                continue;
+            }
+
+            $stylesheet = sanitize_key((string) ($state['stylesheet'] ?? $key));
+            $captured_at = trim((string) ($state['captured_at'] ?? ''));
+            $captured_timestamp = $captured_at !== '' ? strtotime($captured_at . ' UTC') : false;
+            $is_stale = $captured_timestamp === false || ($now - $captured_timestamp) > $max_age_seconds;
+
+            if (!$is_stale || ($stylesheet !== '' && $stylesheet === $active_stylesheet)) {
+                $retained[$key] = $state;
+                continue;
+            }
+
+            $runtime_state = is_array($state['windpress_runtime'] ?? null) ? $state['windpress_runtime'] : [];
+            if ($runtime_state && $this->windpress_bridge && method_exists($this->windpress_bridge, 'delete_runtime_backup')) {
+                $cleanup = $this->windpress_bridge->delete_runtime_backup($runtime_state);
+                if (empty($cleanup['ok'])) {
+                    $errors[] = (string) ($cleanup['message'] ?? __('A stale WindPress runtime backup could not be removed.', 'livecanvas-forge-ai'));
+                    $retained[$key] = $state;
+                    continue;
+                }
+            }
+
+            $removed[] = $key;
+        }
+
+        if ($retained) {
+            update_option(self::PENDING_INSTALLS_OPTION, $retained, false);
+        } else {
+            delete_option(self::PENDING_INSTALLS_OPTION);
+        }
+
+        return [
+            'ok'       => empty($errors),
+            'removed'  => count($removed),
+            'retained' => count($retained),
+            'keys'     => array_values(array_filter($removed)),
+            'errors'   => $errors,
+            'message'  => empty($errors)
+                ? __('Stale Theme Library install handoffs cleaned.', 'livecanvas-forge-ai')
+                : __('Some stale Theme Library install handoffs could not be cleaned.', 'livecanvas-forge-ai'),
+        ];
     }
 
     public function download_theme_zip(array $theme): array {

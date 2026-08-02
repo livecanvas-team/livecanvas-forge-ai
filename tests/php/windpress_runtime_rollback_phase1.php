@@ -129,8 +129,16 @@ namespace {
     lcfa_windpress_assert(get_option('windpress_options') === '{"integration":{"picowind":{"enabled":false}}}', 'WindPress options should be restored.');
     lcfa_windpress_assert($GLOBALS['lcfa_windpress_cache_flushed'] >= 2, 'Runtime caches should be flushed after restore.');
 
-    $tampered = $bridge->capture_runtime_state('theme-import-tampered');
     $backup_root = wp_upload_dir(null, false)['basedir'] . '/livecanvas-forge-ai/windpress-runtime-backups';
+    $backup_directory = $backup_root . '/theme-import-test-123';
+    lcfa_windpress_assert(is_dir($backup_directory), 'Captured WindPress runtime backup should exist before cleanup.');
+    $deleted = $bridge->delete_runtime_backup($state);
+    lcfa_windpress_assert(!empty($deleted['ok']) && !empty($deleted['removed']), 'WindPress runtime backup cleanup should succeed.');
+    lcfa_windpress_assert(!is_dir($backup_directory), 'WindPress runtime backup directory should be removed after cleanup.');
+    $deleted_again = $bridge->delete_runtime_backup($state);
+    lcfa_windpress_assert(!empty($deleted_again['ok']) && !empty($deleted_again['skipped']), 'Repeated backup cleanup should be idempotent.');
+
+    $tampered = $bridge->capture_runtime_state('theme-import-tampered');
     file_put_contents($backup_root . '/theme-import-tampered/cache_css.bak', 'tampered');
     file_put_contents($cache_css, 'must-remain-on-checksum-error');
     $tampered_restore = $bridge->restore_runtime_state($tampered);

@@ -31,8 +31,10 @@ These areas have implemented runtime code and automated regression coverage:
 - GitHub/LiveCanvas-gated plugin update metadata and distribution checks.
 - Theme Library catalog, package validation, child-theme installation, starter-data import, idempotency, and import rollback.
 - Theme Library rollback now preserves the theme active before installation and backs up WindPress options, source CSS, generated CSS, sourcemap, and `theme.json` on disk with checksum verification.
+- Theme Library now prunes inactive install handoffs older than seven days and removes only their orphaned WindPress backups; the active theme handoff is never deleted automatically.
 - Asteria 1.0.1 now passes a real LocalWP preview/install/import/desktop/mobile/rollback run with separate LiveCanvas header/footer rendering and exact previous theme/homepage recovery.
 - Progressive admin workspaces: three-step Setup, focused Connections, four-view Abilities & Runs, and five-view Command Deck.
+- Local MCP visual QA now reports Playwright/browser readiness, verifies Chromium launch on demand, and distinguishes its runtime from Direct OAuth WordPress-only abilities.
 
 ## Beta: Needs More Real-Site Verification
 
@@ -41,7 +43,7 @@ These features are implemented, but should still be treated as beta:
 - Direct OAuth discovery and authorization across different hosts, proxies, security plugins, and WordPress MCP Adapter versions.
 - Remote Full Access writes across restrictive hosting filesystems.
 - Picostrap Sass and WindPress/Picowind compilation across plugin versions.
-- Visual checks, because the local MCP runtime must provide Playwright and a compatible Chromium installation.
+- Visual checks across Windows/Linux and restricted agent hosts; the readiness/repair contract and a real macOS Chromium launch are verified.
 - Theme Library import across migrated, multilingual, cache-heavy, and restrictive remote sites. The first LocalWP Picowind/Tailwind 4 transaction now passes.
 - Polylang and SEOPress operations across different content models and language assignments.
 - The React Abilities & Runs shell and its progressive fallback to the PHP interface.
@@ -65,7 +67,7 @@ The current automated baseline contains:
 
 - 67 PHP regression scripts.
 - 12 non-GUI admin/runtime JavaScript unit checks.
-- 8 MCP Node test files.
+- 9 MCP Node test files.
 - PHP lint across 138 tracked PHP files, including tests and bundled compatibility code.
 - `git diff --check`.
 - Distribution build and package validation.

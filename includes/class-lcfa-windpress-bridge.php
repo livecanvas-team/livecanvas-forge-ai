@@ -706,6 +706,75 @@ final class LCFA_WindPress_Bridge {
         ];
     }
 
+    /**
+     * Delete a disk backup after its install handoff is no longer usable.
+     */
+    public function delete_runtime_backup(array $state): array {
+        if (empty($state['available'])) {
+            return [
+                'ok'      => true,
+                'skipped' => true,
+                'message' => __('No WindPress runtime backup needed cleanup.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $audit_id = sanitize_key((string) ($state['audit_id'] ?? ''));
+        $backup_root = $this->get_runtime_backup_root();
+        if ($audit_id === '' || $backup_root === '') {
+            return [
+                'ok'      => false,
+                'message' => __('The WindPress runtime backup cleanup reference is invalid.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $backup_root = wp_normalize_path(rtrim($backup_root, '/\\'));
+        $backup_directory = wp_normalize_path(trailingslashit($backup_root) . $audit_id);
+        if (strpos($backup_directory, trailingslashit($backup_root)) !== 0) {
+            return [
+                'ok'      => false,
+                'message' => __('The WindPress runtime backup cleanup path is outside the protected directory.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!is_dir($backup_directory)) {
+            return [
+                'ok'      => true,
+                'skipped' => true,
+                'message' => __('The WindPress runtime backup was already removed.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $errors = [];
+        foreach (scandir($backup_directory) ?: [] as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $path = wp_normalize_path(trailingslashit($backup_directory) . $item);
+            if (is_link($path) || is_dir($path)) {
+                $errors[] = sprintf(__('Unexpected WindPress backup entry could not be removed: %s', 'livecanvas-forge-ai'), sanitize_file_name($item));
+                continue;
+            }
+
+            if (is_file($path) && !@unlink($path)) {
+                $errors[] = sprintf(__('WindPress backup file could not be removed: %s', 'livecanvas-forge-ai'), sanitize_file_name($item));
+            }
+        }
+
+        if (!$errors && !@rmdir($backup_directory)) {
+            $errors[] = __('The WindPress runtime backup directory could not be removed.', 'livecanvas-forge-ai');
+        }
+
+        return [
+            'ok'      => empty($errors),
+            'removed' => empty($errors),
+            'errors'  => $errors,
+            'message' => empty($errors)
+                ? __('WindPress runtime backup removed.', 'livecanvas-forge-ai')
+                : __('WindPress runtime backup cleanup completed with errors.', 'livecanvas-forge-ai'),
+        ];
+    }
+
     private function is_available(): bool {
         return $this->environment->is_windpress_active()
             && class_exists('\WindPress\WindPress\Core\Volume')

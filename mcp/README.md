@@ -105,9 +105,19 @@ HTTP routes:
 
 Local MCP-only helpers:
 
-- `visual_check` captures desktop/mobile screenshots and layout diagnostics with Playwright or local Chrome/Chromium.
+- `visual_check_status` detects Playwright and Chrome/Edge/Chromium, optionally proves a real headless launch with `{"probe_launch":true}`, and returns guided repair commands.
+- `visual_check` captures desktop/mobile screenshots, shell counts, broken images, console/page errors, overflow, and selector styles. It defaults to `domcontentloaded` plus a short font/layout settling delay.
 - `asset_discovery` scans a local asset folder and returns a checksum-based image/video manifest.
 - `media_upload_local_assets` scans local assets and uploads them to WordPress through `POST /media/upload`, preserving manifest IDs/checksums for dedupe.
+
+Recommended visual QA sequence:
+
+1. Call `get_connection_handoff` and inspect `mcp_runtime.visual_check`.
+2. If `launch_verified` is false, call `visual_check_status` with `{"probe_launch":true}`.
+3. Follow the returned `next_action` when Playwright or Chromium is missing.
+4. Run `visual_check` only after readiness is confirmed.
+
+Direct OAuth connects Codex to WordPress Abilities without this local Node runtime. In that mode, use the coding agent's browser tooling or configure the advanced local MCP runtime when these helpers are required.
 
 For page-only generation, prefer `run_lc_command` with `action=page_upsert`, `body_html_lines`, optional `page_css_lines`, optional `page_js_lines`, `seo.noindex`, and `no_theme_edits=true`. The guard blocks theme-file, design-system, global shell, and build asset writes for that payload.
 

@@ -73,6 +73,7 @@ class LCFA_Theme_Library_Validator {
 
 class LCFA_WindPress_Bridge {
     public array $captured = [];
+    public array $deleted = [];
 
     public function capture_runtime_state(string $audit_id): array {
         $this->captured[] = $audit_id;
@@ -82,6 +83,11 @@ class LCFA_WindPress_Bridge {
             'audit_id'  => $audit_id,
             'files'     => ['cache_css' => ['exists' => true]],
         ];
+    }
+
+    public function delete_runtime_backup(array $state): array {
+        $this->deleted[] = (string) ($state['audit_id'] ?? '');
+        return ['ok' => true, 'removed' => true];
     }
 }
 
@@ -138,6 +144,29 @@ $second = $installer->install([
 ]);
 lcfa_installer_assert(!empty($second['ok']), 'Reactivating the current theme should remain idempotent.');
 lcfa_installer_assert(count($windpress->captured) === 1, 'The current active theme should not create a redundant runtime backup.');
+
+$GLOBALS['lcfa_installer_options']['lcfa_theme_library_pending_installs'] = [
+    'sample-theme' => [
+        'stylesheet' => 'sample-theme',
+        'captured_at' => '2026-01-01 00:00:00',
+        'windpress_runtime' => ['available' => true, 'audit_id' => 'active-backup'],
+    ],
+    'abandoned-theme' => [
+        'stylesheet' => 'abandoned-theme',
+        'captured_at' => '2026-01-01 00:00:00',
+        'windpress_runtime' => ['available' => true, 'audit_id' => 'abandoned-backup'],
+    ],
+    'fresh-theme' => [
+        'stylesheet' => 'fresh-theme',
+        'captured_at' => '2026-08-01 12:00:00',
+        'windpress_runtime' => ['available' => true, 'audit_id' => 'fresh-backup'],
+    ],
+];
+$cleanup = $installer->cleanup_stale_pending_install_states(604800, (int) strtotime('2026-08-02 00:00:00 UTC'));
+lcfa_installer_assert(!empty($cleanup['ok']) && ($cleanup['removed'] ?? 0) === 1, 'Cleanup should remove only an inactive stale install handoff.');
+lcfa_installer_assert(isset($GLOBALS['lcfa_installer_options']['lcfa_theme_library_pending_installs']['sample-theme']), 'Cleanup must retain a stale handoff for the currently active theme.');
+lcfa_installer_assert(isset($GLOBALS['lcfa_installer_options']['lcfa_theme_library_pending_installs']['fresh-theme']), 'Cleanup must retain a recent inactive handoff.');
+lcfa_installer_assert($windpress->deleted === ['abandoned-backup'], 'Cleanup should delete only the orphaned WindPress runtime backup.');
 
 lcfa_installer_remove_tree($GLOBALS['lcfa_installer_root']);
 echo "PASS\n";
