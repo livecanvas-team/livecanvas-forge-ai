@@ -1,6 +1,6 @@
 # LiveCanvas AI Bridge Theme Library Package Spec
 
-Status: alpha
+Status: beta
 
 This document defines the public package contract for Theme Library imports in LiveCanvas AI Bridge.
 

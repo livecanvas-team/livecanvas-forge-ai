@@ -6,15 +6,17 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `alpha`
+Status: `0.2.0-beta.1` staging beta
 
-Alpha / not production guaranteed: this repository is public for early testing and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use staging sites, backups, previews, and `dry_run` checks before applying agent-generated changes.
+Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
 See the current [development status and release gates](./docs/plugin-development-status.md) and the stack-by-stack [integration completeness audit](./docs/integration-completeness-audit.md) for verified capabilities, evidence levels, and remaining work.
 
 Usable today:
 
-- connect coding agents through the local MCP bridge or REST contract
+- connect Codex, OpenCode, Claude Code, Claude Desktop, and Cursor through secure pairing or the local MCP bridge
+- run the fully supported REST/pairing path on WordPress 6.8
+- use WordPress 7 Abilities and Direct OAuth when available, with secure pairing as the fallback
 - use Codex Direct Mode through OAuth 2.1 + PKCE on public HTTPS sites, without an npm proxy or WordPress credentials in Codex
 - fall back automatically to secure AI Bridge pairing on local/private sites or when WordPress MCP Adapter is unavailable
 - keep Codex connections site-bound with project-scoped `.codex/config.toml` files and a Site ID fingerprint
@@ -58,6 +60,7 @@ Usable today:
 - run the AI Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
 - enable Full Access for trusted sessions when Codex needs targeted content patches, guarded theme-file writes, media upload/replace, Picostrap compile, debug/cache, Polylang, SEO, or visual checks
 - install validated Picowind child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
+- finish pending remote Picowind builds with an audit-bound, checksum-verified MCP build tool
 
 Still in progress:
 
@@ -68,6 +71,7 @@ Still in progress:
 - stronger remote/local parity testing for complex write workflows
 - more complete fallback enqueue behavior for custom themes
 - a complete DataViews-based AI Studio UI; the first progressive React shell is now available
+- full conformance with the stateless MCP 2026 protocol; this beta keeps the currently supported protocol versions while the migration is tested separately
 
 ## What It Does
 
@@ -80,7 +84,7 @@ Coding Agent -> AI Bridge MCP or local MCP -> LiveCanvas AI Bridge -> WordPress 
 Main areas:
 
 - `Setup`: project profile, framework, site mode, policy
-- `Connections`: agent bootstrap for Codex, Cursor, Claude Code, OpenCode, and generic MCP clients
+- `Connections`: agent bootstrap for Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients
 - `Genesis`: project brief and executable site plan
 - `AI Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
 - `Theme Library`: admin-only catalog installer for validated Picowind child themes and LiveCanvas starter data
@@ -92,7 +96,7 @@ Main areas:
 
 - `LiveCanvas AI Bridge`: this plugin. It connects WordPress, LiveCanvas, Picostrap, Picowind, WindPress, and coding agents through safe read/preview/apply workflows.
 - `LiveCanvas AI Vision`: planned premium extension for screenshot-to-code and URL-to-page rebuilds. It will analyze long screenshots or URLs, split pages into sections, extract a reusable design system, generate or map missing assets, and create editable Picowind/Tailwind pages through AI Bridge.
-- `LiveCanvas Theme Forge Internal`: planned private generator for creating validated Picowind child-theme ZIPs from approved source briefs, staging runs, and visual QA. It is not bundled in this public plugin.
+- `LiveCanvas Theme Forge Internal`: separate private generator for creating validated Picowind child-theme ZIPs from approved source briefs, staging runs, and visual QA. It is not bundled in this public plugin.
 
 Tested development references:
 
@@ -103,7 +107,7 @@ Tested development references:
 
 Recommended:
 
-- WordPress
+- WordPress 6.8 or 7.0
 - LiveCanvas
 - PHP 8.0 or newer
 - the official WordPress MCP Adapter for the recommended remote Direct OAuth path
@@ -159,14 +163,19 @@ Updates are shown only when:
 
 - LiveCanvas is installed and active;
 - `lc_get_apikey()` or `get_site_option('lc_apikey')` returns a non-empty LiveCanvas API key;
-- update metadata reports a stable version newer than the installed plugin.
+- update metadata reports a version newer than the installed plugin and allowed by the selected update channel.
+
+The update channel is available under `AI Bridge > Connections > Advanced/manual fallback`:
+
+- `Stable` ignores GitHub prereleases. Existing stable installations, including `0.1.31`, do not receive `0.2.0-beta.*` unless an administrator opts in.
+- `Beta` accepts stable and beta releases. A beta installation follows this channel by default, so `0.2.0-beta.1` can receive `0.2.0-beta.2`.
 
 The updater tries the LiveCanvas licensed update endpoint first. If that endpoint is unavailable and the local LiveCanvas license check passed, AI Bridge falls back to the public GitHub latest release API.
 
 The GitHub fallback requires:
 
 - a public repository;
-- a stable latest release tag such as `v0.1.16`;
+- a valid stable or beta tag for the selected channel, such as `v0.2.0-beta.1`;
 - an uploaded asset named exactly `livecanvas-forge-ai.zip`;
 - a plugin version inside the zip that matches the release version.
 
@@ -180,9 +189,9 @@ Before publishing a release:
 - run `bash scripts/build-dist.sh`;
 - run `php tests/php/github_updater_phase1.php`;
 - run `php tests/php/package_dist_phase1.php`;
-- create a stable GitHub release tag, for example `v0.1.16`;
+- create a GitHub release tag that matches the selected channel;
 - upload the asset as exactly `livecanvas-forge-ai.zip`;
-- confirm the latest GitHub release is public and not marked as draft or prerelease;
+- confirm the release is public and not a draft; prereleases are delivered only to the beta channel;
 - on a licensed WordPress site with an older AI Bridge version, click `Dashboard > Updates > Check again`.
 
 Expected result:
@@ -201,11 +210,13 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
 
+The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.1`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
+
 The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
 
 ## Theme Library
 
-The `Theme Library` tab is an alpha importer for validated Picowind one-page child themes. It does not clone arbitrary websites and it is not exposed to MCP clients in v1. The full package contract is documented in [docs/theme-library-package-spec.md](https://github.com/livecanvas-team/livecanvas-forge-ai/blob/main/docs/theme-library-package-spec.md).
+The `Theme Library` tab is a beta importer for validated Picowind one-page child themes. It does not clone arbitrary websites. Preview, installation, import, and rollback remain admin-only; MCP clients can only complete a build already created and authorized by an administrator. The full package contract is documented in [docs/theme-library-package-spec.md](https://github.com/livecanvas-team/livecanvas-forge-ai/blob/main/docs/theme-library-package-spec.md).
 
 Default catalog:
 
@@ -235,8 +246,9 @@ Theme Library flow:
 2. Click `Preview` to download the ZIP, verify checksum, validate the manifest, and inspect the import plan. This does not write.
 3. Click `Install child theme` to install and activate the Picowind child theme through WordPress theme APIs.
 4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, and homepage option. If a step fails, AI Bridge automatically attempts the stored transaction rollback and reports both outcomes.
-5. AI Bridge compiles Tailwind through the local WindPress/MCP runtime and verifies the persistent CSS cache. If the runtime is unavailable, the item remains `Build required` instead of being reported as ready.
-6. Use `Build Tailwind CSS` to retry a pending build, or `Rollback` to restore the previous site state.
+5. AI Bridge compiles Tailwind through the local WindPress runtime when available. If compilation must happen in the connected coding-agent runtime, the item remains `Build required` instead of being reported as ready.
+6. From the paired agent, call `build_theme_library_css` with the pending theme slug. The tool reads the server-owned audit ID and import checksum, compiles and stores CSS, then asks WordPress to verify the active theme and cache checksum.
+7. Tailwind 4 reaches `Ready` after verification. Tailwind 3 is retained as `Ready (degraded)` with guided limitations. Use `Rollback` to restore the previous site state.
 
 Required ZIP structure:
 
@@ -284,6 +296,8 @@ Theme Library beta acceptance:
 - `Install child theme` activates the child theme or reports it as already installed;
 - `Import starter data` creates or updates homepage, header partial, footer partial, media, menus, and homepage option;
 - a Picowind item reaches `Ready` only after its persistent WindPress CSS cache exists, is readable, and no longer contains Tailwind source directives;
+- remote build completion requires a paired session with `write` and `cache` scopes plus matching site fingerprint, import audit ID, import checksum, active stylesheet, and compiled CSS checksum;
+- Tailwind 4 is the fully supported beta path; a verified Tailwind 3 build is reported as usable but degraded;
 - unavailable compilers return `build_required`; compiler or cache-verification failures return `build_failed` with a retry action;
 - failed imports expose an audit ID, the original error, and the automatic rollback outcome;
 - successful automatic recovery returns `failed_rolled_back`; failed recovery returns `rollback_failed` and preserves the manual rollback action;

@@ -1,7 +1,7 @@
 # LiveCanvas Stack Integration Completeness Audit
 
 Last reviewed: 2026-08-02
-Plugin baseline: LiveCanvas AI Bridge 0.1.31 release candidate
+Plugin baseline: LiveCanvas AI Bridge 0.2.0-beta.1 staging beta
 
 ## Purpose
 
@@ -37,7 +37,7 @@ The running reference site reported WindPress 3.2.86 in `hybrid` mode with Tailw
 - **Picostrap:** strongest framework path; site generation, Sass compilation, header behavior, and visual checks have a dedicated E2E fixture.
 - **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. Cross-host and Tailwind 3 qualification remain open.
 - **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, runtime rollback, and automatic failed-import recovery are implemented; the main flow passes on a real LocalWP stack.
-- **Secure agent transport:** strong alpha. Pairing, site identity, scopes, preview-first writes, and revocation are implemented; multi-host qualification remains open.
+- **Secure agent transport:** functional beta. Pairing, site identity, scopes, preview-first writes, revocation, five-client setup generation, and exact MCP package detection are implemented; multi-host/five-client qualification remains open.
 
 The plugin is not yet “perfectly integrated” in the production sense. Its main remaining risk is not missing CRUD endpoints; it is proving that build output, framework state, and rollback remain coherent across versions and hosts.
 
@@ -96,14 +96,14 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Idempotent re-import | Contract tested | import key/version/checksum logic | Force-update migration rules between manifest versions |
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
 | Automatic failed-import recovery | Contract tested | optional transaction rollback reports original failure plus recovery outcome | Real failure-injection E2E on local and restrictive remote hosts |
-| Automatic compile after source import | Local E2E | explicit `ready`, `build_required`, and `build_failed`; persistent cache checksum verification; admin retry endpoint; passing Asteria import/build/rollback | Remote-host fallback matrix |
+| Automatic compile after source import | Local E2E + contract tested remote handshake | explicit `ready`, `ready_degraded`, `build_required`, and `build_failed`; persistent cache checksum verification; audit-bound remote MCP completion; passing Asteria import/build/rollback | Remote-host and Tailwind 3 qualification |
 | Abandoned install retention | Contract tested | seven-day inactive handoff cleanup, active-theme protection, idempotent WindPress backup deletion | Long-running LocalWP and restrictive-host observation |
 
 ### Agent, Security, And Developer Operations
 
 | Capability | Current level | Evidence | Remaining work |
 |---|---|---|---|
-| Project-scoped Codex setup | Local/remote E2E | generated TOML and pairing flow | Fresh-install UX testing on Windows/Linux Codex clients |
+| Project-scoped client setup | Local/remote E2E + contract tested | generated Codex/OpenCode/Claude Code/Desktop/Cursor configurations and pairing flow | Fresh-install UX and real handoff testing across all five clients |
 | Secure pairing without WordPress Application Password in config | Local/remote E2E | session manager, hashed tokens, revocation | Proxy/WAF/host matrix |
 | Site fingerprint and project identity | Local/remote E2E | handoff and session checks | Stronger warning when a project config targets a migrated domain |
 | Scoped read/preview/write/full access | Contract tested + field use | ability registry and session scopes | Per-operation approval policies for production |
@@ -164,7 +164,7 @@ This run closes the deterministic local build gate. If the compiler or cache ver
 
 ## Picostrap Design-System Contract Evidence
 
-The 0.1.31 contract suite closes the previous code-level synchronization gap:
+The design-system contract suite first stabilized in 0.1.31 and remains part of the 0.2 beta baseline:
 
 1. Preview reads the active Picostrap Customizer registry and produces deterministic current/proposed Sass manifests.
 2. Unsafe, unknown, or unregistered `SCSSvar_*` values are rejected before compilation.
