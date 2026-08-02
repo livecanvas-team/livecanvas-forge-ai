@@ -9,14 +9,25 @@ declare(strict_types=1);
  * LCFA_E2E_WP_ROOT=/path/to/wordpress php tests/e2e/theme-library-build-gate.php import asteria-search
  * LCFA_E2E_WP_ROOT=/path/to/wordpress php tests/e2e/theme-library-build-gate.php build asteria-search
  * LCFA_E2E_WP_ROOT=/path/to/wordpress php tests/e2e/theme-library-build-gate.php rollback asteria-search
+ * LCFA_E2E_MODE=1 LCFA_E2E_FAILURE_STAGE=after_media LCFA_E2E_WP_ROOT=/path/to/wordpress php tests/e2e/theme-library-build-gate.php failure asteria-search
  */
 
 $wp_root = rtrim((string) getenv('LCFA_E2E_WP_ROOT'), '/\\');
 $wp_load = $wp_root . '/wp-load.php';
+$e2e_mode = (string) getenv('LCFA_E2E_MODE') === '1';
+$failure_stage = preg_replace('/[^a-z0-9_]/', '', strtolower((string) getenv('LCFA_E2E_FAILURE_STAGE')));
+$failure_stages = ['after_media', 'after_partials', 'after_homepage', 'after_build'];
 
 if ($wp_root === '' || !is_readable($wp_load)) {
     fwrite(STDERR, "Set LCFA_E2E_WP_ROOT to a readable WordPress root.\n");
     exit(2);
+}
+
+if ($e2e_mode) {
+    define('LCFA_E2E_MODE', true);
+    if (in_array($failure_stage, $failure_stages, true)) {
+        define('LCFA_E2E_FAILURE_STAGE', $failure_stage);
+    }
 }
 
 require $wp_load;
@@ -95,6 +106,57 @@ if ($action === 'import') {
         'result'   => $result,
         'baseline' => $baseline(),
     ], !empty($result['ok']) ? 0 : 1);
+}
+
+if ($action === 'failure') {
+    if (!$e2e_mode || !in_array($failure_stage, $failure_stages, true)) {
+        $emit([
+            'ok'      => false,
+            'message' => 'Set LCFA_E2E_MODE=1 and a supported LCFA_E2E_FAILURE_STAGE.',
+            'stages'  => $failure_stages,
+        ], 2);
+    }
+
+    if (!$theme) {
+        $emit(['ok' => false, 'message' => 'Theme not found in the bundled catalog.', 'slug' => $slug], 1);
+    }
+
+    $before = $baseline();
+    $preview = $installer->preview($theme);
+    if (empty($preview['ok'])) {
+        $emit(['ok' => false, 'stage' => 'preview', 'result' => $preview], 1);
+    }
+
+    $install = $installer->install($theme);
+    if (empty($install['ok'])) {
+        $emit(['ok' => false, 'stage' => 'install', 'result' => $install], 1);
+    }
+
+    $result = $importer->import($theme, true, true);
+    $after = $baseline();
+    $automatic_rollback = is_array($result['automatic_rollback'] ?? null)
+        ? $result['automatic_rollback']
+        : [];
+    $passed = empty($result['ok'])
+        && ($result['status'] ?? '') === 'failed_rolled_back'
+        && !empty($automatic_rollback['attempted'])
+        && !empty($automatic_rollback['ok'])
+        && ($before['theme'] ?? '') === ($after['theme'] ?? '')
+        && (int) ($before['front_page'] ?? 0) === (int) ($after['front_page'] ?? 0)
+        && ($before['compiled_cache']['status'] ?? '') === ($after['compiled_cache']['status'] ?? '');
+
+    $emit([
+        'ok'            => $passed,
+        'stage'         => $failure_stage,
+        'result'        => $result,
+        'before'        => $before,
+        'after'         => $after,
+        'state_matches' => [
+            'theme'          => ($before['theme'] ?? '') === ($after['theme'] ?? ''),
+            'front_page'     => (int) ($before['front_page'] ?? 0) === (int) ($after['front_page'] ?? 0),
+            'compiled_cache' => ($before['compiled_cache']['status'] ?? '') === ($after['compiled_cache']['status'] ?? ''),
+        ],
+    ], $passed ? 0 : 1);
 }
 
 if ($action === 'build') {

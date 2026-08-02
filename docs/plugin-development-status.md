@@ -34,6 +34,7 @@ These areas have implemented runtime code and automated regression coverage:
 - Theme Library catalog, package validation, child-theme installation, starter-data import, idempotency, and import rollback.
 - Theme Library rollback now preserves the theme active before installation and backs up WindPress options, source CSS, generated CSS, sourcemap, and `theme.json` on disk with checksum verification.
 - Theme Library now prunes inactive install handoffs older than seven days and removes only their orphaned WindPress backups; the active theme handoff is never deleted automatically.
+- Theme Library failure injection is available under explicit `LCFA_E2E_MODE`; real LocalWP failures after media, partials, homepage, and build all pass automatic rollback and baseline comparison.
 - Remote Theme Library builds remain `build_required` until the paired MCP runtime stores CSS and WordPress verifies the audit ID, import checksum, active theme, and cache checksum. Tailwind 4 is fully supported; Tailwind 3 is guided degraded mode.
 - Asteria 1.0.1 now passes a real LocalWP preview/install/import/desktop/mobile/rollback run with separate LiveCanvas header/footer rendering and exact previous theme/homepage recovery.
 - Progressive admin workspaces: three-step Setup, focused Connections, four-view Abilities & Runs, and five-view Command Deck.
@@ -82,6 +83,7 @@ The current automated baseline contains:
 - Real MCP discovery from Codex and OpenCode against a clean local WordPress site.
 - Passing LocalWP Picostrap Houseflow generation, compile, targeted patch, exact rollback, and six-view visual check.
 - Passing LocalWP Picowind Asteria import, Tailwind 4 cache verification, desktop/mobile visual check, and rollback to the original Picostrap theme/homepage.
+- Passing LocalWP Theme Library failure injection at all four checkpoints, with theme, homepage, and compiled-cache state restored each time.
 - Passing GitHub Actions run `30746638733` across PHP 8.0-8.4, Node 18/20/22, Chromium on macOS/Linux/Windows, Gitleaks, and the distribution ZIP.
 
 The legacy GUI smoke script is not part of this passing baseline. It contains stale localhost assumptions and requires interactive macOS/Chrome access; current onboarding QA is performed through the controlled browser workflow instead.

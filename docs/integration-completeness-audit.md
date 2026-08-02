@@ -95,7 +95,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Import settings, media, partials, homepage, menus | Local E2E | Asteria created separate header/footer, homepage, and four media items | Multilingual fixtures |
 | Idempotent re-import | Contract tested | import key/version/checksum logic | Force-update migration rules between manifest versions |
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
-| Automatic failed-import recovery | Contract tested | optional transaction rollback reports original failure plus recovery outcome | Real failure-injection E2E on local and restrictive remote hosts |
+| Automatic failed-import recovery | Contract tested + local E2E | optional transaction rollback reports original failure plus recovery outcome; all four import checkpoints restore theme, homepage, and compiled-cache state | Restrictive remote-host failure injection |
 | Automatic compile after source import | Local E2E + contract tested remote handshake | explicit `ready`, `ready_degraded`, `build_required`, and `build_failed`; persistent cache checksum verification; audit-bound remote MCP completion; passing Asteria import/build/rollback | Remote-host and Tailwind 3 qualification |
 | Abandoned install retention | Contract tested | seven-day inactive handoff cleanup, active-theme protection, idempotent WindPress backup deletion | Long-running LocalWP and restrictive-host observation |
 
@@ -122,7 +122,8 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 
 2. **Transaction recovery**
    - Optional automatic rollback is implemented and contract tested, with separate original-error and rollback outcomes.
-   - Production evidence still requires injected mid-import failures on LocalWP and a restrictive remote host.
+   - LocalWP injections after media, partials, homepage, and build all return `failed_rolled_back` and restore the baseline.
+   - Production evidence still requires the same matrix on a restrictive remote host.
 
 3. **Versioned capability detection**
    - `stack-capabilities.v1` publishes tested ranges and returns `supported`, `degraded`, or `unsupported` with explicit missing APIs.
@@ -159,6 +160,7 @@ The 2026-08-02 LocalWP acceptance run used LiveCanvas, Picowind, WindPress 3.2.8
 5. Desktop 1440 px and mobile 390 px checks found exactly one header, main, and footer, no broken images, no console errors, and no horizontal overflow.
 6. Rollback restored `picostrap5-child-base`, front page ID 25, WindPress options, and runtime files with no errors.
 7. Baseline `main.css` remained present; imported `theme.json` and compiled cache files were absent again after rollback, and the import state changed to `rolled_back`.
+8. Controlled failures after media, partials, homepage, and build each completed automatic rollback with the original theme, front page, and compiled-cache status restored.
 
 This run closes the deterministic local build gate. If the compiler or cache verification is unavailable, the importer now returns `build_required` or `build_failed` and never reports the theme as ready.
 
