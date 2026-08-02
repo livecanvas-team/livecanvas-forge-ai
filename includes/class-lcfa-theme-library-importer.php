@@ -41,7 +41,7 @@ final class LCFA_Theme_Library_Importer {
         $imports = $this->get_imports();
         $existing_import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
         $existing_status = (string) ($existing_import['status'] ?? 'imported');
-        if (!$force && $existing_import && in_array($existing_status, ['ready', 'imported'], true) && (string) ($existing_import['import_key'] ?? '') === $import_key) {
+        if (!$force && $existing_import && in_array($existing_status, ['ready', 'ready_degraded', 'imported'], true) && (string) ($existing_import['import_key'] ?? '') === $import_key) {
             $this->delete_file($zip_path);
             return [
                 'ok'       => true,
@@ -167,6 +167,7 @@ final class LCFA_Theme_Library_Importer {
             $this->ensure_livecanvas_partial_settings($rollback, $result);
             $design_system_state = $this->import_design_system($base_dir, $manifest, $rollback, $result);
             $media_map = $this->import_media($base_dir, (string) ($manifest['media_manifest'] ?? ''), $slug, $checksum, $rollback, $result);
+            $this->maybe_inject_e2e_failure('after_media', $audit_id, $slug);
 
             $header = $this->read_content_file($base_dir, (string) ($manifest['header']['content_file'] ?? ''), $media_map);
             $footer = $this->read_content_file($base_dir, (string) ($manifest['footer']['content_file'] ?? ''), $media_map);
@@ -178,7 +179,9 @@ final class LCFA_Theme_Library_Importer {
 
             $header_id = $this->upsert_partial('header', $manifest['header'], $header, $slug, $version, $audit_id, $rollback);
             $footer_id = $this->upsert_partial('footer', $manifest['footer'], $footer, $slug, $version, $audit_id, $rollback);
+            $this->maybe_inject_e2e_failure('after_partials', $audit_id, $slug);
             $page_id = $this->upsert_homepage($manifest['homepage'], $homepage, $slug, $version, $audit_id, $rollback);
+            $this->maybe_inject_e2e_failure('after_homepage', $audit_id, $slug);
 
             $result['header_id'] = $header_id;
             $result['footer_id'] = $footer_id;
@@ -189,6 +192,7 @@ final class LCFA_Theme_Library_Importer {
             $this->set_homepage($page_id, $rollback, $result);
 
             $build = $this->finalize_build($is_picowind, $design_system_state);
+            $this->maybe_inject_e2e_failure('after_build', $audit_id, $slug);
             $result['build'] = $build;
             $result['ready'] = !empty($build['ready']);
             $result['status'] = (string) ($build['status'] ?? 'ready');
@@ -321,10 +325,82 @@ final class LCFA_Theme_Library_Importer {
         ];
     }
 
+    private function maybe_inject_e2e_failure(string $stage, string $audit_id, string $theme_slug): void {
+        if (!defined('LCFA_E2E_MODE') || LCFA_E2E_MODE !== true) {
+            return;
+        }
+
+        $requested_stage = defined('LCFA_E2E_FAILURE_STAGE') ? (string) LCFA_E2E_FAILURE_STAGE : '';
+        if (function_exists('apply_filters')) {
+            $requested_stage = (string) apply_filters(
+                'lcfa_theme_library_e2e_failure_stage',
+                $requested_stage,
+                $stage,
+                $audit_id,
+                $theme_slug
+            );
+        }
+
+        $requested_stage = sanitize_key($requested_stage);
+        if ($requested_stage !== '' && hash_equals(sanitize_key($stage), $requested_stage)) {
+            throw new RuntimeException(sprintf(
+                /* translators: %s: controlled E2E checkpoint name. */
+                __('Controlled Theme Library E2E failure after checkpoint: %s.', 'livecanvas-forge-ai'),
+                $stage
+            ));
+        }
+    }
+
     public static function get_imports(): array {
+        if (!function_exists('get_option')) {
+            return [];
+        }
+
         $imports = get_option(self::IMPORTS_OPTION, []);
 
         return is_array($imports) ? $imports : [];
+    }
+
+    public static function get_build_state_summary(): array {
+        $counts = [
+            'total'          => 0,
+            'pending'        => 0,
+            'ready'          => 0,
+            'degraded'       => 0,
+            'failed'         => 0,
+        ];
+        $pending = [];
+
+        foreach (self::get_imports() as $slug => $import) {
+            if (!is_array($import)) {
+                continue;
+            }
+
+            $counts['total']++;
+            $status = sanitize_key((string) ($import['status'] ?? ''));
+            if (in_array($status, ['build_required', 'build_failed'], true)) {
+                $counts['pending']++;
+                $pending[] = [
+                    'theme_slug' => sanitize_key((string) $slug),
+                    'status'     => $status,
+                    'audit_id'   => sanitize_key((string) ($import['audit_id'] ?? '')),
+                ];
+            } elseif ($status === 'ready') {
+                $counts['ready']++;
+            } elseif ($status === 'ready_degraded') {
+                $counts['degraded']++;
+            } elseif (str_starts_with($status, 'failed') || $status === 'rollback_failed') {
+                $counts['failed']++;
+            }
+        }
+
+        return [
+            'status'  => $counts['pending'] > 0
+                ? 'build_required'
+                : ($counts['degraded'] > 0 ? 'ready_degraded' : ($counts['total'] > 0 ? 'ready' : 'none')),
+            'counts'  => $counts,
+            'pending' => $pending,
+        ];
     }
 
     public function get_build_capability(): array {
@@ -388,6 +464,176 @@ final class LCFA_Theme_Library_Importer {
             'message'         => (string) ($build['message'] ?? ''),
             'theme_slug'      => $slug,
             'import_audit_id' => (string) ($import['audit_id'] ?? ''),
+            'build'           => $build,
+        ];
+    }
+
+    public function get_pending_build(string $slug = ''): array {
+        $slug = sanitize_key($slug);
+        $imports = self::get_imports();
+        $pending = [];
+
+        foreach ($imports as $import_slug => $import) {
+            if (!is_array($import)) {
+                continue;
+            }
+
+            $import_slug = sanitize_key((string) $import_slug);
+            if ($slug !== '' && $import_slug !== $slug) {
+                continue;
+            }
+
+            $status = sanitize_key((string) ($import['status'] ?? ''));
+            if (!in_array($status, ['build_required', 'build_failed'], true)) {
+                continue;
+            }
+
+            $pending[] = [
+                'theme_slug'              => $import_slug,
+                'theme_version'           => sanitize_text_field((string) ($import['version'] ?? '')),
+                'status'                  => $status,
+                'stylesheet'              => sanitize_key((string) ($import['stylesheet'] ?? '')),
+                'import_audit_id'         => sanitize_key((string) ($import['audit_id'] ?? '')),
+                'expected_import_checksum'=> strtolower(trim((string) ($import['checksum'] ?? ''))),
+                'build'                   => is_array($import['build'] ?? null) ? $import['build'] : [],
+                'required_scopes'         => ['write', 'cache'],
+            ];
+        }
+
+        if ($slug !== '') {
+            if (!$pending) {
+                return [
+                    'ok'      => false,
+                    'status'  => 'missing_pending_build',
+                    'message' => __('No pending Theme Library CSS build matches this theme.', 'livecanvas-forge-ai'),
+                ];
+            }
+
+            return [
+                'ok'      => true,
+                'status'  => 'build_required',
+                'pending' => $pending[0],
+            ];
+        }
+
+        return [
+            'ok'      => true,
+            'status'  => $pending ? 'build_required' : 'ready',
+            'pending' => $pending,
+            'count'   => count($pending),
+        ];
+    }
+
+    public function complete_remote_build(array $payload): array {
+        $slug = sanitize_key((string) ($payload['theme_slug'] ?? $payload['slug'] ?? ''));
+        $audit_id = sanitize_key((string) ($payload['import_audit_id'] ?? $payload['audit_id'] ?? ''));
+        $expected_import_checksum = strtolower(trim((string) ($payload['expected_import_checksum'] ?? '')));
+        $cache_sha256 = strtolower(trim((string) ($payload['cache_sha256'] ?? '')));
+        $tailwind_version = (int) ($payload['tailwind_version'] ?? 0);
+        $imports = self::get_imports();
+        $import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
+
+        if ($slug === '' || !$import) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'missing_import',
+                'message' => __('Import starter data before completing its Tailwind CSS build.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!in_array((string) ($import['status'] ?? ''), ['build_required', 'build_failed'], true)) {
+            return [
+                'ok'      => false,
+                'ready'   => (string) ($import['status'] ?? '') === 'ready',
+                'status'  => (string) ($import['status'] ?? 'invalid_import_state'),
+                'message' => __('This Theme Library import is not waiting for a remote CSS build.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $stored_audit_id = (string) ($import['audit_id'] ?? '');
+        if ($audit_id === '' || $stored_audit_id === '' || !hash_equals($stored_audit_id, $audit_id)) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'audit_mismatch',
+                'message' => __('The import audit ID does not match the pending Theme Library build.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $stored_import_checksum = strtolower(trim((string) ($import['checksum'] ?? '')));
+        if ($expected_import_checksum === '' || $stored_import_checksum === '' || !hash_equals($stored_import_checksum, $expected_import_checksum)) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'import_checksum_mismatch',
+                'message' => __('The import checksum does not match the pending Theme Library build.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $stylesheet = sanitize_key((string) ($import['stylesheet'] ?? ''));
+        if ($stylesheet === '' || !function_exists('wp_get_theme') || sanitize_key((string) wp_get_theme()->get_stylesheet()) !== $stylesheet) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'inactive_theme',
+                'message' => __('Activate the imported child theme before completing its Tailwind CSS build.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if (!preg_match('/^[a-f0-9]{64}$/', $cache_sha256)) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'invalid_cache_checksum',
+                'message' => __('A valid compiled CSS SHA-256 checksum is required.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $verification = $this->windpress_bridge->get_compiled_cache_state();
+        $verified_checksum = strtolower(trim((string) ($verification['cache']['sha256'] ?? '')));
+        if (empty($verification['ready']) || $verified_checksum === '' || !hash_equals($verified_checksum, $cache_sha256)) {
+            return [
+                'ok'           => false,
+                'ready'        => false,
+                'status'       => 'cache_checksum_mismatch',
+                'message'      => __('The stored WindPress CSS cache does not match the locally compiled checksum.', 'livecanvas-forge-ai'),
+                'verification' => $verification,
+            ];
+        }
+
+        $tailwind_version = $tailwind_version === 3 ? 3 : 4;
+        $degraded = $tailwind_version === 3;
+        $status = $degraded ? 'ready_degraded' : 'ready';
+        $build = [
+            'ready'             => !$degraded,
+            'usable'            => true,
+            'status'            => $status,
+            'support_level'     => $degraded ? 'degraded' : 'full',
+            'strategy'          => 'windpress_remote_mcp',
+            'tailwind_version'  => $tailwind_version,
+            'cache_sha256'      => $verified_checksum,
+            'verification'      => $verification,
+            'verified_at'       => current_time('mysql', true),
+            'message'           => $degraded
+                ? __('Tailwind 3 CSS was compiled and verified. This runtime remains in guided degraded mode; prefer Tailwind 4 for full beta support.', 'livecanvas-forge-ai')
+                : __('Tailwind 4 CSS was compiled, stored, and verified for this Theme Library import.', 'livecanvas-forge-ai'),
+        ];
+
+        $import['status'] = $status;
+        $import['build'] = $build;
+        $import['build_updated_at'] = current_time('mysql', true);
+        $imports[$slug] = $import;
+        update_option(self::IMPORTS_OPTION, $imports, false);
+
+        return [
+            'ok'              => true,
+            'ready'           => !$degraded,
+            'usable'          => true,
+            'status'          => $status,
+            'message'         => $build['message'],
+            'theme_slug'      => $slug,
+            'import_audit_id' => $stored_audit_id,
             'build'           => $build,
         ];
     }

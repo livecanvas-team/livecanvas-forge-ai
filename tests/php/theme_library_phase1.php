@@ -259,6 +259,15 @@ $importer_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa
 $admin_source = file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-admin.php');
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "register_rest_route('lcfa/v1', '/theme-library/import'"), 'REST API should register Theme Library import endpoint');
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "register_rest_route('lcfa/v1', '/theme-library/build'"), 'REST API should register the admin-only Theme Library build endpoint');
+lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "register_rest_route('lcfa/v1', '/theme-library/build/pending'"), 'REST API should register the protected pending remote build endpoint');
+lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "register_rest_route('lcfa/v1', '/theme-library/build/complete'"), 'REST API should register the protected verified remote build completion endpoint');
+lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, 'can_theme_library_build'), 'Remote Theme Library build routes should require their combined write and cache permission');
+$build_permission_start = is_string($rest_source) ? strpos($rest_source, 'public function can_theme_library_build') : false;
+$build_permission_end = $build_permission_start !== false ? strpos($rest_source, 'public function can_seo', $build_permission_start) : false;
+$build_permission_source = $build_permission_start !== false && $build_permission_end !== false
+    ? substr($rest_source, $build_permission_start, $build_permission_end - $build_permission_start)
+    : '';
+lcfa_theme_assert_true($build_permission_source !== '' && !str_contains($build_permission_source, 'current_user_can') && !str_contains($build_permission_source, 'has_valid_mcp_token'), 'Remote Theme Library build completion should require a scoped paired session instead of an administrator cookie or legacy MCP token');
 lcfa_theme_assert_true(is_string($rest_source) && str_contains($rest_source, "'permission_callback' => [\$this, 'can_manage']"), 'Theme Library REST endpoints should use admin-only can_manage permission');
 lcfa_theme_assert_true(is_string($ability_source) && !str_contains($ability_source, 'theme-library'), 'Theme Library endpoints should not be MCP-public abilities in v1');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, "'status'     => 'failed'"), 'failed Theme Library imports should be tracked for rollback visibility');

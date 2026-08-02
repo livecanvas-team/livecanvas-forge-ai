@@ -888,6 +888,67 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => windpressCompiler.buildCache(argumentsMap)
     },
     {
+      name: 'build_theme_library_css',
+      description: 'Complete the pending CSS build for an admin-imported Picowind Theme Library item. Reads the bound import audit/checksum, compiles Tailwind locally, stores the CSS through WindPress, then verifies the active theme and cache checksum before WordPress marks the import ready. Requires write and cache session scopes.',
+      inputSchema: {
+        type: 'object',
+        required: ['theme_slug'],
+        properties: {
+          theme_slug: { type: 'string' },
+          provider_ids: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          kind: { type: 'string' },
+          source_map: { type: 'boolean' },
+          max_batches: { type: 'integer' }
+        }
+      },
+      invoke: async (argumentsMap = {}) => {
+        const themeSlug = String(argumentsMap.theme_slug || '').trim()
+        const pendingResponse = await client.getPendingThemeLibraryBuild(themeSlug)
+        const pendingResult = pendingResponse.result || pendingResponse
+
+        if (!pendingResult || pendingResult.ok === false || !pendingResult.pending) {
+          return pendingResponse
+        }
+
+        const pending = pendingResult.pending
+        const build = await windpressCompiler.buildCache({
+          provider_ids: argumentsMap.provider_ids,
+          kind: argumentsMap.kind || 'full',
+          store: true,
+          source_map: argumentsMap.source_map === true,
+          max_batches: argumentsMap.max_batches
+        })
+        const verification = build && build.stored && build.stored.verification
+          ? build.stored.verification
+          : null
+        const cacheSha256 = verification && verification.cache
+          ? String(verification.cache.sha256 || '')
+          : ''
+
+        if (!build || build.ok === false || !verification || verification.ready !== true || !cacheSha256) {
+          return {
+            ok: false,
+            ready: false,
+            status: 'build_failed',
+            message: 'Tailwind compiled, but WordPress did not return a verifiable persistent WindPress cache checksum.',
+            theme_slug: themeSlug,
+            build
+          }
+        }
+
+        return client.completeThemeLibraryBuild({
+          theme_slug: themeSlug,
+          import_audit_id: pending.import_audit_id,
+          expected_import_checksum: pending.expected_import_checksum,
+          cache_sha256: cacheSha256,
+          tailwind_version: Number(build.tailwind_version || 4)
+        })
+      }
+    },
+    {
       name: 'get_theme_roots',
       description: 'Resolve the local WordPress and active theme roots available to the MCP.',
       inputSchema: {

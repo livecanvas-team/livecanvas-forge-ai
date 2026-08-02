@@ -227,6 +227,58 @@ async function run() {
   const readiness = await registry.invoke('visual_check_status', { probe_launch: false })
   assert.equal(readiness.status, 'ready', 'visual_check_status should return the runtime readiness payload')
 
+  const themeBuildCalls = []
+  const themeBuildClient = {
+    async getPendingThemeLibraryBuild(themeSlug) {
+      themeBuildCalls.push(['pending', themeSlug])
+      return {
+        result: {
+          ok: true,
+          pending: {
+            theme_slug: themeSlug,
+            import_audit_id: 'theme-import-sample-abc123',
+            expected_import_checksum: 'b'.repeat(64)
+          }
+        }
+      }
+    },
+    async completeThemeLibraryBuild(payload) {
+      themeBuildCalls.push(['complete', payload])
+      return { result: { ok: true, ready: true, status: 'ready' } }
+    }
+  }
+  const themeBuildCompiler = {
+    async buildCache(options) {
+      themeBuildCalls.push(['compile', options])
+      return {
+        ok: true,
+        tailwind_version: 4,
+        stored: {
+          verification: {
+            ready: true,
+            cache: { sha256: 'a'.repeat(64) }
+          }
+        }
+      }
+    }
+  }
+  const themeBuildRegistry = createToolRegistry(
+    themeBuildClient,
+    createNoopThemeFiles(),
+    themeBuildCompiler,
+    createNoopPicostrapCompiler()
+  )
+  const themeBuildTool = themeBuildRegistry.list().find((tool) => tool.name === 'build_theme_library_css')
+  assert.ok(themeBuildTool, 'build_theme_library_css should be registered')
+  assert.ok(themeBuildTool.inputSchema.required.includes('theme_slug'), 'build_theme_library_css should require the imported theme slug')
+  assert.equal(themeBuildTool.annotations.readOnlyHint, false, 'build_theme_library_css should be declared as a write tool')
+
+  const themeBuildResult = await themeBuildRegistry.invoke('build_theme_library_css', { theme_slug: 'sample-theme' })
+  assert.equal(themeBuildResult.result.status, 'ready', 'build_theme_library_css should return the verified WordPress completion result')
+  assert.deepEqual(themeBuildCalls.map((call) => call[0]), ['pending', 'compile', 'complete'], 'Theme Library CSS build should bind, compile, then complete in order')
+  assert.equal(themeBuildCalls[2][1].import_audit_id, 'theme-import-sample-abc123', 'Theme Library completion should reuse the server-issued audit ID')
+  assert.equal(themeBuildCalls[2][1].cache_sha256, 'a'.repeat(64), 'Theme Library completion should submit the verified cache checksum')
+
   const assetDiscovery = tools.find((tool) => tool.name === 'asset_discovery')
   assert.ok(assetDiscovery, 'asset_discovery should be registered')
   assert.ok(assetDiscovery.inputSchema.required.includes('directory'), 'asset_discovery should require a source directory')

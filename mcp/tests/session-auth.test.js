@@ -100,6 +100,7 @@ async function main() {
     const snapshotRequest = requests.find((request) => request.url === '/wp-json/lcfa/v1/snapshot')
     assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-session'], 'session_secret', 'protected requests should use the AI Bridge session header')
     assert.ok(!snapshotRequest.headers['x-lcfa-mcp-token'], 'protected requests should not send a legacy MCP token')
+    assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-package-version'], '0.2.0-beta.1', 'protected requests should report the running MCP package version')
 
     approved = false
     const openCodeClient = new WPClient({

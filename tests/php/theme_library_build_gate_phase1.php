@@ -10,9 +10,16 @@ $GLOBALS['lcfa_build_gate_options'] = [];
 
 function __(string $text, string $domain = ''): string { return $text; }
 function sanitize_key(string $value): string { return strtolower((string) preg_replace('/[^a-zA-Z0-9_-]/', '', $value)); }
+function sanitize_text_field(string $value): string { return trim($value); }
 function current_time(string $type, bool $gmt = false): string { return '2026-08-02 10:00:00'; }
 function get_option(string $name, $default = false) { return $GLOBALS['lcfa_build_gate_options'][$name] ?? $default; }
 function update_option(string $name, $value, bool $autoload = false): bool { $GLOBALS['lcfa_build_gate_options'][$name] = $value; return true; }
+
+final class LCFA_Build_Gate_Theme {
+    public function get_stylesheet(): string { return 'sample-theme'; }
+}
+
+function wp_get_theme(): LCFA_Build_Gate_Theme { return new LCFA_Build_Gate_Theme(); }
 
 final class LCFA_Theme_Library_Installer {}
 final class LCFA_Theme_Library_Validator {}
@@ -57,9 +64,12 @@ function lcfa_build_gate_seed(string $status = 'build_required'): void {
     $GLOBALS['lcfa_build_gate_options']['lcfa_theme_library_imports'] = [
         'sample-theme' => [
             'slug' => 'sample-theme',
+            'version' => '1.0.0',
             'status' => $status,
             'audit_id' => 'theme-import-sample-theme-abc123',
             'import_key' => 'sample-theme:1.0.0:checksum',
+            'checksum' => str_repeat('b', 64),
+            'stylesheet' => 'sample-theme',
         ],
     ];
 }
@@ -124,5 +134,47 @@ $stored = $GLOBALS['lcfa_build_gate_options']['lcfa_theme_library_imports']['sam
 lcfa_build_gate_assert(($stored['status'] ?? '') === 'ready', 'Ready build state should be persisted.');
 lcfa_build_gate_assert((int) ($stored['build']['candidate_count'] ?? 0) === 37, 'Build metadata should retain candidate count without storing the CSS payload.');
 lcfa_build_gate_assert(($stored['build']['verification']['cache']['sha256'] ?? '') === str_repeat('a', 64), 'Build metadata should retain cache checksum verification.');
+
+lcfa_build_gate_seed();
+$pending = $importer->get_pending_build('sample-theme');
+lcfa_build_gate_assert(!empty($pending['ok']) && ($pending['pending']['import_audit_id'] ?? '') === 'theme-import-sample-theme-abc123', 'Pending remote build should expose the bound import audit ID.');
+lcfa_build_gate_assert(($pending['pending']['expected_import_checksum'] ?? '') === str_repeat('b', 64), 'Pending remote build should expose the expected import checksum.');
+
+$audit_mismatch = $importer->complete_remote_build([
+    'theme_slug' => 'sample-theme',
+    'import_audit_id' => 'wrong-audit',
+    'expected_import_checksum' => str_repeat('b', 64),
+    'cache_sha256' => str_repeat('a', 64),
+    'tailwind_version' => 4,
+]);
+lcfa_build_gate_assert(empty($audit_mismatch['ok']) && ($audit_mismatch['status'] ?? '') === 'audit_mismatch', 'Remote completion must reject a mismatched audit ID.');
+
+$checksum_mismatch = $importer->complete_remote_build([
+    'theme_slug' => 'sample-theme',
+    'import_audit_id' => 'theme-import-sample-theme-abc123',
+    'expected_import_checksum' => str_repeat('c', 64),
+    'cache_sha256' => str_repeat('a', 64),
+    'tailwind_version' => 4,
+]);
+lcfa_build_gate_assert(empty($checksum_mismatch['ok']) && ($checksum_mismatch['status'] ?? '') === 'import_checksum_mismatch', 'Remote completion must reject a mismatched import checksum.');
+
+$remote_ready = $importer->complete_remote_build([
+    'theme_slug' => 'sample-theme',
+    'import_audit_id' => 'theme-import-sample-theme-abc123',
+    'expected_import_checksum' => str_repeat('b', 64),
+    'cache_sha256' => str_repeat('a', 64),
+    'tailwind_version' => 4,
+]);
+lcfa_build_gate_assert(!empty($remote_ready['ok']) && !empty($remote_ready['ready']) && ($remote_ready['status'] ?? '') === 'ready', 'Verified Tailwind 4 remote build should mark the import ready.');
+
+lcfa_build_gate_seed();
+$remote_degraded = $importer->complete_remote_build([
+    'theme_slug' => 'sample-theme',
+    'import_audit_id' => 'theme-import-sample-theme-abc123',
+    'expected_import_checksum' => str_repeat('b', 64),
+    'cache_sha256' => str_repeat('a', 64),
+    'tailwind_version' => 3,
+]);
+lcfa_build_gate_assert(!empty($remote_degraded['ok']) && empty($remote_degraded['ready']) && !empty($remote_degraded['usable']) && ($remote_degraded['status'] ?? '') === 'ready_degraded', 'Verified Tailwind 3 remote build should remain explicitly degraded.');
 
 echo "PASS\n";

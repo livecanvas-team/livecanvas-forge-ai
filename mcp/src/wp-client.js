@@ -1,4 +1,5 @@
 const { SessionAuth } = require('./session-auth')
+const MCP_PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
 
 class WPClient {
   constructor(config) {
@@ -430,6 +431,18 @@ class WPClient {
     })
   }
 
+  async getPendingThemeLibraryBuild(themeSlug) {
+    return this.request('GET', 'theme-library/build/pending', {
+      query: { theme_slug: themeSlug }
+    })
+  }
+
+  async completeThemeLibraryBuild(payload = {}) {
+    return this.request('POST', 'theme-library/build/complete', {
+      body: payload
+    })
+  }
+
   async request(method, path, options = {}) {
     const auth = await this.sessionAuth.resolve()
     if (!auth.ok) {
@@ -438,7 +451,8 @@ class WPClient {
 
     const url = new URL(path.replace(/^\//, ''), this.restBase)
     const headers = {
-      Accept: 'application/json'
+      Accept: 'application/json',
+      'X-LCFA-MCP-Package-Version': MCP_PACKAGE_VERSION
     }
 
     if (auth.type === 'legacy_mcp_token') {

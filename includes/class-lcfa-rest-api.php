@@ -318,6 +318,18 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_manage'],
         ]);
 
+        register_rest_route('lcfa/v1', '/theme-library/build/pending', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_pending_theme_library_build'],
+            'permission_callback' => [$this, 'can_theme_library_build'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/theme-library/build/complete', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'complete_theme_library_build'],
+            'permission_callback' => [$this, 'can_theme_library_build'],
+        ]);
+
         register_rest_route('lcfa/v1', '/theme-library/rollback', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'rollback_theme_library_import'],
@@ -2614,6 +2626,22 @@ final class LCFA_Rest_Api {
         ], !empty($result['ok']) ? 200 : 400);
     }
 
+    public function get_pending_theme_library_build(WP_REST_Request $request): WP_REST_Response {
+        $result = $this->theme_library_importer->get_pending_build((string) $request->get_param('theme_slug'));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 404);
+    }
+
+    public function complete_theme_library_build(WP_REST_Request $request): WP_REST_Response {
+        $result = $this->theme_library_importer->complete_remote_build($this->get_request_payload($request));
+
+        return new WP_REST_Response([
+            'result' => $result,
+        ], !empty($result['ok']) ? 200 : 400);
+    }
+
     public function rollback_theme_library_import(WP_REST_Request $request): WP_REST_Response {
         $payload = $this->get_request_payload($request);
         $result = $this->theme_library_rollback->rollback(
@@ -2662,6 +2690,17 @@ final class LCFA_Rest_Api {
         return current_user_can('manage_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'cache');
     }
 
+    public function can_theme_library_build(?WP_REST_Request $request = null): bool {
+        if (!$request instanceof WP_REST_Request || !class_exists('LCFA_MCP_Session_Manager', false)) {
+            return false;
+        }
+
+        $session = LCFA_MCP_Session_Manager::get_session_from_request($request, 'write');
+        $scopes = is_array($session) ? array_map('sanitize_key', (array) ($session['scopes'] ?? [])) : [];
+
+        return in_array('cache', $scopes, true);
+    }
+
     public function can_seo(?WP_REST_Request $request = null): bool {
         return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'seo');
     }
@@ -2706,6 +2745,7 @@ final class LCFA_Rest_Api {
             $framework = sanitize_key((string) $snapshot['detected_framework']);
         }
 
+        $stack_capabilities = is_array($snapshot['stack_capabilities'] ?? null) ? $snapshot['stack_capabilities'] : [];
         $summary = [
             'abilities'                => (int) ($ability['total'] ?? 0),
             'mcp_public'               => (int) ($ability['mcp_public_total'] ?? 0),
@@ -2718,6 +2758,7 @@ final class LCFA_Rest_Api {
             'mcp_adapter_ready'        => !empty($adapter['available']),
             'ai_text_ready'            => !empty($ai_client['text_generation_supported']),
             'mcp_write_master_enabled' => $master_enabled,
+            'stack_capabilities'       => $stack_capabilities,
         ];
         $alerts = $this->build_studio_alerts($summary, $public_write, $allowlist, $master_enabled, $run_errors);
         $mcp_write_policy = [
@@ -2734,7 +2775,7 @@ final class LCFA_Rest_Api {
         $current_session = class_exists('LCFA_MCP_Session_Manager', false)
             ? LCFA_MCP_Session_Manager::get_session_from_request($request, 'read')
             : false;
-        $connection_handoff = $this->build_studio_connection_handoff($connections, $summary, $adapter, is_array($current_session) ? $current_session : []);
+        $connection_handoff = $this->build_studio_connection_handoff($connections, $summary, $adapter, is_array($current_session) ? $current_session : [], $request);
         $agent_smoke_tests = $this->build_studio_agent_smoke_tests($summary, $ability_manifest, $mcp_write_policy);
         $operator_briefing = $this->build_studio_operator_briefing($summary, $alerts, $ability_manifest, $mcp_write_policy, $run_analysis, $connection_handoff);
         $agent_runbook = $this->build_studio_agent_runbook($summary, $operator_briefing, $agent_smoke_tests, $ability_manifest, $mcp_write_policy, $connection_handoff);
@@ -2999,7 +3040,7 @@ final class LCFA_Rest_Api {
         ];
     }
 
-    private function build_studio_connection_handoff(array $connections, array $summary, array $adapter, array $session = []): array {
+    private function build_studio_connection_handoff(array $connections, array $summary, array $adapter, array $session = [], ?WP_REST_Request $request = null): array {
         $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
         if ($client === 'claude-code') {
             $client = 'claude';
@@ -3024,8 +3065,8 @@ final class LCFA_Rest_Api {
         }
 
         $connection_strategy = sanitize_key((string) ($connections['connection_strategy'] ?? ''));
-        $is_remote_adapter = $client === 'codex' && $mode === 'remote' && !empty($adapter['available']);
-        $is_ai_bridge_session = $client === 'codex' && $mode === 'remote' && $connection_strategy === 'ai-bridge-session';
+        $is_remote_adapter = $client !== '' && $mode === 'remote' && !empty($adapter['available']);
+        $is_ai_bridge_session = $client !== '' && $mode === 'remote' && $connection_strategy === 'ai-bridge-session';
         $oauth_identity = class_exists('LCFA_OAuth_Server', false)
             ? LCFA_OAuth_Server::get_current_identity()
             : [];
@@ -3072,6 +3113,15 @@ final class LCFA_Rest_Api {
         ];
         $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
         $custom_server = is_array($adapter['custom_server'] ?? null) ? $adapter['custom_server'] : [];
+        $stack_capabilities = is_array($summary['stack_capabilities'] ?? null) ? $summary['stack_capabilities'] : [];
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.1';
+        $package_detected = $request instanceof WP_REST_Request && method_exists($request, 'get_header')
+            ? sanitize_text_field((string) $request->get_header('x-lcfa-mcp-package-version'))
+            : '';
+        $package_matches = $package_detected === '' ? null : hash_equals($package_expected, $package_detected);
+        $theme_library_build_state = class_exists('LCFA_Theme_Library_Importer', false) && method_exists('LCFA_Theme_Library_Importer', 'get_build_state_summary')
+            ? LCFA_Theme_Library_Importer::get_build_state_summary()
+            : ['status' => 'unavailable', 'counts' => [], 'pending' => []];
 
         return [
             'schema_version' => 'connection-handoff.v1',
@@ -3084,6 +3134,11 @@ final class LCFA_Rest_Api {
             'last_verified_at' => sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? '')),
             'transport'      => $transport,
             'auth_method'    => $auth_method,
+            'wordpress_mode' => sanitize_key((string) ($stack_capabilities['wordpress_mode'] ?? 'legacy_rest')),
+            'mcp_package_expected' => $package_expected,
+            'mcp_package_detected' => $package_detected,
+            'package_version_matches' => $package_matches,
+            'theme_library_build_state' => $theme_library_build_state,
             'session_id'     => sanitize_key((string) ($session['session_id'] ?? ($oauth_identity['access_token_id'] ?? ''))),
             'client_id'      => sanitize_text_field((string) ($oauth_identity['client_id'] ?? '')),
             'project_label'  => sanitize_text_field((string) ($session['project_label'] ?? ($connections['remote_project_label'] ?? ''))),

@@ -318,9 +318,10 @@ final class LCFA_WindPress_Bridge {
         }
 
         return [
-            'ok'      => true,
-            'message' => __('WindPress CSS cache stored.', 'livecanvas-forge-ai'),
-            'cache'   => $this->get_cache_summary(),
+            'ok'           => true,
+            'message'      => __('WindPress CSS cache stored.', 'livecanvas-forge-ai'),
+            'cache'        => $this->get_cache_summary(),
+            'verification' => $this->get_compiled_cache_state(),
         ];
     }
 
