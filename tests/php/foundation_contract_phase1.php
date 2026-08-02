@@ -123,6 +123,14 @@ $GLOBALS['lcfa_test_remote_get_map'] = [];
 $GLOBALS['lcfa_test_force_empty_edit_link'] = false;
 $GLOBALS['lcfa_test_filters'] = [];
 $GLOBALS['lcfa_test_transients'] = [];
+$GLOBALS['lcfa_test_partial_type_terms'] = [
+    'legacy-header' => ['term_id' => 1, 'name' => 'Legacy Header', 'slug' => 'legacy-header', 'parent' => 0],
+    'legacy-footer' => ['term_id' => 2, 'name' => 'Legacy Footer', 'slug' => 'legacy-footer', 'parent' => 0],
+    'navigation' => ['term_id' => 3, 'name' => 'Navigation', 'slug' => 'navigation', 'parent' => 0],
+    'site-footer' => ['term_id' => 4, 'name' => 'Site Footer', 'slug' => 'site-footer', 'parent' => 0],
+    'utility' => ['term_id' => 5, 'name' => 'Utility', 'slug' => 'utility', 'parent' => 0],
+];
+$GLOBALS['lcfa_test_partial_type_assignments'] = [];
 
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'], 0777, true);
 @mkdir($GLOBALS['lcfa_test_theme_root'] . '/' . $GLOBALS['lcfa_test_stylesheet'] . '/page-templates', 0777, true);
@@ -496,6 +504,83 @@ function get_post_meta(int $post_id, string $meta_key = '', bool $single = false
 
     $value = $all[$meta_key] ?? '';
     return $single ? $value : [$value];
+}
+
+function taxonomy_exists(string $taxonomy): bool {
+    return $taxonomy === 'lc_partial_type';
+}
+
+function get_terms(array $args = []) {
+    if (($args['taxonomy'] ?? '') !== 'lc_partial_type') {
+        return [];
+    }
+
+    return array_values(array_map(static function (array $term): object {
+        return (object) $term;
+    }, $GLOBALS['lcfa_test_partial_type_terms']));
+}
+
+function wp_get_post_terms(int $post_id, string $taxonomy, array $args = []) {
+    if ($taxonomy !== 'lc_partial_type') {
+        return [];
+    }
+
+    $slugs = array_values((array) ($GLOBALS['lcfa_test_partial_type_assignments'][$post_id] ?? []));
+    if (($args['fields'] ?? '') === 'slugs') {
+        return $slugs;
+    }
+
+    $terms = [];
+    foreach ($slugs as $slug) {
+        if (isset($GLOBALS['lcfa_test_partial_type_terms'][$slug])) {
+            $terms[] = (object) $GLOBALS['lcfa_test_partial_type_terms'][$slug];
+        }
+    }
+
+    return $terms;
+}
+
+function wp_set_object_terms(int $post_id, array $terms, string $taxonomy, bool $append = false) {
+    if ($taxonomy !== 'lc_partial_type') {
+        return new WP_Error('invalid_taxonomy', 'Invalid taxonomy');
+    }
+
+    $slugs = $append ? array_values((array) ($GLOBALS['lcfa_test_partial_type_assignments'][$post_id] ?? [])) : [];
+    $term_ids = [];
+    foreach ($terms as $term) {
+        $slug = '';
+        if (is_int($term)) {
+            foreach ($GLOBALS['lcfa_test_partial_type_terms'] as $candidate_slug => $candidate) {
+                if ((int) ($candidate['term_id'] ?? 0) === $term) {
+                    $slug = $candidate_slug;
+                    break;
+                }
+            }
+        } else {
+            $slug = sanitize_title((string) $term);
+        }
+
+        if ($slug === '') {
+            continue;
+        }
+
+        if (!isset($GLOBALS['lcfa_test_partial_type_terms'][$slug])) {
+            $next_id = count($GLOBALS['lcfa_test_partial_type_terms']) + 1;
+            $GLOBALS['lcfa_test_partial_type_terms'][$slug] = [
+                'term_id' => $next_id,
+                'name' => ucwords(str_replace('-', ' ', $slug)),
+                'slug' => $slug,
+                'parent' => 0,
+            ];
+        }
+
+        $slugs[] = $slug;
+        $term_ids[] = (int) $GLOBALS['lcfa_test_partial_type_terms'][$slug]['term_id'];
+    }
+
+    $GLOBALS['lcfa_test_partial_type_assignments'][$post_id] = array_values(array_unique($slugs));
+
+    return $term_ids;
 }
 
 function get_posts(array $args = []): array {
@@ -1204,6 +1289,7 @@ $GLOBALS['lcfa_test_posts'][43] = new WP_Post([
     'post_content' => '<header>Header partial</header>',
 ]);
 $GLOBALS['lcfa_test_post_meta'][43]['is_header'] = '1';
+$GLOBALS['lcfa_test_partial_type_assignments'][43] = ['legacy-header'];
 $GLOBALS['lcfa_test_posts'][44] = new WP_Post([
     'ID'           => 44,
     'post_title'   => 'Footer Partial',
@@ -1213,6 +1299,15 @@ $GLOBALS['lcfa_test_posts'][44] = new WP_Post([
     'post_content' => '<footer>Footer partial</footer>',
 ]);
 $GLOBALS['lcfa_test_post_meta'][44]['is_footer'] = '1';
+$GLOBALS['lcfa_test_partial_type_assignments'][44] = ['legacy-footer'];
+$GLOBALS['lcfa_test_posts'][46] = new WP_Post([
+    'ID'           => 46,
+    'post_title'   => 'Utility Partial',
+    'post_name'    => 'utility-partial',
+    'post_type'    => 'lc_partial',
+    'post_status'  => 'publish',
+    'post_content' => '<div>Utility partial</div>',
+]);
 $GLOBALS['lcfa_test_posts'][45] = new WP_Post([
     'ID'           => 45,
     'post_title'   => 'Single Service Template',
@@ -1284,12 +1379,15 @@ $global_shell_preview = $command_deck->execute([
     'variant'     => '1',
     'header_html' => '<header><nav>Preview Header</nav></header>',
     'footer_html' => '<footer>Preview Footer</footer>',
+    'header_partial_types' => ['navigation'],
+    'footer_partial_types' => ['site-footer'],
     'dry_run'     => true,
 ]);
 
 lcfa_assert_true($global_shell_preview['ok'] === true, 'global_shell_apply should preview header/footer updates');
 lcfa_assert_same('global_shell', (string) ($global_shell_preview['target_type'] ?? ''), 'global_shell_apply should expose a global shell target');
 lcfa_assert_same('update', (string) ($global_shell_preview['data']['parts']['header']['operation'] ?? ''), 'global_shell preview should target the existing header partial when present');
+lcfa_assert_same('legacy-header', (string) ($global_shell_preview['data']['parts']['header']['previous_partial_types'][0] ?? ''), 'global shell preview should expose existing lc_partial_type terms for rollback review');
 lcfa_assert_same('<header>Header partial</header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell preview must not mutate the existing header partial');
 
 $blocked_global_shell = $command_deck->execute([
@@ -1309,11 +1407,24 @@ $global_shell_apply = $command_deck->execute([
     'variant'     => '1',
     'header_html' => '<header><nav>Applied Header</nav></header>',
     'footer_html' => '<footer>Applied Footer</footer>',
+    'header_partial_types' => ['navigation'],
+    'footer_partial_types' => ['site-footer'],
 ]);
 
 lcfa_assert_true($global_shell_apply['ok'] === true, 'global_shell_apply should apply header/footer updates');
 lcfa_assert_same('<header><nav>Applied Header</nav></header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell_apply should update the existing header partial');
 lcfa_assert_same('<footer>Applied Footer</footer>', (string) $GLOBALS['lcfa_test_posts'][44]->post_content, 'global_shell_apply should update the existing footer partial');
+lcfa_assert_same(['navigation'], $GLOBALS['lcfa_test_partial_type_assignments'][43] ?? [], 'global shell apply should persist header lc_partial_type terms');
+lcfa_assert_same(['site-footer'], $GLOBALS['lcfa_test_partial_type_assignments'][44] ?? [], 'global shell apply should persist footer lc_partial_type terms');
+
+$generic_partial_update = $command_deck->execute([
+    'action' => 'update_partial',
+    'target_id' => 46,
+    'content' => '<div>Updated utility partial</div>',
+    'partial_types' => ['utility'],
+]);
+lcfa_assert_true($generic_partial_update['ok'] === true, 'update_partial should accept lc_partial_type terms');
+lcfa_assert_same(['utility'], $GLOBALS['lcfa_test_partial_type_assignments'][46] ?? [], 'update_partial should persist lc_partial_type terms');
 
 $global_shell_content_preview = $command_deck->execute([
     'action'  => 'global_shell_apply',
@@ -1380,6 +1491,8 @@ $metadata_dynamic_template = $metadata_inventory['dynamic_templates'][0] ?? [];
 
 lcfa_assert_same('header', (string) ($metadata_header['partial_type'] ?? ''), 'inventory should classify header partials for variant-aware quick actions');
 lcfa_assert_same('1', (string) ($metadata_header['variant'] ?? ''), 'inventory should expose the stored header partial variant');
+lcfa_assert_same('navigation', (string) ($metadata_header['partial_type_slugs'][0] ?? ''), 'inventory should expose normalized lc_partial_type terms');
+lcfa_assert_true(count((array) ($metadata_inventory['partial_types'] ?? [])) >= 5, 'inventory should expose the available lc_partial_type taxonomy choices');
 lcfa_assert_same('taxonomy', (string) ($metadata_dynamic_template['template_assignment']['target'] ?? ''), 'inventory should expose stored dynamic template assignment metadata');
 lcfa_assert_same('category', (string) ($metadata_dynamic_template['template_assignment']['taxonomy'] ?? ''), 'inventory should expose stored dynamic template assignment taxonomy metadata');
 lcfa_assert_same('is_archive_for_tax_category__news', (string) ($metadata_dynamic_template['native_template_keys'][0] ?? ''), 'inventory should expose native LiveCanvas template assignment keys');

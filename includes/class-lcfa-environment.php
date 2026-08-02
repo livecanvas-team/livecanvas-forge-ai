@@ -16,6 +16,10 @@ final class LCFA_Environment {
         }
 
         $current_theme = wp_get_theme();
+        $parent_theme = $current_theme->parent();
+        $framework = $this->detect_framework_family();
+        $livecanvas_plugin_file = $this->find_plugin_file_by_slug('livecanvas');
+        $windpress_plugin_file = $this->find_plugin_file_by_slug('windpress');
 
         $mcp_adapter_status = $this->get_mcp_adapter_status();
         $oauth_direct_status = class_exists('LCFA_OAuth_Server', false)
@@ -27,20 +31,29 @@ final class LCFA_Environment {
                 'message' => __('The bundled OAuth runtime is unavailable.', 'livecanvas-forge-ai'),
             ];
 
-        $this->snapshot_cache = [
-            'livecanvas_installed'    => $this->is_plugin_installed('livecanvas'),
+        $snapshot = [
+            'wordpress_version'       => (string) ($GLOBALS['wp_version'] ?? (function_exists('get_bloginfo') ? get_bloginfo('version') : '')),
+            'livecanvas_installed'    => $livecanvas_plugin_file !== null,
             'livecanvas_active'       => $this->is_livecanvas_active(),
             'livecanvas_license_active' => $this->is_livecanvas_license_active(),
-            'livecanvas_plugin_file'  => $this->find_plugin_file_by_slug('livecanvas'),
+            'livecanvas_plugin_file'  => $livecanvas_plugin_file,
+            'livecanvas_version'      => $this->get_plugin_version('livecanvas'),
             'livecanvas_menu_slug'    => $this->get_livecanvas_menu_slug(),
             'current_theme_name'      => $current_theme->get('Name'),
             'current_theme_stylesheet'=> $current_theme->get_stylesheet(),
             'current_theme_template'  => $current_theme->get_template(),
-            'detected_framework'      => $this->detect_framework_family(),
+            'current_theme_version'   => (string) $current_theme->get('Version'),
+            'current_theme_parent_version' => $parent_theme instanceof WP_Theme ? (string) $parent_theme->get('Version') : '',
+            'detected_framework'      => $framework,
+            'framework_version'       => $parent_theme instanceof WP_Theme && in_array($framework, ['picostrap', 'picowind'], true)
+                ? (string) $parent_theme->get('Version')
+                : (string) $current_theme->get('Version'),
             'framework_slug'          => $this->get_livecanvas_editor_config_slug(),
             'site_mode'               => $this->detect_site_mode(),
-            'windpress_installed'     => $this->is_plugin_installed('windpress'),
+            'windpress_installed'     => $windpress_plugin_file !== null,
             'windpress_active'        => $this->is_windpress_active(),
+            'windpress_plugin_file'   => $windpress_plugin_file,
+            'windpress_version'       => $this->get_plugin_version('windpress'),
             'tangible_available'      => function_exists('tangible_template'),
             'acf_active'              => function_exists('get_field') || class_exists('ACF'),
             'woocommerce_active'      => class_exists('WooCommerce'),
@@ -52,6 +65,12 @@ final class LCFA_Environment {
                 ? (new LCFA_GitHub_Updater($this))->get_update_state()
                 : [],
         ];
+
+        if (class_exists('LCFA_Stack_Capabilities', false)) {
+            $snapshot['stack_capabilities'] = (new LCFA_Stack_Capabilities())->evaluate($snapshot);
+        }
+
+        $this->snapshot_cache = $snapshot;
 
         return $this->snapshot_cache;
     }
@@ -138,6 +157,17 @@ final class LCFA_Environment {
 
     public function is_plugin_installed(string $slug): bool {
         return (bool) $this->find_plugin_file_by_slug($slug);
+    }
+
+    public function get_plugin_version(string $slug): string {
+        $plugin_file = $this->find_plugin_file_by_slug($slug);
+        if (!$plugin_file) {
+            return '';
+        }
+
+        $plugins = $this->get_plugins_index();
+
+        return (string) ($plugins[$plugin_file]['Version'] ?? '');
     }
 
     public function find_plugin_file_by_slug(string $slug): ?string {

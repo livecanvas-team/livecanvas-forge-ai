@@ -9,15 +9,17 @@ final class LCFA_Theme_Library_Importer {
     private LCFA_Theme_Library_Validator $validator;
     private LCFA_WindPress_Bridge $windpress_bridge;
     private ?LCFA_Design_System_Build_Gateway $build_gateway;
+    private ?LCFA_Theme_Library_Rollback $rollback_service;
 
-    public function __construct(LCFA_Theme_Library_Installer $installer, LCFA_Theme_Library_Validator $validator, LCFA_WindPress_Bridge $windpress_bridge, ?LCFA_Design_System_Build_Gateway $build_gateway = null) {
+    public function __construct(LCFA_Theme_Library_Installer $installer, LCFA_Theme_Library_Validator $validator, LCFA_WindPress_Bridge $windpress_bridge, ?LCFA_Design_System_Build_Gateway $build_gateway = null, ?LCFA_Theme_Library_Rollback $rollback_service = null) {
         $this->installer = $installer;
         $this->validator = $validator;
         $this->windpress_bridge = $windpress_bridge;
         $this->build_gateway = $build_gateway;
+        $this->rollback_service = $rollback_service;
     }
 
-    public function import(array $theme, bool $force = false): array {
+    public function import(array $theme, bool $force = false, ?bool $auto_rollback = null): array {
         $download = $this->installer->download_theme_zip($theme);
         if (empty($download['ok'])) {
             return $download;
@@ -126,6 +128,12 @@ final class LCFA_Theme_Library_Importer {
             'steps'           => [],
             'warnings'        => [],
         ];
+        $auto_rollback = $auto_rollback ?? (bool) apply_filters(
+            'lcfa_theme_library_auto_rollback',
+            true,
+            $theme,
+            $manifest
+        );
 
         try {
             if ($is_picowind && empty($rollback['windpress_runtime']['available'])) {
@@ -225,12 +233,7 @@ final class LCFA_Theme_Library_Importer {
 
             LCFA_Settings::store_rollback_record($audit_id, $rollback);
         } catch (Throwable $throwable) {
-            $result = [
-                'ok'              => false,
-                'message'         => $throwable->getMessage(),
-                'import_audit_id' => $audit_id,
-                'rollback_stored' => true,
-            ];
+            $original_error = $throwable->getMessage();
             $imports[$slug] = [
                 'slug'       => $slug,
                 'version'    => $version,
@@ -239,15 +242,83 @@ final class LCFA_Theme_Library_Importer {
                 'import_key' => $import_key,
                 'audit_id'   => $audit_id,
                 'imported_at'=> current_time('mysql', true),
-                'error'      => $throwable->getMessage(),
+                'error'      => $original_error,
             ];
             update_option(self::IMPORTS_OPTION, $imports, false);
             LCFA_Settings::store_rollback_record($audit_id, $rollback);
+
+            $automatic_rollback = $this->recover_failed_import($audit_id, $auto_rollback);
+            $rollback_ok = !empty($automatic_rollback['attempted']) && !empty($automatic_rollback['ok']);
+            $rollback_failed = !empty($automatic_rollback['attempted']) && empty($automatic_rollback['ok']);
+            $status = $rollback_ok ? 'failed_rolled_back' : ($rollback_failed ? 'rollback_failed' : 'failed');
+            $message = $original_error;
+
+            if ($rollback_ok) {
+                $message .= ' ' . __('Automatic rollback restored the previous site state.', 'livecanvas-forge-ai');
+            } elseif ($rollback_failed) {
+                $message .= ' ' . __('Automatic rollback also failed; review the rollback details before retrying.', 'livecanvas-forge-ai');
+            } else {
+                $message .= ' ' . __('A manual rollback remains available for this audit ID.', 'livecanvas-forge-ai');
+            }
+
+            $result = [
+                'ok'                        => false,
+                'ready'                     => false,
+                'status'                    => $status,
+                'message'                   => $message,
+                'original_error'            => $original_error,
+                'import_audit_id'           => $audit_id,
+                'rollback_stored'           => true,
+                'automatic_rollback'        => $automatic_rollback,
+                'manual_rollback_available' => !$rollback_ok,
+            ];
         }
 
         $this->delete_directory($destination);
 
         return $result;
+    }
+
+    private function recover_failed_import(string $audit_id, bool $enabled): array {
+        if (!$enabled) {
+            return [
+                'attempted' => false,
+                'ok'        => false,
+                'message'   => __('Automatic rollback was disabled for this import.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $rollback_service = $this->rollback_service;
+        if (!$rollback_service && class_exists('LCFA_Theme_Library_Rollback')) {
+            $rollback_service = new LCFA_Theme_Library_Rollback($this->windpress_bridge);
+        }
+
+        if (!$rollback_service) {
+            return [
+                'attempted' => false,
+                'ok'        => false,
+                'message'   => __('Automatic rollback is unavailable in this runtime.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        try {
+            $rollback = $rollback_service->rollback($audit_id, false);
+        } catch (Throwable $throwable) {
+            return [
+                'attempted' => true,
+                'ok'        => false,
+                'message'   => $throwable->getMessage(),
+                'errors'    => [$throwable->getMessage()],
+            ];
+        }
+
+        return [
+            'attempted' => true,
+            'ok'        => !empty($rollback['ok']),
+            'message'   => (string) ($rollback['message'] ?? ''),
+            'errors'    => array_values(array_filter(array_map('strval', (array) ($rollback['errors'] ?? [])))),
+            'plan'      => is_array($rollback['plan'] ?? null) ? $rollback['plan'] : [],
+        ];
     }
 
     public static function get_imports(): array {
@@ -643,7 +714,40 @@ final class LCFA_Theme_Library_Importer {
         update_post_meta($post_id, '_lcfa_theme_library_import_id', $audit_id);
         update_post_meta($post_id, '_lcfa_theme_library_part', $type);
 
+        if (array_key_exists('partial_types', $definition)) {
+            $this->persist_manifest_partial_types($post_id, (array) $definition['partial_types']);
+        }
+
         return $post_id;
+    }
+
+    private function persist_manifest_partial_types(int $post_id, array $partial_types): void {
+        if (!function_exists('taxonomy_exists') || !taxonomy_exists('lc_partial_type') || !function_exists('wp_set_object_terms')) {
+            throw new RuntimeException(__('The LiveCanvas lc_partial_type taxonomy is unavailable.', 'livecanvas-forge-ai'));
+        }
+
+        $terms = [];
+        foreach ($partial_types as $term) {
+            if (is_int($term) || (is_string($term) && ctype_digit($term))) {
+                $term_id = absint($term);
+                if ($term_id > 0) {
+                    $terms[] = $term_id;
+                }
+                continue;
+            }
+
+            if (is_scalar($term)) {
+                $slug = sanitize_title((string) $term);
+                if ($slug !== '') {
+                    $terms[] = $slug;
+                }
+            }
+        }
+
+        $updated = wp_set_object_terms($post_id, array_values(array_unique($terms, SORT_REGULAR)), 'lc_partial_type', false);
+        if (is_wp_error($updated)) {
+            throw new RuntimeException($updated->get_error_message());
+        }
     }
 
     private function upsert_homepage(array $definition, string $content, string $theme_slug, string $version, string $audit_id, array &$rollback): int {
@@ -947,7 +1051,7 @@ final class LCFA_Theme_Library_Importer {
             return;
         }
 
-        $rollback['updated_posts'][$post_id] = [
+        $record = [
             'ID'           => $post_id,
             'post_title'   => $post->post_title,
             'post_name'    => $post->post_name,
@@ -964,6 +1068,26 @@ final class LCFA_Theme_Library_Importer {
                 '_lcfa_theme_library_part' => get_post_meta($post_id, '_lcfa_theme_library_part', true),
             ],
         ];
+
+        if ($post->post_type === 'lc_partial') {
+            $record['taxonomies'] = [
+                'lc_partial_type' => $this->get_post_partial_type_slugs($post_id),
+            ];
+        }
+
+        $rollback['updated_posts'][$post_id] = $record;
+    }
+
+    private function get_post_partial_type_slugs(int $post_id): array {
+        if (!function_exists('taxonomy_exists') || !taxonomy_exists('lc_partial_type') || !function_exists('wp_get_post_terms')) {
+            return [];
+        }
+
+        $terms = wp_get_post_terms($post_id, 'lc_partial_type', ['fields' => 'slugs']);
+
+        return is_wp_error($terms) || !is_array($terms)
+            ? []
+            : array_values(array_filter(array_map('sanitize_key', $terms)));
     }
 
     private function delete_file(string $path): void {

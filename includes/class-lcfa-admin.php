@@ -80,8 +80,8 @@ final class LCFA_Admin {
         $theme_library_windpress_bridge = new LCFA_WindPress_Bridge($environment);
         $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
         $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator, $theme_library_windpress_bridge);
-        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $theme_library_windpress_bridge, $design_system_build_gateway);
         $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($theme_library_windpress_bridge);
+        $this->theme_library_importer = new LCFA_Theme_Library_Importer($this->theme_library_installer, $theme_library_validator, $theme_library_windpress_bridge, $design_system_build_gateway, $this->theme_library_rollback);
     }
 
     public function hooks(): void {

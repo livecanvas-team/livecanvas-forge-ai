@@ -118,6 +118,18 @@ final class LCFA_Theme_Library_Rollback {
                     update_post_meta($post_id, $meta_key, $meta_value);
                 }
             }
+
+            foreach ((array) ($post_record['taxonomies'] ?? []) as $taxonomy => $terms) {
+                $taxonomy = sanitize_key((string) $taxonomy);
+                if ($taxonomy === '' || !function_exists('taxonomy_exists') || !taxonomy_exists($taxonomy) || !function_exists('wp_set_object_terms')) {
+                    continue;
+                }
+
+                $restored_terms = wp_set_object_terms($post_id, array_values((array) $terms), $taxonomy, false);
+                if (is_wp_error($restored_terms)) {
+                    $errors[] = $restored_terms->get_error_message();
+                }
+            }
         }
 
         foreach ((array) ($record['created_posts'] ?? []) as $post_id) {

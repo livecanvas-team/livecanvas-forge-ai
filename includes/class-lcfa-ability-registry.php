@@ -583,6 +583,9 @@ final class LCFA_Ability_Registry {
         $rollback_ready = count(array_filter($run_items, static function (array $run): bool {
             return !empty($run['rollback_available']);
         }));
+        $stack_compatibility = is_array($snapshot['snapshot']['stack_capabilities'] ?? null)
+            ? $snapshot['snapshot']['stack_capabilities']
+            : [];
         $summary = [
             'source'         => 'wordpress_ability',
             'framework'      => sanitize_key((string) (($snapshot['snapshot']['detected_framework'] ?? '') ?: ($snapshot['snapshot']['framework'] ?? ''))),
@@ -593,6 +596,7 @@ final class LCFA_Ability_Registry {
             'run_errors'     => $run_errors,
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
+            'stack_compatibility' => $stack_compatibility,
         ];
 
         return [
@@ -618,6 +622,9 @@ final class LCFA_Ability_Registry {
         $rollback_ready = count(array_filter($run_items, static function (array $run): bool {
             return !empty($run['rollback_available']);
         }));
+        $stack_compatibility = is_array($snapshot['snapshot']['stack_capabilities'] ?? null)
+            ? $snapshot['snapshot']['stack_capabilities']
+            : [];
         $summary = [
             'source'         => 'wordpress_ability',
             'framework'      => sanitize_key((string) (($snapshot['snapshot']['detected_framework'] ?? '') ?: ($snapshot['snapshot']['framework'] ?? ''))),
@@ -628,6 +635,7 @@ final class LCFA_Ability_Registry {
             'run_errors'     => $run_errors,
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
+            'stack_compatibility' => $stack_compatibility,
         ];
         $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
 
@@ -656,6 +664,9 @@ final class LCFA_Ability_Registry {
         $rollback_ready = count(array_filter($run_items, static function (array $run): bool {
             return !empty($run['rollback_available']);
         }));
+        $stack_compatibility = is_array($snapshot['snapshot']['stack_capabilities'] ?? null)
+            ? $snapshot['snapshot']['stack_capabilities']
+            : [];
         $summary = [
             'source'         => 'wordpress_ability',
             'framework'      => sanitize_key((string) (($snapshot['snapshot']['detected_framework'] ?? '') ?: ($snapshot['snapshot']['framework'] ?? ''))),
@@ -666,6 +677,7 @@ final class LCFA_Ability_Registry {
             'run_errors'     => $run_errors,
             'rollbacks'      => $rollback_ready,
             'limit'          => $limit,
+            'stack_compatibility' => $stack_compatibility,
         ];
         $smoke_tests = $this->build_agent_handoff_smoke_tests($summary, $ability);
         $connection_handoff = $this->build_agent_handoff_connection_handoff($summary);
@@ -2399,6 +2411,10 @@ final class LCFA_Ability_Registry {
                 ? 'ai_bridge_session'
                 : ($mode === 'local' ? 'legacy_mcp_token' : 'wordpress_ability')
         );
+        $stack_compatibility = is_array($summary['stack_compatibility'] ?? null)
+            ? $summary['stack_compatibility']
+            : [];
+        $stack_status = sanitize_key((string) ($stack_compatibility['status'] ?? 'unknown'));
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
@@ -2407,6 +2423,7 @@ final class LCFA_Ability_Registry {
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
             __('Then call livecanvas-forge-ai/get-agent-handoff-package with {"limit":5} only if you need the full runbook, smoke tests, ability diagnostics, MCP status, AI status, or recent run summary.', 'livecanvas-forge-ai'),
             __('Then run read-only checks starting with livecanvas-forge-ai/get-snapshot, livecanvas-forge-ai/get-ability-diagnostics, and livecanvas-forge-ai/get-runs when available.', 'livecanvas-forge-ai'),
+            __('Read stack_compatibility before planning changes. Stop before writes when it is unsupported; disclose untested versions when it is degraded.', 'livecanvas-forge-ai'),
             __('Verify the returned site_identity before running any write ability; a different Site ID means this coding-agent project targets another WordPress site.', 'livecanvas-forge-ai'),
             __('Summarize the site framework, public abilities, active risks, and write exposure before previewing changes.', 'livecanvas-forge-ai'),
             __('Use LiveCanvas-specific preview/apply abilities before generic commands or direct code/file edits.', 'livecanvas-forge-ai'),
@@ -2454,6 +2471,7 @@ final class LCFA_Ability_Registry {
             'agent_start_prompt' => implode("\n", $prompt_lines),
             'agent_start_prompt_lines' => $prompt_lines,
             'guardrail'      => 'read_only_first',
+            'stack_compatibility' => $stack_compatibility,
             'preferred_abilities' => [
                 'read' => [
                     'livecanvas-forge-ai/get-context',
@@ -2485,6 +2503,7 @@ final class LCFA_Ability_Registry {
                 'mcp_public'       => (int) ($summary['mcp_public'] ?? 0),
                 'public_writes'    => (int) ($summary['public_writes'] ?? 0),
                 'run_errors'       => (int) ($summary['run_errors'] ?? 0),
+                'stack_status'     => $stack_status,
             ],
         ];
     }
@@ -2508,12 +2527,16 @@ final class LCFA_Ability_Registry {
     }
 
     private function build_agent_handoff_runbook(array $summary, array $smoke_tests, array $connection_handoff): string {
+        $stack_compatibility = is_array($summary['stack_compatibility'] ?? null)
+            ? $summary['stack_compatibility']
+            : [];
         $lines = [
             '# LiveCanvas AI Bridge Agent Handoff',
             '',
             '## Current State',
             '- Source: WordPress Ability',
             '- Framework: ' . ((string) ($summary['framework'] ?: 'auto')),
+            '- Stack compatibility: ' . sanitize_key((string) ($stack_compatibility['status'] ?? 'unknown')) . ' (profile ' . sanitize_text_field((string) ($stack_compatibility['profile_version'] ?? 'n/a')) . ')',
             '- Abilities: ' . (int) ($summary['abilities'] ?? 0) . ' total, ' . (int) ($summary['mcp_public'] ?? 0) . ' MCP-public',
             '- MCP-public writes: ' . (int) ($summary['public_writes'] ?? 0),
             '- Recent runs: ' . (int) ($summary['runs'] ?? 0) . ', errors: ' . (int) ($summary['run_errors'] ?? 0) . ', rollback-ready: ' . (int) ($summary['rollbacks'] ?? 0),
@@ -2522,6 +2545,7 @@ final class LCFA_Ability_Registry {
             '## Guardrails',
             '- [ ] Fetch the connection handoff before inspecting or editing content.',
             '- [ ] Start with get-snapshot, get-ability-diagnostics, and get-runs.',
+            '- [ ] Stop before writes if stack compatibility is unsupported; disclose degraded or untested versions.',
             '- [ ] Use preview abilities before apply abilities.',
             '- [ ] Do not execute write abilities automatically.',
             '- [ ] Confirm rollback availability before applying content changes.',
@@ -2619,6 +2643,7 @@ final class LCFA_Ability_Registry {
                 'mcp_public'    => (int) ($summary['mcp_public'] ?? 0),
                 'public_writes' => (int) ($summary['public_writes'] ?? 0),
                 'run_errors'    => (int) ($summary['run_errors'] ?? 0),
+                'stack_status'  => sanitize_key((string) ($summary['stack_compatibility']['status'] ?? 'unknown')),
                 'status'        => sanitize_key((string) ($summary['handoff_status'] ?? '')),
                 'readiness_score' => absint($summary['readiness_score'] ?? 0),
                 'unavailable_tests' => absint($summary['unavailable_tests'] ?? 0),
@@ -2668,7 +2693,13 @@ final class LCFA_Ability_Registry {
 
         $run_errors = (int) ($summary['run_errors'] ?? 0);
         $public_writes = (int) ($summary['public_writes'] ?? 0);
-        $status = !empty($unavailable_tests) ? 'blocked' : (($run_errors > 0 || $public_writes > 0) ? 'review' : 'ready');
+        $stack_compatibility = is_array($summary['stack_compatibility'] ?? null)
+            ? $summary['stack_compatibility']
+            : [];
+        $stack_status = sanitize_key((string) ($stack_compatibility['status'] ?? 'unknown'));
+        $status = !empty($unavailable_tests) || $stack_status === 'unsupported'
+            ? 'blocked'
+            : (($run_errors > 0 || $public_writes > 0 || $stack_status === 'degraded') ? 'review' : 'ready');
         $score = 100;
         if (!empty($unavailable_tests)) {
             $score -= min(50, count($unavailable_tests) * 10);
@@ -2679,6 +2710,11 @@ final class LCFA_Ability_Registry {
         if ($public_writes > 0) {
             $score -= 15;
         }
+        if ($stack_status === 'unsupported') {
+            $score -= 35;
+        } elseif ($stack_status === 'degraded') {
+            $score -= 10;
+        }
         $score = max(0, min(100, $score));
 
         return [
@@ -2687,8 +2723,13 @@ final class LCFA_Ability_Registry {
             'status'               => $status,
             'recommended_mode'     => $status === 'ready' ? 'preview_first' : ($status === 'blocked' ? 'read_only_only' : 'guarded_preview'),
             'score'                => $score,
-            'next_action'          => $status === 'ready' ? 'run_preview_before_apply' : ($status === 'blocked' ? 'resolve_missing_abilities' : 'review_warnings'),
+            'next_action'          => $status === 'ready'
+                ? 'run_preview_before_apply'
+                : ($status === 'blocked'
+                    ? ($stack_status === 'unsupported' ? 'resolve_stack_compatibility' : 'resolve_missing_abilities')
+                    : 'review_warnings'),
             'framework'            => sanitize_key((string) ($summary['framework'] ?? '')),
+            'stack_compatibility'  => $stack_compatibility,
             'public_writes'        => $public_writes,
             'run_errors'           => $run_errors,
             'smoke_counts'         => is_array($smoke_tests['counts'] ?? null) ? $smoke_tests['counts'] : [],
@@ -2795,6 +2836,21 @@ final class LCFA_Ability_Registry {
             'footer_html' => [
                 'type'        => 'string',
                 'description' => __('Proposed footer HTML.', 'livecanvas-forge-ai'),
+            ],
+            'partial_types' => [
+                'type'        => 'array',
+                'items'       => ['type' => ['string', 'integer']],
+                'description' => __('Optional lc_partial_type term slugs or IDs shared by both partials.', 'livecanvas-forge-ai'),
+            ],
+            'header_partial_types' => [
+                'type'        => 'array',
+                'items'       => ['type' => ['string', 'integer']],
+                'description' => __('Optional lc_partial_type term slugs or IDs for the header.', 'livecanvas-forge-ai'),
+            ],
+            'footer_partial_types' => [
+                'type'        => 'array',
+                'items'       => ['type' => ['string', 'integer']],
+                'description' => __('Optional lc_partial_type term slugs or IDs for the footer.', 'livecanvas-forge-ai'),
             ],
             'content' => [
                 'type'        => 'string',

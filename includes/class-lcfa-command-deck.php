@@ -484,6 +484,9 @@ final class LCFA_Command_Deck {
                 $result['summary']       = sprintf(__('Update partial #%d.', 'livecanvas-forge-ai'), $target_id);
                 $result['frontend_url']  = (string) ($existing['post']['view_url'] ?? '');
                 $result['edit_url']      = (string) ($existing['post']['edit_url'] ?? '');
+                $partial_types = $this->get_partial_type_terms_payload($payload);
+                $result['data']['previous_partial_types'] = array_values((array) ($existing['post']['partial_type_slugs'] ?? []));
+                $result['data']['partial_types'] = $partial_types;
 
                 if (!$dry_run) {
                     $updated = $this->with_unfiltered_post_content(static function () use ($target_id, $content) {
@@ -495,6 +498,11 @@ final class LCFA_Command_Deck {
 
                     if (is_wp_error($updated)) {
                         return $this->error_result($updated->get_error_message());
+                    }
+
+                    $term_update = $this->persist_partial_type_terms($target_id, $partial_types);
+                    if (empty($term_update['ok'])) {
+                        return $this->error_result((string) ($term_update['message'] ?? __('Partial type terms could not be updated.', 'livecanvas-forge-ai')));
                     }
 
                     $result['message'] = __('Partial updated.', 'livecanvas-forge-ai');
@@ -516,14 +524,18 @@ final class LCFA_Command_Deck {
                         : __('AI Bridge did not generate footer HTML for this request, so the current footer was left unchanged.', 'livecanvas-forge-ai'));
                 }
 
-                $existing = $this->inventory->get_target_content($action === 'update_header' ? 'header' : 'footer', $target_id, $variant);
+                $partial_name = $action === 'update_header' ? 'header' : 'footer';
+                $existing = $this->inventory->get_target_content($partial_name, $target_id, $variant);
+                $partial_types = $this->get_partial_type_terms_payload($payload, $partial_name);
 
-                $result['target_type']   = $action === 'update_header' ? 'header' : 'footer';
+                $result['target_type']   = $partial_name;
                 $result['target_id']     = $target_id;
                 $result['target_title']  = $existing['post']['title'] ?? '';
                 $result['existing_html'] = $existing['content'];
                 $result['diff_html']     = $this->build_diff($existing['content'], $content);
                 $result['data']['operation'] = 'update';
+                $result['data']['previous_partial_types'] = array_values((array) ($existing['post']['partial_type_slugs'] ?? []));
+                $result['data']['partial_types'] = $partial_types;
                 $result['summary']       = sprintf(__('Update %s variant %s.', 'livecanvas-forge-ai'), $result['target_type'], $variant);
 
                 if (!$dry_run) {
@@ -534,6 +546,11 @@ final class LCFA_Command_Deck {
 
                     if (is_wp_error($updated)) {
                         return $this->error_result($updated->get_error_message());
+                    }
+
+                    $term_update = $this->persist_partial_type_terms($target_id, $partial_types);
+                    if (empty($term_update['ok'])) {
+                        return $this->error_result((string) ($term_update['message'] ?? __('Partial type terms could not be updated.', 'livecanvas-forge-ai')));
                     }
 
                     $result['message'] = $action === 'update_header'
@@ -1227,6 +1244,15 @@ final class LCFA_Command_Deck {
                         ? $this->trash_post_for_rollback($part_target_id)
                         : $this->update_post_content_for_rollback($part_target_id, $previous_content)
                     );
+
+                    if (!$created_post && !empty($part_result['ok']) && array_key_exists('previous_partial_types', $part)) {
+                        $term_restore = $this->restore_partial_type_terms_for_rollback($part_target_id, (array) $part['previous_partial_types']);
+                        $part_result['partial_type_restore'] = $term_restore;
+                        if (empty($term_restore['ok'])) {
+                            $part_result['ok'] = false;
+                            $part_result['message'] = (string) ($term_restore['message'] ?? __('Previous partial type terms could not be restored.', 'livecanvas-forge-ai'));
+                        }
+                    }
                 }
 
                 $restored_parts[] = $part_result;
@@ -1286,6 +1312,15 @@ final class LCFA_Command_Deck {
                     if (empty($runtime_restore['ok'])) {
                         $result['ok'] = false;
                         $result['message'] = (string) ($runtime_restore['message'] ?? __('Previous page status or runtime metadata could not be restored.', 'livecanvas-forge-ai'));
+                    }
+                }
+
+                if (!$created_post && !empty($result['ok']) && array_key_exists('previous_partial_types', $restore)) {
+                    $term_restore = $this->restore_partial_type_terms_for_rollback($target_id, (array) $restore['previous_partial_types']);
+                    $result['data']['partial_type_restore'] = $term_restore;
+                    if (empty($term_restore['ok'])) {
+                        $result['ok'] = false;
+                        $result['message'] = (string) ($term_restore['message'] ?? __('Previous partial type terms could not be restored.', 'livecanvas-forge-ai'));
                     }
                 }
             }
@@ -1709,12 +1744,26 @@ final class LCFA_Command_Deck {
         $proposed = [];
 
         if (trim($header_html) !== '' && empty($payload['skip_header'])) {
-            $parts['header'] = $this->apply_global_shell_partial('header', 'is_header', $variant, $header_html, $dry_run);
+            $parts['header'] = $this->apply_global_shell_partial(
+                'header',
+                'is_header',
+                $variant,
+                $header_html,
+                $dry_run,
+                $this->get_partial_type_terms_payload($payload, 'header')
+            );
             $proposed[] = trim($header_html);
         }
 
         if (trim($footer_html) !== '' && empty($payload['skip_footer'])) {
-            $parts['footer'] = $this->apply_global_shell_partial('footer', 'is_footer', $variant, $footer_html, $dry_run);
+            $parts['footer'] = $this->apply_global_shell_partial(
+                'footer',
+                'is_footer',
+                $variant,
+                $footer_html,
+                $dry_run,
+                $this->get_partial_type_terms_payload($payload, 'footer')
+            );
             $proposed[] = trim($footer_html);
         }
 
@@ -1798,7 +1847,7 @@ final class LCFA_Command_Deck {
         ];
     }
 
-    private function apply_global_shell_partial(string $type, string $flag, string $variant, string $html, bool $dry_run): array {
+    private function apply_global_shell_partial(string $type, string $flag, string $variant, string $html, bool $dry_run, array $partial_types = []): array {
         $variant = $variant !== '' ? $variant : '1';
         $target_id = $this->resolve_partial_post_id_for_write($flag, $variant);
         $operation = $target_id > 0 ? 'update' : 'create';
@@ -1825,6 +1874,8 @@ final class LCFA_Command_Deck {
             'existing_html' => (string) ($existing['content'] ?? ''),
             'proposed_html' => $html,
             'diff_html'     => $this->build_diff((string) ($existing['content'] ?? ''), $html),
+            'previous_partial_types' => array_values((array) ($existing['post']['partial_type_slugs'] ?? [])),
+            'partial_types'  => $partial_types,
         ];
 
         if ($dry_run) {
@@ -1871,6 +1922,13 @@ final class LCFA_Command_Deck {
         }
 
         update_post_meta($post_id, $flag, $variant);
+        $term_update = $this->persist_partial_type_terms($post_id, $partial_types);
+        if (empty($term_update['ok'])) {
+            $part['ok'] = false;
+            $part['message'] = (string) ($term_update['message'] ?? __('Partial type terms could not be updated.', 'livecanvas-forge-ai'));
+
+            return $part;
+        }
         $part['target_id'] = $post_id;
         $part['target_title'] = html_entity_decode(get_the_title($post_id) ?: $title);
         $part['frontend_url'] = (string) get_permalink($post_id);
@@ -1902,6 +1960,96 @@ final class LCFA_Command_Deck {
         ]);
 
         return isset($posts[0]) ? (int) $posts[0]->ID : 0;
+    }
+
+    private function get_partial_type_terms_payload(array $payload, string $type = ''): array {
+        $keys = [];
+        $type = sanitize_key($type);
+        if (in_array($type, ['header', 'footer'], true)) {
+            $keys[] = $type . '_partial_types';
+        }
+        $keys[] = 'partial_types';
+        $keys[] = 'partial_type_terms';
+
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $payload)) {
+                continue;
+            }
+
+            $raw_terms = is_array($payload[$key]) ? $payload[$key] : [$payload[$key]];
+            $terms = [];
+            foreach ($raw_terms as $term) {
+                if (is_int($term) || (is_string($term) && ctype_digit($term))) {
+                    $term_id = absint($term);
+                    if ($term_id > 0) {
+                        $terms[] = $term_id;
+                    }
+                    continue;
+                }
+
+                if (!is_scalar($term)) {
+                    continue;
+                }
+
+                $term_slug = sanitize_title((string) $term);
+                if ($term_slug !== '') {
+                    $terms[] = $term_slug;
+                }
+            }
+
+            return [
+                'provided' => true,
+                'terms'    => array_values(array_unique($terms, SORT_REGULAR)),
+                'source'   => $key,
+            ];
+        }
+
+        return [
+            'provided' => false,
+            'terms'    => [],
+            'source'   => '',
+        ];
+    }
+
+    private function persist_partial_type_terms(int $post_id, array $term_payload): array {
+        if (empty($term_payload['provided'])) {
+            return [
+                'ok'      => true,
+                'changed' => false,
+                'terms'   => [],
+            ];
+        }
+
+        if (!function_exists('taxonomy_exists') || !taxonomy_exists('lc_partial_type') || !function_exists('wp_set_object_terms')) {
+            return [
+                'ok'      => false,
+                'changed' => false,
+                'message' => __('The LiveCanvas lc_partial_type taxonomy is unavailable.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $updated = wp_set_object_terms($post_id, array_values((array) ($term_payload['terms'] ?? [])), 'lc_partial_type', false);
+        if (is_wp_error($updated)) {
+            return [
+                'ok'      => false,
+                'changed' => false,
+                'message' => $updated->get_error_message(),
+            ];
+        }
+
+        return [
+            'ok'       => true,
+            'changed'  => true,
+            'term_ids' => array_values(array_map('absint', (array) $updated)),
+            'terms'    => array_values((array) ($term_payload['terms'] ?? [])),
+        ];
+    }
+
+    private function restore_partial_type_terms_for_rollback(int $post_id, array $terms): array {
+        return $this->persist_partial_type_terms(
+            $post_id,
+            $this->get_partial_type_terms_payload(['partial_types' => $terms])
+        );
     }
 
     private function build_global_shell_starter(array $payload): array {
@@ -2479,6 +2627,7 @@ HTML,
                     'target_title'     => sanitize_text_field((string) ($part['target_title'] ?? '')),
                     'previous_content' => (string) ($part['existing_html'] ?? ''),
                     'created_post'     => $operation === 'create',
+                    'previous_partial_types' => array_values((array) ($part['previous_partial_types'] ?? [])),
                 ];
             }
 
@@ -2492,6 +2641,10 @@ HTML,
             'previous_content' => (string) ($result['existing_html'] ?? ''),
             'created_post'     => ($rollback['type'] ?? '') === 'created_post',
         ]);
+
+        if (in_array((string) ($record['restore']['target_type'] ?? ''), ['partial', 'header', 'footer'], true)) {
+            $record['restore']['previous_partial_types'] = array_values((array) ($result['data']['previous_partial_types'] ?? []));
+        }
 
         if (($record['restore']['target_type'] ?? '') === 'page' && is_array($result['data']['page_runtime_rollback'] ?? null)) {
             $record['restore']['page_runtime'] = $this->sanitize_page_runtime_snapshot((array) $result['data']['page_runtime_rollback']);

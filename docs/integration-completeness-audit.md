@@ -36,7 +36,7 @@ The running reference site reported WindPress 3.2.86 in `hybrid` mode with Tailw
 - **LiveCanvas core operations:** strong alpha, with broad contract coverage and real local/remote use.
 - **Picostrap:** strongest framework path; site generation, Sass compilation, header behavior, and visual checks have a dedicated E2E fixture.
 - **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. Cross-host and Tailwind 3 qualification remain open.
-- **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, and runtime rollback now pass on a real LocalWP stack.
+- **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, runtime rollback, and automatic failed-import recovery are implemented; the main flow passes on a real LocalWP stack.
 - **Secure agent transport:** strong alpha. Pairing, site identity, scopes, preview-first writes, and revocation are implemented; multi-host qualification remains open.
 
 The plugin is not yet “perfectly integrated” in the production sense. Its main remaining risk is not missing CRUD endpoints; it is proving that build output, framework state, and rollback remain coherent across versions and hosts.
@@ -92,9 +92,10 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Safe ZIP paths and Picowind child-theme validation | Contract tested | traversal, required-file, parent-theme tests | Signature support if distribution becomes private |
 | Install and activate child theme | Local E2E | Asteria 1.0.1 preview/install on LocalWP | Multi-host filesystem matrix |
 | Preserve pre-install active theme | Local E2E | pending install handoff restored `picostrap5-child-base` | Verify abandoned installs and stale pending-state cleanup |
-| Import settings, media, partials, homepage, menus | Local E2E | Asteria created separate header/footer, homepage, and four media items | Atomic failure recovery and multilingual fixtures |
+| Import settings, media, partials, homepage, menus | Local E2E | Asteria created separate header/footer, homepage, and four media items | Multilingual fixtures |
 | Idempotent re-import | Contract tested | import key/version/checksum logic | Force-update migration rules between manifest versions |
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
+| Automatic failed-import recovery | Contract tested | optional transaction rollback reports original failure plus recovery outcome | Real failure-injection E2E on local and restrictive remote hosts |
 | Automatic compile after source import | Local E2E | explicit `ready`, `build_required`, and `build_failed`; persistent cache checksum verification; admin retry endpoint; passing Asteria import/build/rollback | Remote-host fallback matrix |
 
 ### Agent, Security, And Developer Operations
@@ -108,6 +109,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Theme files, media, debug, cache, SEO, Polylang | Contract tested | Full Power services | Production E2E across plugin combinations |
 | Visual check | Contract tested | MCP tool and Playwright dependency | Managed Chromium readiness check during onboarding |
 | MCP schema/caching metadata | Contract tested | Node registry tests | Complete migration after the MCP 2026 release candidate stabilizes |
+| Versioned stack capability profile | Contract tested | `stack-capabilities.v1`, snapshot, admin hero, and agent handoff | Validate the profile against second-host and future-version fixtures |
 
 ## Confirmed Gaps
 
@@ -118,12 +120,12 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
    - Production evidence still requires remote-host `build_required` verification and a second supported WindPress host/version.
 
 2. **Transaction recovery**
-   - A failed import currently stores rollback information but does not automatically restore partial writes.
-   - Add an optional automatic rollback path and report both the original error and rollback outcome.
+   - Optional automatic rollback is implemented and contract tested, with separate original-error and rollback outcomes.
+   - Production evidence still requires injected mid-import failures on LocalWP and a restrictive remote host.
 
 3. **Versioned capability detection**
-   - WindPress and framework integrations currently rely heavily on class/method presence.
-   - Publish tested version ranges and return `supported`, `degraded`, or `unsupported` with missing capabilities.
+   - `stack-capabilities.v1` publishes tested ranges and returns `supported`, `degraded`, or `unsupported` with explicit missing APIs.
+   - Production evidence still requires qualification against a second host and supported dependency matrix.
 
 4. **Broader Picowind qualification**
    - Repeat the passing Tailwind 4 LocalWP flow on a clean baseline, a migrated site, and a restrictive remote host.

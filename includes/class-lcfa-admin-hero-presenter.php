@@ -128,6 +128,16 @@ final class LCFA_Admin_Hero_Presenter {
             ];
         }
 
+        $compatibility = is_array($snapshot['stack_capabilities'] ?? null) ? $snapshot['stack_capabilities'] : [];
+        $compatibility_status = strtolower(trim((string) ($compatibility['status'] ?? '')));
+        if (in_array($compatibility_status, ['supported', 'degraded', 'unsupported'], true)) {
+            $chips[] = [
+                'label' => __('Compatibility', 'livecanvas-forge-ai'),
+                'value' => ucfirst($compatibility_status),
+                'tone' => $compatibility_status === 'supported' ? 'active' : 'other',
+            ];
+        }
+
         return $chips;
     }
 
@@ -152,6 +162,20 @@ final class LCFA_Admin_Hero_Presenter {
             $details[] = [
                 'label' => __('Framework', 'livecanvas-forge-ai'),
                 'value' => $framework,
+            ];
+        }
+
+        $compatibility = is_array($snapshot['stack_capabilities'] ?? null) ? $snapshot['stack_capabilities'] : [];
+        if (!empty($compatibility['profile_version'])) {
+            $details[] = [
+                'label' => __('Compatibility profile', 'livecanvas-forge-ai'),
+                'value' => (string) $compatibility['profile_version'],
+            ];
+        }
+        if (!empty($compatibility['missing_capabilities'])) {
+            $details[] = [
+                'label' => __('Missing required APIs', 'livecanvas-forge-ai'),
+                'value' => implode(', ', array_map('sanitize_text_field', (array) $compatibility['missing_capabilities'])),
             ];
         }
 

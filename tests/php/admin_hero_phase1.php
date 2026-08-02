@@ -97,6 +97,11 @@ $hero = $presenter->build('connections', [
     'windpress_active' => true,
     'acf_active' => false,
     'tangible_available' => true,
+    'stack_capabilities' => [
+        'status' => 'supported',
+        'profile_version' => '2026.08.1',
+        'missing_capabilities' => [],
+    ],
 ], [
     'site_mode' => 'local',
     'preferred_client' => 'codex',
@@ -107,6 +112,8 @@ lcfa_assert_same('connections', $hero['tab'] ?? '', 'hero presenter should keep 
 lcfa_assert_true(count($hero['marks'] ?? []) >= 2, 'hero presenter should expose compact stack marks');
 lcfa_assert_true(count($hero['chips'] ?? []) >= 4, 'hero presenter should expose compact stack chips');
 lcfa_assert_same('daisyui-5', $hero['chips'][3]['value'] ?? '', 'hero presenter should surface editor config as a chip');
+lcfa_assert_true(in_array('Compatibility', array_column((array) ($hero['chips'] ?? []), 'label'), true), 'hero presenter should expose stack compatibility as a compact chip');
+lcfa_assert_true(in_array('2026.08.1', array_column((array) ($hero['details'] ?? []), 'value'), true), 'hero details should expose the active compatibility profile');
 lcfa_assert_true(count($hero['details'] ?? []) >= 3, 'hero presenter should move technical facts into details');
 lcfa_assert_false(in_array('LiveCanvas', array_column((array) ($hero['marks'] ?? []), 'label'), true), 'hero presenter should stop repeating a dedicated LiveCanvas mark');
 

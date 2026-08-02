@@ -233,7 +233,7 @@ Theme Library flow:
 1. Open `WordPress Admin > AI Bridge > Theme Library`.
 2. Click `Preview` to download the ZIP, verify checksum, validate the manifest, and inspect the import plan. This does not write.
 3. Click `Install child theme` to install and activate the Picowind child theme through WordPress theme APIs.
-4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, and homepage option.
+4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, and homepage option. If a step fails, AI Bridge automatically attempts the stored transaction rollback and reports both outcomes.
 5. AI Bridge compiles Tailwind through the local WindPress/MCP runtime and verifies the persistent CSS cache. If the runtime is unavailable, the item remains `Build required` instead of being reported as ready.
 6. Use `Build Tailwind CSS` to retry a pending build, or `Rollback` to restore the previous site state.
 
@@ -284,7 +284,8 @@ Theme Library beta acceptance:
 - `Import starter data` creates or updates homepage, header partial, footer partial, media, menus, and homepage option;
 - a Picowind item reaches `Ready` only after its persistent WindPress CSS cache exists, is readable, and no longer contains Tailwind source directives;
 - unavailable compilers return `build_required`; compiler or cache-verification failures return `build_failed` with a retry action;
-- failed imports expose an audit ID and rollback action;
+- failed imports expose an audit ID, the original error, and the automatic rollback outcome;
+- successful automatic recovery returns `failed_rolled_back`; failed recovery returns `rollback_failed` and preserves the manual rollback action;
 - `Rollback` restores previous theme, homepage settings, content, media, menus, and imported options where possible.
 
 ## Codex Multi-Site Safety

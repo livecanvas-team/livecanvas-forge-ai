@@ -31,6 +31,7 @@ final class LCFA_Inventory {
             ]),
             'header_partials'   => $this->find_partials_by_flag('is_header'),
             'footer_partials'   => $this->find_partials_by_flag('is_footer'),
+            'partial_types'     => $this->get_partial_type_taxonomy_terms(),
             'other_partials'    => $this->query_posts([
                 'post_type'      => 'lc_partial',
                 'post_status'    => ['publish', 'draft', 'private'],
@@ -84,6 +85,7 @@ final class LCFA_Inventory {
             'pages'             => $pages,
             'headers'           => $headers,
             'footers'           => $footers,
+            'partial_types'     => count($this->get_partial_type_taxonomy_terms()),
             'dynamic_templates' => $dynamic_templates,
             'blocks'            => $blocks,
             'sections'          => $sections,
@@ -231,6 +233,12 @@ final class LCFA_Inventory {
                 $item['partial_type'] = 'partial';
                 $item['variant'] = '';
             }
+
+            $partial_type_terms = $this->get_post_partial_type_terms($post->ID);
+            $item['partial_type_terms'] = $partial_type_terms;
+            $item['partial_type_slugs'] = array_values(array_filter(array_map(static function (array $term): string {
+                return (string) ($term['slug'] ?? '');
+            }, $partial_type_terms)));
         }
 
         if ($post->post_type === 'lc_dynamic_template') {
@@ -258,6 +266,45 @@ final class LCFA_Inventory {
         }
 
         return $item;
+    }
+
+    private function get_partial_type_taxonomy_terms(): array {
+        if (!function_exists('taxonomy_exists') || !taxonomy_exists('lc_partial_type') || !function_exists('get_terms')) {
+            return [];
+        }
+
+        $terms = get_terms([
+            'taxonomy'   => 'lc_partial_type',
+            'hide_empty' => false,
+        ]);
+
+        if (is_wp_error($terms) || !is_array($terms)) {
+            return [];
+        }
+
+        return array_values(array_map([$this, 'normalize_partial_type_term'], $terms));
+    }
+
+    private function get_post_partial_type_terms(int $post_id): array {
+        if (!function_exists('taxonomy_exists') || !taxonomy_exists('lc_partial_type') || !function_exists('wp_get_post_terms')) {
+            return [];
+        }
+
+        $terms = wp_get_post_terms($post_id, 'lc_partial_type');
+        if (is_wp_error($terms) || !is_array($terms)) {
+            return [];
+        }
+
+        return array_values(array_map([$this, 'normalize_partial_type_term'], $terms));
+    }
+
+    private function normalize_partial_type_term($term): array {
+        return [
+            'id'     => absint(is_object($term) ? ($term->term_id ?? 0) : ($term['term_id'] ?? 0)),
+            'name'   => sanitize_text_field((string) (is_object($term) ? ($term->name ?? '') : ($term['name'] ?? ''))),
+            'slug'   => sanitize_key((string) (is_object($term) ? ($term->slug ?? '') : ($term['slug'] ?? ''))),
+            'parent' => absint(is_object($term) ? ($term->parent ?? 0) : ($term['parent'] ?? 0)),
+        ];
     }
 
     private function find_partials_by_flag(string $flag): array {

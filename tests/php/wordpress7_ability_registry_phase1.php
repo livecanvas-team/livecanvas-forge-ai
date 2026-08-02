@@ -82,7 +82,16 @@ final class LCFA_Settings {
 
 final class LCFA_Environment {
     public function get_snapshot(): array {
-        return ['detected_framework' => 'picostrap', 'site_mode' => 'local'];
+        return [
+            'detected_framework' => 'picostrap',
+            'site_mode' => 'local',
+            'stack_capabilities' => [
+                'schema_version' => 'stack-capabilities.v1',
+                'profile_version' => '2026.08.1',
+                'status' => 'supported',
+                'missing_capabilities' => [],
+            ],
+        ];
     }
 
     public function get_mcp_adapter_status(): array {
@@ -313,12 +322,15 @@ lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['connection_hand
 lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['handoff_package_tool'] ?? '') === 'livecanvas-forge-ai/get-agent-handoff-package', 'connection handoff ability should expose the full package tool as a follow-up');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-connection-handoff'), 'connection handoff ability should expose a first prompt that starts lightweight');
 lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-agent-handoff-package'), 'connection handoff ability should mention the full package follow-up');
+lcfa_wp7_assert_true(($connection_handoff['connection_handoff']['stack_compatibility']['status'] ?? '') === 'supported', 'connection handoff should expose the evaluated stack compatibility status');
+lcfa_wp7_assert_true(str_contains($connection_handoff['connection_handoff']['agent_start_prompt'] ?? '', 'stack_compatibility'), 'connection handoff should instruct agents to inspect compatibility before writes');
 lcfa_wp7_assert_true(!isset($connection_handoff['agent_handoff_package']), 'connection handoff ability should not return the larger virtual package');
 
 $handoff_summary = $registry->get_handoff_summary(['limit' => 1]);
 lcfa_wp7_assert_true(($handoff_summary['handoff_summary']['schema_version'] ?? '') === 'handoff-summary.v1', 'handoff summary ability should expose schema version');
 lcfa_wp7_assert_true(($handoff_summary['handoff_summary']['source'] ?? '') === 'wordpress_ability', 'handoff summary ability should expose source');
 lcfa_wp7_assert_true(isset($handoff_summary['handoff_summary']['score']), 'handoff summary ability should expose readiness score');
+lcfa_wp7_assert_true(($handoff_summary['handoff_summary']['stack_compatibility']['profile_version'] ?? '') === '2026.08.1', 'handoff summary should preserve the compatibility profile');
 lcfa_wp7_assert_true(in_array('native_pattern_page_apply_guard', array_column($handoff_summary['handoff_summary']['write_guard_tests'] ?? [], 'id'), true), 'handoff summary ability should include native apply guard');
 lcfa_wp7_assert_true(!isset($handoff_summary['agent_handoff_package']), 'handoff summary ability should not return the larger virtual package');
 
@@ -334,6 +346,7 @@ lcfa_wp7_assert_true(($handoff['agent_handoff_package']['summary']['files'] ?? 0
 lcfa_wp7_assert_true(strlen($handoff['agent_handoff_package']['summary']['checksum'] ?? '') === 64, 'handoff package ability should expose a package checksum');
 lcfa_wp7_assert_true(($handoff['agent_handoff_package']['summary']['status'] ?? '') !== '', 'handoff package ability should expose compact handoff status');
 lcfa_wp7_assert_true(($handoff['agent_handoff_package']['summary']['readiness_score'] ?? -1) >= 0, 'handoff package ability should expose compact readiness score');
+lcfa_wp7_assert_true(($handoff['agent_handoff_package']['summary']['stack_status'] ?? '') === 'supported', 'handoff package summary should expose compact stack status');
 $handoff_paths = array_column($handoff['agent_handoff_package']['files'] ?? [], 'path');
 lcfa_wp7_assert_true(in_array('forge-agent-start-prompt.txt', $handoff_paths, true), 'handoff package ability should include a first prompt file');
 lcfa_wp7_assert_true(in_array('forge-handoff-summary.json', $handoff_paths, true), 'handoff package ability should include a compact handoff summary file');

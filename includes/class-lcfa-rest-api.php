@@ -84,13 +84,14 @@ final class LCFA_Rest_Api {
         $theme_library_validator = new LCFA_Theme_Library_Validator();
         $this->theme_library_catalog = new LCFA_Theme_Library_Catalog();
         $this->theme_library_installer = new LCFA_Theme_Library_Installer($theme_library_validator, $windpress_bridge);
+        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($windpress_bridge);
         $this->theme_library_importer = new LCFA_Theme_Library_Importer(
             $this->theme_library_installer,
             $theme_library_validator,
             $windpress_bridge,
-            new LCFA_Design_System_Build_Gateway($local_mcp_bridge)
+            new LCFA_Design_System_Build_Gateway($local_mcp_bridge),
+            $this->theme_library_rollback
         );
-        $this->theme_library_rollback = new LCFA_Theme_Library_Rollback($windpress_bridge);
         $this->ability_registry = $ability_registry;
     }
 
@@ -2590,7 +2591,10 @@ final class LCFA_Rest_Api {
             return new WP_REST_Response(['result' => $theme], 404);
         }
 
-        $result = $this->theme_library_importer->import($theme['theme'], !empty($payload['force']));
+        $auto_rollback = array_key_exists('auto_rollback', $payload)
+            ? !empty($payload['auto_rollback'])
+            : null;
+        $result = $this->theme_library_importer->import($theme['theme'], !empty($payload['force']), $auto_rollback);
 
         return new WP_REST_Response([
             'result' => $result,

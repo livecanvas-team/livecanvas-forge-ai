@@ -15,7 +15,13 @@ $GLOBALS['lcfa_test_posts'] = [
         'post_content' => '<section>Created</section>',
         'post_status'  => 'publish',
     ],
+    789 => [
+        'ID'           => 789,
+        'post_content' => '<div>Partial after</div>',
+        'post_status'  => 'publish',
+    ],
 ];
+$GLOBALS['lcfa_test_partial_terms'] = [789 => ['current-type']];
 
 function __(string $text, string $domain = ''): string {
     return $text;
@@ -27,6 +33,10 @@ function sanitize_key($value): string {
 
 function sanitize_text_field($value): string {
     return trim(strip_tags((string) $value));
+}
+
+function sanitize_title($value): string {
+    return trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $value)), '-');
 }
 
 function esc_url_raw($value): string {
@@ -101,6 +111,16 @@ function wp_trash_post(int $post_id) {
 
 function is_wp_error($value): bool {
     return false;
+}
+
+function taxonomy_exists(string $taxonomy): bool {
+    return $taxonomy === 'lc_partial_type';
+}
+
+function wp_set_object_terms(int $post_id, array $terms, string $taxonomy, bool $append = false): array {
+    $GLOBALS['lcfa_test_partial_terms'][$post_id] = array_values(array_map('strval', $terms));
+
+    return array_keys($terms);
 }
 
 final class LCFA_Settings {
@@ -223,5 +243,29 @@ $created_restore = $restore_rollback->invoke($instance, $created_audit_id, false
 
 lcfa_rollback_assert_true(!empty($created_restore['ok']), 'created-post rollback should succeed');
 lcfa_rollback_assert_same('trash', $GLOBALS['lcfa_test_posts'][456]['post_status'], 'created-post rollback should move the created post to trash');
+
+$partial_result = [
+    'ok'               => true,
+    'action'           => 'update_partial',
+    'mode'             => 'apply',
+    'execution_target' => 'local',
+    'target_type'      => 'partial',
+    'target_id'        => 789,
+    'target_title'     => 'Utility partial',
+    'existing_html'    => '<div>Partial before</div>',
+    'data'             => [
+        'operation' => 'update',
+        'previous_partial_types' => ['legacy-type'],
+    ],
+];
+
+$attach_audit->invokeArgs($instance, [&$partial_result, ['action' => 'update_partial'], ['origin' => 'wp_ability']]);
+$partial_audit_id = (string) ($partial_result['audit_id'] ?? '');
+lcfa_rollback_assert_same(['legacy-type'], LCFA_Settings::$records[$partial_audit_id]['restore']['previous_partial_types'] ?? [], 'partial rollback records should preserve lc_partial_type terms');
+
+$partial_restore = $restore_rollback->invoke($instance, $partial_audit_id, false);
+lcfa_rollback_assert_true(!empty($partial_restore['ok']), 'partial rollback should restore content and taxonomy terms');
+lcfa_rollback_assert_same('<div>Partial before</div>', $GLOBALS['lcfa_test_posts'][789]['post_content'], 'partial rollback should restore previous content');
+lcfa_rollback_assert_same(['legacy-type'], $GLOBALS['lcfa_test_partial_terms'][789] ?? [], 'partial rollback should restore previous lc_partial_type terms');
 
 echo "PASS\n";

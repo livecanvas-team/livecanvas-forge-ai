@@ -408,7 +408,9 @@ Theme Library uses explicit completion states:
 - `ready`: starter data is imported and the persistent CSS cache is verified;
 - `build_required`: starter data is imported, but a compatible local build runtime is unavailable;
 - `build_failed`: the compiler failed or returned without producing a verifiable cache;
-- `failed`: the import failed before or outside the build stage.
+- `failed_rolled_back`: the import failed, then automatic rollback restored the previous state;
+- `rollback_failed`: both import and automatic rollback failed; manual recovery remains available;
+- `failed`: the import failed and automatic rollback was disabled or unavailable.
 
 `POST /wp-json/lcfa/v1/theme-library/build` retries only the CSS build for an existing import. It does not duplicate pages, partials, media, or menus. The route is admin-only and is not MCP-public in v1.
 
@@ -453,6 +455,14 @@ Rollback restores or removes:
 The install step stores a short pending activation record before switching themes. The import consumes that record so rollback refers to the theme and menu locations that were active before installation, not the newly activated child theme. Large WindPress files are backed up under the AI Bridge uploads directory and verified with SHA-256; only metadata is stored in the WordPress rollback option.
 
 Rollback records are dedicated Theme Library import records and are separate from normal AI Bridge command rollback records.
+
+Automatic rollback is enabled by default for failed imports. The response keeps the original import error separate from `automatic_rollback`, including `attempted`, `ok`, `message`, `errors`, and the recovery plan. Administrators can disable it for one REST request with `auto_rollback: false`, or globally with:
+
+```php
+add_filter('lcfa_theme_library_auto_rollback', '__return_false');
+```
+
+Disabling automatic rollback never removes the stored `import_audit_id`; the normal manual rollback endpoint remains available.
 
 ## REST Endpoints
 
