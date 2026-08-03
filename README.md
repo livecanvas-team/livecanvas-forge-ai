@@ -12,6 +12,11 @@ Beta / not production guaranteed: this repository is public for staging tests an
 
 See the current [development status and release gates](./docs/plugin-development-status.md) and the stack-by-stack [integration completeness audit](./docs/integration-completeness-audit.md) for verified capabilities, evidence levels, and remaining work.
 
+Public beta material:
+
+- [LiveCanvas AI Bridge beta presentation](./docs/livecanvas-ai-bridge-beta.html)
+- [Practical tutorial: from a reference URL to an editable LiveCanvas website](./docs/practical-beta-use-cases-tutorial.md)
+
 Usable today:
 
 - connect Codex, OpenCode, Claude Code, Claude Desktop, and Cursor through secure pairing or the local MCP bridge
@@ -210,7 +215,7 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
 
-The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.1`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
+The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.2`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
 
 The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
 

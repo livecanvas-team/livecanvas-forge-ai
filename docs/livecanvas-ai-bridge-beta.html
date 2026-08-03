@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="LiveCanvas AI Bridge gives coding agents a verified, preview-first path into WordPress and LiveCanvas.">
+    <title>LiveCanvas AI Bridge | Public Beta</title>
+    <link rel="icon" href="../assets/plugin-icon-256.png">
+    <style>
+        :root {
+            --ink: #0a0710;
+            --ink-soft: #100a18;
+            --surface: #171323;
+            --surface-strong: #211a31;
+            --line: #3b314d;
+            --line-bright: #655674;
+            --text: #f8f7fb;
+            --muted: #c3bed0;
+            --quiet: #90899e;
+            --cyan: #2cc5d8;
+            --cyan-dark: #123d45;
+            --pink: #ec3e8d;
+            --pink-dark: #48172f;
+            --violet: #7b36f1;
+            --green: #43d98a;
+            --amber: #f2c45b;
+            --radius: 8px;
+            --content: 1180px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            overflow-x: hidden;
+            background: var(--ink);
+            color: var(--text);
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+            line-height: 1.55;
+            letter-spacing: 0;
+        }
+
+        img {
+            display: block;
+            max-width: 100%;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        a:focus-visible,
+        button:focus-visible {
+            outline: 3px solid #8cebf3;
+            outline-offset: 4px;
+        }
+
+        .skip-link {
+            position: fixed;
+            top: 0.75rem;
+            left: 0.75rem;
+            z-index: 100;
+            padding: 0.6rem 0.8rem;
+            transform: translateY(-180%);
+            border-radius: 4px;
+            background: var(--text);
+            color: var(--ink);
+            font-weight: 750;
+        }
+
+        .skip-link:focus {
+            transform: translateY(0);
+        }
+
+        .wrap {
+            width: min(calc(100% - 3rem), var(--content));
+            margin-inline: auto;
+        }
+
+        .site-header {
+            position: relative;
+            z-index: 20;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: #0d0914;
+        }
+
+        .site-header__inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+            min-height: 4.5rem;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .brand__livecanvas {
+            width: 9.6rem;
+            height: auto;
+        }
+
+        .brand__divider {
+            width: 1px;
+            height: 1.5rem;
+            background: var(--line-bright);
+        }
+
+        .brand__product {
+            color: var(--text);
+            font-size: 0.84rem;
+            font-weight: 760;
+        }
+
+        .site-nav {
+            display: flex;
+            align-items: center;
+            gap: 1.4rem;
+        }
+
+        .site-nav a {
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-decoration: none;
+        }
+
+        .site-nav a:hover {
+            color: var(--text);
+        }
+
+        .site-nav .nav-cta {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2.65rem;
+            padding: 0 1rem;
+            border: 1px solid #56828a;
+            border-radius: 6px;
+            color: #d8fbff;
+            font-weight: 750;
+        }
+
+        .hero {
+            position: relative;
+            min-height: 42rem;
+            height: calc(100svh - 6rem);
+            max-height: 51rem;
+            overflow: hidden;
+            border-bottom: 1px solid var(--line);
+            background: #0c0712;
+        }
+
+        .hero__art {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            opacity: 0.82;
+        }
+
+        .hero::after {
+            position: absolute;
+            inset: 0;
+            content: "";
+            background: rgba(7, 4, 12, 0.28);
+            pointer-events: none;
+        }
+
+        .hero__inner {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            padding-top: 6.3rem;
+        }
+
+        .hero__copy {
+            position: relative;
+            z-index: 3;
+            width: min(38rem, 54%);
+        }
+
+        .release-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            min-height: 2rem;
+            padding: 0 0.75rem;
+            border: 1px solid #6d3b59;
+            border-radius: 999px;
+            background: rgba(15, 10, 22, 0.82);
+            color: #f6b7d5;
+            font-size: 0.78rem;
+            font-weight: 760;
+        }
+
+        .release-label::before {
+            width: 0.45rem;
+            height: 0.45rem;
+            border-radius: 50%;
+            background: var(--pink);
+            content: "";
+        }
+
+        h1,
+        h2,
+        h3,
+        p {
+            letter-spacing: 0;
+        }
+
+        .hero h1 {
+            max-width: 9ch;
+            margin: 1.25rem 0 1.15rem;
+            font-size: 4.7rem;
+            line-height: 0.98;
+            letter-spacing: 0;
+        }
+
+        .hero__lede {
+            max-width: 36rem;
+            margin: 0;
+            color: #ded9e7;
+            font-size: 1.22rem;
+            line-height: 1.55;
+        }
+
+        .hero__actions,
+        .cta-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1.75rem;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            min-height: 3.25rem;
+            padding: 0 1.25rem;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            text-decoration: none;
+            font-weight: 780;
+            transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button--primary {
+            background: var(--violet);
+            color: #fff;
+        }
+
+        .button--primary:hover {
+            background: #8d50f5;
+        }
+
+        .button--secondary {
+            border-color: #5e7780;
+            background: rgba(10, 7, 16, 0.58);
+            color: #ddf9fc;
+        }
+
+        .button--secondary:hover {
+            border-color: var(--cyan);
+        }
+
+        .hero__proof {
+            position: absolute;
+            right: 0;
+            bottom: -13.25rem;
+            z-index: 2;
+            width: min(52rem, 57vw);
+            margin: 0;
+        }
+
+        .hero__proof img {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            object-fit: cover;
+            object-position: top;
+            border: 1px solid rgba(137, 218, 229, 0.52);
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 1.2rem 5rem rgba(0, 0, 0, 0.5);
+        }
+
+        .hero__proof figcaption {
+            position: absolute;
+            top: -2.25rem;
+            right: 0;
+            color: #d5cfdf;
+            font-size: 0.78rem;
+        }
+
+        .trust-strip {
+            position: relative;
+            z-index: 4;
+            border-bottom: 1px solid var(--line);
+            background: #12101b;
+        }
+
+        .trust-strip__grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .trust-item {
+            min-height: 7.8rem;
+            padding: 1.5rem;
+            border-right: 1px solid var(--line);
+        }
+
+        .trust-item:first-child {
+            border-left: 1px solid var(--line);
+        }
+
+        .trust-item strong {
+            display: block;
+            margin-bottom: 0.35rem;
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        .trust-item span {
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .trust-item__mark {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 0.8rem;
+            color: var(--green);
+            font-size: 0.78rem;
+            font-weight: 780;
+        }
+
+        .trust-item__mark::before {
+            content: "OK";
+            font-size: 0.66rem;
+        }
+
+        .section {
+            padding: 7.5rem 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .section--light {
+            background: #f5f3f7;
+            color: #17131e;
+        }
+
+        .section--signal {
+            position: relative;
+            min-height: 44rem;
+            overflow: hidden;
+            background: #191724;
+        }
+
+        .section--signal::after {
+            position: absolute;
+            inset: 0;
+            content: "";
+            background: rgba(8, 6, 13, 0.24);
+            pointer-events: none;
+        }
+
+        .signal-art {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.78;
+        }
+
+        .section__head {
+            display: grid;
+            grid-template-columns: 0.8fr 1.2fr;
+            gap: 5rem;
+            align-items: start;
+            margin-bottom: 4rem;
+        }
+
+        .section__label {
+            margin: 0 0 0.75rem;
+            color: var(--cyan);
+            font-size: 0.84rem;
+            font-weight: 800;
+        }
+
+        .section--light .section__label {
+            color: #087f90;
+        }
+
+        .section h2 {
+            max-width: 12ch;
+            margin: 0;
+            font-size: 3rem;
+            line-height: 1.06;
+        }
+
+        .section__intro {
+            max-width: 39rem;
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.12rem;
+        }
+
+        .section--light .section__intro {
+            color: #5e5868;
+        }
+
+        .workflow {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin-top: 18rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .workflow__step {
+            min-height: 10rem;
+            padding: 1.5rem;
+            background: rgba(12, 9, 18, 0.9);
+        }
+
+        .workflow__step small {
+            display: block;
+            margin-bottom: 1rem;
+            color: var(--cyan);
+            font-weight: 800;
+        }
+
+        .workflow__step:nth-child(2) small {
+            color: #bf9aff;
+        }
+
+        .workflow__step:nth-child(3) small {
+            color: #ff78b7;
+        }
+
+        .workflow__step h3 {
+            margin: 0 0 0.45rem;
+            font-size: 1.18rem;
+        }
+
+        .workflow__step p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .case-study {
+            display: grid;
+            grid-template-columns: 1.18fr 0.82fr;
+            gap: 4rem;
+            align-items: start;
+        }
+
+        .case-study__screen {
+            margin: 0;
+        }
+
+        .case-study__screen img {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            object-fit: cover;
+            object-position: top;
+            border: 1px solid #d2ccd8;
+            border-radius: var(--radius);
+            background: #ddd8e0;
+        }
+
+        .case-study__screen figcaption {
+            margin-top: 0.8rem;
+            color: #6d6575;
+            font-size: 0.82rem;
+        }
+
+        .case-study__copy h3 {
+            margin: 0 0 1rem;
+            font-size: 2rem;
+            line-height: 1.12;
+        }
+
+        .case-study__copy > p {
+            margin: 0 0 1.6rem;
+            color: #5e5868;
+        }
+
+        .build-list {
+            display: grid;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            border-top: 1px solid #cbc5d0;
+            list-style: none;
+        }
+
+        .build-list li {
+            display: grid;
+            grid-template-columns: 2.5rem 1fr;
+            gap: 0.75rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid #cbc5d0;
+        }
+
+        .build-list span {
+            color: #7b36f1;
+            font-size: 0.78rem;
+            font-weight: 850;
+        }
+
+        .build-list strong {
+            font-size: 0.95rem;
+        }
+
+        .capability-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            border-top: 1px solid var(--line);
+            border-left: 1px solid var(--line);
+        }
+
+        .capability {
+            min-height: 14rem;
+            padding: 2rem;
+            border-right: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .capability__index {
+            display: block;
+            margin-bottom: 2.25rem;
+            color: var(--quiet);
+            font-size: 0.78rem;
+        }
+
+        .capability h3 {
+            margin: 0 0 0.65rem;
+            font-size: 1.35rem;
+        }
+
+        .capability p {
+            max-width: 31rem;
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .guardrail {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            margin-top: 3.5rem;
+            border-top: 1px solid var(--line-bright);
+            border-bottom: 1px solid var(--line-bright);
+        }
+
+        .guardrail__stage {
+            position: relative;
+            padding: 1.5rem 1.25rem 1.7rem;
+            border-right: 1px solid var(--line);
+        }
+
+        .guardrail__stage:last-child {
+            border-right: 0;
+        }
+
+        .guardrail__stage::before {
+            display: block;
+            width: 0.65rem;
+            height: 0.65rem;
+            margin-bottom: 1.25rem;
+            border-radius: 50%;
+            background: var(--cyan);
+            content: "";
+        }
+
+        .guardrail__stage:nth-child(2)::before {
+            background: #a77cf8;
+        }
+
+        .guardrail__stage:nth-child(3)::before {
+            background: var(--pink);
+        }
+
+        .guardrail__stage:nth-child(4)::before {
+            background: var(--green);
+        }
+
+        .guardrail__stage strong {
+            display: block;
+            margin-bottom: 0.4rem;
+        }
+
+        .guardrail__stage span {
+            color: var(--muted);
+            font-size: 0.86rem;
+        }
+
+        .beta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: start;
+        }
+
+        .beta-panel {
+            padding-left: 1.5rem;
+            border-left: 3px solid var(--amber);
+        }
+
+        .beta-panel h3 {
+            margin: 0 0 0.8rem;
+            font-size: 1.35rem;
+        }
+
+        .beta-panel p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .requirements {
+            display: grid;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            border-top: 1px solid var(--line);
+            list-style: none;
+        }
+
+        .requirements li {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.85rem 0;
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
+        }
+
+        .requirements strong {
+            color: var(--text);
+        }
+
+        .closing {
+            padding: 7rem 0;
+            background: #100817;
+            text-align: center;
+        }
+
+        .closing img {
+            width: 5rem;
+            margin: 0 auto 1.5rem;
+        }
+
+        .closing h2 {
+            max-width: 15ch;
+            margin: 0 auto;
+            font-size: 3.2rem;
+            line-height: 1.04;
+        }
+
+        .closing p {
+            max-width: 42rem;
+            margin: 1.2rem auto 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .cta-actions {
+            justify-content: center;
+        }
+
+        .site-footer {
+            padding: 2rem 0;
+            border-top: 1px solid var(--line);
+            background: #0b0811;
+            color: var(--quiet);
+            font-size: 0.8rem;
+        }
+
+        .site-footer__inner {
+            display: flex;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+
+        .site-footer a {
+            color: var(--muted);
+        }
+
+        @media (max-width: 920px) {
+            .site-nav a:not(.nav-cta) {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 3.7rem;
+            }
+
+            .hero__copy {
+                width: 60%;
+            }
+
+            .hero__proof {
+                width: 54vw;
+            }
+
+            .section__head,
+            .case-study,
+            .beta-grid {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+
+            .section__head {
+                margin-bottom: 3rem;
+            }
+
+            .section h2 {
+                max-width: 16ch;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .wrap {
+                width: min(calc(100% - 2rem), var(--content));
+            }
+
+            .site-header__inner {
+                min-height: 4rem;
+            }
+
+            .brand__livecanvas {
+                width: 7.7rem;
+            }
+
+            .brand__product,
+            .brand__divider {
+                display: none;
+            }
+
+            .site-nav .nav-cta {
+                min-height: 2.35rem;
+                padding: 0 0.7rem;
+                font-size: 0.78rem;
+            }
+
+            .hero {
+                min-height: 37.5rem;
+                height: calc(100svh - 4rem);
+                max-height: 44rem;
+            }
+
+            .hero__art {
+                object-position: 62% center;
+                opacity: 0.68;
+            }
+
+            .hero::after {
+                background: rgba(7, 4, 12, 0.42);
+            }
+
+            .hero__inner {
+                padding-top: 3.1rem;
+            }
+
+            .hero__copy {
+                width: 100%;
+            }
+
+            .hero h1 {
+                max-width: 10ch;
+                margin-top: 1rem;
+                font-size: 2.85rem;
+                line-height: 1;
+            }
+
+            .hero__lede {
+                max-width: 31rem;
+                font-size: 1rem;
+                line-height: 1.5;
+            }
+
+            .hero__actions {
+                margin-top: 1.25rem;
+            }
+
+            .button {
+                min-height: 2.85rem;
+                padding-inline: 0.95rem;
+                font-size: 0.88rem;
+            }
+
+            .hero__proof {
+                right: 1rem;
+                bottom: -1.25rem;
+                left: 1rem;
+                width: auto;
+            }
+
+            .hero__proof img {
+                aspect-ratio: 16 / 8.2;
+            }
+
+            .hero__proof figcaption {
+                display: none;
+            }
+
+            .trust-strip__grid,
+            .workflow,
+            .capability-list,
+            .guardrail {
+                grid-template-columns: 1fr;
+            }
+
+            .trust-item,
+            .trust-item:first-child {
+                min-height: auto;
+                padding: 1.15rem 0;
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+                border-left: 0;
+            }
+
+            .trust-item:last-child {
+                border-bottom: 0;
+            }
+
+            .section {
+                padding: 5rem 0;
+            }
+
+            .section h2,
+            .closing h2 {
+                font-size: 2.3rem;
+            }
+
+            .section--signal {
+                min-height: 48rem;
+            }
+
+            .signal-art {
+                object-position: center;
+            }
+
+            .workflow {
+                margin-top: 15rem;
+            }
+
+            .workflow__step {
+                min-height: auto;
+            }
+
+            .capability {
+                min-height: auto;
+                padding: 1.5rem;
+            }
+
+            .capability__index {
+                margin-bottom: 1.25rem;
+            }
+
+            .guardrail__stage {
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+            }
+
+            .guardrail__stage:last-child {
+                border-bottom: 0;
+            }
+
+            .requirements li {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.2rem;
+            }
+
+            .site-footer__inner {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            .button {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+        <div class="site-header__inner wrap">
+            <a class="brand" href="https://livecanvas.com/" aria-label="LiveCanvas home">
+                <img class="brand__livecanvas" src="assets/ai-bridge-beta/livecanvas-logo.svg" alt="LiveCanvas">
+                <span class="brand__divider" aria-hidden="true"></span>
+                <span class="brand__product">AI Bridge</span>
+            </a>
+            <nav class="site-nav" aria-label="Primary navigation">
+                <a href="#workflow">Workflow</a>
+                <a href="#use-cases">Use cases</a>
+                <a href="#beta">Beta status</a>
+                <a class="nav-cta" href="https://github.com/livecanvas-team/livecanvas-forge-ai">View on GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+            <img class="hero__art" src="assets/ai-bridge-beta/bridge-hero.png" alt="Abstract cyan and magenta bridge joining two dark technical surfaces">
+            <div class="hero__inner wrap">
+                <div class="hero__copy">
+                    <span class="release-label">Public beta 0.2</span>
+                    <h1 id="hero-title">LiveCanvas AI Bridge</h1>
+                    <p class="hero__lede">Give your coding agent a verified path into WordPress and LiveCanvas. Inspect the real site, preview changes, apply structured writes, and keep rollback within reach.</p>
+                    <div class="hero__actions">
+                        <a class="button button--primary" href="practical-beta-use-cases-tutorial.md">Read the beta tutorial <span aria-hidden="true">-&gt;</span></a>
+                        <a class="button button--secondary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases">Download the beta</a>
+                    </div>
+                </div>
+
+                <figure class="hero__proof">
+                    <figcaption>Real WordPress connection workflow</figcaption>
+                    <img src="screenshots/connections-pairing-pending-refined.jpg" alt="LiveCanvas AI Bridge secure Codex pairing screen in WordPress">
+                </figure>
+            </div>
+        </section>
+
+        <section class="trust-strip" aria-label="Core safety model">
+            <div class="trust-strip__grid wrap">
+                <div class="trust-item">
+                    <span class="trust-item__mark">IDENTITY</span>
+                    <strong>One project. One site.</strong>
+                    <span>URL and fingerprint are verified before work begins.</span>
+                </div>
+                <div class="trust-item">
+                    <span class="trust-item__mark">ACCESS</span>
+                    <strong>Scoped sessions</strong>
+                    <span>Revocable access without sharing a WordPress password.</span>
+                </div>
+                <div class="trust-item">
+                    <span class="trust-item__mark">CONTROL</span>
+                    <strong>Preview before apply</strong>
+                    <span>Review plans, validation, and diffs before writes.</span>
+                </div>
+                <div class="trust-item">
+                    <span class="trust-item__mark">RECOVERY</span>
+                    <strong>Audit and rollback</strong>
+                    <span>Structured writes return an audit ID for recovery.</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--signal" id="workflow" aria-labelledby="workflow-title">
+            <img class="signal-art" src="assets/ai-bridge-beta/bridge-system.png" alt="Abstract technical system carrying a cyan and magenta signal through a secure center bridge">
+            <div class="wrap" style="position: relative; z-index: 2;">
+                <div class="section__head">
+                    <div>
+                        <p class="section__label">A STRUCTURED EXECUTION LAYER</p>
+                        <h2 id="workflow-title">The agent reasons. AI Bridge controls the site.</h2>
+                    </div>
+                    <p class="section__intro">The coding agent analyzes the brief, reference material, and desired outcome. AI Bridge supplies real WordPress context and exposes explicit LiveCanvas operations instead of an unrestricted remote shell.</p>
+                </div>
+
+                <div class="workflow">
+                    <article class="workflow__step">
+                        <small>01 / CODING AGENT</small>
+                        <h3>Analyze and generate</h3>
+                        <p>Codex, Claude, Cursor, or OpenCode reads the brief, inspects the stack, and prepares framework-native output.</p>
+                    </article>
+                    <article class="workflow__step">
+                        <small>02 / AI BRIDGE</small>
+                        <h3>Verify and govern</h3>
+                        <p>Site identity, scopes, framework validation, preview, audit records, and rollback stay explicit.</p>
+                    </article>
+                    <article class="workflow__step">
+                        <small>03 / WORDPRESS</small>
+                        <h3>Keep it editable</h3>
+                        <p>Pages, partials, templates, media, and design systems remain inside the LiveCanvas workflow.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--light" aria-labelledby="case-title">
+            <div class="wrap">
+                <div class="section__head">
+                    <div>
+                        <p class="section__label">PRACTICAL BETA WORKFLOW</p>
+                        <h2 id="case-title">From a reference URL to an editable site.</h2>
+                    </div>
+                    <p class="section__intro">Use a reference for hierarchy, rhythm, and interaction ideas. Generate an original brand, copy, media, and implementation. The result is not a screenshot pasted into WordPress: it is real HTML that can still be edited in LiveCanvas.</p>
+                </div>
+
+                <div class="case-study">
+                    <figure class="case-study__screen">
+                        <img src="screenshots/houseflow-desktop.png" alt="Original one-page website generated during a LiveCanvas AI Bridge beta workflow">
+                        <figcaption>Example result from a supervised beta build. Original concept, media, copy, and LiveCanvas output.</figcaption>
+                    </figure>
+
+                    <div class="case-study__copy">
+                        <h3>A complete build, divided into verifiable operations.</h3>
+                        <p>The useful unit is not one giant prompt. It is a sequence that can be inspected, repeated, and recovered.</p>
+                        <ol class="build-list">
+                            <li><span>01</span><strong>Audit WordPress, LiveCanvas, theme, and build runtime.</strong></li>
+                            <li><span>02</span><strong>Translate the reference into an original information architecture.</strong></li>
+                            <li><span>03</span><strong>Preview and apply the design system and media manifest.</strong></li>
+                            <li><span>04</span><strong>Create header, footer, homepage, and dynamic templates.</strong></li>
+                            <li><span>05</span><strong>Compile, inspect desktop/mobile output, then refine by patch.</strong></li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="use-cases" aria-labelledby="capabilities-title">
+            <div class="wrap">
+                <div class="section__head">
+                    <div>
+                        <p class="section__label">WHAT YOU CAN DO TODAY</p>
+                        <h2 id="capabilities-title">Developer workflows, not black-box generation.</h2>
+                    </div>
+                    <p class="section__intro">AI Bridge is useful when the task has a clear target and a safe apply path. It coordinates site-aware generation and maintenance while preserving LiveCanvas structure.</p>
+                </div>
+
+                <div class="capability-list">
+                    <article class="capability">
+                        <span class="capability__index">01 / BUILD</span>
+                        <h3>Create LiveCanvas pages</h3>
+                        <p>Generate draft pages from a brief, preserve the global shell, attach page-specific CSS or JavaScript, and keep staging content noindex.</p>
+                    </article>
+                    <article class="capability">
+                        <span class="capability__index">02 / SYSTEM</span>
+                        <h3>Establish a design system</h3>
+                        <p>Preview stack-native tokens for Picostrap or Picowind, then compile the matching Sass or Tailwind workflow.</p>
+                    </article>
+                    <article class="capability">
+                        <span class="capability__index">03 / STRUCTURE</span>
+                        <h3>Update partials and templates</h3>
+                        <p>Work on headers, footers, and dynamic templates as separate LiveCanvas objects instead of embedding everything in one page.</p>
+                    </article>
+                    <article class="capability">
+                        <span class="capability__index">04 / MAINTAIN</span>
+                        <h3>Patch without rewriting</h3>
+                        <p>Target unique text, selectors, classes, and attributes; review the diff; apply the exact change; retain its audit trail.</p>
+                    </article>
+                    <article class="capability">
+                        <span class="capability__index">05 / ASSETS</span>
+                        <h3>Manage media and theme files</h3>
+                        <p>Upload original assets, build manifests, use guarded theme-file tools, and keep backups for advanced development workflows.</p>
+                    </article>
+                    <article class="capability">
+                        <span class="capability__index">06 / VERIFY</span>
+                        <h3>Check the rendered result</h3>
+                        <p>Run desktop and mobile visual checks, inspect overflow and browser errors, flush caches, and verify the final site state.</p>
+                    </article>
+                </div>
+
+                <div class="guardrail" aria-label="Write workflow">
+                    <div class="guardrail__stage">
+                        <strong>Read</strong>
+                        <span>Snapshot, inventory, theme context, and diagnostics.</span>
+                    </div>
+                    <div class="guardrail__stage">
+                        <strong>Preview</strong>
+                        <span>Plan, validate, and show the proposed change.</span>
+                    </div>
+                    <div class="guardrail__stage">
+                        <strong>Apply</strong>
+                        <span>Use an explicitly exposed, scoped write ability.</span>
+                    </div>
+                    <div class="guardrail__stage">
+                        <strong>Rollback</strong>
+                        <span>Restore the audited state when verification fails.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="beta" aria-labelledby="beta-title">
+            <div class="wrap">
+                <div class="section__head">
+                    <div>
+                        <p class="section__label">PUBLIC BETA</p>
+                        <h2 id="beta-title">Ready for staging. Still supervised.</h2>
+                    </div>
+                    <p class="section__intro">The beta is intended for developers and agencies who can review generated code, verify target identity, and test writes on staging before production use.</p>
+                </div>
+
+                <div class="beta-grid">
+                    <div class="beta-panel">
+                        <h3>What this beta does not promise</h3>
+                        <p>It is not a one-click pixel-perfect cloning service, an unsupervised production operator, or a way to bypass hosting permissions and missing build runtimes.</p>
+                    </div>
+                    <ul class="requirements">
+                        <li><strong>WordPress</strong><span>6.8 or 7.0</span></li>
+                        <li><strong>LiveCanvas</strong><span>Active and licensed</span></li>
+                        <li><strong>Recommended target</strong><span>Staging site</span></li>
+                        <li><strong>Safe workflow</strong><span>Preview, apply, verify, rollback</span></li>
+                        <li><strong>Current release</strong><span>0.2 public beta</span></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="closing" aria-labelledby="closing-title">
+            <div class="wrap">
+                <img src="../assets/plugin-icon-256.png" alt="LiveCanvas AI Bridge icon">
+                <h2 id="closing-title">Build with an agent. Stay in control of the site.</h2>
+                <p>Connect one coding-agent project to one verified WordPress site, start read-only, and move through structured previews before any write.</p>
+                <div class="cta-actions">
+                    <a class="button button--primary" href="practical-beta-use-cases-tutorial.md">Open the practical tutorial</a>
+                    <a class="button button--secondary" href="https://github.com/livecanvas-team/livecanvas-forge-ai">Explore the repository</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="site-footer__inner wrap">
+            <span>LiveCanvas AI Bridge 0.2 public beta. Not production guaranteed.</span>
+            <span>Built for <a href="https://livecanvas.com/">LiveCanvas</a>, WordPress, and coding agents.</span>
+        </div>
+    </footer>
+</body>
+</html>

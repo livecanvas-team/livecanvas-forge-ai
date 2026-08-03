@@ -72,10 +72,10 @@ The following work remains intentionally open:
 
 The current automated baseline contains:
 
-- 70 PHP regression scripts.
+- 77 PHP regression scripts.
 - 12 non-GUI admin/runtime JavaScript unit checks.
-- 10 MCP Node test files, including the opt-in real Chromium visual runtime check.
-- PHP lint across 141 tracked PHP files, including tests and bundled compatibility code.
+- 12 MCP Node test files, including the opt-in real Chromium visual runtime check.
+- PHP lint across 154 tracked PHP files, including tests and bundled compatibility code.
 - `git diff --check`.
 - Distribution build and package validation.
 - Manual desktop and 390 px mobile review of the coding-agent setup guide.
@@ -98,7 +98,7 @@ Before calling a release production-ready, complete all of the following:
 4. Verify Full Access tools on at least two hosting environments with different filesystem policies.
 5. Publish a compatibility matrix and document known host/plugin conflicts.
 
-For `0.2.0-beta.2`, the automated matrix, local Picostrap/Tailwind 4 gates, and the Hearthline Picostrap catalog import pass. The remaining production-qualification gates are broader hosting and client coverage. The MCP runtime remains pinned to `0.2.0-beta.1` because this release changes the WordPress importer and Theme Library UI only.
+For `0.2.0-beta.2`, the automated matrix, local Picostrap/Tailwind 4 gates, and the Hearthline Picostrap catalog import pass. The remaining production-qualification gates are broader hosting and client coverage. The matching MCP runtime is pinned to `0.2.0-beta.2` and adds protected-staging HTTP Basic support plus headless DaisyUI plugin loading for WindPress builds.
 
 The detailed stack-by-stack matrix and remaining production gates are maintained in [Integration Completeness Audit](integration-completeness-audit.md).
 
