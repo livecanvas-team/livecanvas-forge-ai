@@ -77,7 +77,7 @@ final class LCFA_Admin_Hero_Presenter {
             ];
         }
 
-        if (!empty($snapshot['windpress_active']) || !empty($snapshot['windpress_installed'])) {
+        if ($framework === 'picowind' && (!empty($snapshot['windpress_active']) || !empty($snapshot['windpress_installed']))) {
             $marks[] = [
                 'key' => 'windpress',
                 'label' => __('WindPress', 'livecanvas-forge-ai'),

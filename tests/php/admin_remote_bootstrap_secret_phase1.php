@@ -9,8 +9,8 @@ error_reporting(E_ALL);
 define('ABSPATH', '/tmp/lcfa-tests/');
 define('LCFA_DIR', dirname(__DIR__, 2) . '/');
 define('LCFA_URL', 'https://example.test/wp-content/plugins/livecanvas-forge-ai/');
-define('LCFA_VERSION', '0.2.0-beta.1');
-define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@0.2.0-beta.1');
+define('LCFA_VERSION', '0.2.0-beta.2');
+define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@0.2.0-beta.2');
 define('WP_PLUGIN_DIR', '/tmp/lcfa-tests/wp-content/plugins');
 
 function __(string $text, string $domain = ''): string {
@@ -82,7 +82,7 @@ foreach (['codex', 'opencode', 'claude', 'cursor'] as $client) {
     $configuration = (array) ($payload['clients'][$client] ?? []);
     $environment = (array) ($configuration['env'] ?? []);
 
-    lcfa_remote_bootstrap_assert(($configuration['command'] ?? '') === 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $client . ' should use the pinned secure MCP package');
+    lcfa_remote_bootstrap_assert(($configuration['command'] ?? '') === 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2', $client . ' should use the pinned secure MCP package');
     lcfa_remote_bootstrap_assert(in_array('LCFA_AGENT=' . $client, $environment, true), $client . ' should identify itself during pairing');
     lcfa_remote_bootstrap_assert(in_array('LCFA_PAIRING_SCOPES=read,preview', $environment, true), $client . ' should default to read and preview scopes');
 }

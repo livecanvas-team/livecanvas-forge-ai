@@ -1,5 +1,6 @@
 const { SessionAuth } = require('./session-auth')
 const MCP_PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
+const { applyHttpBasicAuth } = require('./http-auth')
 
 class WPClient {
   constructor(config) {
@@ -458,10 +459,10 @@ class WPClient {
     }
 
     const url = new URL(path.replace(/^\//, ''), this.restBase)
-    const headers = {
+    const headers = applyHttpBasicAuth({
       Accept: 'application/json',
       'X-LCFA-MCP-Package-Version': MCP_PACKAGE_VERSION
-    }
+    }, this.config)
 
     if (auth.type === 'legacy_mcp_token') {
       headers['X-LCFA-MCP-Token'] = auth.token

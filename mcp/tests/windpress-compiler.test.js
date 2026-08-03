@@ -26,7 +26,7 @@ function createCompiler(wpRoot) {
   })
 }
 
-function run() {
+async function run() {
   const manifestRoot = makeWpRoot()
 
   try {
@@ -55,8 +55,37 @@ function run() {
 
     const manifestCompiler = createCompiler(manifestRoot)
 
+    manifestCompiler.ensureWindPressRuntimeShim()
+    assert.ok(globalThis.window, 'headless compilation should expose a minimal window shim')
+    assert.equal(typeof globalThis.window.dispatchEvent, 'function', 'the WindPress plugin loader should receive EventTarget methods')
+    assert.equal(
+      globalThis.window.windpress.user_data.data_dir.url,
+      'https://localhost/wp-content/uploads/windpress/',
+      'the shim should provide the WindPress data directory URL expected by its compiler bundle'
+    )
+
     assert.equal(manifestCompiler.resolveCompilerAssetPath(4), v4Path, 'Tailwind v4 compiler should be resolved from WindPress manifest')
     assert.equal(manifestCompiler.resolveCompilerAssetPath(3), v3Path, 'Tailwind v3 compiler should be resolved from WindPress manifest')
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url) => {
+      const href = String(url)
+      if (href.includes('daisyui.bundle.mjs')) {
+        return new Response('export default function daisyui() {}', { status: 200 })
+      }
+      return new Response('export { default } from "/daisyui@5.7.14/es2022/daisyui.bundle.mjs";', { status: 200 })
+    }
+
+    try {
+      const prepared = await manifestCompiler.prepareExternalPlugins({
+        '/main.css': '@import "tailwindcss";\n@plugin "daisyui" { themes: light --default; }'
+      })
+      assert.match(prepared['/main.css'], /@plugin "\/__lcfa_plugins\/plugin-[a-f0-9]{12}\.js"/, 'external plugins should be rewritten to a volume module')
+      const pluginPath = Object.keys(prepared).find((entry) => entry.startsWith('/__lcfa_plugins/'))
+      assert.equal(prepared[pluginPath], 'export default function daisyui() {}', 'the self-contained plugin bundle should be stored in the compile volume')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   } finally {
     fs.rmSync(manifestRoot, { recursive: true, force: true })
   }
@@ -91,7 +120,11 @@ function run() {
 
 try {
   run()
-  console.log('PASS')
+    .then(() => console.log('PASS'))
+    .catch((error) => {
+      console.error(error)
+      process.exit(1)
+    })
 } catch (error) {
   console.error(error)
   process.exit(1)

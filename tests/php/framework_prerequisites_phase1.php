@@ -34,4 +34,19 @@ lcfa_prerequisite_assert(($stricter['required_php'] ?? '') === '8.3.0', 'The hig
 $picostrap = $php_81->check('picostrap');
 lcfa_prerequisite_assert(!empty($picostrap['ready']), 'Picostrap should not inherit the Picowind PHP 8.2 requirement.');
 
+$picostrap_windpress = $php_82->check_windpress('picostrap', true, true);
+lcfa_prerequisite_assert(($picostrap_windpress['status'] ?? '') === 'deactivation_recommended', 'Active WindPress should be marked as redundant on Picostrap.');
+lcfa_prerequisite_assert(($picostrap_windpress['action'] ?? '') === 'deactivate', 'Picostrap guidance should offer an explicit WindPress deactivation action.');
+lcfa_prerequisite_assert(empty($picostrap_windpress['required']), 'Picostrap must not require WindPress.');
+
+$picowind_windpress = $php_82->check_windpress('picowind', true, true);
+lcfa_prerequisite_assert(($picowind_windpress['status'] ?? '') === 'ready', 'Active WindPress should satisfy the Picowind runtime requirement.');
+lcfa_prerequisite_assert(!empty($picowind_windpress['required']), 'Picowind must declare WindPress as required.');
+
+$picowind_inactive = $php_82->check_windpress('picowind', true, false);
+lcfa_prerequisite_assert(($picowind_inactive['status'] ?? '') === 'activation_required', 'Installed but inactive WindPress should block the Picowind runtime.');
+
+$picowind_missing = $php_82->check_windpress('picowind', false, false);
+lcfa_prerequisite_assert(($picowind_missing['status'] ?? '') === 'installation_required', 'Missing WindPress should block the Picowind runtime.');
+
 echo "PASS\n";

@@ -87,6 +87,7 @@ final class LCFA_Admin {
     public function hooks(): void {
         add_action('admin_menu', [$this, 'register_menus'], 20);
         add_action('current_screen', [$this, 'suppress_external_admin_notices'], 0);
+        add_action('admin_notices', [$this, 'render_picostrap_windpress_admin_notice']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_init', [$this, 'maybe_redirect_after_activation']);
         add_action('wp_ajax_lcfa_connections_secondary', [$this, 'handle_connections_secondary_ajax']);
@@ -103,6 +104,7 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_mcp_session_revoke', [$this, 'handle_mcp_session_revoke_post']);
         add_action('admin_post_lcfa_reconfigure_connection', [$this, 'handle_reconfigure_connection_post']);
         add_action('admin_post_lcfa_resolve_framework_change_connection', [$this, 'handle_framework_change_connection_post']);
+        add_action('admin_post_lcfa_deactivate_redundant_windpress', [$this, 'handle_deactivate_redundant_windpress_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
         add_action('admin_post_lcfa_generate_plan', [$this, 'handle_generate_plan_post']);
         add_action('admin_post_lcfa_genesis_execute', [$this, 'handle_genesis_execute_post']);
@@ -137,6 +139,83 @@ final class LCFA_Admin {
         foreach ($hooks as $hook) {
             remove_all_actions($hook);
         }
+    }
+
+    public function render_picostrap_windpress_admin_notice(): void {
+        if (!current_user_can('activate_plugins')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        $screen_id = is_object($screen) && isset($screen->id) ? (string) $screen->id : '';
+        if (!in_array($screen_id, ['plugins', 'plugins-network'], true)) {
+            return;
+        }
+
+        $outcome = sanitize_key((string) ($_GET['lcfa_windpress'] ?? ''));
+        if ($outcome === 'deactivated') {
+            echo '<div class="notice notice-success is-dismissible"><p><strong>';
+            echo esc_html__('WindPress deactivated.', 'livecanvas-forge-ai');
+            echo '</strong> ' . esc_html__('The active Picostrap theme continues to use its Bootstrap and Sass build.', 'livecanvas-forge-ai');
+            echo '</p></div>';
+            return;
+        }
+
+        $snapshot = $this->environment->get_snapshot();
+        if (!$this->should_recommend_windpress_deactivation($snapshot)) {
+            return;
+        }
+
+        echo '<div class="notice notice-warning lcfa-windpress-framework-notice">';
+        echo '<p><strong>' . esc_html__('WindPress is not used by the active Picostrap theme.', 'livecanvas-forge-ai') . '</strong></p>';
+        echo '<p>' . esc_html__('Picostrap uses Bootstrap and Sass. WindPress is needed for Picowind, Tailwind, or DaisyUI projects, so you can deactivate it on this site.', 'livecanvas-forge-ai') . '</p>';
+        $this->render_windpress_deactivate_form('plugins', false);
+        echo '</div>';
+    }
+
+    public function handle_deactivate_redundant_windpress_post(): void {
+        if (!current_user_can('activate_plugins')) {
+            wp_die(esc_html__('You do not have permission to deactivate plugins.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_deactivate_redundant_windpress');
+
+        $return_to = sanitize_key((string) ($_POST['return_to'] ?? 'dashboard'));
+        $snapshot = $this->environment->get_snapshot();
+        if (!$this->should_recommend_windpress_deactivation($snapshot)) {
+            LCFA_Settings::set_notice(__('WindPress was not changed because the active framework no longer requires this recommendation.', 'livecanvas-forge-ai'), 'error');
+            $this->redirect_after_windpress_action($return_to, 'unchanged');
+        }
+
+        $plugin_file = (string) ($snapshot['windpress_plugin_file'] ?? '');
+        if ($plugin_file === '') {
+            LCFA_Settings::set_notice(__('WindPress could not be located, so no plugin was changed.', 'livecanvas-forge-ai'), 'error');
+            $this->redirect_after_windpress_action($return_to, 'failed');
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+        $network_wide = is_multisite() && function_exists('is_plugin_active_for_network') && is_plugin_active_for_network($plugin_file);
+        if ($network_wide && !current_user_can('manage_network_plugins')) {
+            LCFA_Settings::set_notice(__('WindPress is network-active. A network administrator must deactivate it.', 'livecanvas-forge-ai'), 'error');
+            $this->redirect_after_windpress_action($return_to, 'failed');
+        }
+
+        deactivate_plugins($plugin_file, false, $network_wide);
+        $still_active = is_plugin_active($plugin_file)
+            || ($network_wide && function_exists('is_plugin_active_for_network') && is_plugin_active_for_network($plugin_file));
+
+        if ($still_active) {
+            LCFA_Settings::set_notice(__('WordPress could not deactivate WindPress. Review plugin or network permissions.', 'livecanvas-forge-ai'), 'error');
+            $this->redirect_after_windpress_action($return_to, 'failed');
+        }
+
+        if (method_exists($this->environment, 'refresh_plugin_caches')) {
+            $this->environment->refresh_plugin_caches();
+        }
+
+        LCFA_Settings::set_notice(__('WindPress deactivated. Picostrap remains active and continues to use Bootstrap and Sass.', 'livecanvas-forge-ai'), 'success');
+        $this->redirect_after_windpress_action($return_to, 'deactivated');
     }
 
     public function handle_theme_library_post(): void {
@@ -1664,7 +1743,7 @@ final class LCFA_Admin {
 
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.2';
 
         return [
             'client_payload' => [
@@ -1778,7 +1857,7 @@ final class LCFA_Admin {
         $is_secure_remote = $filesystem_mode !== 'local-theme-access';
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.2';
         $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
         $project_host = (string) parse_url($site_url, PHP_URL_HOST);
         $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {
@@ -2507,6 +2586,7 @@ final class LCFA_Admin {
         $this->render_notice($notice);
         $this->render_internal_tabs($tab, $settings);
         $this->render_ai_bridge_update_notice($snapshot);
+        $this->render_windpress_framework_advisory($snapshot);
 
         if (!$settings['completed'] && $tab !== 'setup') {
             echo '<div class="notice notice-warning"><p>';
@@ -2580,6 +2660,59 @@ final class LCFA_Admin {
             ));
             echo '</p></div>';
         }
+    }
+
+    private function render_windpress_framework_advisory(array $snapshot): void {
+        if (!$this->should_recommend_windpress_deactivation($snapshot)) {
+            return;
+        }
+
+        echo '<section class="lcfa-runtime-advisory" aria-labelledby="lcfa-windpress-advisory-title">';
+        echo '<span class="lcfa-runtime-advisory__icon" aria-hidden="true">' . $this->get_icon_svg('wind') . '</span>';
+        echo '<div class="lcfa-runtime-advisory__copy">';
+        echo '<h2 id="lcfa-windpress-advisory-title">' . esc_html__('WindPress is not used by Picostrap', 'livecanvas-forge-ai') . '</h2>';
+        echo '<p>' . esc_html__('The active theme uses Bootstrap and Sass. WindPress is only required for Picowind, Tailwind, or DaisyUI projects, so deactivating it keeps this site on one clear frontend stack.', 'livecanvas-forge-ai') . '</p>';
+        echo '<span>' . esc_html__('No theme or content files will be changed. AI Bridge will activate WindPress again if you switch to Picowind.', 'livecanvas-forge-ai') . '</span>';
+        echo '</div>';
+        $this->render_windpress_deactivate_form('dashboard', true);
+        echo '</section>';
+    }
+
+    private function render_windpress_deactivate_form(string $return_to, bool $with_icon): void {
+        echo '<form class="lcfa-runtime-advisory__action" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        wp_nonce_field('lcfa_deactivate_redundant_windpress');
+        echo '<input type="hidden" name="action" value="lcfa_deactivate_redundant_windpress">';
+        echo '<input type="hidden" name="return_to" value="' . esc_attr($return_to) . '">';
+        echo '<button type="submit" class="button button-secondary' . ($with_icon ? ' lcfa-button-with-icon' : '') . '">';
+        if ($with_icon) {
+            echo $this->get_icon_svg('power');
+        }
+        echo esc_html__('Deactivate WindPress', 'livecanvas-forge-ai');
+        echo '</button>';
+        echo '</form>';
+    }
+
+    private function should_recommend_windpress_deactivation(array $snapshot): bool {
+        $compatibility = is_array($snapshot['windpress_compatibility'] ?? null)
+            ? $snapshot['windpress_compatibility']
+            : [];
+
+        if (!empty($compatibility)) {
+            return (string) ($compatibility['status'] ?? '') === 'deactivation_recommended';
+        }
+
+        return (string) ($snapshot['detected_framework'] ?? '') === 'picostrap'
+            && !empty($snapshot['windpress_active']);
+    }
+
+    private function redirect_after_windpress_action(string $return_to, string $outcome): void {
+        if ($return_to === 'plugins') {
+            wp_safe_redirect(add_query_arg('lcfa_windpress', sanitize_key($outcome), admin_url('plugins.php')));
+            exit;
+        }
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard'));
+        exit;
     }
 
     public function render_connections_page(): void {
@@ -3675,8 +3808,10 @@ final class LCFA_Admin {
             'connection_mode'  => $selected_mode,
             'workspace_root'   => $connections['workspace_root'],
         ]);
-        $codex_onboarding = $this->get_codex_onboarding_state($connections, $bundle, $selected_mode, $remote_status);
-        if (!empty($codex_onboarding['should_invalidate_ready'])) {
+        $codex_onboarding = $show_codex_fast_path
+            ? $this->get_codex_onboarding_state($connections, $bundle, $selected_mode, $remote_status)
+            : [];
+        if ($show_codex_fast_path && !empty($codex_onboarding['should_invalidate_ready'])) {
             $connections['connection_status'] = 'needs_attention';
             $connections['connection_last_error'] = (string) ($codex_onboarding['message'] ?? __('Codex config is stale. Regenerate or sync the Codex MCP config.', 'livecanvas-forge-ai'));
             $connections['connection_current_step'] = 'smoke_test';
@@ -3728,21 +3863,29 @@ final class LCFA_Admin {
     private function render_connection_onboarding_hero(array $bundle, array $state, array $mcp_status, array $snapshot, string $selected_mode): void {
         $status = (string) ($state['status'] ?? 'not_connected');
         $status_label = ucfirst(str_replace('_', ' ', $status));
-        $status_class = $status === 'ready' ? ' is-positive' : (($status === 'needs_attention' || $status === 'not_connected') ? ' is-negative' : '');
         $client_label = ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex')));
+        $status_tone = $status === 'ready' ? 'positive' : ($status === 'needs_attention' ? 'warning' : 'neutral');
+        $status_icon = $status === 'ready' ? 'check-circle' : ($status === 'needs_attention' ? 'activity' : 'plug');
+        $status_heading = $status === 'ready'
+            ? __('Connection ready', 'livecanvas-forge-ai')
+            : ($status === 'needs_attention'
+                ? __('Connection needs attention', 'livecanvas-forge-ai')
+                : __('Connection not verified', 'livecanvas-forge-ai'));
 
-        echo '<section class="lcfa-card lcfa-onboarding-hero">';
-        echo '<div class="lcfa-card-head">';
-        echo $this->get_icon_svg('plug');
-        echo '<div><h2>' . esc_html__('Connection status', 'livecanvas-forge-ai') . '</h2></div>';
-        echo '</div>';
-        echo '<div class="lcfa-chip-row">';
-        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(sprintf(__('AI agent: %s', 'livecanvas-forge-ai'), $client_label)) . '</span></span>';
-        echo '<span class="lcfa-chip' . $status_class . '">' . esc_html($status_label) . '</span>';
-        echo '</div>';
+        echo '<section class="lcfa-card lcfa-onboarding-hero lcfa-connection-summary" aria-labelledby="lcfa-connection-summary-title">';
+        echo '<div class="lcfa-connection-summary__main">';
+        echo '<span class="lcfa-connection-summary__icon is-' . esc_attr($status_tone) . '">' . $this->get_icon_svg($status_icon) . '</span>';
+        echo '<div>';
+        echo '<h2 id="lcfa-connection-summary-title">' . esc_html($status_heading) . '</h2>';
         if (!empty($state['message'])) {
-            echo '<p class="lcfa-guide-copy">' . esc_html((string) $state['message']) . '</p>';
+            echo '<p>' . esc_html((string) $state['message']) . '</p>';
         }
+        echo '</div>';
+        echo '</div>';
+        echo '<dl class="lcfa-connection-summary__facts">';
+        echo '<div><dt>' . esc_html__('Coding agent', 'livecanvas-forge-ai') . '</dt><dd>' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html($client_label) . '</span></dd></div>';
+        echo '<div><dt>' . esc_html__('Status', 'livecanvas-forge-ai') . '</dt><dd class="is-' . esc_attr($status_tone) . '"><span class="lcfa-status-dot" aria-hidden="true"></span><span>' . esc_html($status_label) . '</span></dd></div>';
+        echo '</dl>';
         echo '</section>';
     }
 
@@ -5021,14 +5164,14 @@ final class LCFA_Admin {
         echo '<div><h2>' . esc_html((string) ($panel['title'] ?? __('Connection status', 'livecanvas-forge-ai'))) . '</h2><p>' . esc_html((string) ($panel['description'] ?? __('The selected client bundle has already been verified.', 'livecanvas-forge-ai'))) . '</p></div>';
         echo '</div>';
         $this->render_connection_now_alert((array) ($panel['alert'] ?? []));
-        echo '<div class="lcfa-chip-row">';
-        echo '<span class="lcfa-chip is-positive">' . esc_html((string) ($panel['status_label'] ?? __('Ready', 'livecanvas-forge-ai'))) . '</span>';
-        echo '<span class="lcfa-chip lcfa-chip--agent">' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(sprintf(__('Client: %s', 'livecanvas-forge-ai'), ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex'))))) . '</span></span>';
-        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Mode: %s', 'livecanvas-forge-ai'), (string) ($bundle['mode'] ?? 'local'))) . '</span>';
+        echo '<dl class="lcfa-runtime-facts lcfa-ready-facts">';
+        echo '<div><dt>' . esc_html__('Status', 'livecanvas-forge-ai') . '</dt><dd class="is-positive"><span class="lcfa-status-dot" aria-hidden="true"></span><span>' . esc_html((string) ($panel['status_label'] ?? __('Ready', 'livecanvas-forge-ai'))) . '</span></dd></div>';
+        echo '<div><dt>' . esc_html__('Coding agent', 'livecanvas-forge-ai') . '</dt><dd>' . $this->get_agent_icon_markup((string) ($bundle['client'] ?? 'codex'), 'stars') . '<span>' . esc_html(ucfirst(str_replace('-', ' ', (string) ($bundle['client'] ?? 'codex')))) . '</span></dd></div>';
+        echo '<div><dt>' . esc_html__('Mode', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html(ucfirst((string) ($bundle['mode'] ?? 'local'))) . '</dd></div>';
         if (!empty($connections['connection_last_verified_at'])) {
-            echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Verified: %s', 'livecanvas-forge-ai'), (string) $connections['connection_last_verified_at'])) . '</span>';
+            echo '<div><dt>' . esc_html__('Last verified', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html((string) $connections['connection_last_verified_at']) . '</dd></div>';
         }
-        echo '</div>';
+        echo '</dl>';
         $this->render_connection_technical_summary($bundle, true);
 
         echo '<div class="lcfa-cta-row">';
@@ -5036,7 +5179,7 @@ final class LCFA_Admin {
         wp_nonce_field('lcfa_test_connections');
         echo '<input type="hidden" name="action" value="lcfa_test_connections">';
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
-        echo '<button class="button button-primary" type="submit">' . esc_html((string) (($panel['primary_cta']['label'] ?? __('Run checks', 'livecanvas-forge-ai')))) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('activity') . '<span>' . esc_html((string) (($panel['primary_cta']['label'] ?? __('Run checks', 'livecanvas-forge-ai')))) . '</span></button>';
         echo '</form>';
 
         if ($show_workspace_install) {
@@ -5046,7 +5189,7 @@ final class LCFA_Admin {
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-            echo '<button class="button" type="submit">' . esc_html__('Write config in workspace', 'livecanvas-forge-ai') . '</button>';
+            echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html__('Write config in workspace', 'livecanvas-forge-ai') . '</span></button>';
             echo '</form>';
         }
 
@@ -5056,13 +5199,13 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
         echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-        echo '<button class="button" type="submit">' . esc_html__('Regenerate bundle', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('shuffle') . '<span>' . esc_html__('Regenerate bundle', 'livecanvas-forge-ai') . '</span></button>';
         echo '</form>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
         wp_nonce_field('lcfa_reconfigure_connection');
         echo '<input type="hidden" name="action" value="lcfa_reconfigure_connection">';
-        echo '<button class="button" type="submit">' . esc_html__('Change coding agent', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('shuffle') . '<span>' . esc_html__('Change coding agent', 'livecanvas-forge-ai') . '</span></button>';
         echo '</form>';
         echo '</div>';
 
@@ -5105,8 +5248,12 @@ final class LCFA_Admin {
         echo '<ol class="lcfa-wizard__steps">';
         foreach ($steps as $step) {
             $state = (string) ($step['state'] ?? 'locked');
-            echo '<li class="is-' . esc_attr($state) . '">';
-            echo '<span class="lcfa-wizard__step-number">' . esc_html((string) ($step['number'] ?? '')) . '</span>';
+            echo '<li class="is-' . esc_attr($state) . '"' . ($state === 'active' ? ' aria-current="step"' : '') . '>';
+            if ($state === 'done') {
+                echo '<span class="lcfa-wizard__step-number is-complete" aria-label="' . esc_attr__('Completed', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('check-circle') . '</span>';
+            } else {
+                echo '<span class="lcfa-wizard__step-number">' . esc_html((string) ($step['number'] ?? '')) . '</span>';
+            }
             echo '<strong>' . esc_html((string) ($step['title'] ?? '')) . '</strong>';
             echo '</li>';
         }
@@ -5122,6 +5269,7 @@ final class LCFA_Admin {
 
         echo '<section class="' . esc_attr($panel_class) . '">';
         echo '<div class="lcfa-wizard__panel-head">';
+        echo '<div class="lcfa-wizard__panel-label">' . $this->get_icon_svg('activity') . '<span>' . esc_html__('Current action', 'livecanvas-forge-ai') . '</span></div>';
         echo '<h3>' . esc_html((string) ($panel['title'] ?? __('Connection step', 'livecanvas-forge-ai'))) . '</h3>';
         if (!empty($panel['description'])) {
             echo '<p>' . esc_html((string) $panel['description']) . '</p>';
@@ -5156,11 +5304,11 @@ final class LCFA_Admin {
         }
 
         if ($current_step !== 'choose_client') {
-            echo '<div class="lcfa-cta-row">';
+            echo '<div class="lcfa-cta-row lcfa-wizard__secondary-actions">';
             echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
             wp_nonce_field('lcfa_reconfigure_connection');
             echo '<input type="hidden" name="action" value="lcfa_reconfigure_connection">';
-            echo '<button class="button" type="submit">' . esc_html__('Change coding agent', 'livecanvas-forge-ai') . '</button>';
+            echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('shuffle') . '<span>' . esc_html__('Change coding agent', 'livecanvas-forge-ai') . '</span></button>';
             echo '</form>';
             echo '</div>';
         }
@@ -5184,7 +5332,7 @@ final class LCFA_Admin {
         $this->render_radio('preferred_client', 'generic', __('Generic MCP client', 'livecanvas-forge-ai'), $preferred_client, 'plug');
         echo '</div>';
         echo '<div class="lcfa-cta-row">';
-        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('rocket') . '<span>' . esc_html($button_label) . '</span></button>';
         echo '</div>';
         echo '</form>';
     }
@@ -5202,7 +5350,7 @@ final class LCFA_Admin {
         $this->render_radio('claude_connection_target', 'cli', __('Command Line Interface', 'livecanvas-forge-ai'), $selected_target, 'command');
         echo '</div>';
         echo '<div class="lcfa-cta-row">';
-        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('rocket') . '<span>' . esc_html($button_label) . '</span></button>';
         echo '</div>';
         echo '</form>';
     }
@@ -5221,7 +5369,7 @@ final class LCFA_Admin {
         echo '<option value="remote"' . selected($selected_mode, 'remote', false) . '>' . esc_html__('Remote site', 'livecanvas-forge-ai') . '</option>';
         echo '</select></label>';
         echo '<div class="lcfa-cta-row">';
-        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('rocket') . '<span>' . esc_html($button_label) . '</span></button>';
         echo '</div>';
         echo '</form>';
     }
@@ -5258,9 +5406,9 @@ final class LCFA_Admin {
         echo '</div>';
         echo '<p class="lcfa-guide-copy">' . esc_html((string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter' ? __('If these values look correct, confirm them to generate the Codex remote MCP Adapter shortcut.', 'livecanvas-forge-ai') : __('If these values look correct, confirm them to generate the client bundle for the selected coding agent.', 'livecanvas-forge-ai')) . '</p>';
         echo '<div class="lcfa-cta-row">';
-        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('check-circle') . '<span>' . esc_html($button_label) . '</span></button>';
         if ((string) ($bundle['connection_strategy'] ?? '') !== 'remote-mcp-adapter') {
-            echo '<button class="button" type="submit" name="rotate_mcp_token" value="1">' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</button>';
+            echo '<button class="button lcfa-button-with-icon" type="submit" name="rotate_mcp_token" value="1">' . $this->get_icon_svg('shuffle') . '<span>' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</span></button>';
         }
         echo '</div>';
         echo '</form>';
@@ -5284,7 +5432,7 @@ final class LCFA_Admin {
             echo '<span>' . esc_html($primary_copy['description']) . '</span>';
             echo '<small>' . esc_html($primary_copy['note']) . '</small>';
             echo '</span>';
-            echo '<button class="button button-primary lcfa-button--wide" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</span></button>';
             echo '</div>';
         } elseif ($show_workspace_install && ($primary_cta['action'] ?? '') === 'install') {
             $primary_install = $this->get_generate_bundle_action_copy($bundle, 'install', true);
@@ -5302,7 +5450,7 @@ final class LCFA_Admin {
             echo '<small>' . esc_html($primary_install['note']) . '</small>';
             echo '</span>';
             echo '<label class="lcfa-checkbox lcfa-checkbox--card"><input type="checkbox" name="create_backup" value="1"> ' . esc_html__('Create backup before overwrite', 'livecanvas-forge-ai') . '</label>';
-            echo '<button class="button button-primary lcfa-button--wide" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Write config in workspace', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Write config in workspace', 'livecanvas-forge-ai'))) . '</span></button>';
             echo '</form>';
         } else {
             $primary_download = $this->get_generate_bundle_action_copy($bundle, 'download', true);
@@ -5319,7 +5467,7 @@ final class LCFA_Admin {
             echo '<span>' . esc_html($primary_download['description']) . '</span>';
             echo '<small>' . esc_html($primary_download['note']) . '</small>';
             echo '</span>';
-            echo '<button class="button button-primary lcfa-button--wide" type="submit">' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Download client bundle', 'livecanvas-forge-ai'))) . '</button>';
+            echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Download client bundle', 'livecanvas-forge-ai'))) . '</span></button>';
             echo '</form>';
         }
 
@@ -5346,7 +5494,7 @@ final class LCFA_Admin {
                 echo '<span>' . esc_html($secondary_download['description']) . '</span>';
                 echo '<small>' . esc_html($secondary_download['note']) . '</small>';
                 echo '</span>';
-                echo '<button class="button lcfa-button--wide" type="submit">' . esc_html($label ?: __('Download client bundle', 'livecanvas-forge-ai')) . '</button>';
+                echo '<button class="button lcfa-button--wide lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html($label ?: __('Download client bundle', 'livecanvas-forge-ai')) . '</span></button>';
                 echo '</form>';
             }
 
@@ -5360,7 +5508,7 @@ final class LCFA_Admin {
                 echo '<span>' . esc_html($secondary_copy['description']) . '</span>';
                 echo '<small>' . esc_html($secondary_copy['note']) . '</small>';
                 echo '</span>';
-                echo '<button class="button lcfa-button--wide" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . esc_html($copy_label) . '</button>';
+                echo '<button class="button lcfa-button--wide lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr($copy_label) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html($copy_label) . '</span></button>';
                 echo '</div>';
             }
         }
@@ -5467,7 +5615,7 @@ final class LCFA_Admin {
         wp_nonce_field('lcfa_test_connections');
         echo '<input type="hidden" name="action" value="lcfa_test_connections">';
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
-        echo '<button class="button button-primary" type="submit">' . esc_html($button_label) . '</button>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('activity') . '<span>' . esc_html($button_label) . '</span></button>';
         echo '</form>';
     }
 
@@ -5497,27 +5645,33 @@ final class LCFA_Admin {
             return;
         }
 
-        echo '<section class="lcfa-visual-help">';
+        echo '<section class="lcfa-visual-help" aria-labelledby="lcfa-visual-help-title">';
         echo '<div class="lcfa-guide">';
-        echo '<h3 class="lcfa-visual-help__title">';
+        echo '<h3 class="lcfa-visual-help__title" id="lcfa-visual-help-title">';
         if ($client !== '') {
             echo $this->get_agent_icon_markup($client, $this->get_client_fallback_icon($client), 'lcfa-agent-icon lcfa-agent-icon--section');
         }
         echo '<span>' . esc_html((string) ($visual_help['title'] ?? __('What this looks like', 'livecanvas-forge-ai'))) . '</span>';
         echo '</h3>';
         echo '</div>';
-        echo '<div class="lcfa-visual-help__grid">';
+        echo '<ol class="lcfa-visual-help__grid lcfa-visual-help__flow">';
 
-        foreach ($items as $item) {
+        foreach ($items as $index => $item) {
             $tone = sanitize_html_class((string) ($item['tone'] ?? 'default'));
-            echo '<article class="lcfa-visual-help__card tone-' . esc_attr($tone) . '">';
-            echo '<div class="lcfa-visual-help__frame" aria-hidden="true"></div>';
-            echo '<strong>' . esc_html((string) ($item['title'] ?? '')) . '</strong>';
+            $icon = sanitize_key((string) ($item['icon'] ?? ($tone === 'verify' ? 'check-circle' : ($tone === 'mcp' ? 'plug' : 'laptop'))));
+            echo '<li class="lcfa-visual-help__card tone-' . esc_attr($tone) . '">';
+            echo '<span class="lcfa-visual-help__marker" aria-hidden="true">' . $this->get_icon_svg($icon) . '</span>';
+            echo '<div class="lcfa-visual-help__content">';
+            if (!empty($item['context'])) {
+                echo '<span class="lcfa-visual-help__context">' . esc_html((string) $item['context']) . '</span>';
+            }
+            echo '<strong><span class="screen-reader-text">' . esc_html(sprintf(__('Step %d:', 'livecanvas-forge-ai'), $index + 1)) . ' </span>' . esc_html((string) ($item['title'] ?? '')) . '</strong>';
             echo '<p>' . esc_html((string) ($item['caption'] ?? '')) . '</p>';
-            echo '</article>';
+            echo '</div>';
+            echo '</li>';
         }
 
-        echo '</div>';
+        echo '</ol>';
         echo '</section>';
     }
 
@@ -5947,31 +6101,54 @@ final class LCFA_Admin {
         $local_bridge_ready = !$local_bridge_deferred && !empty($local_bridge['available']);
         $site_mode     = (string) (($settings['site_mode'] ?? '') ?: ($snapshot['site_mode'] ?? 'local'));
         $filesystem_mode = (string) ($mcp_status['filesystem_mode'] ?? '');
+        $selected_guide = is_array($guides[$selected_key] ?? null) ? $guides[$selected_key] : [];
+        $selected_label = (string) ($selected_guide['label'] ?? ucfirst($selected_key));
 
-        echo '<section class="lcfa-card">';
-        echo '<div class="lcfa-card-head">';
-        echo $this->get_icon_svg('stars');
         if ($is_wizard_context) {
-            echo '<div><h2>' . esc_html__('Do this next in your coding agent', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Follow these client-specific actions before using the raw bundle details. This section tells you what to click, copy, or run right now.', 'livecanvas-forge-ai') . '</p></div>';
+            echo '<details class="lcfa-agent-setup-details">';
+            echo '<summary>';
+            echo $this->get_icon_svg('command');
+            echo '<span><strong>' . esc_html(sprintf(__('Manual %s setup', 'livecanvas-forge-ai'), $selected_label)) . '</strong><small>' . esc_html__('Open only if the coding agent cannot see the AI Bridge tools.', 'livecanvas-forge-ai') . '</small></span>';
+            echo '</summary>';
+            echo '<div class="lcfa-agent-setup-details__body">';
         } else {
+            echo '<section class="lcfa-card">';
+            echo '<div class="lcfa-card-head">';
+            echo $this->get_icon_svg('stars');
             echo '<div><h2>' . esc_html__('Client quickstart details', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('These quickstart guides are written in English on purpose. Pick your client to review the exact command, environment, and smoke test generated by the plugin.', 'livecanvas-forge-ai') . '</p></div>';
+            echo '</div>';
         }
-        echo '</div>';
 
-        echo '<div class="lcfa-chip-row">';
-        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Site mode: %s', 'livecanvas-forge-ai'), $site_mode)) . '</span>';
-        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Filesystem mode: %s', 'livecanvas-forge-ai'), $filesystem_mode ?: 'n/a')) . '</span>';
-        echo '<span class="lcfa-chip' . ($local_bridge_ready ? ' is-positive' : ($local_bridge_deferred ? '' : '')) . '">' . esc_html($local_bridge_deferred ? __('Local MCP bridge status loading', 'livecanvas-forge-ai') : ($local_bridge_ready ? __('Local MCP bridge ready', 'livecanvas-forge-ai') : __('Local MCP bridge not ready', 'livecanvas-forge-ai'))) . '</span>';
-        echo '</div>';
+        echo '<dl class="lcfa-runtime-facts">';
+        echo '<div><dt>' . esc_html__('Site', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html(ucfirst($site_mode)) . '</dd></div>';
+        echo '<div><dt>' . esc_html__('File access', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html($filesystem_mode ?: __('Not available', 'livecanvas-forge-ai')) . '</dd></div>';
+        echo '<div><dt>' . esc_html__('Local bridge', 'livecanvas-forge-ai') . '</dt><dd class="' . esc_attr($local_bridge_ready ? 'is-positive' : ($local_bridge_deferred ? 'is-pending' : 'is-warning')) . '"><span class="lcfa-status-dot" aria-hidden="true"></span>' . esc_html($local_bridge_deferred ? __('Checking', 'livecanvas-forge-ai') : ($local_bridge_ready ? __('Ready', 'livecanvas-forge-ai') : __('Not ready', 'livecanvas-forge-ai'))) . '</dd></div>';
+        echo '</dl>';
 
-        echo '<div class="lcfa-guide">';
         $guide_notice = in_array($site_mode, ['remote', 'hybrid'], true)
             ? __('Remote agents use secure site-bound pairing. No WordPress password or legacy MCP token belongs in the generated client configuration.', 'livecanvas-forge-ai')
             : ($is_wizard_context
                 ? __('The local runtime may use the site MCP token. Treat raw commands and environment values as advanced reference material.', 'livecanvas-forge-ai')
                 : __('Local MCP tokens are only for trusted local runtimes. Remote agents should use secure site-bound pairing.', 'livecanvas-forge-ai'));
-        echo '<p>' . esc_html($guide_notice) . '</p>';
-        echo '</div>';
+        echo '<div class="lcfa-agent-guide__notice">' . $this->get_icon_svg('shield-lock') . '<p>' . esc_html($guide_notice) . '</p></div>';
+
+        if ($is_wizard_context) {
+            echo '<div class="lcfa-agent-guide lcfa-agent-guide--single">';
+            echo '<section class="lcfa-agent-guide__panel is-current">';
+            if (!empty($selected_guide['intro'])) {
+                echo '<p class="lcfa-agent-guide__intro">' . esc_html((string) $selected_guide['intro']) . '</p>';
+            }
+            if (!empty($selected_guide['modes']) && is_array($selected_guide['modes'])) {
+                $this->render_agent_connection_mode_switcher($selected_key, $selected_guide, $selected_claude_mode);
+            } else {
+                $this->render_agent_connection_windows($selected_guide);
+            }
+            echo '</section>';
+            echo '</div>';
+            echo '</div>';
+            echo '</details>';
+            return;
+        }
 
         echo '<div class="lcfa-agent-guide">';
         foreach ($guides as $key => $guide) {
@@ -7396,6 +7573,15 @@ final class LCFA_Admin {
     }
 
     private function render_snapshot_card(array $snapshot, array $settings): void {
+        $is_picostrap = (string) ($snapshot['detected_framework'] ?? '') === 'picostrap';
+        $windpress_caption = $is_picostrap
+            ? (!empty($snapshot['windpress_active'])
+                ? __('Active, not used by Picostrap', 'livecanvas-forge-ai')
+                : __('Not required by Picostrap', 'livecanvas-forge-ai'))
+            : (!empty($snapshot['windpress_active'])
+                ? __('Active', 'livecanvas-forge-ai')
+                : (!empty($snapshot['windpress_installed']) ? __('Installed', 'livecanvas-forge-ai') : __('Not installed', 'livecanvas-forge-ai')));
+
         echo '<section class="lcfa-card lcfa-snapshot-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('activity');
@@ -7418,8 +7604,8 @@ final class LCFA_Admin {
         $this->render_brand_tile(
             __('WindPress', 'livecanvas-forge-ai'),
             $this->get_partner_logo('windpress'),
-            $snapshot['windpress_active'] ? __('Active', 'livecanvas-forge-ai') : ($snapshot['windpress_installed'] ? __('Installed', 'livecanvas-forge-ai') : __('Not installed', 'livecanvas-forge-ai')),
-            $snapshot['windpress_active'] ? 'active' : 'other'
+            $windpress_caption,
+            !$is_picostrap && !empty($snapshot['windpress_active']) ? 'active' : 'other'
         );
         echo '</div>';
 
@@ -7622,7 +7808,7 @@ final class LCFA_Admin {
             $this->render_admin_hero_mark($mark);
         }
         echo '</div>';
-        echo '<div class="lcfa-hero-chips">';
+        echo '<dl class="lcfa-hero-chips" aria-label="' . esc_attr__('Project context', 'livecanvas-forge-ai') . '">';
         foreach ((array) ($hero['chips'] ?? []) as $chip) {
             if (!is_array($chip)) {
                 continue;
@@ -7630,7 +7816,7 @@ final class LCFA_Admin {
 
             $this->render_admin_hero_chip($chip);
         }
-        echo '</div>';
+        echo '</dl>';
         echo '<details class="lcfa-hero-details-panel">';
         echo '<summary class="lcfa-hero-details-toggle" aria-label="' . esc_attr__('Details', 'livecanvas-forge-ai') . '"><span class="lcfa-hero-details-toggle__icon" aria-hidden="true">i</span><span class="screen-reader-text">' . esc_html__('Details', 'livecanvas-forge-ai') . '</span></summary>';
         echo '<div class="lcfa-hero-details">';
@@ -7670,13 +7856,13 @@ final class LCFA_Admin {
         $value = (string) ($chip['value'] ?? '');
         $client = (string) ($chip['client'] ?? '');
 
-        echo '<span class="lcfa-hero-chip is-' . esc_attr($tone) . '">';
+        echo '<div class="lcfa-hero-chip is-' . esc_attr($tone) . '">';
         if ($client !== '') {
             echo '<span class="lcfa-hero-chip-media">' . $this->get_agent_icon_markup($client, $this->get_client_fallback_icon($client), 'lcfa-agent-icon lcfa-agent-icon--sm') . '</span>';
         }
-        echo '<strong>' . esc_html($label) . '</strong>';
-        echo '<span>' . esc_html($value) . '</span>';
-        echo '</span>';
+        echo '<dt>' . esc_html($label) . '</dt>';
+        echo '<dd>' . esc_html($value) . '</dd>';
+        echo '</div>';
     }
 
     private function render_brand_tile(string $title, string $logo_markup, string $caption, string $tone = 'other'): void {

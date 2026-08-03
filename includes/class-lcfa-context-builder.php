@@ -419,7 +419,7 @@ final class LCFA_Context_Builder {
         $is_secure_remote = $filesystem_mode !== 'local-theme-access';
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.2';
         $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
         $project_host = (string) parse_url($site_url, PHP_URL_HOST);
         $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {

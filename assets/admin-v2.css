@@ -637,3 +637,710 @@
         flex: 1 1 calc(50% - 4px);
     }
 }
+
+/* Connections: information reads as information; only controls look actionable. */
+.lcfa-admin .lcfa-hero-meta {
+    align-items: center;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-hero-stack {
+    gap: 4px;
+}
+
+.lcfa-admin .lcfa-hero-mark,
+.lcfa-admin .lcfa-hero-mark.is-active {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.lcfa-admin .lcfa-hero-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0;
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-hero-chip,
+.lcfa-admin .lcfa-hero-chip.is-active,
+.lcfa-admin .lcfa-hero-chip.is-other {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 6px;
+    min-height: 0;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-left: 1px solid var(--lcfa-v2-border);
+    border-radius: 0;
+    background: transparent;
+    white-space: nowrap;
+}
+
+.lcfa-admin .lcfa-hero-chip:first-child {
+    border-left: 0;
+}
+
+.lcfa-admin .lcfa-hero-chip-media {
+    display: inline-flex;
+    grid-row: 1 / span 2;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-hero-chip dt {
+    grid-column: 2;
+    color: var(--lcfa-v2-quiet);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.lcfa-admin .lcfa-hero-chip dd {
+    grid-column: 2;
+    overflow: hidden;
+    max-width: 190px;
+    margin: 2px 0 0;
+    color: var(--lcfa-v2-text);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+}
+
+.lcfa-admin .lcfa-hero-chip.is-active dd,
+.lcfa-admin .lcfa-hero-chip.is-other dd {
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-connection-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: center;
+    padding: 18px 20px;
+}
+
+.lcfa-admin .lcfa-connection-summary__main {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.lcfa-admin .lcfa-connection-summary__main h2 {
+    margin: 0;
+    color: var(--lcfa-v2-text);
+    font-size: 18px;
+    line-height: 1.25;
+}
+
+.lcfa-admin .lcfa-connection-summary__main p {
+    max-width: 70ch;
+    margin: 4px 0 0;
+    color: var(--lcfa-v2-muted);
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-connection-summary__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--lcfa-v2-surface-raised);
+    color: var(--lcfa-v2-muted);
+}
+
+.lcfa-admin .lcfa-connection-summary__icon.is-positive {
+    background: #173226;
+    color: var(--lcfa-v2-green);
+}
+
+.lcfa-admin .lcfa-connection-summary__icon.is-warning {
+    background: #382f1c;
+    color: var(--lcfa-v2-amber);
+}
+
+.lcfa-admin .lcfa-connection-summary__facts,
+.lcfa-admin .lcfa-runtime-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-connection-summary__facts > div,
+.lcfa-admin .lcfa-runtime-facts > div {
+    min-width: 120px;
+    padding: 0 14px;
+    border-left: 1px solid var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-connection-summary__facts dt,
+.lcfa-admin .lcfa-runtime-facts dt {
+    color: var(--lcfa-v2-quiet);
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.lcfa-admin .lcfa-connection-summary__facts dd,
+.lcfa-admin .lcfa-runtime-facts dd {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 4px 0 0;
+    color: var(--lcfa-v2-text);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.lcfa-admin .lcfa-status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--lcfa-v2-quiet);
+}
+
+.lcfa-admin .lcfa-ready-facts {
+    margin: 18px 0 4px;
+}
+
+.lcfa-admin .lcfa-ready-facts > div:first-child {
+    padding-left: 0;
+    border-left: 0;
+}
+
+.lcfa-admin dd.is-positive .lcfa-status-dot {
+    background: var(--lcfa-v2-green);
+}
+
+.lcfa-admin dd.is-warning .lcfa-status-dot {
+    background: var(--lcfa-v2-amber);
+}
+
+.lcfa-admin dd.is-pending .lcfa-status-dot {
+    background: var(--lcfa-v2-cyan);
+}
+
+.lcfa-admin .lcfa-wizard__steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 2px 0 18px;
+    border: 0;
+    border-bottom: 1px solid var(--lcfa-v2-border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-wizard__steps li,
+.lcfa-admin .lcfa-wizard__steps li.is-active,
+.lcfa-admin .lcfa-wizard__steps li.is-done {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-wizard__steps li.is-locked {
+    opacity: 0.48;
+}
+
+.lcfa-admin .lcfa-wizard__step-number {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--lcfa-v2-border-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--lcfa-v2-muted);
+    font-size: 11px;
+}
+
+.lcfa-admin .lcfa-wizard__steps li.is-active .lcfa-wizard__step-number {
+    border-color: var(--lcfa-v2-cyan);
+    background: #183840;
+    color: #83e4ed;
+}
+
+.lcfa-admin .lcfa-wizard__steps li.is-done .lcfa-wizard__step-number {
+    border-color: #286847;
+    background: #173226;
+    color: var(--lcfa-v2-green);
+}
+
+.lcfa-admin .lcfa-wizard__step-number .lcfa-icon,
+.lcfa-admin .lcfa-wizard__step-number .lcfa-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.lcfa-admin .lcfa-wizard__steps li strong {
+    color: var(--lcfa-v2-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.lcfa-admin .lcfa-wizard__steps li.is-active strong {
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-wizard__steps li.is-done strong {
+    color: #9edbb9;
+}
+
+.lcfa-admin .lcfa-wizard__panel,
+.lcfa-admin .lcfa-wizard__panel--blocking {
+    gap: 16px;
+    padding: 20px;
+    border-color: var(--lcfa-v2-border);
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface-raised);
+    box-shadow: none;
+}
+
+.lcfa-admin .lcfa-wizard__panel--blocking {
+    border-color: #287885;
+    background: #182d35;
+}
+
+.lcfa-admin .lcfa-wizard__panel-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    width: fit-content;
+    color: #83e4ed;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.lcfa-admin .lcfa-wizard__panel-label .lcfa-icon,
+.lcfa-admin .lcfa-wizard__panel-label svg {
+    width: 15px;
+    height: 15px;
+}
+
+.lcfa-admin .lcfa-wizard__panel-head h3 {
+    font-size: 18px;
+}
+
+.lcfa-admin .lcfa-wizard__secondary-actions {
+    margin: 2px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-button-with-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.lcfa-admin .lcfa-button-with-icon > .lcfa-icon,
+.lcfa-admin .lcfa-button-with-icon > .lcfa-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.lcfa-admin .lcfa-visual-help {
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 20px;
+    border-top-color: var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-visual-help__title {
+    font-size: 16px;
+}
+
+.lcfa-admin .lcfa-visual-help__flow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lcfa-admin .lcfa-visual-help__card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 12px;
+    padding: 2px 24px 2px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.lcfa-admin .lcfa-visual-help__card:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 19px;
+    right: 8px;
+    width: 10px;
+    height: 1px;
+    background: var(--lcfa-v2-border-strong);
+}
+
+.lcfa-admin .lcfa-visual-help__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--lcfa-v2-border-strong);
+    border-radius: 50%;
+    background: var(--lcfa-v2-surface-raised);
+    color: var(--lcfa-v2-muted);
+}
+
+.lcfa-admin .lcfa-visual-help__card.tone-project .lcfa-visual-help__marker,
+.lcfa-admin .lcfa-visual-help__card.tone-mcp .lcfa-visual-help__marker {
+    border-color: #287885;
+    color: #83e4ed;
+}
+
+.lcfa-admin .lcfa-visual-help__card.tone-verify .lcfa-visual-help__marker {
+    border-color: #286847;
+    color: var(--lcfa-v2-green);
+}
+
+.lcfa-admin .lcfa-visual-help__marker .lcfa-icon,
+.lcfa-admin .lcfa-visual-help__marker svg {
+    width: 17px;
+    height: 17px;
+}
+
+.lcfa-admin .lcfa-visual-help__content {
+    display: grid;
+    gap: 4px;
+    align-content: start;
+}
+
+.lcfa-admin .lcfa-visual-help__context {
+    color: var(--lcfa-v2-quiet);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.lcfa-admin .lcfa-visual-help__card strong {
+    color: var(--lcfa-v2-text);
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.lcfa-admin .lcfa-visual-help__card p {
+    color: var(--lcfa-v2-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-agent-setup-details {
+    margin-top: 20px;
+    border-top: 1px solid var(--lcfa-v2-border);
+    border-bottom: 1px solid var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 14px 0;
+    cursor: pointer;
+    list-style: none;
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary::after {
+    content: "+";
+    position: absolute;
+    right: 0;
+    color: var(--lcfa-v2-muted);
+    font-size: 20px;
+}
+
+.lcfa-admin .lcfa-agent-setup-details[open] > summary::after {
+    content: "−";
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary {
+    position: relative;
+    padding-right: 36px;
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary > .lcfa-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: var(--lcfa-v2-surface-raised);
+    color: var(--lcfa-v2-muted);
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary > span:last-child {
+    display: grid;
+    gap: 2px;
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary strong {
+    color: var(--lcfa-v2-text);
+    font-size: 14px;
+}
+
+.lcfa-admin .lcfa-agent-setup-details > summary small {
+    color: var(--lcfa-v2-muted);
+    font-size: 12px;
+}
+
+.lcfa-admin .lcfa-agent-setup-details__body {
+    display: grid;
+    gap: 16px;
+    padding: 4px 0 20px;
+}
+
+.lcfa-admin .lcfa-runtime-facts {
+    padding: 12px 0;
+    border-top: 1px solid var(--lcfa-v2-border);
+    border-bottom: 1px solid var(--lcfa-v2-border);
+}
+
+.lcfa-admin .lcfa-runtime-facts > div:first-child {
+    border-left: 0;
+    padding-left: 0;
+}
+
+.lcfa-admin .lcfa-agent-guide__notice {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    color: var(--lcfa-v2-muted);
+}
+
+.lcfa-admin .lcfa-agent-guide__notice .lcfa-icon,
+.lcfa-admin .lcfa-agent-guide__notice svg {
+    width: 17px;
+    height: 17px;
+    color: var(--lcfa-v2-amber);
+}
+
+.lcfa-admin .lcfa-agent-guide__notice p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-agent-guide--single {
+    margin-top: 0;
+}
+
+.lcfa-admin .lcfa-agent-guide--single .lcfa-agent-guide__panel.is-current {
+    display: grid;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.lcfa-admin .lcfa-agent-guide__window {
+    border-radius: var(--lcfa-v2-radius);
+    background: var(--lcfa-v2-surface-raised);
+}
+
+.lcfa-admin .lcfa-runtime-advisory {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    margin: 16px 0;
+    padding: 16px;
+    border: 1px solid #765f2e;
+    border-radius: var(--lcfa-v2-radius);
+    background: #29251a;
+    color: var(--lcfa-v2-text);
+}
+
+.lcfa-admin .lcfa-runtime-advisory__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #765f2e;
+    border-radius: var(--lcfa-v2-radius);
+    color: var(--lcfa-v2-amber);
+    background: #211f18;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__icon .lcfa-icon,
+.lcfa-admin .lcfa-runtime-advisory__icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__copy h2 {
+    margin: 0 0 4px;
+    color: var(--lcfa-v2-text);
+    font-size: 16px;
+    line-height: 1.3;
+    text-wrap: balance;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__copy p {
+    max-width: 72ch;
+    margin: 0 0 4px;
+    color: #ded7c4;
+    line-height: 1.5;
+    text-wrap: pretty;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__copy > span {
+    display: block;
+    color: #bdb49d;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__action {
+    margin: 0;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__action .button {
+    min-height: 44px;
+    border-color: var(--lcfa-v2-amber);
+    background: transparent;
+    color: var(--lcfa-v2-amber);
+    white-space: nowrap;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__action .button:hover,
+.lcfa-admin .lcfa-runtime-advisory__action .button:focus {
+    border-color: #f7d779;
+    background: #332d1d;
+    color: #fff2c4;
+}
+
+.lcfa-admin .lcfa-runtime-advisory__action .button:focus-visible {
+    outline: 2px solid var(--lcfa-v2-cyan);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+@media (max-width: 1100px) {
+    .lcfa-admin .lcfa-hero-meta,
+    .lcfa-admin .lcfa-hero-chips {
+        justify-content: flex-start;
+    }
+
+    .lcfa-admin .lcfa-connection-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .lcfa-admin .lcfa-connection-summary__facts > div:first-child {
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .lcfa-admin .lcfa-wizard__steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .lcfa-admin .lcfa-hero-meta {
+        display: grid;
+        grid-template-columns: 1fr auto;
+    }
+
+    .lcfa-admin .lcfa-hero-chips {
+        grid-column: 1 / -1;
+    }
+
+    .lcfa-admin .lcfa-hero-chip,
+    .lcfa-admin .lcfa-hero-chip.is-active,
+    .lcfa-admin .lcfa-hero-chip.is-other {
+        flex: 1 1 42%;
+        padding: 6px 10px;
+        border-left: 0;
+        border-top: 1px solid var(--lcfa-v2-border);
+    }
+
+    .lcfa-admin .lcfa-visual-help__flow {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+    }
+
+    .lcfa-admin .lcfa-visual-help__card:not(:last-child)::after {
+        top: 42px;
+        right: auto;
+        bottom: -14px;
+        left: 19px;
+        width: 1px;
+        height: 12px;
+    }
+
+    .lcfa-admin .lcfa-agent-guide__panel-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .lcfa-admin .lcfa-runtime-advisory {
+        grid-template-columns: 40px minmax(0, 1fr);
+    }
+
+    .lcfa-admin .lcfa-runtime-advisory__action {
+        grid-column: 2;
+    }
+}
+
+@media (max-width: 560px) {
+    .lcfa-admin .lcfa-wizard__steps {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .lcfa-admin .lcfa-connection-summary__facts,
+    .lcfa-admin .lcfa-runtime-facts {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .lcfa-admin .lcfa-connection-summary__facts > div,
+    .lcfa-admin .lcfa-runtime-facts > div,
+    .lcfa-admin .lcfa-runtime-facts > div:first-child {
+        padding: 0;
+        border-left: 0;
+    }
+
+    .lcfa-admin .lcfa-runtime-advisory {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .lcfa-admin .lcfa-runtime-advisory__action {
+        grid-column: 1;
+    }
+
+    .lcfa-admin .lcfa-runtime-advisory__action .button {
+        width: 100%;
+    }
+}

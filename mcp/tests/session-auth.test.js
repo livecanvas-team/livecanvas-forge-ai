@@ -12,6 +12,7 @@ async function main() {
 
   const requests = []
   let approved = false
+  const expectedBasicAuth = `Basic ${Buffer.from('staging-user:staging-pass').toString('base64')}`
 
   const server = http.createServer((req, res) => {
     let body = ''
@@ -27,6 +28,7 @@ async function main() {
       })
 
       if (req.url === '/wp-json/lcfa/v1/mcp/pairing/start' && req.method === 'POST') {
+        assert.strictEqual(req.headers.authorization, expectedBasicAuth, 'pairing should pass optional HTTP Basic protection')
         const payload = JSON.parse(body || '{}')
         assert.ok(['codex', 'opencode'].includes(payload.client), 'pairing should send the configured coding-agent identity')
         assert.deepStrictEqual(payload.scopes, ['read', 'preview', 'write'], 'default pairing should request read, preview, and write scopes')
@@ -43,6 +45,7 @@ async function main() {
       }
 
       if (req.url && req.url.startsWith('/wp-json/lcfa/v1/mcp/pairing/status')) {
+        assert.strictEqual(req.headers.authorization, expectedBasicAuth, 'pairing polling should pass optional HTTP Basic protection')
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(approved
           ? {
@@ -85,7 +88,9 @@ async function main() {
       siteFingerprint: 'site-fp',
       projectLabel: 'Remote Example',
       agent: 'codex',
-      transport: 'stdio'
+      transport: 'stdio',
+      httpBasicUsername: 'staging-user',
+      httpBasicPassword: 'staging-pass'
     }
     const client = new WPClient(config)
 
@@ -100,7 +105,8 @@ async function main() {
     const snapshotRequest = requests.find((request) => request.url === '/wp-json/lcfa/v1/snapshot')
     assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-session'], 'session_secret', 'protected requests should use the AI Bridge session header')
     assert.ok(!snapshotRequest.headers['x-lcfa-mcp-token'], 'protected requests should not send a legacy MCP token')
-    assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-package-version'], '0.2.0-beta.1', 'protected requests should report the running MCP package version')
+    assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-package-version'], '0.2.0-beta.2', 'protected requests should report the running MCP package version')
+    assert.strictEqual(snapshotRequest.headers.authorization, expectedBasicAuth, 'protected REST requests should pass optional HTTP Basic protection')
 
     approved = false
     const openCodeClient = new WPClient({

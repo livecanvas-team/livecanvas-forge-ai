@@ -1449,13 +1449,19 @@ final class LCFA_Command_Deck {
                 $restored_parts[] = $part_result;
             }
 
+            $settings_restore = $this->restore_livecanvas_global_shell_settings(
+                is_array($restore['livecanvas_settings'] ?? null) ? (array) $restore['livecanvas_settings'] : [],
+                $dry_run
+            );
+
             $result['existing_html'] = implode("\n\n", $current_parts);
             $result['proposed_html'] = implode("\n\n", $previous_parts);
             $result['diff_html'] = $this->build_diff($result['existing_html'], $result['proposed_html']);
             $result['data']['parts'] = $restored_parts;
+            $result['data']['livecanvas_settings_restore'] = $settings_restore;
             $result['ok'] = empty(array_filter($restored_parts, static function (array $part): bool {
                 return empty($part['ok']);
-            }));
+            })) && !empty($settings_restore['ok']);
 
             if (empty($result['ok'])) {
                 $result['message'] = __('One or more rollback parts could not be restored.', 'livecanvas-forge-ai');
@@ -1978,6 +1984,9 @@ final class LCFA_Command_Deck {
             $footer_html = (string) ($starter['footer_html'] ?? '');
         }
 
+        $header_html = $this->normalize_global_shell_partial_wrapper('header', $header_html);
+        $footer_html = $this->normalize_global_shell_partial_wrapper('footer', $footer_html);
+
         $parts = [];
         $proposed = [];
 
@@ -2025,6 +2034,18 @@ final class LCFA_Command_Deck {
             ];
         }
 
+        $livecanvas_settings = $this->ensure_livecanvas_global_shell_settings($parts, $dry_run);
+        if (empty($livecanvas_settings['ok'])) {
+            return [
+                'ok'      => false,
+                'message' => (string) ($livecanvas_settings['message'] ?? __('LiveCanvas header/footer settings could not be enabled.', 'livecanvas-forge-ai')),
+                'data'    => [
+                    'parts'               => $parts,
+                    'livecanvas_settings' => $livecanvas_settings,
+                ],
+            ];
+        }
+
         $existing_html = implode("\n\n", array_map(static function (array $part): string {
             return (string) ($part['existing_html'] ?? '');
         }, $parts));
@@ -2047,9 +2068,114 @@ final class LCFA_Command_Deck {
             'diff_html'        => $this->build_diff($existing_html, $proposed_html),
             'warnings'         => [],
             'data'             => [
-                'variant' => $variant,
-                'parts'   => $parts,
+                'variant'            => $variant,
+                'parts'              => $parts,
+                'livecanvas_settings' => $livecanvas_settings,
             ],
+        ];
+    }
+
+    private function ensure_livecanvas_global_shell_settings(array $parts, bool $dry_run): array {
+        $settings = get_option('lc_settings', []);
+        $settings = is_array($settings) ? $settings : [];
+        $next = $settings;
+        $previous = [];
+        $enabled = [];
+
+        $setting_by_part = [
+            'header' => 'header',
+            'footer' => 'footerV2',
+        ];
+
+        foreach ($setting_by_part as $part => $setting_key) {
+            if (!isset($parts[$part])) {
+                continue;
+            }
+
+            $previous[$setting_key] = [
+                'exists' => array_key_exists($setting_key, $settings),
+                'value'  => array_key_exists($setting_key, $settings) && is_scalar($settings[$setting_key])
+                    ? (string) $settings[$setting_key]
+                    : '',
+            ];
+            $next[$setting_key] = '1';
+            $enabled[] = $setting_key;
+        }
+
+        $changed = $next !== $settings;
+        if (!$dry_run && $changed && !update_option('lc_settings', $next, false)) {
+            return [
+                'ok'      => false,
+                'message' => __('LiveCanvas did not persist the global header/footer settings.', 'livecanvas-forge-ai'),
+                'enabled' => $enabled,
+                'changed' => false,
+                'previous' => $previous,
+            ];
+        }
+
+        return [
+            'ok'       => true,
+            'enabled'  => $enabled,
+            'changed'  => $changed,
+            'previous' => $previous,
+        ];
+    }
+
+    private function sanitize_livecanvas_global_shell_settings_snapshot(array $snapshot): array {
+        $sanitized = [];
+
+        foreach (['header', 'footerV2'] as $setting_key) {
+            if (!is_array($snapshot[$setting_key] ?? null)) {
+                continue;
+            }
+
+            $sanitized[$setting_key] = [
+                'exists' => !empty($snapshot[$setting_key]['exists']),
+                'value'  => is_scalar($snapshot[$setting_key]['value'] ?? null)
+                    ? (string) $snapshot[$setting_key]['value']
+                    : '',
+            ];
+        }
+
+        return $sanitized;
+    }
+
+    private function restore_livecanvas_global_shell_settings(array $snapshot, bool $dry_run): array {
+        $snapshot = $this->sanitize_livecanvas_global_shell_settings_snapshot($snapshot);
+        if (!$snapshot) {
+            return [
+                'ok'      => true,
+                'changed' => false,
+                'keys'    => [],
+            ];
+        }
+
+        $settings = get_option('lc_settings', []);
+        $settings = is_array($settings) ? $settings : [];
+        $restored = $settings;
+
+        foreach ($snapshot as $setting_key => $state) {
+            if (!empty($state['exists'])) {
+                $restored[$setting_key] = (string) ($state['value'] ?? '');
+            } else {
+                unset($restored[$setting_key]);
+            }
+        }
+
+        $changed = $restored !== $settings;
+        if (!$dry_run && $changed && !update_option('lc_settings', $restored, false)) {
+            return [
+                'ok'      => false,
+                'changed' => false,
+                'keys'    => array_keys($snapshot),
+                'message' => __('Previous LiveCanvas header/footer settings could not be restored.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'ok'      => true,
+            'changed' => $changed,
+            'keys'    => array_keys($snapshot),
         ];
     }
 
@@ -2083,6 +2209,17 @@ final class LCFA_Command_Deck {
             'header_html' => $header_html,
             'footer_html' => $footer_html,
         ];
+    }
+
+    private function normalize_global_shell_partial_wrapper(string $type, string $html): string {
+        $html = trim($html);
+        $tag = $type === 'footer' ? 'footer' : 'header';
+
+        if ($html === '' || !preg_match('/^<' . $tag . '\b([^>]*)>(.*)<\/' . $tag . '>\s*$/is', $html, $matches)) {
+            return $html;
+        }
+
+        return '<div' . (string) $matches[1] . '>' . (string) $matches[2] . '</div>';
     }
 
     private function apply_global_shell_partial(string $type, string $flag, string $variant, string $html, bool $dry_run, array $partial_types = []): array {
@@ -3354,6 +3491,11 @@ HTML,
                     'previous_partial_types' => array_values((array) ($part['previous_partial_types'] ?? [])),
                 ];
             }
+
+            $settings = is_array($result['data']['livecanvas_settings']['previous'] ?? null)
+                ? (array) $result['data']['livecanvas_settings']['previous']
+                : [];
+            $record['restore']['livecanvas_settings'] = $this->sanitize_livecanvas_global_shell_settings_snapshot($settings);
 
             return $record;
         }

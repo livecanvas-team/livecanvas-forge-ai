@@ -119,6 +119,25 @@ lcfa_assert_true(in_array('2026.08.1', array_column((array) ($hero['details'] ??
 lcfa_assert_true(count($hero['details'] ?? []) >= 3, 'hero presenter should move technical facts into details');
 lcfa_assert_false(in_array('LiveCanvas', array_column((array) ($hero['marks'] ?? []), 'label'), true), 'hero presenter should stop repeating a dedicated LiveCanvas mark');
 
+$picostrap_hero = $presenter->build('connections', [
+    'current_theme_name' => 'Picostrap Child',
+    'current_theme_stylesheet' => 'picostrap5-child-base',
+    'current_theme_template' => 'picostrap5',
+    'detected_framework' => 'picostrap',
+    'framework_slug' => 'bootstrap-5.3',
+    'livecanvas_active' => true,
+    'windpress_installed' => true,
+    'windpress_active' => true,
+    'acf_active' => false,
+    'tangible_available' => true,
+], [
+    'site_mode' => 'local',
+    'preferred_client' => 'opencode',
+]);
+$picostrap_marks = array_column((array) ($picostrap_hero['marks'] ?? []), 'label');
+lcfa_assert_true(in_array('Bootstrap', $picostrap_marks, true), 'Picostrap hero should identify Bootstrap as the active frontend stack.');
+lcfa_assert_false(in_array('WindPress', $picostrap_marks, true), 'Picostrap hero should not present WindPress as part of the active frontend stack.');
+
 $setup_hero = $presenter->build('setup', [
     'current_theme_name' => 'Picowind Child',
     'current_theme_stylesheet' => 'picowind-child',
@@ -167,7 +186,11 @@ $output = (string) ob_get_clean();
 
 lcfa_assert_contains('lcfa-hero-main', $output, 'hero should expose a dedicated main grid');
 lcfa_assert_contains('lcfa-hero-stack', $output, 'hero should expose a compact logo row');
-lcfa_assert_contains('lcfa-hero-chip', $output, 'hero should render compact chips');
+lcfa_assert_contains('lcfa-hero-chip', $output, 'hero should render compact project facts');
+lcfa_assert_contains('aria-label="Project context"', $output, 'hero project facts should be grouped semantically');
+lcfa_assert_contains('<dt>Mode</dt>', $output, 'hero project facts should expose labels instead of button-like text');
+lcfa_assert_contains('<dd>local</dd>', $output, 'hero project facts should expose the current value separately');
+lcfa_assert_false(strpos($output, '<span class="lcfa-hero-chip ') !== false, 'hero project facts should not use pill markup');
 lcfa_assert_contains('lcfa-hero-details', $output, 'hero should render inline details');
 lcfa_assert_true(strpos($output, 'lcfa-hero-mark-label') === false, 'hero marks should render as icon-only badges without visible labels');
 lcfa_assert_contains('aria-label="Details"', $output, 'hero details toggle should stay accessible after switching to an icon-only control');
@@ -179,5 +202,8 @@ lcfa_assert_false(strpos($output, 'lcfa-logo-livecanvas-micro') !== false, 'hero
 $admin_v2_css = (string) file_get_contents(LCFA_DIR . 'assets/admin-v2.css');
 lcfa_assert_contains('.lcfa-hero-details-panel:not([open]) > .lcfa-hero-details', $admin_v2_css, 'closed hero details should not occupy layout space');
 lcfa_assert_contains('.lcfa-hero-details-panel[open]', $admin_v2_css, 'open hero details should have an explicit responsive width');
+lcfa_assert_contains('.lcfa-connection-summary', $admin_v2_css, 'connection state should have a semantic summary treatment');
+lcfa_assert_contains('.lcfa-visual-help__flow', $admin_v2_css, 'coding-agent guidance should use a connected process treatment');
+lcfa_assert_contains('.lcfa-agent-setup-details', $admin_v2_css, 'manual technical setup should remain progressively disclosed');
 
 echo "PASS\n";

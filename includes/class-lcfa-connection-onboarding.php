@@ -29,6 +29,10 @@ final class LCFA_Connection_Onboarding {
         $is_opencode_local = $this->is_opencode_local($preferred_client, $connection_mode);
         $is_claude = $this->is_claude($preferred_client);
 
+        if ($this->error_belongs_to_another_client($last_error, $preferred_client)) {
+            $last_error = '';
+        }
+
         if ($status === 'ready' && $last_verified_at !== '') {
             return [
                 'status'           => 'ready',
@@ -141,5 +145,26 @@ final class LCFA_Connection_Onboarding {
 
     private function is_claude(string $preferred_client): bool {
         return $preferred_client === 'claude';
+    }
+
+    private function error_belongs_to_another_client(string $message, string $preferred_client): bool {
+        if ($message === '' || $preferred_client === '') {
+            return false;
+        }
+
+        $client_names = [
+            'codex' => 'codex',
+            'opencode' => 'opencode',
+            'claude' => 'claude',
+            'cursor' => 'cursor',
+        ];
+
+        foreach ($client_names as $client => $needle) {
+            if ($client !== $preferred_client && stripos($message, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

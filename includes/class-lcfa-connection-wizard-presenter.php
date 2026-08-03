@@ -341,7 +341,7 @@ final class LCFA_Connection_Wizard_Presenter {
             }
 
             return [
-                'title' => __('What to do in Codex', 'livecanvas-forge-ai'),
+                'title' => __('Finish setup in Codex', 'livecanvas-forge-ai'),
                 'client' => 'codex',
                 'items' => [
                     [
@@ -350,6 +350,8 @@ final class LCFA_Connection_Wizard_Presenter {
                             ? __('Execute the generated install command once on the machine where Codex runs. It registers the secure AI Bridge pairing proxy.', 'livecanvas-forge-ai')
                             : __('Execute the generated install command once from this same project root. It auto-detects the embedded Codex desktop CLI.', 'livecanvas-forge-ai'),
                         'tone' => 'project',
+                        'icon' => 'laptop',
+                        'context' => __('In Terminal', 'livecanvas-forge-ai'),
                     ],
                     [
                         'title' => __('Check codex mcp list', 'livecanvas-forge-ai'),
@@ -357,11 +359,15 @@ final class LCFA_Connection_Wizard_Presenter {
                             ? __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-ai-bridge appears before you continue.', 'livecanvas-forge-ai')
                             : __('If codex is not in PATH, use /Applications/Codex.app/Contents/Resources/codex mcp list and make sure livecanvas-forge appears before you continue.', 'livecanvas-forge-ai'),
                         'tone' => 'mcp',
+                        'icon' => 'plug',
+                        'context' => __('In Terminal', 'livecanvas-forge-ai'),
                     ],
                     [
                         'title' => sprintf(__('Open Codex and call %s', 'livecanvas-forge-ai'), $handoff_tool),
                         'caption' => __('Once Codex sees the MCP server, ask it to fetch the AI Bridge connection handoff, then return here and run the smoke test.', 'livecanvas-forge-ai'),
                         'tone' => 'verify',
+                        'icon' => 'check-circle',
+                        'context' => __('In Codex', 'livecanvas-forge-ai'),
                     ],
                 ],
             ];
@@ -372,23 +378,29 @@ final class LCFA_Connection_Wizard_Presenter {
         }
 
         return [
-            'title' => __('What this looks like in OpenCode', 'livecanvas-forge-ai'),
+            'title' => __('Finish setup in OpenCode', 'livecanvas-forge-ai'),
             'client' => 'opencode',
             'items' => [
                 [
                     'title' => __('Open this project in OpenCode', 'livecanvas-forge-ai'),
                     'caption' => __('Use the same project folder that contains this WordPress install.', 'livecanvas-forge-ai'),
                     'tone' => 'project',
+                    'icon' => 'laptop',
+                    'context' => __('In OpenCode', 'livecanvas-forge-ai'),
                 ],
                 [
                     'title' => __('Check MCP: livecanvas-forge', 'livecanvas-forge-ai'),
                     'caption' => __('The MCP indicator should turn green before you continue.', 'livecanvas-forge-ai'),
                     'tone' => 'mcp',
+                    'icon' => 'plug',
+                    'context' => __('In OpenCode', 'livecanvas-forge-ai'),
                 ],
                 [
                     'title' => __('Return here and run the smoke test', 'livecanvas-forge-ai'),
                     'caption' => __('Once OpenCode is connected, verify the connection back in WordPress.', 'livecanvas-forge-ai'),
                     'tone' => 'verify',
+                    'icon' => 'check-circle',
+                    'context' => __('Back in WordPress', 'livecanvas-forge-ai'),
                 ],
             ],
         ];

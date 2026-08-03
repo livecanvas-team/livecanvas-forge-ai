@@ -20,6 +20,11 @@ final class LCFA_Environment {
         $framework = $this->detect_framework_family();
         $livecanvas_plugin_file = $this->find_plugin_file_by_slug('livecanvas');
         $windpress_plugin_file = $this->find_plugin_file_by_slug('windpress');
+        $windpress_installed = $windpress_plugin_file !== null;
+        $windpress_active = $this->is_windpress_active();
+        $windpress_compatibility = class_exists('LCFA_Framework_Prerequisites', false)
+            ? (new LCFA_Framework_Prerequisites())->check_windpress($framework, $windpress_installed, $windpress_active)
+            : [];
 
         $mcp_adapter_status = $this->get_mcp_adapter_status();
         $oauth_direct_status = class_exists('LCFA_OAuth_Server', false)
@@ -50,10 +55,11 @@ final class LCFA_Environment {
                 : (string) $current_theme->get('Version'),
             'framework_slug'          => $this->get_livecanvas_editor_config_slug(),
             'site_mode'               => $this->detect_site_mode(),
-            'windpress_installed'     => $windpress_plugin_file !== null,
-            'windpress_active'        => $this->is_windpress_active(),
+            'windpress_installed'     => $windpress_installed,
+            'windpress_active'        => $windpress_active,
             'windpress_plugin_file'   => $windpress_plugin_file,
             'windpress_version'       => $this->get_plugin_version('windpress'),
+            'windpress_compatibility' => $windpress_compatibility,
             'tangible_available'      => function_exists('tangible_template'),
             'acf_active'              => function_exists('get_field') || class_exists('ACF'),
             'woocommerce_active'      => class_exists('WooCommerce'),

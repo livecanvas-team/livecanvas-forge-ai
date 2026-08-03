@@ -1459,6 +1459,10 @@ lcfa_assert_same('global_shell', (string) ($global_shell_preview['target_type'] 
 lcfa_assert_same('update', (string) ($global_shell_preview['data']['parts']['header']['operation'] ?? ''), 'global_shell preview should target the existing header partial when present');
 lcfa_assert_same('legacy-header', (string) ($global_shell_preview['data']['parts']['header']['previous_partial_types'][0] ?? ''), 'global shell preview should expose existing lc_partial_type terms for rollback review');
 lcfa_assert_same('<header>Header partial</header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell preview must not mutate the existing header partial');
+lcfa_assert_same('<div><nav>Preview Header</nav></div>', (string) ($global_shell_preview['data']['parts']['header']['proposed_html'] ?? ''), 'global shell preview should remove the redundant outer header landmark');
+lcfa_assert_same('<div>Preview Footer</div>', (string) ($global_shell_preview['data']['parts']['footer']['proposed_html'] ?? ''), 'global shell preview should remove the redundant outer footer landmark');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_options']['lc_settings']), 'global shell preview must not enable LiveCanvas header/footer settings');
+lcfa_assert_same(['header', 'footerV2'], (array) ($global_shell_preview['data']['livecanvas_settings']['enabled'] ?? []), 'global shell preview should disclose the LiveCanvas settings that apply will enable');
 
 $blocked_global_shell = $command_deck->execute([
     'action'         => 'global_shell_apply',
@@ -1482,10 +1486,30 @@ $global_shell_apply = $command_deck->execute([
 ]);
 
 lcfa_assert_true($global_shell_apply['ok'] === true, 'global_shell_apply should apply header/footer updates');
-lcfa_assert_same('<header><nav>Applied Header</nav></header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell_apply should update the existing header partial');
-lcfa_assert_same('<footer>Applied Footer</footer>', (string) $GLOBALS['lcfa_test_posts'][44]->post_content, 'global_shell_apply should update the existing footer partial');
+lcfa_assert_same('<div><nav>Applied Header</nav></div>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'global_shell_apply should update the existing header partial without a nested header landmark');
+lcfa_assert_same('<div>Applied Footer</div>', (string) $GLOBALS['lcfa_test_posts'][44]->post_content, 'global_shell_apply should update the existing footer partial without a nested footer landmark');
 lcfa_assert_same(['navigation'], $GLOBALS['lcfa_test_partial_type_assignments'][43] ?? [], 'global shell apply should persist header lc_partial_type terms');
 lcfa_assert_same(['site-footer'], $GLOBALS['lcfa_test_partial_type_assignments'][44] ?? [], 'global shell apply should persist footer lc_partial_type terms');
+lcfa_assert_same('1', (string) ($GLOBALS['lcfa_test_options']['lc_settings']['header'] ?? ''), 'global shell apply should enable the LiveCanvas custom header');
+lcfa_assert_same('1', (string) ($GLOBALS['lcfa_test_options']['lc_settings']['footerV2'] ?? ''), 'global shell apply should enable the LiveCanvas custom footer');
+
+$global_shell_rollback = $command_deck->execute([
+    'action'   => 'restore_audit_rollback',
+    'audit_id' => (string) ($global_shell_apply['audit_id'] ?? ''),
+]);
+lcfa_assert_true($global_shell_rollback['ok'] === true, 'global shell rollback should restore partials and LiveCanvas settings');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_options']['lc_settings']['header']), 'global shell rollback should remove a header setting that did not previously exist');
+lcfa_assert_true(!isset($GLOBALS['lcfa_test_options']['lc_settings']['footerV2']), 'global shell rollback should remove a footer setting that did not previously exist');
+
+$global_shell_apply = $command_deck->execute([
+    'action'      => 'global_shell_apply',
+    'variant'     => '1',
+    'header_html' => '<header><nav>Applied Header</nav></header>',
+    'footer_html' => '<footer>Applied Footer</footer>',
+    'header_partial_types' => ['navigation'],
+    'footer_partial_types' => ['site-footer'],
+]);
+lcfa_assert_true($global_shell_apply['ok'] === true, 'global shell should remain reusable after rollback');
 
 $generic_partial_update = $command_deck->execute([
     'action' => 'update_partial',
@@ -1662,7 +1686,7 @@ lcfa_assert_true($foundation_preview['ok'] === true, 'site_foundation_run should
 lcfa_assert_true(isset($foundation_preview['data']['steps']['site_prepare']), 'site_foundation_run should include a site_prepare step');
 lcfa_assert_true(isset($foundation_preview['data']['steps']['design_system_apply']), 'site_foundation_run should include design system apply when design tokens are provided');
 lcfa_assert_true(isset($foundation_preview['data']['steps']['global_shell_apply']), 'site_foundation_run should include global shell apply by default');
-lcfa_assert_same('<header><nav>Applied Header</nav></header>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'site_foundation_run dry-run must not mutate the header partial');
+lcfa_assert_same('<div><nav>Applied Header</nav></div>', (string) $GLOBALS['lcfa_test_posts'][43]->post_content, 'site_foundation_run dry-run must not mutate the normalized header partial');
 
 $hero_section_suggestion = $prompt_suggester->suggest([
     'user_prompt'     => 'Fammi una hero più chiara per questa pagina.',
@@ -2294,6 +2318,8 @@ lcfa_assert_same('create', (string) ($global_shell_create['data']['parts']['head
 lcfa_assert_true((int) ($global_shell_create['data']['parts']['header']['target_id'] ?? 0) > 0, 'created global shell headers should return a target id');
 lcfa_assert_same('2', (string) ($GLOBALS['lcfa_test_post_meta'][(int) $global_shell_create['data']['parts']['header']['target_id']]['is_header'] ?? ''), 'created global shell headers should persist the requested variant');
 lcfa_assert_same('2', (string) ($GLOBALS['lcfa_test_post_meta'][(int) $global_shell_create['data']['parts']['footer']['target_id']]['is_footer'] ?? ''), 'created global shell footers should persist the requested variant');
+lcfa_assert_same('<div>Variant Two Header</div>', (string) $GLOBALS['lcfa_test_posts'][(int) $global_shell_create['data']['parts']['header']['target_id']]->post_content, 'created global shell headers should avoid nested header landmarks');
+lcfa_assert_same('<div>Variant Two Footer</div>', (string) $GLOBALS['lcfa_test_posts'][(int) $global_shell_create['data']['parts']['footer']['target_id']]->post_content, 'created global shell footers should avoid nested footer landmarks');
 
 $variant_inventory = (new LCFA_Inventory($environment))->get_inventory();
 $variant_header_id = (int) ($global_shell_create['data']['parts']['header']['target_id'] ?? 0);

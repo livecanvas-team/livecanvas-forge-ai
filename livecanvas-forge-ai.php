@@ -16,7 +16,7 @@
 defined('ABSPATH') || exit;
 
 define('LCFA_VERSION', '0.2.0-beta.2');
-define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.1');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.2');
 define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@' . LCFA_MCP_PACKAGE_VERSION);
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));

@@ -59,6 +59,60 @@ final class LCFA_Framework_Prerequisites {
         ];
     }
 
+    public function check_windpress(string $framework, bool $installed, bool $active): array {
+        $framework = $this->normalize_framework($framework);
+
+        if ($framework === 'picowind') {
+            if ($active) {
+                return [
+                    'status'    => 'ready',
+                    'framework' => $framework,
+                    'required'  => true,
+                    'installed' => $installed,
+                    'active'    => true,
+                    'action'    => 'none',
+                    'message'   => __('WindPress is active and available for the Picowind Tailwind build.', 'livecanvas-forge-ai'),
+                ];
+            }
+
+            return [
+                'status'    => $installed ? 'activation_required' : 'installation_required',
+                'framework' => $framework,
+                'required'  => true,
+                'installed' => $installed,
+                'active'    => false,
+                'action'    => $installed ? 'activate' : 'install',
+                'message'   => $installed
+                    ? __('Picowind requires WindPress. Activate it before compiling Tailwind or DaisyUI styles.', 'livecanvas-forge-ai')
+                    : __('Picowind requires WindPress. Install and activate it before compiling Tailwind or DaisyUI styles.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        if ($framework === 'picostrap') {
+            return [
+                'status'    => $active ? 'deactivation_recommended' : 'not_required',
+                'framework' => $framework,
+                'required'  => false,
+                'installed' => $installed,
+                'active'    => $active,
+                'action'    => $active ? 'deactivate' : 'none',
+                'message'   => $active
+                    ? __('WindPress is not used by the active Picostrap theme. Deactivate it to keep this Bootstrap stack focused.', 'livecanvas-forge-ai')
+                    : __('WindPress is not required by Picostrap or Bootstrap themes.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        return [
+            'status'    => 'framework_unknown',
+            'framework' => $framework,
+            'required'  => false,
+            'installed' => $installed,
+            'active'    => $active,
+            'action'    => 'none',
+            'message'   => __('Choose Picostrap or Picowind before changing the WindPress runtime.', 'livecanvas-forge-ai'),
+        ];
+    }
+
     private function normalize_framework(string $framework): string {
         return strtolower((string) preg_replace('/[^a-z0-9_-]/i', '', trim($framework)));
     }

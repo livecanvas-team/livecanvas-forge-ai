@@ -2,6 +2,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { applyHttpBasicAuth } = require('./http-auth')
 
 class SessionAuth {
   constructor(config) {
@@ -76,9 +77,9 @@ class SessionAuth {
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
+      headers: applyHttpBasicAuth({
         Accept: 'application/json'
-      }
+      }, this.config)
     })
     const payload = await parseResponse(response)
 
@@ -121,9 +122,9 @@ class SessionAuth {
     const url = new URL(route, this.config.restBase)
     const options = {
       method,
-      headers: {
+      headers: applyHttpBasicAuth({
         Accept: 'application/json'
-      }
+      }, this.config)
     }
 
     if (body !== null) {

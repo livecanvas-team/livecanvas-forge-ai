@@ -142,10 +142,11 @@ $method->invoke(
 );
 $markup = (string) ob_get_clean();
 
-lcfa_assert_contains('>Claude<', $markup, 'guide tabs should show Claude as the top-level client');
+lcfa_assert_contains('Manual Claude setup', $markup, 'wizard context should keep Claude setup available in a clearly labelled disclosure');
+lcfa_assert_contains('lcfa-agent-setup-details', $markup, 'wizard context should keep raw Claude configuration collapsed until requested');
 lcfa_assert_contains('Desktop App', $markup, 'Claude guide should expose the Desktop App mode');
 lcfa_assert_contains('Command Line Interface', $markup, 'Claude guide should expose the CLI mode');
-lcfa_assert_not_contains('>Claude Code<', $markup, 'guide tabs should not use Claude Code as the top-level client label');
+lcfa_assert_not_contains('>Claude Code<', $markup, 'wizard setup label should not use Claude Code as the client name');
 lcfa_assert_contains('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', $markup, 'Claude Desktop guide should render an absolute MCP script path for Desktop App');
 lcfa_assert_contains('Merge the JSON block under mcpServers inside your existing Claude Desktop config.', $markup, 'Claude Desktop guide should explain that the JSON must be merged into the existing config');
 lcfa_assert_contains('Do not paste it as a second top-level JSON object or replace your preferences block.', $markup, 'Claude Desktop guide should warn against invalid top-level JSON merges');

@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const crypto = require('node:crypto')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 
 class WindPressCompiler {
@@ -7,6 +8,7 @@ class WindPressCompiler {
     this.client = client
     this.config = config
     this.compilerCache = new Map()
+    this.pluginModuleCache = new Map()
   }
 
   async buildCache(options = {}) {
@@ -57,9 +59,10 @@ class WindPressCompiler {
     let candidates = []
 
     if (tailwindVersion === 4) {
+      const compileVolume = await this.prepareExternalPlugins(volume)
       const compiled = await compiler.compile({
         entrypoint: '/main.css',
-        volume
+        volume: compileVolume
       })
 
       const sourceContents = await compiler.loadSource(compiled.sources || [])
@@ -134,8 +137,97 @@ class WindPressCompiler {
     }
   }
 
+  async prepareExternalPlugins(volume) {
+    const prepared = { ...volume }
+    const pluginPattern = /(@plugin\s+)(["'])([^"']+)\2/g
+    const replacements = new Map()
+
+    for (const content of Object.values(prepared)) {
+      if (typeof content !== 'string') {
+        continue
+      }
+
+      for (const match of content.matchAll(pluginPattern)) {
+        const specifier = String(match[3] || '').trim()
+        if (!isExternalPluginSpecifier(specifier) || replacements.has(specifier)) {
+          continue
+        }
+
+        const source = await this.fetchBundledPlugin(specifier)
+        const hash = crypto.createHash('sha256').update(specifier).digest('hex').slice(0, 12)
+        const modulePath = `/__lcfa_plugins/plugin-${hash}.js`
+        prepared[modulePath] = source
+        replacements.set(specifier, modulePath)
+      }
+    }
+
+    if (replacements.size === 0) {
+      return prepared
+    }
+
+    for (const [filePath, content] of Object.entries(prepared)) {
+      if (typeof content !== 'string' || filePath.startsWith('/__lcfa_plugins/')) {
+        continue
+      }
+
+      prepared[filePath] = content.replace(pluginPattern, (full, prefix, quote, specifier) => {
+        const replacement = replacements.get(String(specifier || '').trim())
+        return replacement ? `${prefix}${quote}${replacement}${quote}` : full
+      })
+    }
+
+    return prepared
+  }
+
+  async fetchBundledPlugin(specifier) {
+    if (this.pluginModuleCache.has(specifier)) {
+      return this.pluginModuleCache.get(specifier)
+    }
+
+    const promise = this.downloadBundledPlugin(specifier)
+    this.pluginModuleCache.set(specifier, promise)
+
+    try {
+      return await promise
+    } catch (error) {
+      this.pluginModuleCache.delete(specifier)
+      throw error
+    }
+  }
+
+  async downloadBundledPlugin(specifier) {
+    const entryUrl = resolveEsmPluginUrl(specifier)
+    const entryResponse = await fetch(entryUrl)
+    if (!entryResponse.ok) {
+      throw new Error(`Unable to download Tailwind plugin ${entryUrl}: HTTP ${entryResponse.status}`)
+    }
+
+    const entrySource = await entryResponse.text()
+    const bundleMatch = entrySource.match(/(?:export\s+\*\s+from|export\s+\{[^}]*\}\s+from)\s+["']([^"']+\.bundle\.mjs)["']/)
+    let bundledSource = entrySource
+
+    if (bundleMatch) {
+      const bundleUrl = new URL(bundleMatch[1], entryUrl)
+      const bundleResponse = await fetch(bundleUrl)
+      if (!bundleResponse.ok) {
+        throw new Error(`Unable to download bundled Tailwind plugin ${bundleUrl.href}: HTTP ${bundleResponse.status}`)
+      }
+      bundledSource = await bundleResponse.text()
+    }
+
+    if (Buffer.byteLength(bundledSource, 'utf8') > 2 * 1024 * 1024) {
+      throw new Error(`Bundled Tailwind plugin ${entryUrl} exceeds the 2 MB safety limit.`)
+    }
+    if (/\bimport\s*(?:\(|[^;]*\bfrom\s*)["']https?:/m.test(bundledSource)) {
+      throw new Error(`Bundled Tailwind plugin ${entryUrl} still contains network imports.`)
+    }
+
+    return bundledSource
+  }
+
   async loadCompiler(tailwindVersion) {
     this.ensureFileFetchShim()
+    this.ensureWindPressRuntimeShim()
 
     if (this.compilerCache.has(tailwindVersion)) {
       return this.compilerCache.get(tailwindVersion)
@@ -149,6 +241,46 @@ class WindPressCompiler {
     } catch (error) {
       this.compilerCache.delete(tailwindVersion)
       throw error
+    }
+  }
+
+  ensureWindPressRuntimeShim() {
+    if (typeof globalThis.window === 'undefined') {
+      globalThis.window = globalThis
+    }
+
+    const runtimeWindow = globalThis.window
+    if (!runtimeWindow.window) {
+      runtimeWindow.window = runtimeWindow
+    }
+    if (!runtimeWindow.__lcfaEventTarget && typeof EventTarget === 'function') {
+      runtimeWindow.__lcfaEventTarget = new EventTarget()
+    }
+    if (runtimeWindow.__lcfaEventTarget) {
+      if (typeof runtimeWindow.addEventListener !== 'function') {
+        runtimeWindow.addEventListener = runtimeWindow.__lcfaEventTarget.addEventListener.bind(runtimeWindow.__lcfaEventTarget)
+      }
+      if (typeof runtimeWindow.removeEventListener !== 'function') {
+        runtimeWindow.removeEventListener = runtimeWindow.__lcfaEventTarget.removeEventListener.bind(runtimeWindow.__lcfaEventTarget)
+      }
+      if (typeof runtimeWindow.dispatchEvent !== 'function') {
+        runtimeWindow.dispatchEvent = runtimeWindow.__lcfaEventTarget.dispatchEvent.bind(runtimeWindow.__lcfaEventTarget)
+      }
+    }
+    if (!runtimeWindow.windpress || typeof runtimeWindow.windpress !== 'object') {
+      runtimeWindow.windpress = {}
+    }
+    if (!runtimeWindow.windpress.user_data || typeof runtimeWindow.windpress.user_data !== 'object') {
+      runtimeWindow.windpress.user_data = {}
+    }
+    if (!runtimeWindow.windpress.user_data.data_dir || typeof runtimeWindow.windpress.user_data.data_dir !== 'object') {
+      runtimeWindow.windpress.user_data.data_dir = {}
+    }
+    if (!runtimeWindow.windpress.user_data.data_dir.url) {
+      const siteUrl = String(this.config.siteUrl || '').replace(/\/$/, '')
+      runtimeWindow.windpress.user_data.data_dir.url = siteUrl
+        ? `${siteUrl}/wp-content/uploads/windpress/`
+        : 'https://localhost/wp-content/uploads/windpress/'
     }
   }
 
@@ -331,6 +463,27 @@ class WindPressCompiler {
 
     throw new Error('Unable to resolve the local WordPress root for WindPress compilation. Set LCFA_WP_ROOT or pass --wp-root.')
   }
+}
+
+function isExternalPluginSpecifier(specifier) {
+  return specifier !== '' && !specifier.startsWith('.') && !specifier.startsWith('/')
+}
+
+function resolveEsmPluginUrl(specifier) {
+  if (/^https?:\/\//i.test(specifier)) {
+    const url = new URL(specifier)
+    if (url.protocol !== 'https:' || url.hostname !== 'esm.sh') {
+      throw new Error(`External Tailwind plugins must use https://esm.sh. Received: ${specifier}`)
+    }
+    url.searchParams.set('bundle', '')
+    return url
+  }
+
+  if (!/^(?:@?[a-z0-9][a-z0-9._-]*)(?:\/[a-z0-9][a-z0-9._-]*)?(?:@[a-z0-9][a-z0-9._-]*)?$/i.test(specifier)) {
+    throw new Error(`Unsupported Tailwind plugin specifier: ${specifier}`)
+  }
+
+  return new URL(`https://esm.sh/${specifier}?bundle`)
 }
 
 function hasNamedExport(content, name) {

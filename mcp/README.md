@@ -21,7 +21,7 @@ Secure remote Direct Mode:
 LCFA_SITE_URL="https://example.test/" \
 LCFA_SITE_FINGERPRINT="site-fingerprint" \
 LCFA_PROJECT_LABEL="Example Site" \
-npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1
+npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2
 ```
 
 On first use, the MCP asks WordPress for a short-lived pairing request. Approve the pending Codex session in `AI Bridge > Connections`; the MCP receives a plugin-scoped session token once and caches it locally with restricted file permissions.
@@ -31,6 +31,15 @@ By default the pairing requests `read`, `preview`, and `write` scopes, because A
 ```bash
 LCFA_PAIRING_SCOPES="read,preview"
 ```
+
+If a staging host is protected by HTTP Basic authentication, pass those credentials only as local MCP process environment variables:
+
+```bash
+LCFA_HTTP_BASIC_USERNAME="staging-user"
+LCFA_HTTP_BASIC_PASSWORD="staging-password"
+```
+
+These values are used only for the outer web-server protection. They are not sent to WordPress, stored by AI Bridge, or included in pairing/session records.
 
 Legacy/local runtime:
 

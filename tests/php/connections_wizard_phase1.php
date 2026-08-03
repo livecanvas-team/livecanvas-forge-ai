@@ -353,7 +353,7 @@ $remote_codex_bundle = $builder->build([
         'remote_site_url'     => 'https://remote.example/',
     ],
     'client_payload' => [
-        'command' => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+        'command' => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
         'env'     => [
             'LCFA_SITE_URL=https://remote.example/',
             'LCFA_SITE_FINGERPRINT=test-fingerprint',
@@ -367,7 +367,7 @@ lcfa_assert_same('ai-bridge-session', $remote_codex_bundle['connection_strategy'
 lcfa_assert_same('https://remote.example/wp-json/lcfa/v1/', $remote_codex_bundle['mcp_adapter_url'] ?? '', 'remote Codex bundle should expose the AI Bridge REST URL');
 lcfa_assert_true(empty($remote_codex_bundle['workspace_files']), 'remote Codex bundle should not propose local workspace writes');
 lcfa_assert_false(isset($remote_codex_bundle['environment']['LCFA_WP_ROOT']), 'remote Codex bundle should strip local filesystem environment');
-lcfa_assert_same('@livecanvas/ai-bridge-mcp@0.2.0-beta.1', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the secure AI Bridge MCP package');
+lcfa_assert_same('@livecanvas/ai-bridge-mcp@0.2.0-beta.2', $remote_codex_bundle['command'][2] ?? '', 'remote Codex bundle should use the secure AI Bridge MCP package');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env LCFA_SITE_URL=') !== false, 'remote Codex shortcut should register LCFA_SITE_URL with Codex');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), '--env WP_API_PASSWORD=') === false, 'remote Codex shortcut should not register an Application Password with Codex');
 lcfa_assert_true(strpos((string) ($remote_codex_bundle['shortcut_command'] ?? ''), 'secure LiveCanvas AI Bridge pairing') !== false, 'remote Codex shortcut should explain secure pairing');
@@ -446,6 +446,19 @@ $fast_path_state = $onboarding->derive_state([
 
 lcfa_assert_same('confirm_details', $fast_path_state['current_step'] ?? '', 'OpenCode local flow should skip the separate choose_mode step once local mode is known');
 
+$stale_codex_error_state = $onboarding->derive_state([
+    'preferred_client'            => 'opencode',
+    'connection_mode'             => 'local',
+    'workspace_root'              => '/Users/commander/Studio/consultala',
+    'connection_status'           => 'needs_attention',
+    'connection_last_verified_at' => '',
+    'connection_last_error'       => 'Codex config is missing or empty. Sync the Codex MCP config.',
+    'connection_current_step'     => 'smoke_test',
+]);
+
+lcfa_assert_same('not_connected', $stale_codex_error_state['status'] ?? '', 'an error saved for another coding agent should not mark OpenCode as broken');
+lcfa_assert_false(stripos((string) ($stale_codex_error_state['message'] ?? ''), 'Codex') !== false, 'OpenCode status should never repeat a stale Codex-specific error');
+
 $presenter = new LCFA_Connection_Wizard_Presenter();
 $claude_target_view = $presenter->build([
     'state' => [
@@ -489,8 +502,10 @@ $opencode_fast_path = $presenter->build([
 
 lcfa_assert_same('Download opencode.json', $opencode_fast_path['active_panel']['primary_cta']['label'] ?? '', 'OpenCode fast path should use direct bundle copy');
 lcfa_assert_same('Copy command', $opencode_fast_path['active_panel']['secondary_ctas'][0]['label'] ?? '', 'non-writable local mode should expose copy command as the secondary action');
-lcfa_assert_same('What this looks like in OpenCode', $opencode_fast_path['visual_help']['title'] ?? '', 'OpenCode fast path should expose visual helper strip');
+lcfa_assert_same('Finish setup in OpenCode', $opencode_fast_path['visual_help']['title'] ?? '', 'OpenCode fast path should expose an action-oriented setup guide');
 lcfa_assert_same('Check MCP: livecanvas-forge', $opencode_fast_path['visual_help']['items'][1]['title'] ?? '', 'OpenCode visual strip should explain the green MCP state');
+lcfa_assert_same('In OpenCode', $opencode_fast_path['visual_help']['items'][0]['context'] ?? '', 'OpenCode visual guide should identify where the user acts');
+lcfa_assert_same('Back in WordPress', $opencode_fast_path['visual_help']['items'][2]['context'] ?? '', 'OpenCode visual guide should identify the return to WordPress');
 lcfa_assert_false(($opencode_fast_path['technical_summary']['expanded'] ?? true), 'OpenCode bundle step should keep technical summary secondary');
 lcfa_assert_same(4, count($opencode_fast_path['steps'] ?? []), 'OpenCode local flow should use the shortened four-step path');
 lcfa_assert_same('confirm_details', $opencode_fast_path['steps'][1]['key'] ?? '', 'OpenCode local flow should collapse the mode step into confirm details');
@@ -565,7 +580,7 @@ $codex_bundle_view = $presenter->build([
 
 lcfa_assert_same('Copy Codex shortcut', $codex_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex local flow should elevate the registration shortcut to the primary action');
 lcfa_assert_same('Download Codex helper', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should still offer the helper script as a fallback');
-lcfa_assert_same('What to do in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific visual strip');
+lcfa_assert_same('Finish setup in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific action guide');
 lcfa_assert_true(strpos((string) ($codex_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex visual help should point to the connection handoff tool instead of the legacy snapshot tool');
 
 $codex_remote_bundle_view = $presenter->build([
@@ -579,10 +594,10 @@ $codex_remote_bundle_view = $presenter->build([
         'connection_strategy' => 'ai-bridge-session',
         'mcp_adapter_url'     => 'https://remote.example/wp-json/lcfa/v1/',
         'workspace_root'      => '',
-        'command_string'      => "'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
-        'copy_command_string' => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+        'command_string'      => "'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
         'shortcut_title'      => 'Codex shortcut',
-        'shortcut_command'    => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
+        'shortcut_command'    => "codex mcp add livecanvas-ai-bridge \\\n  --env LCFA_SITE_URL='https://remote.example/' \\\n  --env LCFA_SITE_FINGERPRINT='test-fingerprint' \\\n  --env LCFA_PROJECT_LABEL='Remote Example' \\\n  -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
         'workspace_files'     => [],
         'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
     ],
@@ -689,7 +704,7 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
     ],
 ]);
 
-lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
+lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
 lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point LCFA_SITE_URL at the target site');
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
@@ -703,7 +718,7 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     $remote_env = (array) ($remote_agent_payload['client_payload']['env'] ?? []);
 
     lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
-    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
+    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
     lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
     lcfa_assert_true(in_array('LCFA_PAIRING_SCOPES=read,preview', $remote_env, true), $remote_client . ' pairing should default to read and preview scopes when Power Mode is disabled');
     lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {
@@ -745,7 +760,7 @@ $missing_remote_state = $codex_onboarding_state_method->invoke($admin_instance, 
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
     'copy_command_string' => '',
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
     'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('missing_credentials', $missing_remote_state['status'] ?? '', 'remote Codex state should report missing_credentials while prerequisites are incomplete');
@@ -764,10 +779,10 @@ $complete_remote_state = $codex_onboarding_state_method->invoke($admin_instance,
     'client'              => 'codex',
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
-    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
     'agent_start_tool'    => 'get_connection_handoff',
-    'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.1\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
+    'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.2\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
     'codex_project_config_path' => '.codex/config.toml',
 ], 'remote', []);
 lcfa_assert_same('restart_required', $complete_remote_state['status'] ?? '', 'remote Codex should require restart/reload after shortcut generation and before smoke test');
@@ -788,8 +803,8 @@ $ready_remote_state = $codex_onboarding_state_method->invoke($admin_instance, [
     'client'              => 'codex',
     'mode'                => 'remote',
     'connection_strategy' => 'ai-bridge-session',
-    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
-    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+    'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
+    'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
     'agent_start_tool'    => 'get_connection_handoff',
 ], 'remote', []);
 lcfa_assert_same('ready', $ready_remote_state['status'] ?? '', 'remote Codex state should become ready only after a passed smoke test timestamp exists');
@@ -805,7 +820,7 @@ $codex_fast_path_panel_method->invoke(
         'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '',
         'copy_command_string' => '',
-        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
     ],
     [
         'workspace_root' => '',
@@ -838,10 +853,10 @@ $codex_fast_path_panel_method->invoke(
         'mode'                => 'remote',
         'connection_strategy' => 'ai-bridge-session',
         'workspace_root'      => '/var/www/example.com',
-        'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.1'",
-        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1',
+        'copy_command_string' => "codex mcp add livecanvas-ai-bridge --env LCFA_SITE_URL='https://remote.example/' -- 'npx' '-y' '@livecanvas/ai-bridge-mcp@0.2.0-beta.2'",
+        'command_string'      => 'npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.2',
         'agent_start_tool'    => 'get_connection_handoff',
-        'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.1\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
+        'codex_config_snippet' => "[mcp_servers.livecanvas-ai-bridge]\ncommand = \"npx\"\nargs = [\"-y\", \"@livecanvas/ai-bridge-mcp@0.2.0-beta.2\"]\n\n[mcp_servers.livecanvas-ai-bridge.env]\nLCFA_SITE_URL = \"https://remote.example/\"",
         'codex_project_config_path' => '.codex/config.toml',
     ],
     [
@@ -925,8 +940,12 @@ ob_start();
 $visual_help_method->invoke($admin_instance, $opencode_fast_path);
 $visual_help_markup = (string) ob_get_clean();
 
-lcfa_assert_true(strpos($visual_help_markup, 'What this looks like in OpenCode') !== false, 'admin should render the visual strip title');
+lcfa_assert_true(strpos($visual_help_markup, 'Finish setup in OpenCode') !== false, 'admin should render the action-oriented visual guide title');
 lcfa_assert_true(strpos($visual_help_markup, 'Check MCP: livecanvas-forge') !== false, 'admin should render the OpenCode MCP instruction');
+lcfa_assert_true(strpos($visual_help_markup, 'lcfa-visual-help__flow') !== false, 'visual guide should render as a connected sequence');
+lcfa_assert_true(strpos($visual_help_markup, 'In OpenCode') !== false && strpos($visual_help_markup, 'Back in WordPress') !== false, 'visual guide should label where each action happens');
+lcfa_assert_true(strpos($visual_help_markup, 'lcfa-icon-check-circle') !== false, 'visual guide should use a verification icon for its final step');
+lcfa_assert_false(strpos($visual_help_markup, 'lcfa-visual-help__frame') !== false, 'visual guide should not render empty decorative frames');
 
 ob_start();
 $stepper_method->invoke($admin_instance, $opencode_fast_path['steps']);
@@ -937,6 +956,8 @@ lcfa_assert_false(strpos($stepper_markup, 'Pick the client') !== false, 'wizard 
 lcfa_assert_false(strpos($stepper_markup, 'Current') !== false, 'wizard stepper should stop rendering the Current badge');
 lcfa_assert_false(strpos($stepper_markup, 'Done') !== false, 'wizard stepper should stop rendering the Done badge');
 lcfa_assert_false(strpos($stepper_markup, '>Active<') !== false, 'wizard stepper should no longer label the active step as Active');
+lcfa_assert_true(strpos($stepper_markup, 'lcfa-icon-check-circle') !== false, 'completed wizard steps should use a clear check icon');
+lcfa_assert_true(strpos($stepper_markup, 'aria-current="step"') !== false, 'active wizard step should be exposed semantically');
 
 ob_start();
 $connection_hero_method->invoke(
@@ -961,8 +982,11 @@ $connection_hero_method->invoke(
 );
 $connection_hero_markup = (string) ob_get_clean();
 
-lcfa_assert_true(strpos($connection_hero_markup, 'AI agent: Claude') !== false, 'connections hero should foreground only the selected AI agent');
+lcfa_assert_true(strpos($connection_hero_markup, '<dt>Coding agent</dt>') !== false, 'connections hero should label the selected client as information');
+lcfa_assert_true(strpos($connection_hero_markup, '>Claude</span></dd>') !== false, 'connections hero should foreground only the selected AI agent');
+lcfa_assert_true(strpos($connection_hero_markup, '<dt>Status</dt>') !== false, 'connections hero should label connection state as information');
 lcfa_assert_true(strpos($connection_hero_markup, 'Not connected') !== false, 'connections hero should foreground the connection status');
+lcfa_assert_false(strpos($connection_hero_markup, 'lcfa-chip') !== false, 'connection summary should not make informational facts look like buttons');
 lcfa_assert_false(strpos($connection_hero_markup, 'Mode:') !== false, 'connections hero should stop repeating the mode chip');
 lcfa_assert_false(strpos($connection_hero_markup, 'Framework:') !== false, 'connections hero should stop repeating the framework chip');
 lcfa_assert_false(strpos($connection_hero_markup, 'Local MCP bridge status') !== false, 'connections hero should stop repeating local bridge loading copy');
@@ -1115,6 +1139,10 @@ $ready_card_markup = (string) ob_get_clean();
 
 lcfa_assert_true(strpos($ready_card_markup, 'Connection ready') !== false, 'ready card should render its guidance alert without fatals');
 lcfa_assert_true(strpos($ready_card_markup, 'The smoke test has already passed.') !== false, 'ready card alert should explain that verification is already complete');
+lcfa_assert_true(strpos($ready_card_markup, 'lcfa-ready-facts') !== false, 'ready card should render connection facts as labelled information');
+lcfa_assert_true(strpos($ready_card_markup, '<dt>Status</dt>') !== false && strpos($ready_card_markup, '<dt>Coding agent</dt>') !== false, 'ready card should label status and coding agent explicitly');
+lcfa_assert_false(strpos($ready_card_markup, 'lcfa-chip') !== false, 'ready card facts should not look like clickable pills');
+lcfa_assert_true(strpos($ready_card_markup, 'lcfa-icon-activity') !== false, 'ready card primary verification action should include an icon');
 lcfa_assert_false(strpos($ready_card_markup, 'Uncaught') !== false, 'ready card should not leak PHP fatal output into the admin page');
 lcfa_assert_true(strpos($ready_card_markup, 'lcfa-code-explanation') !== false, 'ready card generated bundle should explain each technical command block');
 lcfa_assert_true(strpos($ready_card_markup, 'data-lcfa-read-more') !== false, 'long generated bundle explanations should expose a read-more control');
@@ -1279,6 +1307,9 @@ $active_step_panel_method->invoke(
 $smoke_step_markup = (string) ob_get_clean();
 
 lcfa_assert_true(strpos($smoke_step_markup, 'lcfa-wizard__panel--blocking') !== false, 'smoke-test panel should render a dedicated blocking style hook');
+lcfa_assert_true(strpos($smoke_step_markup, 'Current action') !== false, 'smoke-test panel should distinguish the current action from supporting information');
+lcfa_assert_true(strpos($smoke_step_markup, 'lcfa-icon-activity') !== false, 'smoke-test action should include a recognizable icon');
+lcfa_assert_true(strpos($smoke_step_markup, 'lcfa-icon-shuffle') !== false, 'change-agent action should include a recognizable icon');
 
 ob_start();
 $active_step_panel_method->invoke(
