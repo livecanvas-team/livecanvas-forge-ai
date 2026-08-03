@@ -329,7 +329,7 @@ final class LCFA_WindPress_Bridge {
      * Verify that WindPress has a persistent, compiled CSS cache rather than a
      * Tailwind source entrypoint that only works through the browser compiler.
      */
-    public function get_compiled_cache_state(): array {
+    public function get_compiled_cache_state(array $requirements = []): array {
         if (!$this->is_available()) {
             return [
                 'ready'   => false,
@@ -376,13 +376,25 @@ final class LCFA_WindPress_Bridge {
             ];
         }
 
+        $semantic = $this->verify_compiled_css_requirements($contents, $requirements);
+        if (empty($semantic['ok'])) {
+            return [
+                'ready'    => false,
+                'status'   => 'semantic_mismatch',
+                'message'  => __('The compiled WindPress cache does not contain the CSS required by this Theme Library item.', 'livecanvas-forge-ai'),
+                'cache'    => $cache,
+                'semantic' => $semantic,
+            ];
+        }
+
         $cache['sha256'] = hash_file('sha256', $path) ?: '';
 
         return [
-            'ready'   => true,
-            'status'  => 'ready',
-            'message' => __('WindPress compiled CSS cache is present and verified.', 'livecanvas-forge-ai'),
-            'cache'   => $cache,
+            'ready'    => true,
+            'status'   => 'ready',
+            'message'  => __('WindPress compiled CSS cache is present and verified.', 'livecanvas-forge-ai'),
+            'cache'    => $cache,
+            'semantic' => $semantic,
         ];
     }
 
@@ -446,19 +458,7 @@ final class LCFA_WindPress_Bridge {
             $content = (string) file_get_contents($main_css_path);
         }
 
-        if ($content === '') {
-            $stub = trailingslashit(WP_PLUGIN_DIR) . 'windpress/stubs/tailwindcss-v4/main.css';
-            if (is_readable($stub)) {
-                $content = (string) file_get_contents($stub);
-            }
-        }
-
-        if ($content === '') {
-            $content = "@layer theme, base, components, utilities;\n\n"
-                . "@import \"tailwindcss/theme.css\" layer(theme) theme(static);\n"
-                . "@import \"tailwindcss/preflight.css\" layer(base);\n"
-                . "@import \"tailwindcss/utilities.css\" layer(utilities);\n";
-        }
+        $content = $this->normalize_tailwind_entrypoint($content, $this->get_tailwind_version());
 
         $picowind_import = '@import "./@picowind/tailwind.css";';
         $content = (string) preg_replace(
@@ -499,6 +499,85 @@ final class LCFA_WindPress_Bridge {
             'main_css' => $main_css_path,
             'cache'    => $this->get_cache_summary(),
         ];
+    }
+
+    private function normalize_tailwind_entrypoint(string $content, int $tailwind_version): string {
+        $content = trim($content);
+
+        if ($tailwind_version === 3) {
+            $content = (string) preg_replace('~^\s*@tailwind\s+(?:base|components|utilities)\s*;\s*$~mi', '', $content);
+            $foundation = "@tailwind base;\n@tailwind components;\n@tailwind utilities;";
+
+            return $foundation . ($content !== '' ? "\n\n" . trim($content) : '') . "\n";
+        }
+
+        $patterns = [
+            '~^\s*@layer\s+theme\s*,\s*base\s*,\s*components\s*,\s*utilities\s*;\s*$~mi',
+            '~^\s*\/\*\s*@import\s+["\']tailwindcss\/(?:theme|preflight|utilities)\.css[\s\S]*?;\s*\*\/\s*$~mi',
+            '~^\s*@import\s+["\']tailwindcss\/(?:theme|preflight|utilities)\.css[\s\S]*?;\s*$~mi',
+            '~^\s*@import\s+["\']\.\/wizard\.css["\']\s*;\s*$~mi',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $content = (string) preg_replace($pattern, '', $content);
+        }
+
+        $foundation = "@layer theme, base, components, utilities;\n\n"
+            . "@import \"tailwindcss/theme.css\" layer(theme) theme(static);\n"
+            . "@import \"tailwindcss/preflight.css\" layer(base);\n"
+            . "@import \"tailwindcss/utilities.css\" layer(utilities);\n\n"
+            . "@import \"./wizard.css\";";
+
+        return $foundation . ($content !== '' ? "\n\n" . trim($content) : '') . "\n";
+    }
+
+    private function verify_compiled_css_requirements(string $contents, array $requirements): array {
+        $required = $this->normalize_css_fragments($requirements['required_fragments'] ?? []);
+        $forbidden = $this->normalize_css_fragments($requirements['forbidden_fragments'] ?? []);
+        $missing = [];
+        $unexpected = [];
+
+        foreach ($required as $fragment) {
+            if (strpos($contents, $fragment) === false) {
+                $missing[] = $fragment;
+            }
+        }
+
+        foreach ($forbidden as $fragment) {
+            if (strpos($contents, $fragment) !== false) {
+                $unexpected[] = $fragment;
+            }
+        }
+
+        return [
+            'ok'                   => !$missing && !$unexpected,
+            'required_count'       => count($required),
+            'forbidden_count'      => count($forbidden),
+            'missing_fragments'    => $missing,
+            'unexpected_fragments' => $unexpected,
+        ];
+    }
+
+    private function normalize_css_fragments($fragments): array {
+        if (!is_array($fragments)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach (array_slice($fragments, 0, 20) as $fragment) {
+            if (!is_scalar($fragment)) {
+                continue;
+            }
+
+            $fragment = trim((string) $fragment);
+            if ($fragment === '' || strlen($fragment) > 200 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $fragment)) {
+                continue;
+            }
+
+            $normalized[] = $fragment;
+        }
+
+        return array_values(array_unique($normalized));
     }
 
     /**

@@ -142,6 +142,15 @@ async function run() {
   const connectionResult = await registry.invoke('get_connection_handoff', { limit: 5 })
   assert.equal(connectionResult.mcp_runtime.visual_check.status, 'ready', 'connection handoff should include local visual-check readiness')
 
+  const abilityDiagnostics = tools.find((tool) => tool.name === 'get_ability_diagnostics')
+  assert.ok(abilityDiagnostics, 'get_ability_diagnostics should be registered because the handoff runbook recommends it')
+  assert.equal(abilityDiagnostics.annotations.readOnlyHint, true, 'get_ability_diagnostics should be read-only')
+
+  const recentRuns = tools.find((tool) => tool.name === 'get_runs')
+  assert.ok(recentRuns, 'get_runs should be registered because the handoff runbook recommends it')
+  assert.ok(recentRuns.inputSchema.properties.limit, 'get_runs should expose a bounded history limit')
+  assert.equal(recentRuns.annotations.readOnlyHint, true, 'get_runs should be read-only')
+
   const blockPatternLibrary = tools.find((tool) => tool.name === 'get_block_pattern_library')
   assert.ok(blockPatternLibrary, 'get_block_pattern_library should be registered')
   assert.ok(blockPatternLibrary.inputSchema.properties.include_content, 'get_block_pattern_library should expose include_content')
@@ -237,7 +246,22 @@ async function run() {
           pending: {
             theme_slug: themeSlug,
             import_audit_id: 'theme-import-sample-abc123',
-            expected_import_checksum: 'b'.repeat(64)
+            expected_import_checksum: 'b'.repeat(64),
+            css_verification: {
+              required_fragments: ['.sample-theme-marker'],
+              forbidden_fragments: ['.foreign-theme-marker']
+            }
+          }
+        }
+      }
+    },
+    async saveWindPressCache(css, sourcemap, fullBuild) {
+      themeBuildCalls.push(['store', { css, sourcemap, fullBuild }])
+      return {
+        result: {
+          verification: {
+            ready: true,
+            cache: { sha256: 'a'.repeat(64) }
           }
         }
       }
@@ -253,11 +277,12 @@ async function run() {
       return {
         ok: true,
         tailwind_version: 4,
-        stored: {
-          verification: {
-            ready: true,
-            cache: { sha256: 'a'.repeat(64) }
-          }
+        provider_count: 2,
+        candidate_count: 12,
+        css: {
+          normal: '.sample-theme-marker { display: block; }',
+          minified: '.sample-theme-marker{display:block}',
+          sourcemap: null
         }
       }
     }
@@ -275,9 +300,43 @@ async function run() {
 
   const themeBuildResult = await themeBuildRegistry.invoke('build_theme_library_css', { theme_slug: 'sample-theme' })
   assert.equal(themeBuildResult.result.status, 'ready', 'build_theme_library_css should return the verified WordPress completion result')
-  assert.deepEqual(themeBuildCalls.map((call) => call[0]), ['pending', 'compile', 'complete'], 'Theme Library CSS build should bind, compile, then complete in order')
-  assert.equal(themeBuildCalls[2][1].import_audit_id, 'theme-import-sample-abc123', 'Theme Library completion should reuse the server-issued audit ID')
-  assert.equal(themeBuildCalls[2][1].cache_sha256, 'a'.repeat(64), 'Theme Library completion should submit the verified cache checksum')
+  assert.deepEqual(themeBuildCalls.map((call) => call[0]), ['pending', 'compile', 'store', 'complete'], 'Theme Library CSS build should bind, compile, verify, store, then complete in order')
+  assert.equal(themeBuildCalls[3][1].import_audit_id, 'theme-import-sample-abc123', 'Theme Library completion should reuse the server-issued audit ID')
+  assert.equal(themeBuildCalls[3][1].cache_sha256, 'a'.repeat(64), 'Theme Library completion should submit the verified cache checksum')
+  assert.equal(themeBuildCalls[3][1].candidate_count, 12, 'Theme Library completion should submit candidate scan evidence')
+
+  const rejectedBuildCalls = []
+  const rejectedBuildClient = {
+    ...themeBuildClient,
+    async saveWindPressCache() {
+      rejectedBuildCalls.push('store')
+      throw new Error('Invalid CSS must never be stored')
+    }
+  }
+  const rejectedBuildCompiler = {
+    async buildCache() {
+      return {
+        ok: true,
+        tailwind_version: 4,
+        provider_count: 2,
+        candidate_count: 12,
+        css: {
+          normal: '.foreign-theme-marker { display: block; }',
+          minified: '.foreign-theme-marker{display:block}',
+          sourcemap: null
+        }
+      }
+    }
+  }
+  const rejectedBuildRegistry = createToolRegistry(
+    rejectedBuildClient,
+    createNoopThemeFiles(),
+    rejectedBuildCompiler,
+    createNoopPicostrapCompiler()
+  )
+  const rejectedBuild = await rejectedBuildRegistry.invoke('build_theme_library_css', { theme_slug: 'sample-theme' })
+  assert.equal(rejectedBuild.status, 'build_failed', 'Theme Library CSS build should reject missing required or forbidden CSS fragments')
+  assert.equal(rejectedBuildCalls.length, 0, 'Rejected Theme Library CSS must not overwrite the persistent WindPress cache')
 
   const assetDiscovery = tools.find((tool) => tool.name === 'asset_discovery')
   assert.ok(assetDiscovery, 'asset_discovery should be registered')
@@ -373,6 +432,7 @@ async function run() {
 
   assert.equal(frameworkClient.calls.length, 1, 'validate_markup_for_framework should call the plugin once')
   assert.equal(frameworkClient.calls[0].action, 'validate_markup_for_framework', 'validate_markup_for_framework should set the command action automatically')
+  assert.equal(frameworkClient.calls[0].dry_run, true, 'validate_markup_for_framework should always run as a read-only preview')
   assert.equal(frameworkClient.calls[0].framework, 'picowind', 'validate_markup_for_framework should inject the active framework when it is missing from the payload')
   assert.equal(frameworkClient.calls[0].body_html, '<main></main>', 'validate_markup_for_framework should forward structured body_html payloads unchanged')
   assert.equal(frameworkClient.calls[0].footer_script, 'console.log("pricing")', 'validate_markup_for_framework should forward structured footer_script payloads unchanged')

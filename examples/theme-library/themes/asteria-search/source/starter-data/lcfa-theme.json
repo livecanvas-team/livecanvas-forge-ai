@@ -3,7 +3,7 @@
   "theme": {
     "slug": "asteria-search",
     "name": "Asteria Search",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "stylesheet": "asteria-search"
   },
   "compatibility": {
@@ -33,6 +33,17 @@
   "design_system_file": "starter-data/design-system.json",
   "livecanvas_settings": "starter-data/livecanvas-settings.json",
   "qa_report": "starter-data/qa-report.json",
+  "css_verification": {
+    "required_fragments": [
+      ".bg-\\[\\#f7f7f3\\]",
+      ".max-w-\\[1420px\\]",
+      ".min-h-\\[880px\\]"
+    ],
+    "forbidden_fragments": [
+      ".mr-page",
+      ".mr-hero"
+    ]
+  },
   "rollback": {
     "strategy": "lcfa-import-audit"
   }

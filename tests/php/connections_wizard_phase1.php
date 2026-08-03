@@ -705,6 +705,7 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
     lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.1', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
     lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
+    lcfa_assert_true(in_array('LCFA_PAIRING_SCOPES=read,preview', $remote_env, true), $remote_client . ' pairing should default to read and preview scopes when Power Mode is disabled');
     lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {
         return strpos($entry, 'LCFA_MCP_TOKEN=') === 0 || strpos($entry, 'WP_API_PASSWORD=') === 0;
     }), $remote_client . ' remote setup must not expose legacy WordPress or MCP credentials');

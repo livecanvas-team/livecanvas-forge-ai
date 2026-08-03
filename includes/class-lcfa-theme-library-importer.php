@@ -20,6 +20,17 @@ final class LCFA_Theme_Library_Importer {
     }
 
     public function import(array $theme, bool $force = false, ?bool $auto_rollback = null): array {
+        $prerequisites = $this->installer->get_prerequisites($theme);
+        if (empty($prerequisites['ready'])) {
+            return [
+                'ok'            => false,
+                'status'        => 'php_upgrade_required',
+                'code'          => 'lcfa_framework_php_upgrade_required',
+                'message'       => (string) ($prerequisites['message'] ?? __('The server PHP version is not compatible with this theme.', 'livecanvas-forge-ai')),
+                'prerequisites' => $prerequisites,
+            ];
+        }
+
         $download = $this->installer->download_theme_zip($theme);
         if (empty($download['ok'])) {
             return $download;
@@ -33,6 +44,17 @@ final class LCFA_Theme_Library_Importer {
         }
 
         $manifest = is_array($validation['manifest'] ?? null) ? $validation['manifest'] : [];
+        $prerequisites = $this->installer->get_prerequisites($theme, $manifest, (string) ($validation['requires_php'] ?? ''));
+        if (empty($prerequisites['ready'])) {
+            $this->delete_file($zip_path);
+            return [
+                'ok'            => false,
+                'status'        => 'php_upgrade_required',
+                'code'          => 'lcfa_framework_php_upgrade_required',
+                'message'       => (string) ($prerequisites['message'] ?? __('The server PHP version is not compatible with this theme.', 'livecanvas-forge-ai')),
+                'prerequisites' => $prerequisites,
+            ];
+        }
         $slug = sanitize_key((string) ($manifest['theme']['slug'] ?? $theme['slug'] ?? ''));
         $version = sanitize_text_field((string) ($manifest['theme']['version'] ?? $theme['version'] ?? ''));
         $checksum = (string) ($validation['checksum'] ?? '');
@@ -89,6 +111,7 @@ final class LCFA_Theme_Library_Importer {
         }
 
         $audit_id = sanitize_key('theme-import-' . $slug . '-' . strtolower(wp_generate_password(8, false, false)));
+        $previous_import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
         $is_picowind = ($manifest['compatibility']['picowind'] ?? null) !== null || ($theme['framework'] ?? '') === 'picowind';
         $pending_install = $this->installer->consume_pending_install_state($stylesheet, $slug);
         $previous_theme = sanitize_key((string) ($pending_install['previous_theme'] ?? wp_get_theme()->get_stylesheet()));
@@ -115,6 +138,8 @@ final class LCFA_Theme_Library_Importer {
             'previous_theme_mods'=> $previous_theme_mods,
             'created_menus'     => [],
             'windpress_runtime' => $windpress_runtime,
+            'previous_import'   => $previous_import,
+            'created_at'        => current_time('mysql', true),
         ];
 
         $result = [
@@ -165,6 +190,7 @@ final class LCFA_Theme_Library_Importer {
 
             $this->import_options($base_dir, (string) ($manifest['livecanvas_settings'] ?? ''), $rollback, $result);
             $this->ensure_livecanvas_partial_settings($rollback, $result);
+            $css_verification = $this->normalize_css_verification($manifest['css_verification'] ?? []);
             $design_system_state = $this->import_design_system($base_dir, $manifest, $rollback, $result);
             $media_map = $this->import_media($base_dir, (string) ($manifest['media_manifest'] ?? ''), $slug, $checksum, $rollback, $result);
             $this->maybe_inject_e2e_failure('after_media', $audit_id, $slug);
@@ -191,7 +217,7 @@ final class LCFA_Theme_Library_Importer {
             $this->import_menus($base_dir, (string) ($manifest['menus_file'] ?? ''), $rollback, $result);
             $this->set_homepage($page_id, $rollback, $result);
 
-            $build = $this->finalize_build($is_picowind, $design_system_state);
+            $build = $this->finalize_build($is_picowind, $design_system_state, $css_verification);
             $this->maybe_inject_e2e_failure('after_build', $audit_id, $slug);
             $result['build'] = $build;
             $result['ready'] = !empty($build['ready']);
@@ -231,6 +257,7 @@ final class LCFA_Theme_Library_Importer {
                 'header_id'  => $header_id,
                 'footer_id'  => $footer_id,
                 'stylesheet' => $stylesheet,
+                'css_verification' => $css_verification,
                 'build'      => $build,
             ];
             update_option(self::IMPORTS_OPTION, $imports, false);
@@ -450,7 +477,9 @@ final class LCFA_Theme_Library_Importer {
             }
         }
 
-        $build = $this->execute_windpress_build();
+        $build = $this->execute_windpress_build(
+            $this->normalize_css_verification($import['css_verification'] ?? [])
+        );
         $import['status'] = (string) ($build['status'] ?? 'build_failed');
         $import['build'] = $build;
         $import['build_updated_at'] = current_time('mysql', true);
@@ -496,6 +525,7 @@ final class LCFA_Theme_Library_Importer {
                 'import_audit_id'         => sanitize_key((string) ($import['audit_id'] ?? '')),
                 'expected_import_checksum'=> strtolower(trim((string) ($import['checksum'] ?? ''))),
                 'build'                   => is_array($import['build'] ?? null) ? $import['build'] : [],
+                'css_verification'        => $this->normalize_css_verification($import['css_verification'] ?? []),
                 'required_scopes'         => ['write', 'cache'],
             ];
         }
@@ -530,6 +560,7 @@ final class LCFA_Theme_Library_Importer {
         $expected_import_checksum = strtolower(trim((string) ($payload['expected_import_checksum'] ?? '')));
         $cache_sha256 = strtolower(trim((string) ($payload['cache_sha256'] ?? '')));
         $tailwind_version = (int) ($payload['tailwind_version'] ?? 0);
+        $candidate_count = max(0, (int) ($payload['candidate_count'] ?? 0));
         $imports = self::get_imports();
         $import = is_array($imports[$slug] ?? null) ? $imports[$slug] : [];
 
@@ -590,7 +621,18 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
-        $verification = $this->windpress_bridge->get_compiled_cache_state();
+        $tailwind_version = $tailwind_version === 3 ? 3 : 4;
+        if ($tailwind_version === 4 && $candidate_count < 1) {
+            return [
+                'ok'      => false,
+                'ready'   => false,
+                'status'  => 'missing_build_evidence',
+                'message' => __('The Tailwind 4 build did not report any scanned utility candidates.', 'livecanvas-forge-ai'),
+            ];
+        }
+
+        $css_verification = $this->normalize_css_verification($import['css_verification'] ?? []);
+        $verification = $this->windpress_bridge->get_compiled_cache_state($css_verification);
         $verified_checksum = strtolower(trim((string) ($verification['cache']['sha256'] ?? '')));
         if (empty($verification['ready']) || $verified_checksum === '' || !hash_equals($verified_checksum, $cache_sha256)) {
             return [
@@ -602,7 +644,6 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
-        $tailwind_version = $tailwind_version === 3 ? 3 : 4;
         $degraded = $tailwind_version === 3;
         $status = $degraded ? 'ready_degraded' : 'ready';
         $build = [
@@ -612,6 +653,7 @@ final class LCFA_Theme_Library_Importer {
             'support_level'     => $degraded ? 'degraded' : 'full',
             'strategy'          => 'windpress_remote_mcp',
             'tailwind_version'  => $tailwind_version,
+            'candidate_count'   => $candidate_count,
             'cache_sha256'      => $verified_checksum,
             'verification'      => $verification,
             'verified_at'       => current_time('mysql', true),
@@ -730,7 +772,7 @@ final class LCFA_Theme_Library_Importer {
         return $state;
     }
 
-    private function finalize_build(bool $is_picowind, array $design_system_state): array {
+    private function finalize_build(bool $is_picowind, array $design_system_state, array $css_verification = []): array {
         if (!$is_picowind) {
             return [
                 'ready'    => true,
@@ -741,12 +783,23 @@ final class LCFA_Theme_Library_Importer {
         }
 
         if (!empty($design_system_state['cache_ready'])) {
+            $verification = $this->windpress_bridge->get_compiled_cache_state($css_verification);
+            if (empty($verification['ready'])) {
+                return [
+                    'ready'        => false,
+                    'status'       => 'build_failed',
+                    'strategy'     => 'packaged_compiled_css',
+                    'message'      => (string) ($verification['message'] ?? __('The packaged CSS failed semantic verification.', 'livecanvas-forge-ai')),
+                    'verification' => $verification,
+                ];
+            }
+
             return [
                 'ready'        => true,
                 'status'       => 'ready',
                 'strategy'     => 'packaged_compiled_css',
                 'message'      => __('The packaged compiled CSS was stored and verified.', 'livecanvas-forge-ai'),
-                'verification' => $design_system_state['cache'] ?? [],
+                'verification' => $verification,
             ];
         }
 
@@ -759,10 +812,10 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
-        return $this->execute_windpress_build();
+        return $this->execute_windpress_build($css_verification);
     }
 
-    private function execute_windpress_build(): array {
+    private function execute_windpress_build(array $css_verification = []): array {
         if (!$this->build_gateway) {
             return [
                 'ready'       => false,
@@ -802,7 +855,21 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
-        $verification = $this->windpress_bridge->get_compiled_cache_state();
+        $build_result = is_array($build['result'] ?? null) ? $build['result'] : [];
+        $tailwind_version = (int) ($build_result['tailwind_version'] ?? 0);
+        $candidate_count = (int) ($build_result['candidate_count'] ?? 0);
+        if ($tailwind_version === 4 && $candidate_count < 1) {
+            return [
+                'ready'       => false,
+                'status'      => 'build_failed',
+                'strategy'    => 'windpress_local_mcp',
+                'next_action' => 'retry_build',
+                'message'     => __('Tailwind compiled without any scanned utility candidates. The generated CSS cannot be trusted.', 'livecanvas-forge-ai'),
+                'gateway'     => $this->summarize_gateway_status($gateway_status),
+            ];
+        }
+
+        $verification = $this->windpress_bridge->get_compiled_cache_state($css_verification);
         if (empty($verification['ready'])) {
             return [
                 'ready'        => false,
@@ -815,8 +882,6 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
-        $build_result = is_array($build['result'] ?? null) ? $build['result'] : [];
-
         return [
             'ready'           => true,
             'status'          => 'ready',
@@ -827,6 +892,42 @@ final class LCFA_Theme_Library_Importer {
             'candidate_count' => (int) ($build_result['candidate_count'] ?? 0),
             'verification'    => $verification,
             'gateway'         => $this->summarize_gateway_status($gateway_status),
+        ];
+    }
+
+    private function normalize_css_verification($value): array {
+        if (!is_array($value)) {
+            return [
+                'required_fragments'  => [],
+                'forbidden_fragments' => [],
+            ];
+        }
+
+        $normalize = static function ($fragments): array {
+            if (!is_array($fragments)) {
+                return [];
+            }
+
+            $normalized = [];
+            foreach (array_slice($fragments, 0, 20) as $fragment) {
+                if (!is_scalar($fragment)) {
+                    continue;
+                }
+
+                $fragment = trim((string) $fragment);
+                if ($fragment === '' || strlen($fragment) > 200 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $fragment)) {
+                    continue;
+                }
+
+                $normalized[] = $fragment;
+            }
+
+            return array_values(array_unique($normalized));
+        };
+
+        return [
+            'required_fragments'  => $normalize($value['required_fragments'] ?? []),
+            'forbidden_fragments' => $normalize($value['forbidden_fragments'] ?? []),
         ];
     }
 

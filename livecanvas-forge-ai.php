@@ -42,6 +42,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-stack-capabilities.php';
 require_once LCFA_DIR . 'includes/class-lcfa-framework-compatibility.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-diagnostics.php';
 require_once LCFA_DIR . 'includes/class-lcfa-github-updater.php';
+require_once LCFA_DIR . 'includes/class-lcfa-framework-prerequisites.php';
 require_once LCFA_DIR . 'includes/class-lcfa-installer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require_once LCFA_DIR . 'includes/class-lcfa-genesis-planner.php';

@@ -116,7 +116,7 @@ function lcfa_assert_true(bool $condition, string $message): void {
 
 require LCFA_DIR . 'includes/class-lcfa-installer.php';
 
-$installer = new LCFA_Installer(new LCFA_Environment());
+$installer = new LCFA_Installer(new LCFA_Environment(), new LCFA_Framework_Prerequisites('8.2.0'));
 $method = lcfa_test_reflection_method('LCFA_Installer', 'install_framework_package');
 $result = $method->invoke($installer, 'picowind');
 
@@ -135,5 +135,11 @@ lcfa_assert_true(
     stripos((string) (($GLOBALS['lcfa_remote_get_args']['headers']['User-Agent'] ?? '')), 'LiveCanvas AI Bridge/') !== false,
     'installer should identify the plugin in the GitHub request user agent'
 );
+
+$blocked_installer = new LCFA_Installer(new LCFA_Environment(), new LCFA_Framework_Prerequisites('8.1.34'));
+$blocked_method = lcfa_test_reflection_method('LCFA_Installer', 'install_framework_package');
+$blocked_result = $blocked_method->invoke($blocked_installer, 'picowind');
+lcfa_assert_true(is_wp_error($blocked_result), 'Picowind installation should be blocked on PHP 8.1 before Theme_Upgrader runs');
+lcfa_assert_same('lcfa_framework_php_upgrade_required', $blocked_result->get_error_code(), 'Picowind PHP blocker should return a guided error code');
 
 echo "PASS\n";

@@ -716,6 +716,15 @@
     line-height: 1.45;
 }
 
+.lcfa-admin .lcfa-theme-card__notice.is-critical {
+    border-color: rgba(244, 63, 94, 0.42);
+    background: rgba(244, 63, 94, 0.11);
+}
+
+.lcfa-admin .lcfa-theme-card__notice.is-critical strong {
+    color: #fb7185;
+}
+
 .lcfa-admin .lcfa-theme-card__audit {
     max-width: 100%;
     color: #35d0f2;

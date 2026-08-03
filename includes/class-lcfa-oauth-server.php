@@ -27,6 +27,7 @@ final class LCFA_OAuth_Server {
     private ?AuthorizationServer $authorization_server = null;
     private ?ResourceServer $resource_server = null;
     private ?WP_Error $request_auth_error = null;
+    private array $masked_authorization_headers = [];
     private static array $current_identity = [];
 
     public function hooks(): void {
@@ -37,6 +38,8 @@ final class LCFA_OAuth_Server {
         add_action('admin_post_lcfa_oauth_revoke_client', [$this, 'handle_revoke_client']);
         add_filter('determine_current_user', [$this, 'authenticate_bearer'], 30);
         add_filter('rest_authentication_errors', [$this, 'enforce_bearer_error'], 5);
+        add_filter('rest_pre_dispatch', [$this, 'mask_oauth_bearer_for_legacy_rest_filters'], 1, 3);
+        add_filter('rest_pre_dispatch', [$this, 'restore_oauth_bearer_after_legacy_rest_filters'], PHP_INT_MAX, 3);
         add_filter('rest_request_before_callbacks', [$this, 'protect_mcp_route'], 5, 3);
         add_filter('rest_post_dispatch', [$this, 'attach_authenticate_challenge'], 10, 3);
     }
@@ -369,6 +372,37 @@ final class LCFA_OAuth_Server {
 
     public function enforce_bearer_error($error) {
         return $this->request_auth_error instanceof WP_Error ? $this->request_auth_error : $error;
+    }
+
+    public function mask_oauth_bearer_for_legacy_rest_filters($response, $server, WP_REST_Request $request) {
+        if (!$this->is_mcp_route((string) $request->get_route()) || self::$current_identity === []) {
+            return $response;
+        }
+
+        $this->masked_authorization_headers = [];
+        foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $header) {
+            if (!array_key_exists($header, $_SERVER)) {
+                continue;
+            }
+
+            $this->masked_authorization_headers[$header] = $_SERVER[$header];
+            unset($_SERVER[$header]);
+        }
+
+        return $response;
+    }
+
+    public function restore_oauth_bearer_after_legacy_rest_filters($response, $server, WP_REST_Request $request) {
+        if ($this->masked_authorization_headers === []) {
+            return $response;
+        }
+
+        foreach ($this->masked_authorization_headers as $header => $value) {
+            $_SERVER[$header] = $value;
+        }
+        $this->masked_authorization_headers = [];
+
+        return $response;
     }
 
     public function protect_mcp_route($response, $handler, WP_REST_Request $request) {
@@ -845,16 +879,25 @@ final class LCFA_OAuth_Server {
     }
 
     private function log_exception(string $context, Throwable $exception): void {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(
-                sprintf(
-                    '[LiveCanvas AI Bridge OAuth:%s] %s in %s:%d',
-                    $context,
-                    $exception->getMessage(),
-                    $exception->getFile(),
-                    $exception->getLine()
-                )
-            );
-        }
+        $trace = array_map(
+            static function (array $frame): string {
+                $location = (string) ($frame['file'] ?? '[internal]') . ':' . (int) ($frame['line'] ?? 0);
+                $call = (string) ($frame['class'] ?? '') . (string) ($frame['type'] ?? '') . (string) ($frame['function'] ?? '');
+
+                return $location . ' ' . $call;
+            },
+            array_slice($exception->getTrace(), 0, 6)
+        );
+        error_log(
+            sprintf(
+                '[LiveCanvas AI Bridge OAuth:%s] %s: %s in %s:%d; trace=%s',
+                $context,
+                get_class($exception),
+                $exception->getMessage(),
+                $exception->getFile(),
+                $exception->getLine(),
+                implode(' <- ', $trace)
+            )
+        );
     }
 }

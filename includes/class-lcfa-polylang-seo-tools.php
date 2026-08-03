@@ -258,7 +258,8 @@ final class LCFA_Polylang_SEO_Tools {
 
     private function unavailable(string $integration, string $message): array {
         return [
-            'ok' => false,
+            'ok' => true,
+            'available' => false,
             'status' => 'unavailable',
             'integration' => $integration,
             'message' => $message,

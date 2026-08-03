@@ -54,6 +54,9 @@ package_assert_true(in_array('livecanvas-forge-ai/vendor/autoload.php', $entries
 package_assert_true(in_array('livecanvas-forge-ai/vendor/league/oauth2-server/src/AuthorizationServer.php', $entries, true), 'distribution zip should include the OAuth server runtime');
 package_assert_true(in_array('livecanvas-forge-ai/vendor/nyholm/psr7/src/ServerRequest.php', $entries, true), 'distribution zip should include the PSR-7 runtime');
 package_assert_true(in_array('livecanvas-forge-ai/docs/coding-agent-setup.html', $entries, true), 'distribution zip should include the four-step coding-agent guide');
+package_assert_true(in_array('livecanvas-forge-ai/examples/theme-library/catalog.json', $entries, true), 'distribution zip should include the offline Theme Library catalog');
+package_assert_true(!in_array('livecanvas-forge-ai/examples/theme-library/themes/asteria-search/asteria-search.zip', $entries, true), 'distribution zip should not bundle remote Theme Library packages');
+package_assert_true(!in_array('livecanvas-forge-ai/examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png', $entries, true), 'distribution zip should not bundle remote Theme Library screenshots');
 package_assert_true(strpos($plugin_bootstrap, 'Update URI: https://livecanvas.com/ai-bridge') !== false, 'distribution zip should preserve the LiveCanvas Update URI header');
 package_assert_true(strpos($plugin_bootstrap, 'Version: 0.2.0-beta.1') !== false, 'distribution zip should preserve the beta plugin version');
 package_assert_true(strpos($plugin_bootstrap, 'Requires at least: 6.8') !== false, 'distribution zip should declare WordPress 6.8 as the supported minimum');

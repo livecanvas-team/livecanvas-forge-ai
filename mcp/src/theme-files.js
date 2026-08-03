@@ -44,7 +44,7 @@ class ThemeFilesystem {
     this.client = client
     this.config = config
     this.cachedRoots = null
-    this.backupsDirectory = path.resolve(__dirname, '..', '.lcfa-backups')
+    this.backupsDirectory = path.resolve(config.backupsDirectory || path.resolve(__dirname, '..', '.lcfa-backups'))
   }
 
   async getThemeRoots() {
@@ -308,11 +308,37 @@ class ThemeFilesystem {
     assertWritablePath(relativePath)
 
     const root = this.resolveWriteTarget(rootScope, roots)
+    const writePolicy = this.getWriteRootPolicy(root, roots, options)
     const absolutePath = this.resolveAbsolutePath(root.path, relativePath)
     const exists = fs.existsSync(absolutePath)
     const previousContent = exists ? await fsp.readFile(absolutePath, 'utf8') : ''
     const changed = !exists || previousContent !== content
     const created = !exists
+
+    if (!writePolicy.writable) {
+      if (!dryRun) {
+        throw new Error(writePolicy.message)
+      }
+
+      return {
+        ok: true,
+        dry_run: true,
+        writable: false,
+        blocked: true,
+        status: 'parent_theme_read_only',
+        message: writePolicy.message,
+        root_scope: rootScope,
+        root: root.key,
+        theme: root.label,
+        relative_path: relativePath,
+        absolute_path: absolutePath,
+        exists,
+        created,
+        changed,
+        bytes_before: Buffer.byteLength(previousContent, 'utf8'),
+        bytes_after: Buffer.byteLength(content, 'utf8')
+      }
+    }
 
     if (dryRun) {
       return {
@@ -351,6 +377,7 @@ class ThemeFilesystem {
     return {
       ok: true,
       dry_run: false,
+      writable: true,
       root_scope: rootScope,
       root: root.key,
       theme: root.label,
@@ -521,6 +548,23 @@ class ThemeFilesystem {
     }
 
     return targets[0]
+  }
+
+  getWriteRootPolicy(root, roots, options = {}) {
+    const isParentRoot = root.key === 'template' || !roots.is_child_theme
+    const allowParentWrites = Boolean(
+      options.allow_parent_theme_writes ||
+      this.config.allowParentThemeWrites
+    )
+
+    if (!isParentRoot || allowParentWrites) {
+      return { writable: true, message: '' }
+    }
+
+    return {
+      writable: false,
+      message: 'The active target is a parent theme. Install and activate a child theme before writing files, or explicitly set LCFA_ALLOW_PARENT_THEME_WRITES=1.'
+    }
   }
 
   resolveTargets(rootScope, roots, options = {}) {

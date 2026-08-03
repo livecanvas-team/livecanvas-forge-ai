@@ -253,10 +253,21 @@ final class LCFA_Theme_Library_Catalog {
         }
 
         $remote['themes'] = array_values($themes);
-        $remote['errors'] = array_values(array_filter(array_merge(
+        $errors = array_values(array_unique(array_filter(array_merge(
             (array) ($remote['errors'] ?? []),
             (array) ($local['errors'] ?? [])
-        )));
+        ))));
+        $remote['errors'] = array_values(array_filter($errors, static function ($error) use ($themes): bool {
+            $error = (string) $error;
+            if (preg_match('/Theme "([^"]+)"/', $error, $matches)) {
+                $slug = sanitize_key((string) ($matches[1] ?? ''));
+                if ($slug !== '' && isset($themes[$slug])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
         $remote['bundled_catalog_loaded'] = true;
 
         return $remote;

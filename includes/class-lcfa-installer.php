@@ -2,19 +2,30 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Framework_Prerequisites', false)) {
+    require_once __DIR__ . '/class-lcfa-framework-prerequisites.php';
+}
+
 final class LCFA_Installer {
     private const PICOWIND_LATEST_RELEASE_API = 'https://api.github.com/repos/livecanvas-team/picowind/releases/latest';
     private const MCP_ADAPTER_RELEASE_ZIP = 'https://github.com/WordPress/mcp-adapter/releases/latest/download/mcp-adapter.zip';
 
     private LCFA_Environment $environment;
+    private LCFA_Framework_Prerequisites $framework_prerequisites;
 
-    public function __construct(LCFA_Environment $environment) {
+    public function __construct(LCFA_Environment $environment, ?LCFA_Framework_Prerequisites $framework_prerequisites = null) {
         $this->environment = $environment;
+        $this->framework_prerequisites = $framework_prerequisites ?: new LCFA_Framework_Prerequisites();
     }
 
     public function apply_framework(string $framework) {
         if (!in_array($framework, ['picostrap', 'picowind'], true)) {
             return new WP_Error('lcfa_invalid_framework', __('Invalid framework.', 'livecanvas-forge-ai'));
+        }
+
+        $prerequisites = $this->get_framework_prerequisites($framework);
+        if (empty($prerequisites['ready'])) {
+            return new WP_Error('lcfa_framework_php_upgrade_required', (string) $prerequisites['message']);
         }
 
         $stylesheet = $this->environment->get_preferred_theme_stylesheet($framework);
@@ -63,6 +74,10 @@ final class LCFA_Installer {
             'theme_switched'   => $switched,
             'windpress_status' => $windpress_status,
         ];
+    }
+
+    public function get_framework_prerequisites(string $framework): array {
+        return $this->framework_prerequisites->check($framework);
     }
 
     public function activate_livecanvas() {
@@ -171,6 +186,11 @@ final class LCFA_Installer {
     }
 
     private function install_framework_package(string $framework) {
+        $prerequisites = $this->get_framework_prerequisites($framework);
+        if (empty($prerequisites['ready'])) {
+            return new WP_Error('lcfa_framework_php_upgrade_required', (string) $prerequisites['message']);
+        }
+
         $url = $this->resolve_framework_package_url($framework);
 
         if (is_wp_error($url)) {

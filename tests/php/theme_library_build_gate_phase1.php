@@ -25,13 +25,15 @@ final class LCFA_Theme_Library_Installer {}
 final class LCFA_Theme_Library_Validator {}
 
 final class LCFA_WindPress_Bridge {
+    public array $last_requirements = [];
     public array $verification = [
         'ready' => false,
         'status' => 'missing',
         'message' => 'No compiled cache.',
     ];
 
-    public function get_compiled_cache_state(): array {
+    public function get_compiled_cache_state(array $requirements = []): array {
+        $this->last_requirements = $requirements;
         return $this->verification;
     }
 }
@@ -70,6 +72,10 @@ function lcfa_build_gate_seed(string $status = 'build_required'): void {
             'import_key' => 'sample-theme:1.0.0:checksum',
             'checksum' => str_repeat('b', 64),
             'stylesheet' => 'sample-theme',
+            'css_verification' => [
+                'required_fragments' => ['.sample-theme-marker'],
+                'forbidden_fragments' => ['.foreign-theme-marker'],
+            ],
         ],
     ];
 }
@@ -139,6 +145,7 @@ lcfa_build_gate_seed();
 $pending = $importer->get_pending_build('sample-theme');
 lcfa_build_gate_assert(!empty($pending['ok']) && ($pending['pending']['import_audit_id'] ?? '') === 'theme-import-sample-theme-abc123', 'Pending remote build should expose the bound import audit ID.');
 lcfa_build_gate_assert(($pending['pending']['expected_import_checksum'] ?? '') === str_repeat('b', 64), 'Pending remote build should expose the expected import checksum.');
+lcfa_build_gate_assert(($pending['pending']['css_verification']['required_fragments'][0] ?? '') === '.sample-theme-marker', 'Pending remote build should expose package-bound CSS verification fragments.');
 
 $audit_mismatch = $importer->complete_remote_build([
     'theme_slug' => 'sample-theme',
@@ -158,14 +165,26 @@ $checksum_mismatch = $importer->complete_remote_build([
 ]);
 lcfa_build_gate_assert(empty($checksum_mismatch['ok']) && ($checksum_mismatch['status'] ?? '') === 'import_checksum_mismatch', 'Remote completion must reject a mismatched import checksum.');
 
+$missing_evidence = $importer->complete_remote_build([
+    'theme_slug' => 'sample-theme',
+    'import_audit_id' => 'theme-import-sample-theme-abc123',
+    'expected_import_checksum' => str_repeat('b', 64),
+    'cache_sha256' => str_repeat('a', 64),
+    'tailwind_version' => 4,
+    'candidate_count' => 0,
+]);
+lcfa_build_gate_assert(empty($missing_evidence['ok']) && ($missing_evidence['status'] ?? '') === 'missing_build_evidence', 'Tailwind 4 remote completion must reject a build without scanned candidates.');
+
 $remote_ready = $importer->complete_remote_build([
     'theme_slug' => 'sample-theme',
     'import_audit_id' => 'theme-import-sample-theme-abc123',
     'expected_import_checksum' => str_repeat('b', 64),
     'cache_sha256' => str_repeat('a', 64),
     'tailwind_version' => 4,
+    'candidate_count' => 37,
 ]);
 lcfa_build_gate_assert(!empty($remote_ready['ok']) && !empty($remote_ready['ready']) && ($remote_ready['status'] ?? '') === 'ready', 'Verified Tailwind 4 remote build should mark the import ready.');
+lcfa_build_gate_assert(($windpress->last_requirements['required_fragments'][0] ?? '') === '.sample-theme-marker', 'Remote completion should verify the persistent CSS against the package requirements.');
 
 lcfa_build_gate_seed();
 $remote_degraded = $importer->complete_remote_build([
@@ -174,6 +193,7 @@ $remote_degraded = $importer->complete_remote_build([
     'expected_import_checksum' => str_repeat('b', 64),
     'cache_sha256' => str_repeat('a', 64),
     'tailwind_version' => 3,
+    'candidate_count' => 37,
 ]);
 lcfa_build_gate_assert(!empty($remote_degraded['ok']) && empty($remote_degraded['ready']) && !empty($remote_degraded['usable']) && ($remote_degraded['status'] ?? '') === 'ready_degraded', 'Verified Tailwind 3 remote build should remain explicitly degraded.');
 

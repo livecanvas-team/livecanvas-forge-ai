@@ -366,6 +366,18 @@ final class LCFA_Rest_Api {
             'permission_callback' => [$this, 'can_read'],
         ]);
 
+        register_rest_route('lcfa/v1', '/studio/ability-diagnostics', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_studio_ability_diagnostics_route'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/studio/runs', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_studio_runs_route'],
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+
         register_rest_route('lcfa/v1', '/studio/block-pattern-library', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_studio_block_pattern_library'],
@@ -1036,6 +1048,30 @@ final class LCFA_Rest_Api {
         ]);
     }
 
+    public function get_studio_ability_diagnostics_route(): WP_REST_Response {
+        return new WP_REST_Response($this->get_studio_ability_diagnostics());
+    }
+
+    public function get_studio_runs_route(WP_REST_Request $request): WP_REST_Response {
+        $limit = absint($request->get_param('limit') ?: 20);
+        if ($limit < 1 || $limit > 40) {
+            $limit = 20;
+        }
+
+        if ($this->ability_registry instanceof LCFA_Ability_Registry && method_exists($this->ability_registry, 'get_runs')) {
+            return new WP_REST_Response($this->ability_registry->get_runs(['limit' => $limit]));
+        }
+
+        $runs = array_slice($this->sanitize_studio_runs(LCFA_Settings::get_history()), 0, $limit);
+        return new WP_REST_Response([
+            'runs' => [
+                'items' => $runs,
+                'count' => count($runs),
+                'limit' => $limit,
+            ],
+        ]);
+    }
+
     public function get_studio_block_pattern_library(WP_REST_Request $request): WP_REST_Response {
         $limit = absint($request->get_param('limit') ?: 20);
         if ($limit < 1 || $limit > 40) {
@@ -1520,7 +1556,7 @@ final class LCFA_Rest_Api {
 
     public function get_mcp_bootstrap(): WP_REST_Response {
         return new WP_REST_Response([
-            'bootstrap' => $this->context_builder->get_bootstrap_payload(),
+            'bootstrap' => $this->context_builder->get_public_bootstrap_payload(),
         ]);
     }
 
@@ -2595,9 +2631,10 @@ final class LCFA_Rest_Api {
 
         $result = $this->theme_library_installer->install($theme['theme']);
 
+        $status = (string) ($result['status'] ?? '') === 'php_upgrade_required' ? 409 : 400;
         return new WP_REST_Response([
             'result' => $result,
-        ], !empty($result['ok']) ? 200 : 400);
+        ], !empty($result['ok']) ? 200 : $status);
     }
 
     public function import_theme_library_item(WP_REST_Request $request): WP_REST_Response {
@@ -2612,9 +2649,10 @@ final class LCFA_Rest_Api {
             : null;
         $result = $this->theme_library_importer->import($theme['theme'], !empty($payload['force']), $auto_rollback);
 
+        $status = (string) ($result['status'] ?? '') === 'php_upgrade_required' ? 409 : 400;
         return new WP_REST_Response([
             'result' => $result,
-        ], !empty($result['ok']) ? 200 : 400);
+        ], !empty($result['ok']) ? 200 : $status);
     }
 
     public function build_theme_library_item(WP_REST_Request $request): WP_REST_Response {

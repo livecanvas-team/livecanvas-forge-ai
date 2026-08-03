@@ -201,6 +201,30 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       )
     },
     {
+      name: 'get_ability_diagnostics',
+      description: 'Read ability totals, MCP-public exposure, write allowlist state, and adapter diagnostics without changing WordPress.',
+      inputSchema: {
+        type: 'object',
+        properties: {}
+      },
+      invoke: async () => client.getAbilityDiagnostics()
+    },
+    {
+      name: 'get_runs',
+      description: 'Read sanitized recent AI Bridge runs, audit IDs, errors, and rollback availability without changing WordPress.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 40
+          }
+        }
+      },
+      invoke: async (argumentsMap = {}) => client.getRuns(argumentsMap)
+    },
+    {
       name: 'get_block_pattern_library',
       description: 'Read export-ready WordPress-native AI Bridge block patterns with checksums for fallback pages and reusable pattern previews.',
       inputSchema: {
@@ -917,25 +941,49 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
         const build = await windpressCompiler.buildCache({
           provider_ids: argumentsMap.provider_ids,
           kind: argumentsMap.kind || 'full',
-          store: true,
+          store: false,
           source_map: argumentsMap.source_map === true,
           max_batches: argumentsMap.max_batches
         })
-        const verification = build && build.stored && build.stored.verification
-          ? build.stored.verification
-          : null
+        const compiledCss = build && build.css
+          ? String(build.css.sourcemap ? build.css.normal || '' : build.css.minified || build.css.normal || '')
+          : ''
+        const semantic = verifyCompiledCss(compiledCss, pending.css_verification || {})
+
+        if (!build || build.ok === false || Number(build.candidate_count || 0) < 1 || !semantic.ok) {
+          return {
+            ok: false,
+            ready: false,
+            status: 'build_failed',
+            message: Number(build && build.candidate_count ? build.candidate_count : 0) < 1
+              ? 'Tailwind did not discover any utility candidates for this Theme Library import.'
+              : 'Compiled CSS failed the Theme Library semantic verification checks.',
+            theme_slug: themeSlug,
+            semantic,
+            build: summarizeWindPressBuild(build)
+          }
+        }
+
+        const storedResponse = await client.saveWindPressCache(
+          compiledCss,
+          build.css && build.css.sourcemap ? build.css.sourcemap : '',
+          Date.now()
+        )
+        const stored = storedResponse.result || storedResponse
+        const verification = stored && stored.verification ? stored.verification : null
         const cacheSha256 = verification && verification.cache
           ? String(verification.cache.sha256 || '')
           : ''
 
-        if (!build || build.ok === false || !verification || verification.ready !== true || !cacheSha256) {
+        if (!verification || verification.ready !== true || !cacheSha256) {
           return {
             ok: false,
             ready: false,
             status: 'build_failed',
             message: 'Tailwind compiled, but WordPress did not return a verifiable persistent WindPress cache checksum.',
             theme_slug: themeSlug,
-            build
+            semantic,
+            build: summarizeWindPressBuild(build)
           }
         }
 
@@ -944,7 +992,8 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           import_audit_id: pending.import_audit_id,
           expected_import_checksum: pending.expected_import_checksum,
           cache_sha256: cacheSha256,
-          tailwind_version: Number(build.tailwind_version || 4)
+          tailwind_version: Number(build.tailwind_version || 4),
+          candidate_count: Number(build.candidate_count || 0)
         })
       }
     },
@@ -1398,7 +1447,8 @@ function transactionFailure(payload, message) {
 async function invokeValidateMarkupForFramework(argumentsMap, client) {
   const hydratedArguments = await hydrateFrameworkArgument({
     ...argumentsMap,
-    action: 'validate_markup_for_framework'
+    action: 'validate_markup_for_framework',
+    dry_run: true
   }, client)
 
   return client.runCommand(hydratedArguments)
@@ -1709,6 +1759,44 @@ function visualCheckStatusSchema() {
       executable_path: { type: 'string' },
       headless: { type: 'boolean' }
     }
+  }
+}
+
+function verifyCompiledCss(css, requirements = {}) {
+  const normalize = (values) => Array.isArray(values)
+    ? [...new Set(values
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0 && value.length <= 200))]
+      .slice(0, 20)
+    : []
+  const required = normalize(requirements.required_fragments)
+  const forbidden = normalize(requirements.forbidden_fragments)
+  const missing = required.filter((fragment) => !css.includes(fragment))
+  const unexpected = forbidden.filter((fragment) => css.includes(fragment))
+
+  return {
+    ok: css.trim() !== '' && missing.length === 0 && unexpected.length === 0,
+    required_count: required.length,
+    forbidden_count: forbidden.length,
+    missing_fragments: missing,
+    unexpected_fragments: unexpected
+  }
+}
+
+function summarizeWindPressBuild(build) {
+  if (!build || typeof build !== 'object') {
+    return null
+  }
+
+  return {
+    ok: build.ok !== false,
+    tailwind_version: Number(build.tailwind_version || 0),
+    provider_count: Number(build.provider_count || 0),
+    candidate_count: Number(build.candidate_count || 0),
+    css_bytes: build.css
+      ? Buffer.byteLength(String(build.css.minified || build.css.normal || ''), 'utf8')
+      : 0
   }
 }
 

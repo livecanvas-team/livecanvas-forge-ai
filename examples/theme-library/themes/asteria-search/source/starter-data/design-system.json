@@ -1,13 +1,16 @@
 {
   "tokens": {
     "colors": {
-      "primary": "#9be7ff",
-      "secondary": "#b8a7ff",
-      "ink": "#0b1020"
+      "background": "#f7f7f3",
+      "surface": "#fafaf7",
+      "primary": "#213d34",
+      "accent": "#9f623c",
+      "ink": "#151713",
+      "muted": "#62665f"
     },
     "radius": {
-      "card": "1.5rem",
-      "button": "999px"
+      "card": "8px",
+      "button": "6px"
     }
   }
 }

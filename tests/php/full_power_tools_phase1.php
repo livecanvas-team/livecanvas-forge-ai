@@ -50,6 +50,7 @@ final class LCFA_Command_Deck {
 }
 
 require dirname(__DIR__, 2) . '/includes/class-lcfa-content-patch-service.php';
+require dirname(__DIR__, 2) . '/includes/class-lcfa-polylang-seo-tools.php';
 
 function lcfa_full_power_assert_true(bool $condition, string $message): void {
     if (!$condition) {
@@ -102,5 +103,11 @@ lcfa_full_power_assert_true(!empty($apply['ok']), 'content patch apply should ex
 lcfa_full_power_assert_true(($apply['action'] ?? '') === 'update_page', 'page content patch apply should use update_page');
 lcfa_full_power_assert_true(str_contains($apply['content'] ?? '', 'Applied title'), 'content patch apply should pass patched content to Command Deck');
 lcfa_full_power_assert_true(($command_deck->last_payload['status'] ?? '') === 'publish', 'page content patch apply should preserve the current page status');
+
+$optional_integrations = new LCFA_Polylang_SEO_Tools();
+$polylang = $optional_integrations->polylang(['action' => 'list_languages']);
+lcfa_full_power_assert_true(!empty($polylang['ok']), 'an unavailable optional integration should be a successful diagnostic response');
+lcfa_full_power_assert_true(($polylang['status'] ?? '') === 'unavailable', 'missing Polylang should return an unavailable status');
+lcfa_full_power_assert_true(array_key_exists('available', $polylang) && $polylang['available'] === false, 'missing Polylang should explicitly report available=false');
 
 echo "PASS\n";

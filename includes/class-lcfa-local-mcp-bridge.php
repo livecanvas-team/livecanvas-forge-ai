@@ -25,11 +25,20 @@ final class LCFA_Local_MCP_Bridge {
         }
 
         $snapshot    = $this->environment->get_snapshot();
-        $node_binary = $this->resolve_node_binary();
+        $local_site  = ($snapshot['site_mode'] ?? '') === 'local';
+        $node_binary = '';
         $script_path = $this->get_cli_script_path();
-        $node_probe  = $this->probe_node_binary($node_binary);
-        $loopback    = $this->probe_rest_loopback();
-        $local_site  = $snapshot['site_mode'] === 'local';
+        $node_probe  = ['ok' => false, 'version' => ''];
+        $loopback    = [
+            'ok'      => false,
+            'message' => __('REST loopback is skipped outside local environments.', 'livecanvas-forge-ai'),
+        ];
+
+        if ($local_site) {
+            $node_binary = $this->resolve_node_binary();
+            $node_probe = $this->probe_node_binary($node_binary);
+            $loopback = $this->probe_rest_loopback();
+        }
         $script_ok   = is_readable($script_path);
 
         $message = __('The local MCP bridge is ready.', 'livecanvas-forge-ai');

@@ -163,7 +163,7 @@ final class LCFA_Theme_Library_Rollback {
             'message' => empty($errors) ? __('Theme Library rollback restored.', 'livecanvas-forge-ai') : implode(' ', $errors),
         ]);
 
-        $this->update_import_state($audit_id, empty($errors), $errors);
+        $this->update_import_state($audit_id, empty($errors), $errors, $record);
 
         return [
             'ok'      => empty($errors),
@@ -173,9 +173,17 @@ final class LCFA_Theme_Library_Rollback {
         ];
     }
 
-    private function update_import_state(string $audit_id, bool $restored, array $errors): void {
+    private function update_import_state(string $audit_id, bool $restored, array $errors, array $record = []): void {
         $imports = get_option(self::IMPORTS_OPTION, []);
         if (!is_array($imports)) {
+            return;
+        }
+
+        $theme_slug = sanitize_key((string) ($record['theme_slug'] ?? ''));
+        $previous_import = is_array($record['previous_import'] ?? null) ? $record['previous_import'] : [];
+        if ($restored && $theme_slug !== '' && $previous_import !== []) {
+            $imports[$theme_slug] = $previous_import;
+            update_option(self::IMPORTS_OPTION, $imports, false);
             return;
         }
 

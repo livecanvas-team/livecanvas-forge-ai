@@ -115,7 +115,11 @@ function lcfa_installer_remove_tree(string $path): void {
 require dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-installer.php';
 
 $windpress = new LCFA_WindPress_Bridge();
-$installer = new LCFA_Theme_Library_Installer(new LCFA_Theme_Library_Validator(), $windpress);
+$installer = new LCFA_Theme_Library_Installer(
+    new LCFA_Theme_Library_Validator(),
+    $windpress,
+    new LCFA_Framework_Prerequisites('8.2.0')
+);
 $result = $installer->install([
     'slug'         => 'sample-theme',
     'name'         => 'Sample Theme',
@@ -144,6 +148,24 @@ $second = $installer->install([
 ]);
 lcfa_installer_assert(!empty($second['ok']), 'Reactivating the current theme should remain idempotent.');
 lcfa_installer_assert(count($windpress->captured) === 1, 'The current active theme should not create a redundant runtime backup.');
+
+$GLOBALS['lcfa_installer_active_theme'] = 'original-child';
+$blocked_installer = new LCFA_Theme_Library_Installer(
+    new LCFA_Theme_Library_Validator(),
+    $windpress,
+    new LCFA_Framework_Prerequisites('8.1.34')
+);
+$blocked = $blocked_installer->install([
+    'slug'         => 'sample-theme',
+    'name'         => 'Sample Theme',
+    'version'      => '1.0.0',
+    'framework'    => 'picowind',
+    'package_path' => 'packages/sample-theme.zip',
+]);
+lcfa_installer_assert(empty($blocked['ok']), 'Theme Library install should be blocked on PHP 8.1.');
+lcfa_installer_assert(($blocked['status'] ?? '') === 'php_upgrade_required', 'Theme Library install should expose a guided PHP blocker status.');
+lcfa_installer_assert($GLOBALS['lcfa_installer_active_theme'] === 'original-child', 'Blocked Theme Library install must not switch the active theme.');
+$GLOBALS['lcfa_installer_active_theme'] = 'sample-theme';
 
 $GLOBALS['lcfa_installer_options']['lcfa_theme_library_pending_installs'] = [
     'sample-theme' => [

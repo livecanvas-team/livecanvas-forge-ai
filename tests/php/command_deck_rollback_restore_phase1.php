@@ -22,8 +22,15 @@ $GLOBALS['lcfa_test_posts'] = [
         'post_content' => '<div>Partial after</div>',
         'post_status'  => 'publish',
     ],
+    901 => [
+        'ID'           => 901,
+        'post_content' => '',
+        'post_status'  => 'inherit',
+        'post_type'    => 'attachment',
+    ],
 ];
 $GLOBALS['lcfa_test_partial_terms'] = [789 => ['current-type']];
+$GLOBALS['lcfa_test_thumbnails'] = [123 => 901];
 
 function __(string $text, string $domain = ''): string {
     return $text;
@@ -119,6 +126,26 @@ function wp_trash_post(int $post_id) {
     return (object) $GLOBALS['lcfa_test_posts'][$post_id];
 }
 
+function set_post_thumbnail(int $post_id, int $attachment_id) {
+    $GLOBALS['lcfa_test_thumbnails'][$post_id] = $attachment_id;
+    return $attachment_id;
+}
+
+function delete_post_thumbnail(int $post_id): bool {
+    unset($GLOBALS['lcfa_test_thumbnails'][$post_id]);
+    return true;
+}
+
+function wp_delete_attachment(int $attachment_id, bool $force_delete = false) {
+    if (!isset($GLOBALS['lcfa_test_posts'][$attachment_id])) {
+        return false;
+    }
+
+    $attachment = (object) $GLOBALS['lcfa_test_posts'][$attachment_id];
+    unset($GLOBALS['lcfa_test_posts'][$attachment_id]);
+    return $attachment;
+}
+
 function is_wp_error($value): bool {
     return false;
 }
@@ -159,7 +186,19 @@ final class LCFA_Settings {
 final class LCFA_Environment {}
 final class LCFA_Inventory {}
 final class LCFA_WindPress_Bridge {}
-final class LCFA_Theme_Files_Bridge {}
+final class LCFA_Theme_Files_Bridge {
+    public array $rollback_calls = [];
+
+    public function rollback_write(array $options): array {
+        $this->rollback_calls[] = $options;
+
+        return [
+            'ok' => true,
+            'operation' => !empty($options['created_file']) ? 'delete_created_file' : 'restore_backup',
+            'dry_run' => !empty($options['dry_run']),
+        ];
+    }
+}
 final class LCFA_Local_MCP_Bridge {}
 final class LCFA_Remote_Client {}
 final class LCFA_Design_System_Compose {}
@@ -209,6 +248,9 @@ $instance = $reflection->newInstanceWithoutConstructor();
 $design_system_apply = new LCFA_Design_System_Apply();
 $design_system_property = lcfa_test_reflection_property('LCFA_Command_Deck', 'design_system_apply');
 $design_system_property->setValue($instance, $design_system_apply);
+$theme_files_bridge = new LCFA_Theme_Files_Bridge();
+$theme_files_property = lcfa_test_reflection_property('LCFA_Command_Deck', 'theme_files_bridge');
+$theme_files_property->setValue($instance, $theme_files_bridge);
 $attach_audit = lcfa_test_reflection_method('LCFA_Command_Deck', 'attach_audit_envelope');
 $restore_rollback = lcfa_test_reflection_method('LCFA_Command_Deck', 'restore_audit_rollback');
 
@@ -331,5 +373,63 @@ lcfa_rollback_assert_same(true, $design_system_apply->restore_calls[0]['dry_run'
 $design_restore = $restore_rollback->invoke($instance, $design_audit_id, false);
 lcfa_rollback_assert_true(!empty($design_restore['ok']), 'Design-system rollback apply should succeed');
 lcfa_rollback_assert_same(false, $design_system_apply->restore_calls[1]['dry_run'] ?? null, 'Rollback apply should delegate to the design-system service');
+
+$media_audit_id = 'audit-media-upload';
+LCFA_Settings::store_rollback_record($media_audit_id, [
+    'audit_id' => $media_audit_id,
+    'created_at' => current_time('mysql', true),
+    'action' => 'media_upload',
+    'target_type' => 'media',
+    'target_id' => 901,
+    'target_title' => 'Test image',
+    'restore' => [
+        'type' => 'media_upload',
+        'attachment_id' => 901,
+        'target_id' => 901,
+        'target_title' => 'Test image',
+        'created_attachment' => true,
+        'featured_image_changed' => true,
+        'featured_image_post_id' => 123,
+        'previous_featured_image_id' => 902,
+    ],
+]);
+
+$media_preview = $restore_rollback->invoke($instance, $media_audit_id, true);
+lcfa_rollback_assert_true(!empty($media_preview['ok']), 'Media rollback preview should succeed.');
+lcfa_rollback_assert_true(isset($GLOBALS['lcfa_test_posts'][901]), 'Media rollback preview must not delete the attachment.');
+lcfa_rollback_assert_same(901, $GLOBALS['lcfa_test_thumbnails'][123] ?? 0, 'Media rollback preview must not change the featured image.');
+
+$media_restore = $restore_rollback->invoke($instance, $media_audit_id, false);
+lcfa_rollback_assert_true(!empty($media_restore['ok']), 'Media rollback apply should succeed.');
+lcfa_rollback_assert_true(!isset($GLOBALS['lcfa_test_posts'][901]), 'Media rollback should delete an attachment created by AI Bridge.');
+lcfa_rollback_assert_same(902, $GLOBALS['lcfa_test_thumbnails'][123] ?? 0, 'Media rollback should restore the previous featured image.');
+lcfa_rollback_assert_same('2026-05-27 12:00:00', LCFA_Settings::$records[$media_audit_id]['restored_at'] ?? '', 'Media rollback should mark the audit record restored.');
+
+$theme_audit_id = 'audit-theme-file';
+LCFA_Settings::store_rollback_record($theme_audit_id, [
+    'audit_id' => $theme_audit_id,
+    'created_at' => current_time('mysql', true),
+    'action' => 'theme_file_write',
+    'target_type' => 'theme_file',
+    'target_title' => 'assets/custom.css',
+    'restore' => [
+        'type' => 'theme_file_write',
+        'root_scope' => 'stylesheet',
+        'relative_path' => 'assets/custom.css',
+        'target_theme' => 'example-child',
+        'backup_id' => '2026-08-02/example-child/custom.css',
+        'created_file' => false,
+        'expected_checksum' => str_repeat('a', 64),
+    ],
+]);
+
+$theme_preview = $restore_rollback->invoke($instance, $theme_audit_id, true);
+lcfa_rollback_assert_true(!empty($theme_preview['ok']), 'Theme-file rollback preview should succeed.');
+lcfa_rollback_assert_same(true, $theme_files_bridge->rollback_calls[0]['dry_run'] ?? null, 'Theme-file rollback preview should delegate in dry-run mode.');
+
+$theme_restore = $restore_rollback->invoke($instance, $theme_audit_id, false);
+lcfa_rollback_assert_true(!empty($theme_restore['ok']), 'Theme-file rollback apply should succeed.');
+lcfa_rollback_assert_same(false, $theme_files_bridge->rollback_calls[1]['dry_run'] ?? null, 'Theme-file rollback apply should delegate in apply mode.');
+lcfa_rollback_assert_same('2026-05-27 12:00:00', LCFA_Settings::$records[$theme_audit_id]['restored_at'] ?? '', 'Theme-file rollback should mark the audit record restored.');
 
 echo "PASS\n";

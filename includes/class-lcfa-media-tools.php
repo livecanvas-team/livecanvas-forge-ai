@@ -15,6 +15,10 @@ final class LCFA_Media_Tools {
         $source_type = sanitize_key((string) ($payload['source_type'] ?? ''));
         $filename = sanitize_file_name((string) ($payload['filename'] ?? ''));
         $post_id = absint($payload['post_id'] ?? 0);
+        $set_featured = $post_id > 0 && !empty($payload['set_featured']);
+        $previous_featured_image_id = $set_featured && function_exists('get_post_thumbnail_id')
+            ? absint(get_post_thumbnail_id($post_id))
+            : 0;
 
         if ($filename === '') {
             $filename = 'ai-bridge-media-' . gmdate('Ymd-His') . '.png';
@@ -29,17 +33,27 @@ final class LCFA_Media_Tools {
 
         $existing_attachment_id = $this->find_existing_asset($payload);
         if ($existing_attachment_id > 0 && empty($payload['force'])) {
-            if ($post_id > 0 && !empty($payload['set_featured'])) {
+            if ($set_featured) {
                 set_post_thumbnail($post_id, $existing_attachment_id);
             }
 
-            return $this->describe_attachment($existing_attachment_id) + [
+            $result = $this->describe_attachment($existing_attachment_id) + [
                 'ok'                  => true,
                 'attachment_id'       => $existing_attachment_id,
                 'already_uploaded'    => true,
-                'featured_image_set'  => $post_id > 0 && !empty($payload['set_featured']),
+                'featured_image_set'  => $set_featured,
                 'message'             => __('Existing Media Library asset reused from the manifest.', 'livecanvas-forge-ai'),
             ];
+
+            return $this->attach_upload_audit(
+                $result,
+                $existing_attachment_id,
+                $post_id,
+                $previous_featured_image_id,
+                false,
+                $set_featured && $previous_featured_image_id !== $existing_attachment_id,
+                $payload
+            );
         }
 
         if ($source_type === 'url') {
@@ -58,14 +72,24 @@ final class LCFA_Media_Tools {
         $this->update_attachment_fields($attachment_id, $payload);
         $this->store_asset_manifest_meta($attachment_id, $payload);
 
-        if ($post_id > 0 && !empty($payload['set_featured'])) {
+        if ($set_featured) {
             set_post_thumbnail($post_id, $attachment_id);
             $result['featured_image_set'] = true;
         }
 
-        return array_merge($result, $this->describe_attachment($attachment_id), [
+        $result = array_merge($result, $this->describe_attachment($attachment_id), [
             'message' => __('Media uploaded to the WordPress Media Library.', 'livecanvas-forge-ai'),
         ]);
+
+        return $this->attach_upload_audit(
+            $result,
+            $attachment_id,
+            $post_id,
+            $previous_featured_image_id,
+            true,
+            $set_featured,
+            $payload
+        );
     }
 
     public function replace(array $payload): array {
@@ -284,6 +308,95 @@ final class LCFA_Media_Tools {
             'mime_type' => (string) get_post_mime_type($attachment_id),
             'metadata' => is_array($metadata) ? $metadata : [],
         ];
+    }
+
+    private function attach_upload_audit(array $result, int $attachment_id, int $post_id, int $previous_featured_image_id, bool $created_attachment, bool $featured_image_changed, array $payload): array {
+        if (!$created_attachment && !$featured_image_changed) {
+            $result['rollback_available'] = false;
+            return $result;
+        }
+
+        $audit_id = $this->create_audit_id();
+        $created_at = function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s');
+        $target_title = sanitize_text_field((string) ($payload['title'] ?? $payload['filename'] ?? ''));
+        $provenance = [
+            'origin'       => sanitize_text_field((string) ($payload['_lcfa_origin'] ?? 'mcp_agent')),
+            'processed_by' => sanitize_text_field((string) ($payload['_lcfa_processed_by'] ?? 'media_upload')),
+            'ruleset'      => sanitize_text_field((string) ($payload['_lcfa_ruleset'] ?? 'wordpress_abilities')),
+        ];
+        $restore = [
+            'type'                       => 'media_upload',
+            'attachment_id'              => $attachment_id,
+            'target_id'                  => $attachment_id,
+            'target_title'               => $target_title,
+            'created_attachment'         => $created_attachment,
+            'featured_image_changed'     => $featured_image_changed,
+            'featured_image_post_id'     => $post_id,
+            'previous_featured_image_id' => $previous_featured_image_id,
+        ];
+
+        $result['audit_id'] = $audit_id;
+        $result['rollback_available'] = true;
+        $result['audit'] = [
+            'id'                 => $audit_id,
+            'created_at'         => $created_at,
+            'action'             => 'media_upload',
+            'mode'               => 'apply',
+            'execution_target'   => 'local',
+            'target_type'        => 'media',
+            'target_id'          => $attachment_id,
+            'target_title'       => $target_title,
+            'rollback_available' => true,
+            'rollback_reference' => [
+                'available'      => true,
+                'type'           => 'media_upload',
+                'attachment_id'  => $attachment_id,
+                'delete_created' => $created_attachment,
+            ],
+            'provenance'         => $provenance,
+        ];
+
+        if (class_exists('LCFA_Settings') && method_exists('LCFA_Settings', 'store_rollback_record')) {
+            LCFA_Settings::store_rollback_record($audit_id, [
+                'audit_id'           => $audit_id,
+                'created_at'         => $created_at,
+                'action'             => 'media_upload',
+                'execution_target'   => 'local',
+                'target_type'        => 'media',
+                'target_id'          => $attachment_id,
+                'target_title'       => $target_title,
+                'rollback_reference' => $result['audit']['rollback_reference'],
+                'provenance'         => $provenance,
+                'restore'            => $restore,
+            ]);
+        }
+
+        if (class_exists('LCFA_Settings') && method_exists('LCFA_Settings', 'append_history')) {
+            LCFA_Settings::append_history([
+                'time'               => $created_at,
+                'audit_id'           => $audit_id,
+                'action'             => 'media_upload',
+                'mode'               => 'apply',
+                'ok'                 => true,
+                'message'            => (string) ($result['message'] ?? __('Media uploaded to the WordPress Media Library.', 'livecanvas-forge-ai')),
+                'summary'            => sprintf(__('Upload Media Library attachment #%d.', 'livecanvas-forge-ai'), $attachment_id),
+                'target_type'        => 'media',
+                'target_id'          => $attachment_id,
+                'target_title'       => $target_title,
+                'rollback_available' => true,
+                'execution_target'   => 'local',
+            ] + $provenance);
+        }
+
+        return $result;
+    }
+
+    private function create_audit_id(): string {
+        if (function_exists('wp_generate_password')) {
+            return sanitize_key('audit-' . strtolower(wp_generate_password(12, false, false)));
+        }
+
+        return sanitize_key('audit-' . substr(md5((string) microtime(true)), 0, 12));
     }
 
     private function get_post_content(int $post_id): ?string {

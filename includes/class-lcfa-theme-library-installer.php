@@ -2,16 +2,22 @@
 
 defined('ABSPATH') || exit;
 
+if (!class_exists('LCFA_Framework_Prerequisites', false)) {
+    require_once __DIR__ . '/class-lcfa-framework-prerequisites.php';
+}
+
 final class LCFA_Theme_Library_Installer {
     private const PENDING_INSTALLS_OPTION = 'lcfa_theme_library_pending_installs';
     private const PENDING_INSTALL_RETENTION_SECONDS = 604800;
 
     private LCFA_Theme_Library_Validator $validator;
     private ?LCFA_WindPress_Bridge $windpress_bridge;
+    private LCFA_Framework_Prerequisites $framework_prerequisites;
 
-    public function __construct(LCFA_Theme_Library_Validator $validator, ?LCFA_WindPress_Bridge $windpress_bridge = null) {
+    public function __construct(LCFA_Theme_Library_Validator $validator, ?LCFA_WindPress_Bridge $windpress_bridge = null, ?LCFA_Framework_Prerequisites $framework_prerequisites = null) {
         $this->validator = $validator;
         $this->windpress_bridge = $windpress_bridge;
+        $this->framework_prerequisites = $framework_prerequisites ?: new LCFA_Framework_Prerequisites();
     }
 
     public function preview(array $theme): array {
@@ -33,11 +39,17 @@ final class LCFA_Theme_Library_Installer {
             'checksum'     => (string) ($validation['checksum'] ?? ''),
             'preview_plan' => $validation['preview_plan'] ?? [],
             'manifest'     => $validation['manifest'] ?? [],
+            'prerequisites'=> $this->get_prerequisites($theme, (array) ($validation['manifest'] ?? []), (string) ($validation['requires_php'] ?? '')),
         ];
     }
 
     public function install(array $theme): array {
         $this->cleanup_stale_pending_install_states();
+
+        $prerequisites = $this->get_prerequisites($theme);
+        if (empty($prerequisites['ready'])) {
+            return $this->prerequisite_error($prerequisites);
+        }
 
         $download = $this->download_theme_zip($theme);
         if (empty($download['ok'])) {
@@ -52,6 +64,11 @@ final class LCFA_Theme_Library_Installer {
         }
 
         $manifest = is_array($validation['manifest'] ?? null) ? $validation['manifest'] : [];
+        $prerequisites = $this->get_prerequisites($theme, $manifest, (string) ($validation['requires_php'] ?? ''));
+        if (empty($prerequisites['ready'])) {
+            $this->delete_file($zip_path);
+            return $this->prerequisite_error($prerequisites);
+        }
         $stylesheet = sanitize_key((string) ($manifest['theme']['stylesheet'] ?? $manifest['theme']['slug'] ?? $theme['slug'] ?? ''));
 
         if ($stylesheet !== '') {
@@ -122,6 +139,21 @@ final class LCFA_Theme_Library_Installer {
             'manifest'        => $manifest,
             'theme_stylesheet'=> $installed_stylesheet !== '' ? $installed_stylesheet : $stylesheet,
         ];
+    }
+
+    public function get_prerequisites(array $theme = [], array $manifest = [], string $style_requires_php = ''): array {
+        $framework = sanitize_key((string) ($theme['framework'] ?? ($theme['stack']['framework'] ?? 'picowind')));
+        if ($framework === '') {
+            $framework = 'picowind';
+        }
+
+        $compatibility = is_array($manifest['compatibility'] ?? null) ? $manifest['compatibility'] : [];
+        $declared_requirement = $compatibility['php'] ?? $compatibility['requires_php'] ?? $theme['requires_php'] ?? '';
+        if ($style_requires_php !== '') {
+            $declared_requirement = $this->higher_requirement((string) $declared_requirement, $style_requires_php);
+        }
+
+        return $this->framework_prerequisites->check($framework, $declared_requirement);
     }
 
     public function get_pending_install_state(string $stylesheet, string $theme_slug = ''): array {
@@ -362,6 +394,11 @@ final class LCFA_Theme_Library_Installer {
     }
 
     private function activate_theme_with_rollback(string $stylesheet, array $manifest, array $theme, string $checksum): array {
+        $prerequisites = $this->get_prerequisites($theme, $manifest);
+        if (empty($prerequisites['ready'])) {
+            return $this->prerequisite_error($prerequisites);
+        }
+
         $stylesheet = sanitize_key($stylesheet);
         $current_stylesheet = sanitize_key((string) wp_get_theme()->get_stylesheet());
         if ($stylesheet === '' || $current_stylesheet === $stylesheet) {
@@ -421,5 +458,33 @@ final class LCFA_Theme_Library_Installer {
         if ($path !== '' && is_file($path)) {
             @unlink($path);
         }
+    }
+
+    private function prerequisite_error(array $prerequisites): array {
+        return [
+            'ok'            => false,
+            'status'        => 'php_upgrade_required',
+            'code'          => 'lcfa_framework_php_upgrade_required',
+            'message'       => (string) ($prerequisites['message'] ?? __('The server PHP version is not compatible with this theme.', 'livecanvas-forge-ai')),
+            'prerequisites' => $prerequisites,
+        ];
+    }
+
+    private function higher_requirement(string $first, string $second): string {
+        $normalize = static function (string $value): string {
+            return preg_match('/^(?:>=\s*)?(\d+(?:\.\d+){0,2})$/', trim($value), $matches)
+                ? $matches[1]
+                : '';
+        };
+        $first = $normalize($first);
+        $second = $normalize($second);
+        if ($first === '') {
+            return $second;
+        }
+        if ($second === '') {
+            return $first;
+        }
+
+        return version_compare($first, $second, '>=') ? $first : $second;
     }
 }

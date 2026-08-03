@@ -216,17 +216,44 @@ final class LCFA_Theme_Files_Bridge {
         $relative_path    = $this->sanitize_relative_path((string) ($options['path'] ?? ''));
         $content          = is_string($options['content'] ?? null) ? $options['content'] : (string) ($options['content'] ?? '');
         $dry_run          = !empty($options['dry_run']);
+        $record_audit     = !array_key_exists('record_audit', $options) || !empty($options['record_audit']);
         $create_directories = !array_key_exists('create_directories', $options) || !empty($options['create_directories']);
 
         $this->assert_allowed_extension($relative_path, self::WRITABLE_EXTENSIONS, 'write');
         $this->assert_writable_path($relative_path);
 
         $root          = $this->resolve_write_target($root_scope, $roots);
+        $write_policy  = $this->get_write_root_policy($root, $roots, $options);
         $absolute_path = $this->resolve_absolute_path($root['path'], $relative_path);
         $exists        = file_exists($absolute_path) && is_file($absolute_path);
         $previous      = $exists ? (string) file_get_contents($absolute_path) : '';
         $changed       = !$exists || $previous !== $content;
         $created       = !$exists;
+
+        if (!$write_policy['writable']) {
+            if (!$dry_run) {
+                throw new RuntimeException((string) $write_policy['message']);
+            }
+
+            return [
+                'ok'            => true,
+                'dry_run'       => true,
+                'writable'      => false,
+                'blocked'       => true,
+                'status'        => 'parent_theme_read_only',
+                'message'       => (string) $write_policy['message'],
+                'root_scope'    => $root_scope,
+                'root'          => $root['key'],
+                'theme'         => $root['label'],
+                'relative_path' => $relative_path,
+                'absolute_path' => $absolute_path,
+                'exists'        => $exists,
+                'created'       => $created,
+                'changed'       => $changed,
+                'bytes_before'  => strlen($previous),
+                'bytes_after'   => strlen($content),
+            ];
+        }
 
         if ($dry_run) {
             return [
@@ -254,14 +281,17 @@ final class LCFA_Theme_Files_Bridge {
             $backup_file = $this->create_backup($root, $relative_path, $previous);
         }
 
-        $written = file_put_contents($absolute_path, $content);
-        if ($written === false) {
-            throw new RuntimeException(sprintf(__('Unable to write theme file: %s', 'livecanvas-forge-ai'), $relative_path));
+        if ($changed) {
+            $written = file_put_contents($absolute_path, $content);
+            if ($written === false) {
+                throw new RuntimeException(sprintf(__('Unable to write theme file: %s', 'livecanvas-forge-ai'), $relative_path));
+            }
         }
 
-        return [
+        $result = [
             'ok'           => true,
             'dry_run'      => false,
+            'writable'     => true,
             'root_scope'   => $root_scope,
             'root'         => $root['key'],
             'theme'        => $root['label'],
@@ -272,10 +302,21 @@ final class LCFA_Theme_Files_Bridge {
             'changed'      => $changed,
             'backup_file'  => $backup_file,
             'backup_id'    => $backup_file !== null ? $this->get_backup_id_from_path($backup_file) : '',
+            'checksum_before' => $exists ? hash('sha256', $previous) : '',
+            'checksum_after'  => hash('sha256', $content),
             'bytes_before' => strlen($previous),
             'bytes_after'  => strlen($content),
             'modified_at'  => gmdate('c', filemtime($absolute_path) ?: time()),
         ];
+
+        if ($record_audit && $changed) {
+            $result = $this->attach_write_audit($result);
+        } else {
+            $result['audit_id'] = '';
+            $result['rollback_available'] = false;
+        }
+
+        return $result;
     }
 
     public function write_template_file(array $options = []): array {
@@ -384,6 +425,7 @@ final class LCFA_Theme_Files_Bridge {
             'content'            => (string) ($backup['content'] ?? ''),
             'dry_run'            => $dry_run,
             'create_directories' => !array_key_exists('create_directories', $options) || !empty($options['create_directories']),
+            'record_audit'       => !array_key_exists('record_audit', $options) || !empty($options['record_audit']),
         ]);
 
         $write_result['restored_from_backup'] = [
@@ -410,6 +452,136 @@ final class LCFA_Theme_Files_Bridge {
         return $write_result;
     }
 
+    public function rollback_write(array $options = []): array {
+        $roots          = $this->get_theme_roots();
+        $root_scope     = sanitize_key((string) ($options['root_scope'] ?? 'stylesheet'));
+        $relative_path  = $this->sanitize_relative_path((string) ($options['path'] ?? $options['relative_path'] ?? ''));
+        $target_theme   = sanitize_text_field((string) ($options['target_theme'] ?? ''));
+        $backup_id      = sanitize_text_field((string) ($options['backup_id'] ?? ''));
+        $created_file   = !empty($options['created_file']);
+        $expected_hash  = strtolower(trim((string) ($options['expected_checksum'] ?? '')));
+        $dry_run        = !empty($options['dry_run']);
+        $force          = !empty($options['force']);
+
+        $this->assert_allowed_extension($relative_path, self::WRITABLE_EXTENSIONS, 'rollback');
+        $this->assert_writable_path($relative_path);
+
+        $root = $this->resolve_write_target($root_scope, $roots);
+        $write_policy = $this->get_write_root_policy($root, $roots, $options);
+        if (empty($write_policy['writable'])) {
+            throw new RuntimeException((string) $write_policy['message']);
+        }
+
+        if ($target_theme !== '' && $target_theme !== (string) ($root['label'] ?? '')) {
+            throw new RuntimeException(sprintf(
+                __('Rollback targets theme "%1$s", but the active writable theme is "%2$s". Activate the original theme before retrying.', 'livecanvas-forge-ai'),
+                $target_theme,
+                (string) ($root['label'] ?? '')
+            ));
+        }
+
+        $absolute_path = $this->resolve_absolute_path((string) $root['path'], $relative_path);
+        $exists = is_file($absolute_path);
+        $current_hash = $exists ? hash_file('sha256', $absolute_path) : '';
+
+        if (!$force && $exists && $expected_hash !== '' && !hash_equals($expected_hash, (string) $current_hash)) {
+            throw new RuntimeException(__('The theme file changed after the audited write. Review the current file or retry with an explicit force rollback.', 'livecanvas-forge-ai'));
+        }
+
+        $operation = $created_file ? 'delete_created_file' : 'restore_backup';
+        $result = [
+            'ok'                => true,
+            'dry_run'           => $dry_run,
+            'operation'         => $operation,
+            'root_scope'        => $root_scope,
+            'root'              => (string) ($root['key'] ?? ''),
+            'theme'             => (string) ($root['label'] ?? ''),
+            'relative_path'     => $relative_path,
+            'absolute_path'     => $absolute_path,
+            'exists'            => $exists,
+            'expected_checksum' => $expected_hash,
+            'current_checksum'  => (string) $current_hash,
+        ];
+
+        if ($dry_run) {
+            return $result;
+        }
+
+        if ($created_file) {
+            if ($exists && !unlink($absolute_path)) {
+                throw new RuntimeException(sprintf(__('Unable to delete the theme file created by AI Bridge: %s', 'livecanvas-forge-ai'), $relative_path));
+            }
+
+            $result['deleted'] = $exists;
+            $result['already_missing'] = !$exists;
+            return $result;
+        }
+
+        if ($backup_id === '') {
+            throw new RuntimeException(__('The theme-file rollback record does not contain a backup ID.', 'livecanvas-forge-ai'));
+        }
+
+        $result['restore_result'] = $this->restore_backup([
+            'backup_id'    => $backup_id,
+            'root_scope'   => $root_scope,
+            'path'         => $relative_path,
+            'record_audit' => false,
+        ]);
+
+        return $result;
+    }
+
+    private function attach_write_audit(array $result): array {
+        $audit_id = $this->create_audit_id();
+        $rollback_available = !empty($result['created']) || (string) ($result['backup_id'] ?? '') !== '';
+        $audit = [
+            'id'                 => $audit_id,
+            'created_at'         => current_time('mysql', true),
+            'action'             => 'theme_file_write',
+            'target_type'        => 'theme_file',
+            'target_title'       => sanitize_text_field((string) ($result['relative_path'] ?? '')),
+            'rollback_available' => $rollback_available,
+        ];
+
+        $result['audit_id'] = $audit_id;
+        $result['rollback_available'] = $rollback_available;
+        $result['audit'] = $audit;
+
+        if ($rollback_available && class_exists('LCFA_Settings') && method_exists('LCFA_Settings', 'store_rollback_record')) {
+            LCFA_Settings::store_rollback_record($audit_id, [
+                'audit_id'           => $audit_id,
+                'created_at'         => (string) $audit['created_at'],
+                'action'             => 'theme_file_write',
+                'target_type'        => 'theme_file',
+                'target_id'          => 0,
+                'target_title'       => (string) $audit['target_title'],
+                'rollback_reference' => [
+                    'available' => true,
+                    'type'      => 'theme_file_write',
+                ],
+                'restore' => [
+                    'type'              => 'theme_file_write',
+                    'root_scope'        => sanitize_key((string) ($result['root'] ?? 'stylesheet')),
+                    'relative_path'     => sanitize_text_field((string) ($result['relative_path'] ?? '')),
+                    'target_theme'      => sanitize_text_field((string) ($result['theme'] ?? '')),
+                    'backup_id'         => sanitize_text_field((string) ($result['backup_id'] ?? '')),
+                    'created_file'      => !empty($result['created']),
+                    'expected_checksum' => sanitize_text_field((string) ($result['checksum_after'] ?? '')),
+                ],
+            ]);
+        }
+
+        return $result;
+    }
+
+    private function create_audit_id(): string {
+        if (function_exists('wp_generate_password')) {
+            return sanitize_key('audit-' . strtolower(wp_generate_password(12, false, false)));
+        }
+
+        return sanitize_key('audit-' . substr(md5((string) microtime(true)), 0, 12));
+    }
+
     private function resolve_readable_file(string $root_scope, string $relative_path, array $roots): array {
         foreach ($this->resolve_targets($root_scope, $roots, false) as $root) {
             $absolute_path = $this->resolve_absolute_path($root['path'], $relative_path);
@@ -433,6 +605,30 @@ final class LCFA_Theme_Files_Bridge {
         }
 
         return $targets[0];
+    }
+
+    private function get_write_root_policy(array $root, array $roots, array $options): array {
+        $is_child_theme = !empty($roots['is_child_theme']);
+        $is_parent_root = ($root['key'] ?? '') === 'template' || !$is_child_theme;
+        $allow_parent   = (bool) apply_filters(
+            'lcfa_allow_parent_theme_writes',
+            false,
+            $root,
+            $roots,
+            $options
+        );
+
+        if (!$is_parent_root || $allow_parent) {
+            return [
+                'writable' => true,
+                'message'  => '',
+            ];
+        }
+
+        return [
+            'writable' => false,
+            'message'  => __('The active target is a parent theme. Install and activate a child theme before writing files, or explicitly opt in with the lcfa_allow_parent_theme_writes filter.', 'livecanvas-forge-ai'),
+        ];
     }
 
     private function resolve_targets(string $root_scope, array $roots, bool $for_write): array {

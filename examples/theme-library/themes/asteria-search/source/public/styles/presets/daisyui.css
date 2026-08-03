@@ -3,17 +3,10 @@
  * https://daisyui.com/theme-generator/
  */
 
-/*
- * DaisyUI's remote ESM bundle currently fails inside the local WindPress
- * compiler because it expects a browser `window` object. Keep this preset
- * file in place for Picowind, but avoid loading the plugin during local
- * Tailwind cache builds. The Marketing Rocks page uses utility classes and
- * the dedicated `marketing-rocks.css` preset instead of DaisyUI components.
- */
+/* Keep the package self-contained; the page uses Tailwind utilities directly. */
 
 /* @plugin "@tailwindcss/typography"; */
 
 /* Add your custom styles below this line */
 
-body {
-}
+body {}

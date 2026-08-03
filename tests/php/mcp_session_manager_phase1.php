@@ -158,6 +158,7 @@ lcfa_assert_true(!empty($pairing['pairing_id']), 'pairing start should return a 
 lcfa_assert_true(!empty($pairing['device_secret']), 'pairing start should return the device secret to the MCP client');
 lcfa_assert_true(!empty($pairing['user_code']), 'pairing start should return a user code');
 lcfa_assert_true(strpos((string) ($pairing['verification_url'] ?? ''), '#lcfa-secure-codex-pairing-sessions') !== false, 'pairing verification URL should deep-link to the approval panel');
+delete_transient('lcfa_mcp_pairing_' . sanitize_key((string) $pairing['pairing_id']));
 lcfa_assert_true(LCFA_MCP_Session_Manager::get_pending_pairings() !== [], 'pending pairing should be visible to admins');
 
 $approve = LCFA_MCP_Session_Manager::approve_pairing((string) $pairing['pairing_id']);

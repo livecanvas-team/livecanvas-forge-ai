@@ -1002,6 +1002,8 @@ final class LCFA_Command_Deck {
                     ? __('Theme template written.', 'livecanvas-forge-ai')
                     : __('Theme file written.', 'livecanvas-forge-ai');
                 $result['data'] = $write_result;
+                $result['audit_id'] = sanitize_key((string) ($write_result['audit_id'] ?? ''));
+                $result['rollback_available'] = !empty($write_result['rollback_available']);
                 break;
 
             case 'restore_theme_backup':
@@ -1288,6 +1290,116 @@ final class LCFA_Command_Deck {
 
             if (empty($result['ok'])) {
                 $result['message'] = (string) ($restore_result['message'] ?? __('Picostrap design-system rollback failed.', 'livecanvas-forge-ai'));
+            }
+        } elseif ($restore_type === 'media_upload') {
+            $attachment_id = absint($restore['attachment_id'] ?? $restore['target_id'] ?? 0);
+            $featured_post_id = absint($restore['featured_image_post_id'] ?? 0);
+            $previous_featured_image_id = absint($restore['previous_featured_image_id'] ?? 0);
+            $created_attachment = !empty($restore['created_attachment']);
+            $featured_image_changed = !empty($restore['featured_image_changed']) && $featured_post_id > 0;
+
+            if ($attachment_id < 1) {
+                return [
+                    'ok'      => false,
+                    'message' => __('The media rollback record does not contain a valid attachment ID.', 'livecanvas-forge-ai'),
+                ];
+            }
+
+            $attachment_exists = function_exists('get_post') && get_post($attachment_id) !== null;
+            $result['target_type'] = 'media';
+            $result['target_id'] = $attachment_id;
+            $result['target_title'] = sanitize_text_field((string) ($restore['target_title'] ?? $result['target_title']));
+            $result['data']['restore_operation'] = $created_attachment
+                ? 'delete_created_attachment'
+                : 'restore_featured_image';
+            $result['data']['media'] = [
+                'attachment_id'              => $attachment_id,
+                'attachment_exists'          => $attachment_exists,
+                'delete_created_attachment'  => $created_attachment,
+                'featured_image_changed'     => $featured_image_changed,
+                'featured_image_post_id'     => $featured_post_id,
+                'previous_featured_image_id' => $previous_featured_image_id,
+            ];
+
+            if (!$dry_run) {
+                $media_restore = [
+                    'ok'                       => true,
+                    'featured_image_restored' => false,
+                    'attachment_deleted'       => false,
+                ];
+
+                if ($featured_image_changed) {
+                    if ($previous_featured_image_id > 0 && function_exists('set_post_thumbnail')) {
+                        $thumbnail_result = set_post_thumbnail($featured_post_id, $previous_featured_image_id);
+                        $media_restore['featured_image_restored'] = $thumbnail_result !== false;
+                    } elseif ($previous_featured_image_id === 0 && function_exists('delete_post_thumbnail')) {
+                        $thumbnail_result = delete_post_thumbnail($featured_post_id);
+                        $media_restore['featured_image_restored'] = $thumbnail_result !== false;
+                    } else {
+                        $media_restore['ok'] = false;
+                        $media_restore['message'] = __('WordPress could not restore the previous featured image.', 'livecanvas-forge-ai');
+                    }
+                }
+
+                if ($created_attachment && $attachment_exists) {
+                    if (!function_exists('wp_delete_attachment')) {
+                        $media_restore['ok'] = false;
+                        $media_restore['message'] = __('WordPress attachment deletion is unavailable.', 'livecanvas-forge-ai');
+                    } else {
+                        $delete_result = wp_delete_attachment($attachment_id, true);
+                        $media_restore['attachment_deleted'] = $delete_result !== false && !(function_exists('is_wp_error') && is_wp_error($delete_result));
+                        if (!$media_restore['attachment_deleted']) {
+                            $media_restore['ok'] = false;
+                            $media_restore['message'] = __('The created Media Library attachment could not be deleted.', 'livecanvas-forge-ai');
+                        }
+                    }
+                } elseif ($created_attachment) {
+                    $media_restore['attachment_deleted'] = true;
+                    $media_restore['already_missing'] = true;
+                }
+
+                $result['ok'] = !empty($media_restore['ok']);
+                $result['data']['restore_result'] = $media_restore;
+                if (empty($result['ok'])) {
+                    $result['message'] = (string) ($media_restore['message'] ?? __('Media rollback failed.', 'livecanvas-forge-ai'));
+                }
+            }
+        } elseif ($restore_type === 'theme_file_write') {
+            $root_scope = sanitize_key((string) ($restore['root_scope'] ?? 'stylesheet'));
+            $relative_path = sanitize_text_field((string) ($restore['relative_path'] ?? ''));
+
+            if ($relative_path === '') {
+                return [
+                    'ok'      => false,
+                    'message' => __('The theme-file rollback record does not contain a valid path.', 'livecanvas-forge-ai'),
+                ];
+            }
+
+            try {
+                $theme_restore = $this->theme_files_bridge->rollback_write([
+                    'root_scope'        => $root_scope,
+                    'path'              => $relative_path,
+                    'target_theme'      => sanitize_text_field((string) ($restore['target_theme'] ?? '')),
+                    'backup_id'         => sanitize_text_field((string) ($restore['backup_id'] ?? '')),
+                    'created_file'      => !empty($restore['created_file']),
+                    'expected_checksum' => sanitize_text_field((string) ($restore['expected_checksum'] ?? '')),
+                    'dry_run'           => $dry_run,
+                ]);
+            } catch (Throwable $throwable) {
+                return [
+                    'ok'      => false,
+                    'message' => $throwable->getMessage(),
+                ];
+            }
+
+            $result['ok'] = !empty($theme_restore['ok']);
+            $result['target_type'] = 'theme_file';
+            $result['target_title'] = $relative_path;
+            $result['data']['restore_operation'] = (string) ($theme_restore['operation'] ?? '');
+            $result['data']['restore_result'] = $theme_restore;
+
+            if (empty($result['ok'])) {
+                $result['message'] = __('Theme-file rollback failed.', 'livecanvas-forge-ai');
             }
         } elseif ($restore_type === 'global_shell_parts') {
             $parts = is_array($restore['parts'] ?? null) ? $restore['parts'] : [];
@@ -3256,6 +3368,19 @@ HTML,
             return $record;
         }
 
+        if (($rollback['type'] ?? '') === 'theme_file_write') {
+            $record['restore'] = array_merge($record['restore'], [
+                'root_scope'        => sanitize_key((string) ($rollback['root_scope'] ?? 'stylesheet')),
+                'relative_path'     => sanitize_text_field((string) ($rollback['relative_path'] ?? '')),
+                'target_theme'      => sanitize_text_field((string) ($rollback['target_theme'] ?? '')),
+                'backup_id'         => sanitize_text_field((string) ($rollback['backup_id'] ?? '')),
+                'created_file'      => !empty($rollback['created_file']),
+                'expected_checksum' => sanitize_text_field((string) ($rollback['expected_checksum'] ?? '')),
+            ]);
+
+            return $record;
+        }
+
         $record['restore'] = array_merge($record['restore'], [
             'target_type'      => sanitize_key((string) ($rollback['target_type'] ?? ($result['target_type'] ?? ''))),
             'target_id'        => absint($rollback['target_id'] ?? ($result['target_id'] ?? 0)),
@@ -3321,6 +3446,23 @@ HTML,
                 'available' => !empty($part_refs),
                 'type'      => 'global_shell_parts',
                 'parts'     => $part_refs,
+            ];
+        }
+
+        if (in_array($target_type, ['theme_file', 'theme_template'], true)) {
+            $write = is_array($result['data'] ?? null) ? $result['data'] : [];
+            $backup_id = sanitize_text_field((string) ($write['backup_id'] ?? ''));
+            $created_file = !empty($write['created']);
+
+            return [
+                'available'         => $created_file || $backup_id !== '',
+                'type'              => 'theme_file_write',
+                'root_scope'        => sanitize_key((string) ($write['root'] ?? $write['root_scope'] ?? 'stylesheet')),
+                'relative_path'     => sanitize_text_field((string) ($write['relative_path'] ?? '')),
+                'target_theme'      => sanitize_text_field((string) ($write['theme'] ?? '')),
+                'backup_id'         => $backup_id,
+                'created_file'      => $created_file,
+                'expected_checksum' => sanitize_text_field((string) ($write['checksum_after'] ?? '')),
             ];
         }
 

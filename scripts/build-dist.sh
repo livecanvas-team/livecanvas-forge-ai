@@ -28,10 +28,15 @@ copy_into_package "${ROOT_DIR}/LICENSE.md"
 copy_into_package "${ROOT_DIR}/composer.json"
 copy_into_package "${ROOT_DIR}/composer.lock"
 copy_into_package "${ROOT_DIR}/assets"
-copy_into_package "${ROOT_DIR}/examples"
 copy_into_package "${ROOT_DIR}/includes"
 copy_into_package "${ROOT_DIR}/mcp"
 copy_into_package "${ROOT_DIR}/vendor"
+
+# Theme packages and screenshots are served from the remote catalog. Keep only
+# the bundled catalog as an offline fallback so the plugin ZIP stays below
+# common WordPress/nginx upload limits.
+mkdir -p "${PACKAGE_DIR}/examples/theme-library"
+cp "${ROOT_DIR}/examples/theme-library/catalog.json" "${PACKAGE_DIR}/examples/theme-library/catalog.json"
 
 mkdir -p "${PACKAGE_DIR}/docs"
 cp "${ROOT_DIR}/docs/coding-agent-setup.html" "${PACKAGE_DIR}/docs/coding-agent-setup.html"
@@ -42,6 +47,7 @@ find "${PACKAGE_DIR}" \
 
 rm -rf \
   "${PACKAGE_DIR}/mcp/node_modules" \
+  "${PACKAGE_DIR}/mcp/.lcfa-backups" \
   "${PACKAGE_DIR}/mcp/tests" \
   "${PACKAGE_DIR}/mcp/.DS_Store" \
   "${PACKAGE_DIR}/vendor/bin"

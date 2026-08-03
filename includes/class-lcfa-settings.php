@@ -169,7 +169,7 @@ final class LCFA_Settings {
             'transport'                   => 'rest',
             'picowind_package_url'        => '',
             'picostrap_package_url'       => '',
-            'local_bridge_url'            => rest_url('lcfa/v1/'),
+            'local_bridge_url'            => self::get_site_rest_base_url(),
             'mcp_enabled'                 => true,
             'mcp_write_abilities_enabled' => true,
             'mcp_public_write_abilities'  => self::get_default_mcp_write_abilities(),
@@ -268,7 +268,7 @@ final class LCFA_Settings {
             'transport'                   => in_array($connections['transport'] ?? '', ['rest', 'mcp', 'hybrid'], true) ? $connections['transport'] : 'rest',
             'picowind_package_url'        => esc_url_raw($connections['picowind_package_url'] ?? ''),
             'picostrap_package_url'       => esc_url_raw($connections['picostrap_package_url'] ?? ''),
-            'local_bridge_url'            => esc_url_raw($connections['local_bridge_url'] ?? rest_url('lcfa/v1/')),
+            'local_bridge_url'            => esc_url_raw($connections['local_bridge_url'] ?? self::get_site_rest_base_url()),
             'mcp_enabled'                 => !empty($connections['mcp_enabled']),
             'mcp_write_abilities_enabled' => $write_enabled,
             'mcp_public_write_abilities'  => $public_write_abilities,
@@ -319,7 +319,7 @@ final class LCFA_Settings {
         $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? rtrim((string) ABSPATH, '/\\') : '';
         $payload = [
             'site_url'  => function_exists('home_url') ? rtrim(home_url('/'), '/') . '/' : '',
-            'rest_base' => function_exists('rest_url') ? rtrim(rest_url('lcfa/v1/'), '/') . '/' : '',
+            'rest_base' => self::get_site_rest_base_url(),
             'wp_root'   => $wp_root,
         ];
 
@@ -328,6 +328,37 @@ final class LCFA_Settings {
             : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return substr(hash('sha256', (string) $encoded), 0, 16);
+    }
+
+    private static function get_site_rest_base_url(): string {
+        if (!function_exists('home_url')) {
+            return '';
+        }
+
+        $home = rtrim((string) home_url('/'), '/');
+        if ($home === '') {
+            return '';
+        }
+
+        $prefix = function_exists('rest_get_url_prefix')
+            ? trim((string) rest_get_url_prefix(), '/')
+            : 'wp-json';
+        $route = 'lcfa/v1/';
+        $permalink_structure = function_exists('get_option')
+            ? (string) get_option('permalink_structure', '')
+            : '';
+
+        if ($permalink_structure === '') {
+            $url = function_exists('add_query_arg')
+                ? (string) add_query_arg('rest_route', '/' . $route, $home . '/')
+                : $home . '/?rest_route=' . rawurlencode('/' . $route);
+
+            return rtrim($url, '/') . '/';
+        }
+
+        $index = strpos($permalink_structure, 'index.php/') !== false ? 'index.php/' : '';
+
+        return $home . '/' . $index . $prefix . '/' . $route;
     }
 
     public static function site_urls_match(string $first_url, string $second_url): bool {

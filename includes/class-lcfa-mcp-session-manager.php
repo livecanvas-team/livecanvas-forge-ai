@@ -4,6 +4,7 @@ defined('ABSPATH') || exit;
 
 final class LCFA_MCP_Session_Manager {
     private const SESSIONS_OPTION_KEY = 'lcfa_mcp_sessions';
+    private const PAIRINGS_OPTION_KEY = 'lcfa_mcp_pairings';
     private const PAIRING_INDEX_OPTION_KEY = 'lcfa_mcp_pairing_index';
     private const PAIRING_TRANSIENT_PREFIX = 'lcfa_mcp_pairing_';
     private const PAIRING_RATE_PREFIX = 'lcfa_mcp_pairing_rate_';
@@ -53,7 +54,7 @@ final class LCFA_MCP_Session_Manager {
             'consumed_at'        => '',
         ];
 
-        set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
+        self::save_pairing_record($pairing_id, $record);
         self::index_pairing($pairing_id);
 
         return [
@@ -126,7 +127,7 @@ final class LCFA_MCP_Session_Manager {
         unset($record['session_token']);
         $record['status'] = 'consumed';
         $record['consumed_at'] = gmdate('c');
-        set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
+        self::save_pairing_record($pairing_id, $record);
 
         $client_label = self::get_client_label((string) ($record['client'] ?? 'codex'));
 
@@ -184,7 +185,7 @@ final class LCFA_MCP_Session_Manager {
         $record['session_id'] = $session_id;
         $record['session_token'] = $session_token;
         $record['approved_at'] = gmdate('c', $now);
-        set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
+        self::save_pairing_record($pairing_id, $record);
 
         self::invalidate_ready_state(sprintf(
             __('A new %s pairing session was approved. Run the smoke test again.', 'livecanvas-forge-ai'),
@@ -370,13 +371,51 @@ final class LCFA_MCP_Session_Manager {
     }
 
     private static function get_pairing_record(string $pairing_id) {
-        $record = get_transient(self::PAIRING_TRANSIENT_PREFIX . sanitize_key($pairing_id));
+        $pairing_id = sanitize_key($pairing_id);
+        $records = self::get_pairing_records();
+        $record = $records[$pairing_id] ?? false;
+        if (!is_array($record)) {
+            $record = get_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id);
+        }
         return is_array($record) ? $record : false;
+    }
+
+    private static function save_pairing_record(string $pairing_id, array $record): void {
+        $pairing_id = sanitize_key($pairing_id);
+        if ($pairing_id === '') {
+            return;
+        }
+
+        $records = self::get_pairing_records();
+        $records[$pairing_id] = $record;
+        update_option(self::PAIRINGS_OPTION_KEY, $records, false);
+        set_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id, $record, self::PAIRING_TTL);
+    }
+
+    private static function get_pairing_records(): array {
+        $records = get_option(self::PAIRINGS_OPTION_KEY, []);
+        if (!is_array($records)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($records as $pairing_id => $record) {
+            $pairing_id = sanitize_key((string) $pairing_id);
+            if ($pairing_id === '' || !is_array($record)) {
+                continue;
+            }
+            $normalized[$pairing_id] = $record;
+        }
+
+        return $normalized;
     }
 
     private static function delete_pairing(string $pairing_id): void {
         $pairing_id = sanitize_key($pairing_id);
         delete_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id);
+        $records = self::get_pairing_records();
+        unset($records[$pairing_id]);
+        update_option(self::PAIRINGS_OPTION_KEY, $records, false);
         $index = array_values(array_diff(self::get_pairing_index(), [$pairing_id]));
         update_option(self::PAIRING_INDEX_OPTION_KEY, $index, false);
     }
@@ -389,16 +428,23 @@ final class LCFA_MCP_Session_Manager {
 
     private static function get_pairing_index(): array {
         $index = get_option(self::PAIRING_INDEX_OPTION_KEY, []);
-        return is_array($index) ? array_values(array_filter(array_map('sanitize_key', $index))) : [];
+        $index = is_array($index) ? array_values(array_filter(array_map('sanitize_key', $index))) : [];
+        return array_values(array_unique(array_merge($index, array_keys(self::get_pairing_records()))));
     }
 
     private static function cleanup_pairing_index(): void {
         $next = [];
+        $records = self::get_pairing_records();
         foreach (self::get_pairing_index() as $pairing_id) {
-            if (self::get_pairing_record($pairing_id)) {
-                $next[] = $pairing_id;
+            $record = self::get_pairing_record($pairing_id);
+            if (!$record || self::is_expired((string) ($record['expires_at'] ?? ''))) {
+                delete_transient(self::PAIRING_TRANSIENT_PREFIX . $pairing_id);
+                unset($records[$pairing_id]);
+                continue;
             }
+            $next[] = $pairing_id;
         }
+        update_option(self::PAIRINGS_OPTION_KEY, $records, false);
         update_option(self::PAIRING_INDEX_OPTION_KEY, array_values(array_unique($next)), false);
     }
 

@@ -158,10 +158,33 @@ lcfa_theme_assert_same('tailwind', $catalog['themes'][0]['stack']['css'], 'catal
 lcfa_theme_assert_same('daisyui', $catalog['themes'][0]['stack']['ui'], 'catalog should expose UI stack metadata');
 lcfa_theme_assert_true(count($catalog['errors']) === 1, 'catalog should report invalid entries');
 
+$merge_catalogs = new ReflectionMethod(LCFA_Theme_Library_Catalog::class, 'merge_catalogs');
+$merged_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
+    'themes' => [],
+    'errors' => [
+        'Theme "sample-theme" is missing slug, name, version, package_url/package_path, checksum, or screenshot.',
+        'Theme "sample-theme" is missing slug, name, version, package_url/package_path, checksum, or screenshot.',
+    ],
+], [
+    'themes' => [$catalog['themes'][0]],
+    'errors' => [],
+]);
+lcfa_theme_assert_same([], $merged_catalog['errors'], 'a valid bundled theme should clear duplicate stale errors for the same slug');
+
 $validator = new LCFA_Theme_Library_Validator();
 $valid = $validator->validate_zip($valid_zip, ['checksum' => $checksum]);
 lcfa_theme_assert_true(!empty($valid['ok']), 'valid ZIP should pass validation');
 lcfa_theme_assert_same('lcfa-theme.v1', $valid['manifest']['schema'] ?? '', 'manifest schema should be preserved');
+lcfa_theme_assert_same('', $valid['requires_php'] ?? '', 'validator should expose an empty PHP requirement when style.css does not declare one');
+lcfa_theme_assert_same([], $valid['manifest']['css_verification']['required_fragments'] ?? null, 'validator should normalize missing CSS verification requirements');
+
+$invalid_css_verification_zip = lcfa_theme_create_zip([
+    'css_verification' => [
+        'required_fragments' => 'not-an-array',
+    ],
+]);
+$invalid_css_verification = $validator->validate_zip($invalid_css_verification_zip, ['checksum' => hash_file('sha256', $invalid_css_verification_zip)]);
+lcfa_theme_assert_false(!empty($invalid_css_verification['ok']), 'CSS verification fragments must use an array schema');
 
 $example_catalog_path = dirname(__DIR__, 2) . '/examples/theme-library/catalog.json';
 $example_catalog = json_decode((string) file_get_contents($example_catalog_path), true);
@@ -275,14 +298,23 @@ lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_sou
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'windpress_source_css_ready'), 'Theme Library import should identify Tailwind source CSS before compilation');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, "'status'      => 'build_required'"), 'Theme Library import should expose an explicit build-required state');
 lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, 'get_compiled_cache_state'), 'Theme Library import should verify the persistent WindPress cache after building');
+lcfa_theme_assert_true(is_string($importer_source) && str_contains($importer_source, "'previous_import'"), 'Theme Library force re-import should retain the previous import state for chained rollback');
+lcfa_theme_assert_true(str_contains((string) file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-rollback.php'), '$previous_import'), 'Theme Library rollback should restore the previous import metadata when available');
 lcfa_theme_assert_true(str_contains((string) file_get_contents(dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-rollback.php'), "'rolled_back'"), 'Theme Library rollback should persist a rolled-back import state');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'THEME_LIBRARY_PREVIEW_TRANSIENT_PREFIX'), 'Theme Library UI should remember a successful package preview per user');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Preview and validate the package before installing it.'), 'Theme Library UI should require preview before the first child-theme install');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$operation === \'import\' && $show_force'), 'Theme Library UI should show force update only for existing imports');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-filter="all"'), 'Theme Library category controls should be functional buttons');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-category='), 'Theme Library cards should expose their filter category');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'PHP upgrade required'), 'Theme Library UI should show a guided PHP compatibility blocker');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_framework_prerequisites'), 'Theme Library UI should check framework PHP requirements before enabling install');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$needs_build_capability'), 'Theme Library UI should probe the local build bridge only when a CSS build is pending');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$child_active'), 'Theme Library UI should distinguish an installed child theme from the currently active child theme');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Current child theme'), 'Theme Library UI should not offer to activate the child theme that is already active');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_theme_library_rollback_history'), 'Theme Library UI should expose older unresolved import audits for chained rollback');
 
 @unlink($valid_zip);
+@unlink($invalid_css_verification_zip);
 @unlink($not_picowind_zip);
 @unlink($inline_shell_zip);
 @unlink($missing_media_zip);

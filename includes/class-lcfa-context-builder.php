@@ -341,9 +341,9 @@ final class LCFA_Context_Builder {
         return $groups;
     }
 
-    public function get_mcp_status(): array {
+    public function get_mcp_status(bool $include_secret = false): array {
         if ($this->mcp_status_cache !== null) {
-            return $this->mcp_status_cache;
+            return $this->prepare_mcp_status_response($this->mcp_status_cache, $include_secret);
         }
 
         $connections = LCFA_Settings::get_connections();
@@ -380,7 +380,28 @@ final class LCFA_Context_Builder {
             ],
         ];
 
-        return $this->mcp_status_cache;
+        return $this->prepare_mcp_status_response($this->mcp_status_cache, $include_secret);
+    }
+
+    public function get_public_bootstrap_payload(): array {
+        $payload = $this->get_bootstrap_payload();
+        if (isset($payload['common']['mcp_token'])) {
+            $payload['common']['mcp_token'] = trim((string) $payload['common']['mcp_token']) !== '' ? 'generated' : '';
+        }
+
+        foreach ((array) ($payload['clients'] ?? []) as $client => $configuration) {
+            if (!is_array($configuration) || !is_array($configuration['env'] ?? null)) {
+                continue;
+            }
+            $payload['clients'][$client]['env'] = array_values(array_filter(
+                $configuration['env'],
+                static function ($entry): bool {
+                    return !preg_match('/(?:token|password|secret)\s*=/i', (string) $entry);
+                }
+            ));
+        }
+
+        return $payload;
     }
 
     public function get_bootstrap_payload(): array {
@@ -388,24 +409,42 @@ final class LCFA_Context_Builder {
             return $this->bootstrap_payload_cache;
         }
 
-        $mcp_status  = $this->get_mcp_status();
+        $mcp_status  = $this->get_mcp_status(true);
         $snapshot    = $this->environment->get_snapshot();
         $connections = LCFA_Settings::get_connections();
         $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
+        $site_url = home_url('/');
+        $site_fingerprint = method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '';
+        $filesystem_mode = (string) ($mcp_status['filesystem_mode'] ?? '');
+        $is_secure_remote = $filesystem_mode !== 'local-theme-access';
+        $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
+            ? (string) LCFA_MCP_PACKAGE_SPEC
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+        $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
+        $project_host = (string) parse_url($site_url, PHP_URL_HOST);
+        $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {
+            return [
+                'LCFA_AGENT=' . $client,
+                'LCFA_PROJECT_LABEL=' . ($project_host !== '' ? $project_host : 'WordPress site'),
+                'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
+                'LCFA_SITE_URL=' . $site_url,
+                'LCFA_PAIRING_SCOPES=read,preview',
+            ];
+        };
 
         $common = [
-            'site_url'       => home_url('/'),
+            'site_url'       => $site_url,
             'rest_base'      => rest_url('lcfa/v1/'),
-            'site_fingerprint' => method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '',
+            'site_fingerprint' => $site_fingerprint,
             'mcp_endpoint'   => $mcp_status['endpoint'],
-            'mcp_token'      => $mcp_status['token'],
+            'mcp_token'      => $is_secure_remote ? '' : $mcp_status['token'],
             'wp_root'        => untrailingslashit(ABSPATH),
             'framework'      => $snapshot['detected_framework'],
             'theme'          => $snapshot['current_theme_stylesheet'],
             'stylesheet_directory' => get_stylesheet_directory(),
             'template_directory'   => get_template_directory(),
             'transport'      => $connections['transport'],
-            'filesystem_mode'=> $mcp_status['filesystem_mode'],
+            'filesystem_mode'=> $filesystem_mode,
         ];
         $filesystem_env = $common['filesystem_mode'] === 'local-theme-access'
             ? ['LCFA_WP_ROOT=' . $common['wp_root']]
@@ -416,8 +455,8 @@ final class LCFA_Context_Builder {
             'clients'=> [
                 'codex' => [
                     'label'   => 'Codex',
-                    'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio'),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('codex') : array_merge([
                         'LCFA_SITE_URL=' . $common['site_url'],
                         'LCFA_REST_BASE=' . $common['rest_base'],
                         'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
@@ -427,8 +466,8 @@ final class LCFA_Context_Builder {
                 ],
                 'opencode' => [
                     'label'   => 'OpenCode',
-                    'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode'),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('opencode') : array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
                         'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
@@ -436,8 +475,8 @@ final class LCFA_Context_Builder {
                 ],
                 'claude' => [
                     'label'   => 'Claude',
-                    'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude'),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('claude') : array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
                         'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_ENDPOINT=' . $common['mcp_endpoint'],
@@ -446,8 +485,8 @@ final class LCFA_Context_Builder {
                 ],
                 'cursor' => [
                     'label'   => 'Cursor',
-                    'command' => $connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor'),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('cursor') : array_merge([
                         'LCFA_REST_BASE=' . $common['rest_base'],
                         'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
                         'LCFA_MCP_TOKEN=' . $common['mcp_token'],
@@ -459,6 +498,14 @@ final class LCFA_Context_Builder {
         $this->bootstrap_payload_cache['clients']['claude-code'] = $this->bootstrap_payload_cache['clients']['claude'];
 
         return $this->bootstrap_payload_cache;
+    }
+
+    private function prepare_mcp_status_response(array $status, bool $include_secret): array {
+        if (!$include_secret && array_key_exists('token', $status)) {
+            $status['token'] = trim((string) $status['token']) !== '' ? 'generated' : '';
+        }
+
+        return $status;
     }
 
     private function get_post_context(int $post_id): ?array {

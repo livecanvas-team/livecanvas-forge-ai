@@ -145,6 +145,25 @@ namespace {
     lcfa_windpress_assert(empty($tampered_restore['ok']), 'A tampered WindPress backup must fail checksum validation.');
     lcfa_windpress_assert(file_get_contents($cache_css) === 'must-remain-on-checksum-error', 'A failed checksum must not overwrite the live cache file.');
 
+    file_put_contents($main_css, "\n@import \"./@picowind/tailwind.css\";\n");
+    $initialized = $bridge->ensure_picowind_runtime();
+    $normalized_entrypoint = (string) file_get_contents($main_css);
+    lcfa_windpress_assert(!empty($initialized['ok']), 'Picowind runtime initialization should succeed.');
+    lcfa_windpress_assert(str_contains($normalized_entrypoint, '@import "tailwindcss/theme.css" layer(theme) theme(static);'), 'Picowind initialization must restore the Tailwind 4 theme import.');
+    lcfa_windpress_assert(str_contains($normalized_entrypoint, '@import "tailwindcss/utilities.css" layer(utilities);'), 'Picowind initialization must restore Tailwind utility generation.');
+    lcfa_windpress_assert(substr_count($normalized_entrypoint, '@import "./@picowind/tailwind.css";') === 1, 'Picowind initialization should keep exactly one child-theme import.');
+
+    file_put_contents($cache_css, '.sample-theme-marker{display:block}');
+    $semantic_ready = $bridge->get_compiled_cache_state([
+        'required_fragments' => ['.sample-theme-marker'],
+        'forbidden_fragments' => ['.foreign-theme-marker'],
+    ]);
+    lcfa_windpress_assert(!empty($semantic_ready['ready']), 'Compiled CSS should pass when all package-bound semantic fragments match.');
+    $semantic_failed = $bridge->get_compiled_cache_state([
+        'required_fragments' => ['.missing-theme-marker'],
+    ]);
+    lcfa_windpress_assert(empty($semantic_failed['ready']) && ($semantic_failed['status'] ?? '') === 'semantic_mismatch', 'Compiled CSS should fail readiness when a required theme fragment is missing.');
+
     lcfa_windpress_remove_tree($GLOBALS['lcfa_windpress_test_root']);
     echo "PASS\n";
 }

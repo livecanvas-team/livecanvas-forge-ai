@@ -1653,13 +1653,13 @@ final class LCFA_Admin {
         $power_state = $this->get_power_mode()->get_state($connections, $snapshot);
         $pairing_scopes = !empty($power_state['enabled'])
             ? 'read,preview,write,media,theme_files,debug,cache,seo'
-            : '';
+            : 'read,preview';
         $env = array_values(array_filter([
             $remote_site_url !== '' ? 'LCFA_SITE_URL=' . $remote_site_url : '',
             'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
             'LCFA_PROJECT_LABEL=' . $project_label,
             'LCFA_AGENT=' . $client_key,
-            $pairing_scopes !== '' ? 'LCFA_PAIRING_SCOPES=' . $pairing_scopes : '',
+            'LCFA_PAIRING_SCOPES=' . $pairing_scopes,
         ]));
 
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
@@ -1775,12 +1775,27 @@ final class LCFA_Admin {
         $site_fingerprint = method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '';
         $filesystem_mode = ($snapshot['site_mode'] ?? 'local') === 'local' ? 'local-theme-access' : 'remote-rest-primary';
         $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
+        $is_secure_remote = $filesystem_mode !== 'local-theme-access';
+        $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
+            ? (string) LCFA_MCP_PACKAGE_SPEC
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.1';
+        $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
+        $project_host = (string) parse_url($site_url, PHP_URL_HOST);
+        $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {
+            return [
+                'LCFA_AGENT=' . $client,
+                'LCFA_PROJECT_LABEL=' . ($project_host !== '' ? $project_host : 'WordPress site'),
+                'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
+                'LCFA_SITE_URL=' . $site_url,
+                'LCFA_PAIRING_SCOPES=read,preview',
+            ];
+        };
         $common = [
             'site_url'       => $site_url,
             'rest_base'      => $rest_base,
             'site_fingerprint' => $site_fingerprint,
             'mcp_endpoint'   => $mcp_endpoint,
-            'mcp_token'      => $mcp_token,
+            'mcp_token'      => $is_secure_remote ? '' : $mcp_token,
             'wp_root'        => $wp_root,
             'framework'      => (string) ($snapshot['detected_framework'] ?? 'unknown'),
             'theme'          => (string) ($snapshot['current_theme_stylesheet'] ?? ''),
@@ -1796,8 +1811,8 @@ final class LCFA_Admin {
             'clients' => [
                 'codex' => [
                     'label'   => 'Codex',
-                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('codex') : array_merge([
                         'LCFA_SITE_URL=' . $site_url,
                         'LCFA_REST_BASE=' . $rest_base,
                         'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
@@ -1807,8 +1822,8 @@ final class LCFA_Admin {
                 ],
                 'opencode' => [
                     'label'   => 'OpenCode',
-                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('opencode') : array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
                         'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
@@ -1816,8 +1831,8 @@ final class LCFA_Admin {
                 ],
                 'claude' => [
                     'label'   => 'Claude',
-                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('claude') : array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
                         'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
@@ -1826,8 +1841,8 @@ final class LCFA_Admin {
                 ],
                 'cursor' => [
                     'label'   => 'Cursor',
-                    'command' => (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
-                    'env'     => array_merge([
+                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
+                    'env'     => $is_secure_remote ? $secure_remote_environment('cursor') : array_merge([
                         'LCFA_REST_BASE=' . $rest_base,
                         'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                         'LCFA_MCP_TOKEN=' . $mcp_token,
@@ -2656,6 +2671,7 @@ final class LCFA_Admin {
     private function render_theme_library_tab(array $settings, array $snapshot): void {
         $catalog = $this->theme_library_catalog->get_catalog(!empty($_GET['refresh_catalog']));
         $imports = LCFA_Theme_Library_Importer::get_imports();
+        $rollback_history = $this->get_theme_library_rollback_history($imports);
 
         echo '<div class="lcfa-main">';
 
@@ -2668,6 +2684,7 @@ final class LCFA_Admin {
         echo '<div class="lcfa-chip-row lcfa-theme-library-status">';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Framework: %s', 'livecanvas-forge-ai'), (string) ($snapshot['detected_framework'] ?? 'unknown'))) . '</span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Theme: %s', 'livecanvas-forge-ai'), (string) ($snapshot['current_theme_stylesheet'] ?? 'unknown'))) . '</span>';
+        echo '<span class="lcfa-chip">' . esc_html(sprintf(__('PHP: %s', 'livecanvas-forge-ai'), PHP_VERSION)) . '</span>';
         echo '</div>';
         echo '<div class="lcfa-theme-library-steps" aria-label="' . esc_attr__('Theme import flow', 'livecanvas-forge-ai') . '">';
         echo '<span><b>1</b>' . esc_html__('Preview package', 'livecanvas-forge-ai') . '</span>';
@@ -2711,7 +2728,19 @@ final class LCFA_Admin {
         echo '</div>';
 
         $themes = (array) ($catalog['themes'] ?? []);
-        $build_capability = $this->theme_library_importer->get_build_capability();
+        $needs_build_capability = false;
+        foreach ($imports as $stored_import) {
+            if (is_array($stored_import) && in_array((string) ($stored_import['status'] ?? ''), ['build_required', 'build_failed'], true)) {
+                $needs_build_capability = true;
+                break;
+            }
+        }
+        $build_capability = $needs_build_capability
+            ? $this->theme_library_importer->get_build_capability()
+            : [
+                'build_available' => false,
+                'message'         => __('CSS build status is checked after starter data creates a pending build.', 'livecanvas-forge-ai'),
+            ];
         if (!$themes) {
             echo '<p>' . esc_html__('No valid themes are currently available in the catalog.', 'livecanvas-forge-ai') . '</p>';
         } else {
@@ -2746,10 +2775,16 @@ final class LCFA_Admin {
                 $category = (string) ($theme['category'] ?? '');
                 $has_screenshot = !empty($theme['screenshot']);
                 $framework = $this->get_theme_library_framework($theme);
-                $parent_ready = $this->theme_library_framework_is_ready($framework, $snapshot);
+                $parent_installed = $this->theme_library_framework_is_ready($framework, $snapshot);
+                $framework_prerequisites = $this->installer->get_framework_prerequisites($framework);
+                $theme_prerequisites = $this->theme_library_installer->get_prerequisites($theme);
+                $runtime_ready = !empty($framework_prerequisites['ready']) && !empty($theme_prerequisites['ready']);
+                $parent_ready = $parent_installed && $runtime_ready;
                 $windpress_ready = $framework !== 'picowind' || (!empty($snapshot['windpress_installed']) && !empty($snapshot['windpress_active']));
                 $installed_stylesheet = $this->find_theme_library_child_stylesheet($theme);
                 $child_installed = $installed_stylesheet !== '';
+                $active_stylesheet = sanitize_key((string) ($snapshot['current_theme_stylesheet'] ?? ''));
+                $child_active = $child_installed && sanitize_key($installed_stylesheet) === $active_stylesheet;
                 $import_status = (string) ($import['status'] ?? '');
                 $is_imported = !empty($import) && in_array($import_status, ['ready', 'imported', 'build_required', 'build_failed'], true);
                 $build_ready = $framework !== 'picowind' || in_array($import_status, ['ready', 'imported'], true);
@@ -2783,7 +2818,14 @@ final class LCFA_Admin {
                 }
                 $this->render_theme_library_stack_badges($theme);
                 echo '<div class="lcfa-theme-card__readiness">';
-                $this->render_theme_library_check(__('Parent theme', 'livecanvas-forge-ai'), $parent_ready, $parent_ready ? __('Ready', 'livecanvas-forge-ai') : sprintf(__('Install %s first', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)));
+                $this->render_theme_library_check(__('PHP runtime', 'livecanvas-forge-ai'), $runtime_ready, $runtime_ready
+                    ? sprintf(__('PHP %s is compatible', 'livecanvas-forge-ai'), (string) ($theme_prerequisites['current_php'] ?? PHP_VERSION))
+                    : sprintf(
+                        __('PHP %1$s installed; PHP %2$s required', 'livecanvas-forge-ai'),
+                        (string) ($theme_prerequisites['current_php'] ?? PHP_VERSION),
+                        (string) ($theme_prerequisites['required_php'] ?? '')
+                    ));
+                $this->render_theme_library_check(__('Parent theme', 'livecanvas-forge-ai'), $parent_installed, $parent_installed ? __('Installed', 'livecanvas-forge-ai') : sprintf(__('Install %s first', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)));
                 if ($framework === 'picowind') {
                     $windpress_detail = $windpress_ready
                         ? __('Active', 'livecanvas-forge-ai')
@@ -2791,7 +2833,12 @@ final class LCFA_Admin {
                     $this->render_theme_library_check(__('WindPress runtime', 'livecanvas-forge-ai'), $windpress_ready, $windpress_detail);
                 }
                 $this->render_theme_library_check(__('Package preview', 'livecanvas-forge-ai'), $preview_ready, $preview_ready ? __('Validated for 30 minutes', 'livecanvas-forge-ai') : __('Required before first install', 'livecanvas-forge-ai'));
-                $this->render_theme_library_check(__('Child theme', 'livecanvas-forge-ai'), $child_installed, $child_installed ? $installed_stylesheet : __('Not installed yet', 'livecanvas-forge-ai'));
+                $child_theme_detail = $child_installed
+                    ? ($child_active
+                        ? sprintf(__('%s (active)', 'livecanvas-forge-ai'), $installed_stylesheet)
+                        : $installed_stylesheet)
+                    : __('Not installed yet', 'livecanvas-forge-ai');
+                $this->render_theme_library_check(__('Child theme', 'livecanvas-forge-ai'), $child_installed, $child_theme_detail);
                 $this->render_theme_library_check(__('Starter data', 'livecanvas-forge-ai'), $is_imported, $is_imported ? __('Imported', 'livecanvas-forge-ai') : __('Not imported yet', 'livecanvas-forge-ai'));
                 if ($framework === 'picowind') {
                     $build_detail = !$is_imported
@@ -2802,7 +2849,12 @@ final class LCFA_Admin {
                     $this->render_theme_library_check(__('Tailwind CSS', 'livecanvas-forge-ai'), $build_ready, $build_detail);
                 }
                 echo '</div>';
-                if (!$parent_ready) {
+                if (!$runtime_ready) {
+                    echo '<div class="lcfa-theme-card__notice is-critical">';
+                    echo '<strong>' . esc_html__('PHP upgrade required', 'livecanvas-forge-ai') . '</strong>';
+                    echo '<span>' . esc_html((string) ($theme_prerequisites['message'] ?? __('Upgrade PHP before installing or activating this theme.', 'livecanvas-forge-ai'))) . '</span>';
+                    echo '</div>';
+                } elseif (!$parent_installed) {
                     echo '<div class="lcfa-theme-card__notice">';
                     echo '<strong>' . esc_html__('Required before install', 'livecanvas-forge-ai') . '</strong>';
                     echo '<span>' . esc_html(sprintf(__('This starter needs %s. Install the parent framework first, then install the child theme.', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework))) . '</span>';
@@ -2825,15 +2877,34 @@ final class LCFA_Admin {
                 echo '</div>';
                 echo '<div class="lcfa-actions">';
                 $this->render_theme_library_action_form($slug, 'preview', $preview_ready ? __('Revalidate package', 'livecanvas-forge-ai') : __('Preview package', 'livecanvas-forge-ai'), false);
-                if (!$parent_ready) {
-                    $this->render_theme_library_framework_form($framework, sprintf(__('Install %s', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)));
+                if (!$parent_installed) {
+                    $this->render_theme_library_framework_form(
+                        $framework,
+                        sprintf(__('Install %s', 'livecanvas-forge-ai'), $this->get_theme_library_framework_label($framework)),
+                        empty($framework_prerequisites['ready']),
+                        empty($framework_prerequisites['ready']) ? (string) ($framework_prerequisites['message'] ?? '') : ''
+                    );
                 }
-                $install_disabled = !$parent_ready || (!$child_installed && !$preview_ready);
-                $install_disabled_reason = !$parent_ready
-                    ? __('Install the parent framework theme first.', 'livecanvas-forge-ai')
-                    : __('Preview and validate the package before installing it.', 'livecanvas-forge-ai');
-                $this->render_theme_library_action_form($slug, 'install', $child_installed ? __('Activate child theme', 'livecanvas-forge-ai') : __('Install child theme', 'livecanvas-forge-ai'), false, $install_disabled, $install_disabled_reason);
-                $this->render_theme_library_action_form($slug, 'import', $is_imported ? __('Re-import starter data', 'livecanvas-forge-ai') : __('Import starter data', 'livecanvas-forge-ai'), true, !$parent_ready || !$child_installed, !$parent_ready ? __('Install the parent framework theme first.', 'livecanvas-forge-ai') : __('Install the child theme before importing starter data.', 'livecanvas-forge-ai'), $is_imported);
+                $install_disabled = $child_active || !$parent_ready || (!$child_installed && !$preview_ready);
+                if ($child_active) {
+                    $install_disabled_reason = __('This child theme is already active.', 'livecanvas-forge-ai');
+                } elseif (!$runtime_ready) {
+                    $install_disabled_reason = (string) ($theme_prerequisites['message'] ?? __('Upgrade PHP before installing this theme.', 'livecanvas-forge-ai'));
+                } elseif (!$parent_installed) {
+                    $install_disabled_reason = __('Install the parent framework theme first.', 'livecanvas-forge-ai');
+                } else {
+                    $install_disabled_reason = __('Preview and validate the package before installing it.', 'livecanvas-forge-ai');
+                }
+                $install_label = $child_active
+                    ? __('Current child theme', 'livecanvas-forge-ai')
+                    : ($child_installed ? __('Activate child theme', 'livecanvas-forge-ai') : __('Install child theme', 'livecanvas-forge-ai'));
+                $this->render_theme_library_action_form($slug, 'install', $install_label, false, $install_disabled, $install_disabled_reason);
+                $import_disabled_reason = !$runtime_ready
+                    ? (string) ($theme_prerequisites['message'] ?? __('Upgrade PHP before importing this theme.', 'livecanvas-forge-ai'))
+                    : (!$parent_installed
+                        ? __('Install the parent framework theme first.', 'livecanvas-forge-ai')
+                        : __('Install the child theme before importing starter data.', 'livecanvas-forge-ai'));
+                $this->render_theme_library_action_form($slug, 'import', $is_imported ? __('Re-import starter data', 'livecanvas-forge-ai') : __('Import starter data', 'livecanvas-forge-ai'), true, !$parent_ready || !$child_installed, $import_disabled_reason, $is_imported);
                 if ($build_pending) {
                     $build_unavailable = empty($build_capability['build_available']);
                     $this->render_theme_library_action_form(
@@ -2853,7 +2924,12 @@ final class LCFA_Admin {
         }
         echo '</section>';
 
-        if ($imports) {
+        $rollback_rows = array_values($imports);
+        foreach ($rollback_history as $history_row) {
+            $rollback_rows[] = $history_row;
+        }
+
+        if ($rollback_rows) {
             echo '<section class="lcfa-card">';
             echo '<div class="lcfa-card-head">';
             echo $this->get_icon_svg('shuffle');
@@ -2862,21 +2938,30 @@ final class LCFA_Admin {
             echo '<div class="lcfa-table-wrap"><table class="widefat striped"><thead><tr>';
             echo '<th>' . esc_html__('Theme', 'livecanvas-forge-ai') . '</th><th>' . esc_html__('Version', 'livecanvas-forge-ai') . '</th><th>' . esc_html__('Status', 'livecanvas-forge-ai') . '</th><th>' . esc_html__('Imported', 'livecanvas-forge-ai') . '</th><th>' . esc_html__('Audit', 'livecanvas-forge-ai') . '</th><th>' . esc_html__('Action', 'livecanvas-forge-ai') . '</th>';
             echo '</tr></thead><tbody>';
-            foreach ($imports as $import) {
+            foreach ($rollback_rows as $import) {
                 if (!is_array($import)) {
                     continue;
                 }
+                $audit_id = sanitize_key((string) ($import['audit_id'] ?? ''));
+                $rollback_record = $audit_id !== '' ? LCFA_Settings::get_rollback_record($audit_id) : [];
+                $rollback_available = $audit_id !== ''
+                    && is_array($rollback_record)
+                    && empty($rollback_record['restored_at']);
                 echo '<tr>';
                 echo '<td>' . esc_html((string) ($import['slug'] ?? '')) . '</td>';
                 echo '<td>' . esc_html((string) ($import['version'] ?? '')) . '</td>';
                 echo '<td>' . esc_html((string) ($import['status'] ?? 'imported')) . '</td>';
                 echo '<td>' . esc_html((string) ($import['imported_at'] ?? '')) . '</td>';
-                echo '<td><code>' . esc_html((string) ($import['audit_id'] ?? '')) . '</code></td>';
+                echo '<td><code>' . esc_html($audit_id) . '</code></td>';
                 echo '<td>';
                 if (in_array((string) ($import['status'] ?? ''), ['build_required', 'build_failed'], true)) {
                     $this->render_theme_library_action_form((string) ($import['slug'] ?? ''), 'build', __('Build CSS', 'livecanvas-forge-ai'), false, empty($build_capability['build_available']), (string) ($build_capability['message'] ?? ''));
                 }
-                $this->render_theme_library_rollback_form((string) ($import['audit_id'] ?? ''));
+                if ($rollback_available) {
+                    $this->render_theme_library_rollback_form($audit_id);
+                } else {
+                    echo '<span class="lcfa-chip">' . esc_html__('Restored', 'livecanvas-forge-ai') . '</span>';
+                }
                 echo '</td>';
                 echo '</tr>';
             }
@@ -2885,6 +2970,39 @@ final class LCFA_Admin {
         }
 
         echo '</div>';
+    }
+
+    private function get_theme_library_rollback_history(array $imports): array {
+        $current_audits = [];
+        foreach ($imports as $import) {
+            if (is_array($import) && !empty($import['audit_id'])) {
+                $current_audits[sanitize_key((string) $import['audit_id'])] = true;
+            }
+        }
+
+        $history = [];
+        foreach (array_reverse(LCFA_Settings::get_rollback_records(), true) as $audit_id => $record) {
+            $audit_id = sanitize_key((string) $audit_id);
+            if (
+                $audit_id === ''
+                || isset($current_audits[$audit_id])
+                || !is_array($record)
+                || (string) ($record['type'] ?? '') !== 'theme_library_import'
+                || !empty($record['restored_at'])
+            ) {
+                continue;
+            }
+
+            $history[] = [
+                'slug'        => sanitize_key((string) ($record['theme_slug'] ?? '')),
+                'version'     => sanitize_text_field((string) ($record['theme_version'] ?? '')),
+                'status'      => 'rollback_available',
+                'imported_at' => sanitize_text_field((string) ($record['created_at'] ?? '')),
+                'audit_id'    => $audit_id,
+            ];
+        }
+
+        return $history;
     }
 
     private function render_theme_library_action_form(string $slug, string $operation, string $label, bool $confirm, bool $disabled = false, string $disabled_reason = '', bool $show_force = false): void {
@@ -2956,7 +3074,7 @@ final class LCFA_Admin {
         return preg_match('/^[a-f0-9]{64}$/', $checksum) ? $checksum : '';
     }
 
-    private function render_theme_library_framework_form(string $framework, string $label): void {
+    private function render_theme_library_framework_form(string $framework, string $label, bool $disabled = false, string $disabled_reason = ''): void {
         $framework = $this->normalize_supported_framework($framework);
         if ($framework === '') {
             return;
@@ -2967,7 +3085,7 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="action" value="lcfa_theme_library">';
         echo '<input type="hidden" name="operation" value="install_framework">';
         echo '<input type="hidden" name="framework" value="' . esc_attr($framework) . '">';
-        echo '<button class="button button-primary lcfa-theme-button lcfa-theme-button--framework" type="submit">' . esc_html($label) . '</button>';
+        echo '<button class="button button-primary lcfa-theme-button lcfa-theme-button--framework" type="submit"' . ($disabled ? ' disabled aria-disabled="true" title="' . esc_attr($disabled_reason) . '"' : '') . '>' . esc_html($label) . '</button>';
         echo '</form>';
     }
 
@@ -5758,7 +5876,12 @@ final class LCFA_Admin {
         echo '</div>';
 
         echo '<div class="lcfa-guide">';
-        echo '<p>' . esc_html__($is_wizard_context ? 'Use the MCP token for your coding agent. Treat the raw server command and generated files below as reference material after you complete the steps in this guide.' : 'Use the MCP token for your coding agent. WordPress Application Passwords are only needed when one WordPress site connects to another WordPress site through the remote companion.', 'livecanvas-forge-ai') . '</p>';
+        $guide_notice = in_array($site_mode, ['remote', 'hybrid'], true)
+            ? __('Remote agents use secure site-bound pairing. No WordPress password or legacy MCP token belongs in the generated client configuration.', 'livecanvas-forge-ai')
+            : ($is_wizard_context
+                ? __('The local runtime may use the site MCP token. Treat raw commands and environment values as advanced reference material.', 'livecanvas-forge-ai')
+                : __('Local MCP tokens are only for trusted local runtimes. Remote agents should use secure site-bound pairing.', 'livecanvas-forge-ai'));
+        echo '<p>' . esc_html($guide_notice) . '</p>';
         echo '</div>';
 
         echo '<div class="lcfa-agent-guide">';

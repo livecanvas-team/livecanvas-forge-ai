@@ -673,7 +673,13 @@ final class LCFA_OAuth_Storage {
     }
 
     public static function resource_url(): string {
-        return untrailingslashit(rest_url('livecanvas-forge-ai/mcp'));
+        global $wp_rewrite;
+
+        if (is_object($wp_rewrite)) {
+            return untrailingslashit(rest_url('livecanvas-forge-ai/mcp'));
+        }
+
+        return untrailingslashit(self::early_rest_url('livecanvas-forge-ai/mcp'));
     }
 
     public static function issuer_url(): string {
@@ -826,6 +832,23 @@ final class LCFA_OAuth_Storage {
             'path' => '/' . ltrim((string) ($parts['path'] ?? '/'), '/'),
             'query' => (string) ($parts['query'] ?? ''),
         ];
+    }
+
+    private static function early_rest_url(string $route): string {
+        $route = '/' . ltrim($route, '/');
+        $permalink_structure = (string) get_option('permalink_structure', '');
+
+        if ($permalink_structure === '') {
+            return add_query_arg('rest_route', $route, home_url('/'));
+        }
+
+        $prefix = function_exists('rest_get_url_prefix')
+            ? trim((string) rest_get_url_prefix(), '/')
+            : 'wp-json';
+        $uses_index = strpos($permalink_structure, '/index.php/') === 0;
+        $path = ($uses_index ? 'index.php/' : '') . $prefix . '/' . ltrim($route, '/');
+
+        return home_url('/' . $path);
     }
 
     private static function rest_route_from_url_parts(array $parts): string {

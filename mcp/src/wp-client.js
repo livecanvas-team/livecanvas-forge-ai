@@ -76,6 +76,14 @@ class WPClient {
     return this.request('GET', 'studio/connection-handoff', { query: params })
   }
 
+  async getAbilityDiagnostics() {
+    return this.request('GET', 'studio/ability-diagnostics')
+  }
+
+  async getRuns(params = {}) {
+    return this.request('GET', 'studio/runs', { query: params })
+  }
+
   async getBlockPatternLibrary(params = {}) {
     return this.request('GET', 'studio/block-pattern-library', { query: params })
   }

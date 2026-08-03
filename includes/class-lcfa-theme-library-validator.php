@@ -109,6 +109,7 @@ final class LCFA_Theme_Library_Validator {
             'root'            => $root,
             'checksum'        => $actual_checksum,
             'manifest'        => $manifest_result['manifest'],
+            'requires_php'    => (string) ($style_result['requires_php'] ?? ''),
             'required_files'  => self::REQUIRED_FILES,
             'preview_plan'    => $this->build_preview_plan($manifest_result['manifest']),
         ];
@@ -253,6 +254,36 @@ final class LCFA_Theme_Library_Validator {
             $manifest[$key] = $path;
         }
 
+        $css_verification = $manifest['css_verification'] ?? [];
+        if (!is_array($css_verification)) {
+            return $this->error(__('Theme manifest css_verification must be an object.', 'livecanvas-forge-ai'));
+        }
+
+        foreach (['required_fragments', 'forbidden_fragments'] as $key) {
+            $fragments = $css_verification[$key] ?? [];
+            if (!is_array($fragments)) {
+                return $this->error(sprintf('Theme manifest css_verification.%s must be an array.', $key));
+            }
+
+            $normalized = [];
+            foreach (array_slice($fragments, 0, 20) as $fragment) {
+                if (!is_string($fragment)) {
+                    return $this->error(sprintf('Theme manifest css_verification.%s entries must be strings.', $key));
+                }
+
+                $fragment = trim($fragment);
+                if ($fragment === '' || strlen($fragment) > 200 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $fragment)) {
+                    return $this->error(sprintf('Theme manifest css_verification.%s contains an invalid CSS fragment.', $key));
+                }
+
+                $normalized[] = $fragment;
+            }
+
+            $css_verification[$key] = array_values(array_unique($normalized));
+        }
+
+        $manifest['css_verification'] = $css_verification;
+
         return [
             'ok'       => true,
             'manifest' => $manifest,
@@ -273,8 +304,9 @@ final class LCFA_Theme_Library_Validator {
         }
 
         return [
-            'ok'       => true,
-            'template' => $template,
+            'ok'           => true,
+            'template'     => $template,
+            'requires_php' => $this->read_theme_header($style, 'Requires PHP'),
         ];
     }
 

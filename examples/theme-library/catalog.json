@@ -21,7 +21,7 @@
     {
       "slug": "asteria-search",
       "name": "Asteria Search",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "description": "One-page Picowind theme exported from the wordpress-theme-test local site.",
       "category": "onepage",
       "framework": "picowind",
@@ -32,7 +32,7 @@
       "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/screenshots/cover.jpg",
       "package_path": "examples/theme-library/themes/asteria-search/asteria-search.zip",
       "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/asteria-search.zip",
-      "checksum": "sha256:6777a52607d60e421068337a8b367e391b6ad413e8dcbcd04109c80d17fc3310",
+      "checksum": "sha256:3dae15dec5b143837d35caf94999f50f53338def26c0327f2506cea6047e841e",
       "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/metadata.json"
     },
     {
@@ -46,11 +46,11 @@
       "ui": "daisyui",
       "builder": "picowind",
       "screenshot_path": "examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png",
-      "screenshot": "",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png",
       "package_path": "examples/theme-library/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
-      "package_url": "",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
       "checksum": "sha256:beda9cd4dad5443e5462a430230b9bc55ffb780c2385f49b04f118d0ef457757",
-      "metadata_url": ""
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/metadata.json"
     }
   ]
 }

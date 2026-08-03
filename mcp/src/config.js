@@ -14,6 +14,7 @@ const DEFAULTS = {
   tool: '',
   toolArgs: {},
   output: 'json',
+  allowParentThemeWrites: false,
   verbose: false
 }
 
@@ -34,6 +35,7 @@ function loadConfig(argv = []) {
     tool: process.env.LCFA_TOOL || DEFAULTS.tool,
     toolArgs: parseToolArguments(process.env.LCFA_TOOL_ARGS || ''),
     output: process.env.LCFA_OUTPUT || DEFAULTS.output,
+    allowParentThemeWrites: process.env.LCFA_ALLOW_PARENT_THEME_WRITES === '1',
     verbose: process.env.LCFA_VERBOSE === '1'
   }
 
@@ -44,7 +46,10 @@ function loadConfig(argv = []) {
       continue
     }
 
-    const [rawKey, inlineValue] = item.slice(2).split('=')
+    const option = item.slice(2)
+    const separatorIndex = option.indexOf('=')
+    const rawKey = separatorIndex === -1 ? option : option.slice(0, separatorIndex)
+    const inlineValue = separatorIndex === -1 ? undefined : option.slice(separatorIndex + 1)
     const key = rawKey.trim()
     const value = inlineValue !== undefined ? inlineValue : argv[index + 1]
 
@@ -98,6 +103,9 @@ function loadConfig(argv = []) {
         break
       case 'output':
         config.output = value || config.output
+        break
+      case 'allow-parent-theme-writes':
+        config.allowParentThemeWrites = true
         break
       case 'verbose':
         config.verbose = true
