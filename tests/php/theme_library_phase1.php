@@ -128,6 +128,35 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-theme-library-rollback.php';
 
 $valid_zip = lcfa_theme_create_zip();
 $checksum = hash_file('sha256', $valid_zip);
+$picostrap_bundle = ':root{--bs-primary:#7047a8}.container{width:100%}.houseflow-header{position:sticky}'
+    . str_repeat('.row{display:flex;flex-wrap:wrap}', 4);
+$picostrap_zip = lcfa_theme_create_zip([
+    'theme' => [
+        'framework' => 'picostrap',
+        'parent' => 'picostrap5',
+    ],
+    'compatibility' => [
+        'framework' => 'picostrap',
+        'picostrap' => '5',
+    ],
+    'css_verification' => [
+        'required_fragments' => ['.houseflow-header'],
+    ],
+], [], [
+    'style.css' => "/*\nTheme Name: Sample Picostrap\nTemplate: picostrap5\n*/",
+    'page-templates/empty.php' => "<?php\n/* Template Name: Empty Page Template */\nget_header(); while (have_posts()) { the_post(); the_content(); } get_footer();\n",
+    'views/page-templates/empty.twig' => null,
+    'public/styles/presets/daisyui.css' => null,
+    'public/styles/tailwind.css' => null,
+    'css-output/bundle.css' => $picostrap_bundle,
+    'sass/_theme_variables.scss' => '$primary: #7047a8;',
+    'sass/_custom.scss' => '.houseflow-header { position: sticky; }',
+    'js/bootstrap.bundle.min.js' => '/* Bootstrap 5 bundle */',
+    'js/custom.js' => '/* Hearthline interactions */',
+    'starter-data/header.html' => '<header><nav>Header</nav></header>',
+    'starter-data/footer.html' => '<footer>Footer</footer>',
+]);
+$picostrap_checksum = hash_file('sha256', $picostrap_zip);
 
 $GLOBALS['lcfa_theme_library_catalog_payload'] = [
     'themes' => [
@@ -146,17 +175,42 @@ $GLOBALS['lcfa_theme_library_catalog_payload'] = [
             'package_url' => 'https://example.test/broken.zip',
             'checksum' => str_repeat('a', 64),
         ],
+        [
+            'slug' => 'sample-picostrap',
+            'name' => 'Sample Picostrap',
+            'version' => '1.0.0',
+            'framework' => 'bootstrap-5',
+            'package_url' => 'https://example.test/sample-picostrap.zip',
+            'checksum' => 'sha256:' . $checksum,
+            'screenshot' => 'https://example.test/picostrap.jpg',
+        ],
+        [
+            'slug' => 'unsupported-stack',
+            'name' => 'Unsupported Stack',
+            'version' => '1.0.0',
+            'framework' => 'unknown-framework',
+            'package_url' => 'https://example.test/unsupported.zip',
+            'checksum' => 'sha256:' . $checksum,
+            'screenshot' => 'https://example.test/unsupported.jpg',
+        ],
     ],
 ];
 
 $catalog = (new LCFA_Theme_Library_Catalog())->get_catalog(true);
 lcfa_theme_assert_true(!empty($catalog['ok']), 'valid catalog should load');
-lcfa_theme_assert_same(1, count($catalog['themes']), 'catalog should include only themes with required screenshot/package/checksum data');
+lcfa_theme_assert_same(2, count($catalog['themes']), 'catalog should include valid Picowind and Picostrap themes');
 lcfa_theme_assert_same('sample-theme', $catalog['themes'][0]['slug'], 'catalog should normalize theme slug');
 lcfa_theme_assert_same('picowind', $catalog['themes'][0]['framework'], 'catalog should default Theme Library items to Picowind');
+lcfa_theme_assert_same('Picowind', $catalog['themes'][0]['framework_label'], 'catalog should expose a readable Picowind label');
+lcfa_theme_assert_same('Tailwind CSS + DaisyUI', $catalog['themes'][0]['technology_label'], 'catalog should expose the Picowind technology label');
 lcfa_theme_assert_same('tailwind', $catalog['themes'][0]['stack']['css'], 'catalog should expose CSS stack metadata');
 lcfa_theme_assert_same('daisyui', $catalog['themes'][0]['stack']['ui'], 'catalog should expose UI stack metadata');
-lcfa_theme_assert_true(count($catalog['errors']) === 1, 'catalog should report invalid entries');
+lcfa_theme_assert_same('picostrap', $catalog['themes'][1]['framework'], 'catalog should normalize Bootstrap aliases to Picostrap');
+lcfa_theme_assert_same('Picostrap', $catalog['themes'][1]['framework_label'], 'catalog should expose a readable Picostrap label');
+lcfa_theme_assert_same('Bootstrap 5', $catalog['themes'][1]['technology_label'], 'catalog should expose the Picostrap technology label');
+lcfa_theme_assert_same(['picowind' => 1, 'picostrap' => 1], $catalog['frameworks'], 'catalog should expose framework counts for filtering');
+lcfa_theme_assert_same(2, $catalog['normalization_version'], 'catalog should invalidate normalized cache when framework metadata changes');
+lcfa_theme_assert_true(count($catalog['errors']) === 2, 'catalog should report missing data and unsupported framework entries');
 
 $merge_catalogs = new ReflectionMethod(LCFA_Theme_Library_Catalog::class, 'merge_catalogs');
 $merged_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
@@ -178,6 +232,25 @@ lcfa_theme_assert_same('lcfa-theme.v1', $valid['manifest']['schema'] ?? '', 'man
 lcfa_theme_assert_same('', $valid['requires_php'] ?? '', 'validator should expose an empty PHP requirement when style.css does not declare one');
 lcfa_theme_assert_same([], $valid['manifest']['css_verification']['required_fragments'] ?? null, 'validator should normalize missing CSS verification requirements');
 
+$valid_picostrap = $validator->validate_zip($picostrap_zip, [
+    'framework' => 'picostrap',
+    'checksum' => $picostrap_checksum,
+]);
+lcfa_theme_assert_true(
+    !empty($valid_picostrap['ok']),
+    'valid Picostrap ZIP should pass validation: ' . json_encode($valid_picostrap, JSON_UNESCAPED_SLASHES)
+);
+lcfa_theme_assert_same('picostrap', $valid_picostrap['framework'] ?? '', 'validator should identify Picostrap from the Template header');
+lcfa_theme_assert_same(hash('sha256', $picostrap_bundle), $valid_picostrap['framework_assets']['bundle_sha256'] ?? '', 'validator should checksum the packaged Picostrap bundle');
+lcfa_theme_assert_true(in_array('css-output/bundle.css', $valid_picostrap['required_files'] ?? [], true), 'Picostrap packages should require a compiled bundle');
+lcfa_theme_assert_false(in_array('public/styles/tailwind.css', $valid_picostrap['required_files'] ?? [], true), 'Picostrap packages should not require Tailwind source CSS');
+
+$catalog_framework_mismatch = $validator->validate_zip($picostrap_zip, [
+    'framework' => 'picowind',
+    'checksum' => $picostrap_checksum,
+]);
+lcfa_theme_assert_false(!empty($catalog_framework_mismatch['ok']), 'catalog and child-theme framework mismatches should fail validation');
+
 $invalid_css_verification_zip = lcfa_theme_create_zip([
     'css_verification' => [
         'required_fragments' => 'not-an-array',
@@ -192,19 +265,39 @@ foreach ((array) ($example_catalog['themes'] ?? []) as $example_theme) {
     $example_slug = (string) ($example_theme['slug'] ?? '');
     $example_zip_path = dirname(__DIR__, 2) . '/examples/theme-library/themes/' . $example_slug . '/' . $example_slug . '.zip';
     lcfa_theme_assert_true(is_file($example_zip_path), 'example Theme Library ZIP should exist for beta fallback catalog testing: ' . $example_slug);
-    lcfa_theme_assert_same('picowind', (string) ($example_theme['framework'] ?? ''), 'example Theme Library catalog entries should declare Picowind: ' . $example_slug);
-    lcfa_theme_assert_same('tailwind', (string) ($example_theme['css'] ?? ''), 'example Theme Library catalog entries should declare Tailwind: ' . $example_slug);
-    lcfa_theme_assert_same('daisyui', (string) ($example_theme['ui'] ?? ''), 'example Theme Library catalog entries should declare DaisyUI: ' . $example_slug);
+    $example_framework = (string) ($example_theme['framework'] ?? '');
+    lcfa_theme_assert_true(in_array($example_framework, ['picowind', 'picostrap'], true), 'example Theme Library catalog entries should declare a supported framework: ' . $example_slug);
+    lcfa_theme_assert_same($example_framework === 'picostrap' ? 'bootstrap' : 'tailwind', (string) ($example_theme['css'] ?? ''), 'example Theme Library catalog entries should declare the matching CSS stack: ' . $example_slug);
+    lcfa_theme_assert_same($example_framework === 'picostrap' ? 'bootstrap' : 'daisyui', (string) ($example_theme['ui'] ?? ''), 'example Theme Library catalog entries should declare the matching UI stack: ' . $example_slug);
     lcfa_theme_assert_same((string) ($example_theme['checksum'] ?? ''), 'sha256:' . hash_file('sha256', $example_zip_path), 'example catalog checksum should match the packaged ZIP: ' . $example_slug);
     $example_validation = $validator->validate_zip($example_zip_path, $example_theme);
     lcfa_theme_assert_true(!empty($example_validation['ok']), 'example Theme Library ZIP should pass validation: ' . $example_slug);
 }
 
-$not_picowind_zip = lcfa_theme_create_zip([], [], [
+$unsupported_parent_zip = lcfa_theme_create_zip([], [], [
     'style.css' => "/*\nTheme Name: Sample Theme\nTemplate: twentytwentyfour\n*/",
 ]);
-$not_picowind = $validator->validate_zip($not_picowind_zip, ['checksum' => hash_file('sha256', $not_picowind_zip)]);
-lcfa_theme_assert_false(!empty($not_picowind['ok']), 'non-Picowind child themes should fail validation');
+$unsupported_parent = $validator->validate_zip($unsupported_parent_zip, ['checksum' => hash_file('sha256', $unsupported_parent_zip)]);
+lcfa_theme_assert_false(!empty($unsupported_parent['ok']), 'child themes outside Picowind and Picostrap should fail validation');
+
+$missing_picostrap_bundle_zip = lcfa_theme_create_zip([
+    'theme' => ['framework' => 'picostrap'],
+], [], [
+    'style.css' => "/*\nTheme Name: Sample Picostrap\nTemplate: picostrap5\n*/",
+    'page-templates/empty.php' => "<?php get_header(); the_content(); get_footer();\n",
+    'views/page-templates/empty.twig' => null,
+    'public/styles/presets/daisyui.css' => null,
+    'public/styles/tailwind.css' => null,
+    'sass/_theme_variables.scss' => '$primary: #7047a8;',
+    'sass/_custom.scss' => '.houseflow-header { position: sticky; }',
+    'js/bootstrap.bundle.min.js' => '/* Bootstrap 5 bundle */',
+    'js/custom.js' => '/* Hearthline interactions */',
+]);
+$missing_picostrap_bundle = $validator->validate_zip($missing_picostrap_bundle_zip, [
+    'framework' => 'picostrap',
+    'checksum' => hash_file('sha256', $missing_picostrap_bundle_zip),
+]);
+lcfa_theme_assert_false(!empty($missing_picostrap_bundle['ok']), 'Picostrap packages without a compiled bundle should fail validation');
 
 $inline_shell_zip = lcfa_theme_create_zip([], [], [
     'starter-data/home.html' => '<header>Wrong</header><section>Home</section>',
@@ -304,8 +397,12 @@ lcfa_theme_assert_true(str_contains((string) file_get_contents(dirname(__DIR__, 
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'THEME_LIBRARY_PREVIEW_TRANSIENT_PREFIX'), 'Theme Library UI should remember a successful package preview per user');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Preview and validate the package before installing it.'), 'Theme Library UI should require preview before the first child-theme install');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$operation === \'import\' && $show_force'), 'Theme Library UI should show force update only for existing imports');
-lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-filter="all"'), 'Theme Library category controls should be functional buttons');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-framework-filter="all"'), 'Theme Library should expose a dedicated framework filter');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-framework="'), 'Theme Library cards should expose their normalized framework');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-category-filter="all"'), 'Theme Library should expose a separate theme-type filter');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'data-lcfa-theme-category='), 'Theme Library cards should expose their filter category');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_theme_library_framework_profile'), 'Theme Library cards should render a prominent Picowind or Picostrap identity');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'No themes match these filters.'), 'Theme Library should explain empty filter results');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'PHP upgrade required'), 'Theme Library UI should show a guided PHP compatibility blocker');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_framework_prerequisites'), 'Theme Library UI should check framework PHP requirements before enabling install');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$needs_build_capability'), 'Theme Library UI should probe the local build bridge only when a CSS build is pending');
@@ -314,8 +411,10 @@ lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_theme_library_rollback_history'), 'Theme Library UI should expose older unresolved import audits for chained rollback');
 
 @unlink($valid_zip);
+@unlink($picostrap_zip);
 @unlink($invalid_css_verification_zip);
-@unlink($not_picowind_zip);
+@unlink($unsupported_parent_zip);
+@unlink($missing_picostrap_bundle_zip);
 @unlink($inline_shell_zip);
 @unlink($missing_media_zip);
 @unlink($missing_css_import_zip);

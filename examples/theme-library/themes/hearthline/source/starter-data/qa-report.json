@@ -1,0 +1,20 @@
+{
+  "schema": "lcfa-theme-qa.v1",
+  "status": "passed",
+  "source": "LiveCanvas Theme Forge Internal",
+  "framework": "picostrap",
+  "viewports": [1440, 768, 390],
+  "checks": {
+    "homepage_separate_from_shell": true,
+    "header_partial_present": true,
+    "footer_partial_present": true,
+    "media_placeholders_resolved_by_importer": true,
+    "bootstrap_bundle_compiled": true,
+    "responsive_layout_checked": true,
+    "clean_site_import_checked": true,
+    "mobile_navigation_checked": true,
+    "horizontal_overflow_absent": true,
+    "broken_images_absent": true,
+    "reduced_motion_supported": true
+  }
+}

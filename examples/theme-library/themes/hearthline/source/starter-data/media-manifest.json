@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "hearthline-hero",
+      "file": "starter-data/media/hearthline-hero.png",
+      "title": "Hearthline family hero",
+      "alt": "Family sharing breakfast and planning the day together",
+      "checksum": "sha256:3f21c60f19874fbcba5c70eb1fa5d5ced5e084be50a52b24fb67ed11396c2593"
+    },
+    {
+      "id": "hearthline-meal-planning",
+      "file": "starter-data/media/hearthline-meal-planning.png",
+      "title": "Hearthline meal planning",
+      "alt": "Parent and child preparing a meal plan together",
+      "checksum": "sha256:bda9e38251c35fe208b4e61c88bc8ae0d06aa654fb1ebe452b12e7dea93a1923"
+    },
+    {
+      "id": "hearthline-routines",
+      "file": "starter-data/media/hearthline-routines.png",
+      "title": "Hearthline family routines",
+      "alt": "Family preparing school bags and a weekly routine board",
+      "checksum": "sha256:1af2312a2ec6ca99a1bef3efc1056aaf890bee596262f965a2a61625c9ff2ea1"
+    }
+  ]
+}

@@ -366,6 +366,7 @@ final class LCFA_Theme_Library_Installer {
         $expected_name = sanitize_text_field((string) ($manifest['theme']['name'] ?? $theme['name'] ?? ''));
         $expected_slug = sanitize_key((string) ($manifest['theme']['slug'] ?? $theme['slug'] ?? $stylesheet));
         $expected_text_domain = sanitize_key((string) ($manifest['theme']['text_domain'] ?? $expected_slug));
+        $expected_parent = $this->get_expected_parent($manifest, $theme);
 
         foreach (wp_get_themes() as $candidate_stylesheet => $candidate) {
             if (!$candidate->exists()) {
@@ -377,7 +378,7 @@ final class LCFA_Theme_Library_Installer {
             $candidate_template = sanitize_key((string) $candidate->get_template());
             $candidate_key = sanitize_key((string) $candidate_stylesheet);
 
-            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0 && $candidate_template === 'picowind') {
+            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0 && $candidate_template === $expected_parent) {
                 return (string) $candidate_stylesheet;
             }
 
@@ -391,6 +392,17 @@ final class LCFA_Theme_Library_Installer {
         }
 
         return $stylesheet;
+    }
+
+    private function get_expected_parent(array $manifest, array $theme): string {
+        $parent = sanitize_key((string) ($manifest['theme']['parent'] ?? $manifest['compatibility']['parent_theme'] ?? ''));
+        if ($parent !== '') {
+            return $parent;
+        }
+
+        $framework = sanitize_key((string) ($manifest['theme']['framework'] ?? $theme['framework'] ?? $theme['stack']['framework'] ?? 'picowind'));
+
+        return $framework === 'picostrap' ? 'picostrap5' : 'picowind';
     }
 
     private function activate_theme_with_rollback(string $stylesheet, array $manifest, array $theme, string $checksum): array {

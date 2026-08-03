@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.1` staging beta
+Status: `0.2.0-beta.2` staging beta
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -59,7 +59,7 @@ Usable today:
 - use `forge-handoff-summary.json` inside handoff packages for quick agent decisions
 - run the AI Studio integration test plan with copy-ready REST endpoints, MCP tools, and no-write preview checks
 - enable Full Access for trusted sessions when Codex needs targeted content patches, guarded theme-file writes, media upload/replace, Picostrap compile, debug/cache, Polylang, SEO, or visual checks
-- install validated Picowind child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
+- install validated Picowind or Picostrap child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
 - finish pending remote Picowind builds with an audit-bound, checksum-verified MCP build tool
 
 Still in progress:
@@ -87,7 +87,7 @@ Main areas:
 - `Connections`: agent bootstrap for Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients
 - `Genesis`: project brief and executable site plan
 - `AI Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
-- `Theme Library`: admin-only catalog installer for validated Picowind child themes and LiveCanvas starter data
+- `Theme Library`: admin-only catalog installer for validated Picowind and Picostrap child themes with deterministic LiveCanvas starter data
 - `Command Deck`: preview/apply console for structured operations
 - `LiveCanvas editor drawer`: in-editor prompt surface for contextual page edits
 - `MCP package`: local Node bridge in [`mcp/`](./mcp/)
@@ -168,14 +168,14 @@ Updates are shown only when:
 The update channel is available under `AI Bridge > Connections > Advanced/manual fallback`:
 
 - `Stable` ignores GitHub prereleases. Existing stable installations, including `0.1.31`, do not receive `0.2.0-beta.*` unless an administrator opts in.
-- `Beta` accepts stable and beta releases. A beta installation follows this channel by default, so `0.2.0-beta.1` can receive `0.2.0-beta.2`.
+- `Beta` accepts stable and beta releases. A beta installation follows this channel by default, so `0.2.0-beta.2` can receive later beta releases.
 
 The updater tries the LiveCanvas licensed update endpoint first. If that endpoint is unavailable and the local LiveCanvas license check passed, AI Bridge falls back to the public GitHub latest release API.
 
 The GitHub fallback requires:
 
 - a public repository;
-- a valid stable or beta tag for the selected channel, such as `v0.2.0-beta.1`;
+- a valid stable or beta tag for the selected channel, such as `v0.2.0-beta.2`;
 - an uploaded asset named exactly `livecanvas-forge-ai.zip`;
 - a plugin version inside the zip that matches the release version.
 
@@ -216,12 +216,12 @@ The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenC
 
 ## Theme Library
 
-The `Theme Library` tab is a beta importer for validated Picowind one-page child themes. It does not clone arbitrary websites. Preview, installation, import, and rollback remain admin-only; MCP clients can only complete a build already created and authorized by an administrator. The full package contract is documented in [docs/theme-library-package-spec.md](https://github.com/livecanvas-team/livecanvas-forge-ai/blob/main/docs/theme-library-package-spec.md).
+The `Theme Library` tab labels every catalog item as Picowind (Tailwind CSS + DaisyUI) or Picostrap (Bootstrap 5) and provides separate framework and theme-type filters. Both frameworks use validated one-page child-theme packages; Picowind imports verify a WindPress/Tailwind cache, while Picostrap imports verify the packaged Sass sources and compiled Bootstrap bundle. It does not clone arbitrary websites. Preview, installation, import, and rollback remain admin-only; MCP clients can only complete a build already created and authorized by an administrator. The full package contract is documented in [docs/theme-library-package-spec.md](https://github.com/livecanvas-team/livecanvas-forge-ai/blob/main/docs/theme-library-package-spec.md).
 
 Default catalog:
 
 ```text
-https://raw.githubusercontent.com/livecanvas-team/livecanvas-picowind-onepage-themes/main/catalog.json
+https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/catalog.json
 ```
 
 Beta fallback catalog:
@@ -244,23 +244,19 @@ Theme Library flow:
 
 1. Open `WordPress Admin > AI Bridge > Theme Library`.
 2. Click `Preview` to download the ZIP, verify checksum, validate the manifest, and inspect the import plan. This does not write.
-3. Click `Install child theme` to install and activate the Picowind child theme through WordPress theme APIs.
+3. Click `Install child theme` to install and activate the selected Picowind or Picostrap child theme through WordPress theme APIs.
 4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, and homepage option. If a step fails, AI Bridge automatically attempts the stored transaction rollback and reports both outcomes.
-5. AI Bridge compiles Tailwind through the local WindPress runtime when available. If compilation must happen in the connected coding-agent runtime, the item remains `Build required` instead of being reported as ready.
-6. From the paired agent, call `build_theme_library_css` with the pending theme slug. The tool reads the server-owned audit ID and import checksum, compiles and stores CSS, then asks WordPress to verify the active theme and cache checksum.
-7. Tailwind 4 reaches `Ready` after verification. Tailwind 3 is retained as `Ready (degraded)` with guided limitations. Use `Rollback` to restore the previous site state.
+5. For Picowind, AI Bridge compiles Tailwind through the local WindPress runtime when available. If compilation must happen in the connected coding-agent runtime, the item remains `Build required` instead of being reported as ready.
+6. From the paired agent, call `build_theme_library_css` for a pending Picowind theme. The tool reads the server-owned audit ID and import checksum, compiles and stores CSS, then asks WordPress to verify the active theme and cache checksum.
+7. Picostrap packages reach `Ready` after the packaged Bootstrap bundle passes checksum and required-fragment verification. Use `Rollback` to restore the previous site state.
 
-Required ZIP structure:
+Required files shared by both frameworks:
 
 ```text
 style.css
 functions.php
 screenshot.jpg
-page-templates/empty.php
-views/page-templates/empty.twig
 livecanvas/configuration.php
-public/styles/presets/daisyui.css
-public/styles/tailwind.css
 starter-data/lcfa-theme.json
 starter-data/livecanvas-settings.json
 starter-data/design-system.json
@@ -269,6 +265,8 @@ starter-data/menus.json
 starter-data/qa-report.json
 starter-data/media/*
 ```
+
+Picowind packages additionally require `page-templates/empty.php`, `views/page-templates/empty.twig`, `public/styles/presets/daisyui.css`, and `public/styles/tailwind.css`. Picostrap packages require `page-templates/empty.php`, `css-output/bundle.css`, `sass/_theme_variables.scss`, `sass/_custom.scss`, `js/bootstrap.bundle.min.js`, and `js/custom.js`.
 
 The manifest schema is `lcfa-theme.v1`. All paths must be relative and path traversal is blocked. The default page template must include WordPress head/body/footer hooks, one main content shell, and the separate LiveCanvas header/footer calls. Header and footer starter files contain only inner partial markup; AI Bridge enables the required LiveCanvas partial settings during import and restores the previous settings during rollback. Re-importing the same theme/version/checksum is idempotent unless `force=true` is used.
 
@@ -291,11 +289,12 @@ node scripts/theme-library-cover.js \
 
 Theme Library beta acceptance:
 
-- catalog loads at least one valid Picowind child theme item;
+- catalog loads valid Picowind and Picostrap child theme items;
 - `Preview` passes checksum, manifest, child-theme header, content, and media validation;
 - `Install child theme` activates the child theme or reports it as already installed;
 - `Import starter data` creates or updates homepage, header partial, footer partial, media, menus, and homepage option;
 - a Picowind item reaches `Ready` only after its persistent WindPress CSS cache exists, is readable, and no longer contains Tailwind source directives;
+- a Picostrap item reaches `Ready` only after its packaged Bootstrap bundle contains the declared theme fragments and passes checksum verification;
 - remote build completion requires a paired session with `write` and `cache` scopes plus matching site fingerprint, import audit ID, import checksum, active stylesheet, and compiled CSS checksum;
 - Tailwind 4 is the fully supported beta path; a verified Tailwind 3 build is reported as usable but degraded;
 - unavailable compilers return `build_required`; compiler or cache-verification failures return `build_failed` with a retry action;

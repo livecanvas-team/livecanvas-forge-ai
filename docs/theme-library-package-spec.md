@@ -4,23 +4,24 @@ Status: beta
 
 This document defines the public package contract for Theme Library imports in LiveCanvas AI Bridge.
 
-The public plugin imports only validated Picowind child theme ZIPs and deterministic starter data. It does not clone arbitrary websites. Internal generators, Playwright analysis, source-site reconstruction, and visual matching pipelines should live in a separate private project and export ZIPs that match this contract.
+The public plugin imports validated Picowind or Picostrap child theme ZIPs and deterministic starter data. It does not clone arbitrary websites. Internal generators, Playwright analysis, source-site reconstruction, and visual matching pipelines should live in a separate private project and export ZIPs that match this contract.
 
 ## Goals
 
-- Install validated Picowind child themes from a catalog.
+- Install validated Picowind and Picostrap child themes from a catalog.
 - Import LiveCanvas starter data in a predictable order.
 - Keep header and footer as separate LiveCanvas partials.
 - Replace media placeholders with WordPress Media Library URLs.
 - Make re-imports idempotent for the same theme/version/checksum.
 - Store rollback metadata for every import.
+- Make the declared Picowind or Picostrap framework visible and filterable in the catalog.
 
 ## Catalog
 
 Default catalog URL:
 
 ```text
-https://raw.githubusercontent.com/livecanvas-team/livecanvas-picowind-onepage-themes/main/catalog.json
+https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/catalog.json
 ```
 
 Beta fallback catalog:
@@ -29,7 +30,7 @@ Beta fallback catalog:
 https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/catalog.json
 ```
 
-The dedicated catalog repository is the long-term location. The fallback catalog in the AI Bridge repository exists so the importer can be tested before the dedicated catalog is populated.
+The dedicated public catalog repository is the canonical distribution location. The fallback catalog in the AI Bridge repository remains available for recovery and development testing.
 
 Developers can override it with:
 
@@ -52,6 +53,10 @@ The catalog can be either:
       "version": "1.0.0",
       "description": "One-page starter theme for creative studios.",
       "category": "portfolio",
+      "framework": "picowind",
+      "css": "tailwind",
+      "ui": "daisyui",
+      "builder": "picowind",
       "screenshot": "https://example.com/themes/studio-one/screenshots/home.jpg",
       "package_url": "https://example.com/themes/studio-one/studio-one.zip",
       "checksum": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -73,6 +78,19 @@ Required per item:
 - `screenshot`, `screenshot_url`, or first entry of `screenshots`
 
 Invalid catalog items are skipped and reported in catalog errors.
+
+### Framework Metadata
+
+New catalog entries should declare one of these framework values:
+
+- `picowind` for Tailwind CSS and DaisyUI child themes.
+- `picostrap` for Bootstrap 5 child themes.
+
+The optional `css`, `ui`, and `builder` fields make the stack explicit on each card. Legacy catalog entries without `framework` continue to normalize to `picowind`. Common aliases such as `tailwind`, `daisyui`, `bootstrap-5`, and `picostrap5` normalize to the matching framework.
+
+The WordPress Theme Library provides independent **Framework** and **Theme type** filters. The framework badge remains visible on every theme card so users can distinguish the target stack before preview or installation.
+
+The `lcfa-theme.v1` contract supports both frameworks. The child theme `Template` header, catalog framework, and manifest framework must agree. Picowind uses WindPress/Tailwind build verification; Picostrap ships Sass source plus a precompiled Bootstrap bundle that is verified before the import can become ready.
 
 ## Repository Structure
 
@@ -150,17 +168,13 @@ Do not commit API keys, raw provider responses containing secrets, or temporary 
 
 ## ZIP Structure
 
-Every ZIP must contain a valid Picowind child theme. A root directory inside the ZIP is allowed. The following files are required:
+Every ZIP must contain a valid Picowind or Picostrap child theme. A root directory inside the ZIP is allowed. These files are required for both frameworks:
 
 ```text
 style.css
 functions.php
 screenshot.jpg
-page-templates/empty.php
-views/page-templates/empty.twig
 livecanvas/configuration.php
-public/styles/presets/daisyui.css
-public/styles/tailwind.css
 starter-data/lcfa-theme.json
 starter-data/livecanvas-settings.json
 starter-data/design-system.json
@@ -170,7 +184,27 @@ starter-data/qa-report.json
 starter-data/media/*
 ```
 
-If `starter-data/lcfa-theme.json` declares another `homepage.template`, that template file must exist in the ZIP. The default `page-templates/empty.php` must render a standalone `page-templates/empty.twig` with:
+Picowind additionally requires:
+
+```text
+page-templates/empty.php
+views/page-templates/empty.twig
+public/styles/presets/daisyui.css
+public/styles/tailwind.css
+```
+
+Picostrap additionally requires:
+
+```text
+page-templates/empty.php
+css-output/bundle.css
+sass/_theme_variables.scss
+sass/_custom.scss
+js/bootstrap.bundle.min.js
+js/custom.js
+```
+
+If `starter-data/lcfa-theme.json` declares another `homepage.template`, that template file must exist in the ZIP. For Picowind, the default `page-templates/empty.php` must render a standalone `page-templates/empty.twig` with:
 
 - `wp_head()` and `wp_footer()`;
 - `wp_body_open()`;
@@ -178,7 +212,11 @@ If `starter-data/lcfa-theme.json` declares another `homepage.template`, that tem
 - `lc_custom_header()` or `lc_get_header()` before the main content;
 - `lc_custom_footer()` or `lc_get_footer()` after the main content.
 
-Do not rely on a parent `base.twig` unless the ZIP also ships the full child-theme view scaffold. Header and footer content files must contain only the inner partial markup; do not add outer `<header>` or `<footer>` elements because LiveCanvas supplies those shells. The homepage must not contain inline header/footer markup. Put global CSS in `public/styles/tailwind.css` rather than a `<style>` block inside starter content.
+Do not rely on a parent `base.twig` unless the ZIP also ships the full child-theme view scaffold. Picowind header and footer content files contain only inner partial markup because its shell supplies the semantic elements.
+
+For Picostrap, `page-templates/empty.php` must call `get_header()`, `the_content()`, and `get_footer()`. Picostrap partial files may include their outer `<header>` and `<footer>` elements. The compiled `css-output/bundle.css` must contain the Bootstrap runtime and every fragment declared under `css_verification.required_fragments`.
+
+For both frameworks, homepage content must not contain inline header/footer markup. Put global CSS in framework-owned theme files rather than a `<style>` block inside starter content.
 
 The importer accepts a ZIP with either:
 
@@ -207,7 +245,9 @@ Minimal valid example:
     "slug": "studio-one",
     "name": "Studio One",
     "version": "1.0.0",
-    "stylesheet": "studio-one"
+    "stylesheet": "studio-one",
+    "framework": "picowind",
+    "parent": "picowind"
   },
   "compatibility": {
     "ai_bridge": ">=0.1.25",
@@ -339,7 +379,7 @@ Every listed option is backed up before update and restored on rollback.
 
 Path: `starter-data/design-system.json`.
 
-The importer stores the design system payload through the WindPress `theme.json` cache API when WindPress is active.
+For Picowind, the importer stores the design system payload through the WindPress `theme.json` cache API when WindPress is active.
 
 ```text
 starter-data/design-system.json -> WindPress theme.json cache
@@ -353,6 +393,8 @@ The required `public/styles/tailwind.css` file can contain either Tailwind sourc
 ```
 
 Tailwind source is compiled after the homepage and partials are written, so provider scans see the final imported content. Already compiled CSS is stored directly. In both cases AI Bridge verifies the persistent WindPress cache before declaring the import ready.
+
+For Picostrap, `design-system.json` documents the source tokens while `sass/_theme_variables.scss` and `sass/_custom.scss` remain authoritative. The distributed `css-output/bundle.css` must already be compiled. AI Bridge verifies that bundle and does not invoke WindPress.
 
 ## Menus
 
@@ -390,15 +432,15 @@ The importer creates missing menus, adds menu items, and assigns `nav_menu_locat
 `import` runs in this order:
 
 1. LiveCanvas settings.
-2. Design system and WindPress CSS data.
+2. Framework design system and compiled CSS data.
 3. Media into Media Library.
 4. Header `lc_partial`.
 5. Footer `lc_partial`.
 6. Homepage page with `_lc_livecanvas_enabled=1`.
 7. Menus.
 8. `show_on_front=page` and `page_on_front={homepage_id}`.
-9. WindPress compile and persistent cache verification.
-10. WindPress and AI Bridge cache flush.
+9. WindPress cache verification for Picowind, or packaged bundle verification for Picostrap.
+10. Framework-specific and AI Bridge cache flush.
 11. Rollback metadata storage.
 
 ## Import Completion States
@@ -484,7 +526,7 @@ The private `LiveCanvas Theme Forge Internal` project should treat this document
 
 It may use Playwright, agent orchestration, visual QA, screenshot-to-section analysis, asset generation, and staging WordPress sites internally, but the public output should always be:
 
-- one Picowind child theme ZIP;
+- one Picowind or Picostrap child theme ZIP;
 - one catalog item;
 - one `lcfa-theme.v1` manifest;
 - deterministic starter-data files;

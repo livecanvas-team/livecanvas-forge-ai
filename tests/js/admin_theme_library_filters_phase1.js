@@ -7,12 +7,19 @@ const script = fs.readFileSync(
 )
 
 const requiredTokens = [
-  'applyThemeLibraryFilter',
+  'getActiveThemeLibraryFilter',
+  'setActiveThemeLibraryFilter',
+  'applyThemeLibraryFilters',
   'bootstrapThemeLibraryFilters',
-  '[data-lcfa-theme-filter]',
+  '[data-lcfa-theme-framework-filter]',
+  '[data-lcfa-theme-category-filter]',
   '[data-lcfa-theme-card]',
-  "button.setAttribute('aria-pressed', active ? 'true' : 'false')",
-  "card.hidden = filter !== 'all' && category !== filter"
+  '[data-lcfa-theme-results]',
+  '[data-lcfa-theme-empty]',
+  "candidate.setAttribute('aria-pressed', active ? 'true' : 'false')",
+  "var frameworkMatches = framework === 'all' || cardFramework === framework",
+  "var categoryMatches = category === 'all' || cardCategory === category",
+  'card.hidden = !matches'
 ]
 
 for (const token of requiredTokens) {

@@ -1,10 +1,10 @@
 # LiveCanvas AI Bridge Development Status
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-03
 
 ## Product Status
 
-LiveCanvas AI Bridge `0.2.0-beta.1` is a **staging beta, not production guaranteed**. It is useful for connecting coding agents to WordPress and LiveCanvas, but complex write workflows still need broader real-site verification before production guarantees are appropriate.
+LiveCanvas AI Bridge `0.2.0-beta.2` is a **staging beta, not production guaranteed**. It is useful for connecting coding agents to WordPress and LiveCanvas, but complex write workflows still need broader real-site verification before production guarantees are appropriate.
 
 The plugin has three responsibilities:
 
@@ -98,7 +98,7 @@ Before calling a release production-ready, complete all of the following:
 4. Verify Full Access tools on at least two hosting environments with different filesystem policies.
 5. Publish a compatibility matrix and document known host/plugin conflicts.
 
-For `0.2.0-beta.1`, the automated matrix and local Picostrap/Tailwind 4 gates now pass. The remaining prerelease gates are a guided Tailwind 3 degraded run, one remote staging pairing/build run, and the five-client handoff matrix. Publishing the npm beta package is allowed earlier because clients need it to perform that qualification.
+For `0.2.0-beta.2`, the automated matrix, local Picostrap/Tailwind 4 gates, and the Hearthline Picostrap catalog import pass. The remaining production-qualification gates are broader hosting and client coverage. The MCP runtime remains pinned to `0.2.0-beta.1` because this release changes the WordPress importer and Theme Library UI only.
 
 The detailed stack-by-stack matrix and remaining production gates are maintained in [Integration Completeness Audit](integration-completeness-audit.md).
 

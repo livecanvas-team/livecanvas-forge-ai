@@ -3,21 +3,33 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Validator {
-    private const REQUIRED_FILES = [
+    private const COMMON_REQUIRED_FILES = [
         'style.css',
         'functions.php',
         'screenshot.jpg',
-        'page-templates/empty.php',
-        'views/page-templates/empty.twig',
         'livecanvas/configuration.php',
-        'public/styles/presets/daisyui.css',
-        'public/styles/tailwind.css',
         'starter-data/lcfa-theme.json',
         'starter-data/livecanvas-settings.json',
         'starter-data/design-system.json',
         'starter-data/media-manifest.json',
         'starter-data/menus.json',
         'starter-data/qa-report.json',
+    ];
+
+    private const PICOWIND_REQUIRED_FILES = [
+        'page-templates/empty.php',
+        'views/page-templates/empty.twig',
+        'public/styles/presets/daisyui.css',
+        'public/styles/tailwind.css',
+    ];
+
+    private const PICOSTRAP_REQUIRED_FILES = [
+        'page-templates/empty.php',
+        'css-output/bundle.css',
+        'sass/_theme_variables.scss',
+        'sass/_custom.scss',
+        'js/bootstrap.bundle.min.js',
+        'js/custom.js',
     ];
 
     public function validate_zip(string $zip_path, array $theme = []): array {
@@ -45,8 +57,17 @@ final class LCFA_Theme_Library_Validator {
 
         $entries = $this->get_entries($zip);
         $root = $this->detect_root($entries);
+
+        $style_result = $this->validate_style_css($zip, $root, $theme);
+        if (empty($style_result['ok'])) {
+            $zip->close();
+            return $style_result;
+        }
+
+        $framework = (string) ($style_result['framework'] ?? '');
+        $required_files = $this->get_required_files($framework);
         $missing = [];
-        foreach (self::REQUIRED_FILES as $relative_path) {
+        foreach ($required_files as $relative_path) {
             if (!$this->entry_exists($entries, $root . $relative_path)) {
                 $missing[] = $relative_path;
             }
@@ -59,13 +80,7 @@ final class LCFA_Theme_Library_Validator {
             ]);
         }
 
-        $style_result = $this->validate_style_css($zip, $root);
-        if (empty($style_result['ok'])) {
-            $zip->close();
-            return $style_result;
-        }
-
-        $template_result = $this->validate_page_template_shell($zip, $root);
+        $template_result = $this->validate_page_template_shell($zip, $root, $framework);
         if (empty($template_result['ok'])) {
             $zip->close();
             return $template_result;
@@ -84,13 +99,19 @@ final class LCFA_Theme_Library_Validator {
             return $this->error(__('Theme manifest JSON is invalid.', 'livecanvas-forge-ai'));
         }
 
-        $manifest_result = $this->validate_manifest($manifest, $entries, $root);
+        $manifest_result = $this->validate_manifest($manifest, $entries, $root, $framework);
         if (empty($manifest_result['ok'])) {
             $zip->close();
             return $manifest_result;
         }
 
-        $content_result = $this->validate_content_files($zip, $root, $manifest_result['manifest']);
+        $framework_assets = $this->validate_framework_assets($zip, $root, $manifest_result['manifest'], $framework);
+        if (empty($framework_assets['ok'])) {
+            $zip->close();
+            return $framework_assets;
+        }
+
+        $content_result = $this->validate_content_files($zip, $root, $manifest_result['manifest'], $framework);
         if (empty($content_result['ok'])) {
             $zip->close();
             return $content_result;
@@ -109,8 +130,10 @@ final class LCFA_Theme_Library_Validator {
             'root'            => $root,
             'checksum'        => $actual_checksum,
             'manifest'        => $manifest_result['manifest'],
+            'framework'       => $framework,
+            'framework_assets'=> $framework_assets,
             'requires_php'    => (string) ($style_result['requires_php'] ?? ''),
-            'required_files'  => self::REQUIRED_FILES,
+            'required_files'  => $required_files,
             'preview_plan'    => $this->build_preview_plan($manifest_result['manifest']),
         ];
     }
@@ -196,7 +219,7 @@ final class LCFA_Theme_Library_Validator {
         return $parts ? implode('/', $parts) : '';
     }
 
-    private function validate_manifest(array $manifest, array $entries, string $root): array {
+    private function validate_manifest(array $manifest, array $entries, string $root, string $framework): array {
         if ((string) ($manifest['schema'] ?? '') !== 'lcfa-theme.v1') {
             return $this->error(__('Theme manifest schema must be lcfa-theme.v1.', 'livecanvas-forge-ai'));
         }
@@ -212,6 +235,20 @@ final class LCFA_Theme_Library_Validator {
         $manifest['theme']['slug'] = $slug;
         $manifest['theme']['version'] = $version;
         $manifest['theme']['name'] = sanitize_text_field((string) ($theme['name'] ?? $slug));
+        $declared_framework_value = (string) ($theme['framework'] ?? $manifest['framework'] ?? $manifest['compatibility']['framework'] ?? '');
+        if ($declared_framework_value === '' && isset($manifest['compatibility']['picostrap'])) {
+            $declared_framework_value = 'picostrap';
+        } elseif ($declared_framework_value === '' && isset($manifest['compatibility']['picowind'])) {
+            $declared_framework_value = 'picowind';
+        }
+        $declared_framework = $this->normalize_framework($declared_framework_value);
+        if ($declared_framework !== '' && $declared_framework !== $framework) {
+            return $this->error(__('Theme manifest framework does not match the child theme Template header.', 'livecanvas-forge-ai'), [
+                'manifest_framework' => $declared_framework,
+                'style_framework'    => $framework,
+            ]);
+        }
+        $manifest['theme']['framework'] = $framework;
 
         foreach (['homepage', 'header', 'footer'] as $section) {
             if (!is_array($manifest[$section] ?? null)) {
@@ -290,27 +327,65 @@ final class LCFA_Theme_Library_Validator {
         ];
     }
 
-    private function validate_style_css(ZipArchive $zip, string $root): array {
+    private function validate_style_css(ZipArchive $zip, string $root, array $theme = []): array {
         $style = $zip->getFromName($root . 'style.css');
         if (!is_string($style) || trim($style) === '') {
             return $this->error(__('Theme style.css is empty.', 'livecanvas-forge-ai'));
         }
 
         $template = $this->read_theme_header($style, 'Template');
-        if ($template === '' || stripos($template, 'picowind') === false) {
-            return $this->error(__('Theme Library packages must be Picowind child themes with a Template header that references Picowind.', 'livecanvas-forge-ai'), [
+        $framework = $this->framework_from_template($template);
+        if ($framework === '') {
+            return $this->error(__('Theme Library packages must be Picowind or Picostrap child themes.', 'livecanvas-forge-ai'), [
                 'template' => $template,
+            ]);
+        }
+
+        $declared_framework = $this->normalize_framework((string) ($theme['framework'] ?? $theme['stack']['framework'] ?? ''));
+        if ($declared_framework !== '' && $declared_framework !== $framework) {
+            return $this->error(__('Catalog framework does not match the child theme Template header.', 'livecanvas-forge-ai'), [
+                'catalog_framework' => $declared_framework,
+                'style_framework'   => $framework,
+                'template'          => $template,
             ]);
         }
 
         return [
             'ok'           => true,
             'template'     => $template,
+            'framework'    => $framework,
             'requires_php' => $this->read_theme_header($style, 'Requires PHP'),
         ];
     }
 
-    private function validate_page_template_shell(ZipArchive $zip, string $root): array {
+    private function validate_page_template_shell(ZipArchive $zip, string $root, string $framework): array {
+        if ($framework === 'picostrap') {
+            $template = $zip->getFromName($root . 'page-templates/empty.php');
+            if (!is_string($template) || trim($template) === '') {
+                return $this->error(__('Picostrap page template is empty.', 'livecanvas-forge-ai'));
+            }
+
+            $required = [
+                'get_header'  => 'get_header',
+                'the_content' => 'the_content',
+                'get_footer'  => 'get_footer',
+            ];
+            $missing = [];
+            foreach ($required as $label => $needle) {
+                if (strpos($template, $needle) === false) {
+                    $missing[] = $label;
+                }
+            }
+
+            if ($missing) {
+                return $this->error(__('Picostrap page template must render the theme header, page content, and footer.', 'livecanvas-forge-ai'), [
+                    'missing_template_calls' => $missing,
+                ]);
+            }
+
+            return ['ok' => true];
+        }
+
         $twig = $zip->getFromName($root . 'views/page-templates/empty.twig');
         if (!is_string($twig) || trim($twig) === '') {
             return $this->error(__('Theme page template view is empty.', 'livecanvas-forge-ai'));
@@ -386,7 +461,52 @@ final class LCFA_Theme_Library_Validator {
         return ['ok' => true];
     }
 
-    private function validate_content_files(ZipArchive $zip, string $root, array $manifest): array {
+    private function validate_framework_assets(ZipArchive $zip, string $root, array $manifest, string $framework): array {
+        if ($framework !== 'picostrap') {
+            return [
+                'ok'        => true,
+                'framework' => $framework,
+            ];
+        }
+
+        $bundle = $zip->getFromName($root . 'css-output/bundle.css');
+        if (!is_string($bundle) || strlen(trim($bundle)) < 100) {
+            return $this->error(__('Picostrap compiled CSS bundle is missing or too small.', 'livecanvas-forge-ai'));
+        }
+
+        foreach (['--bs-', '.container'] as $required_fragment) {
+            if (strpos($bundle, $required_fragment) === false) {
+                return $this->error(__('Picostrap compiled CSS bundle does not contain the expected Bootstrap runtime.', 'livecanvas-forge-ai'), [
+                    'missing_fragment' => $required_fragment,
+                ]);
+            }
+        }
+
+        $verification = is_array($manifest['css_verification'] ?? null) ? $manifest['css_verification'] : [];
+        foreach ((array) ($verification['required_fragments'] ?? []) as $required_fragment) {
+            if (strpos($bundle, (string) $required_fragment) === false) {
+                return $this->error(__('Picostrap compiled CSS bundle is missing a required theme fragment.', 'livecanvas-forge-ai'), [
+                    'missing_fragment' => (string) $required_fragment,
+                ]);
+            }
+        }
+        foreach ((array) ($verification['forbidden_fragments'] ?? []) as $forbidden_fragment) {
+            if (strpos($bundle, (string) $forbidden_fragment) !== false) {
+                return $this->error(__('Picostrap compiled CSS bundle contains a forbidden fragment.', 'livecanvas-forge-ai'), [
+                    'forbidden_fragment' => (string) $forbidden_fragment,
+                ]);
+            }
+        }
+
+        return [
+            'ok'            => true,
+            'framework'     => $framework,
+            'bundle_sha256' => hash('sha256', $bundle),
+            'bundle_bytes'  => strlen($bundle),
+        ];
+    }
+
+    private function validate_content_files(ZipArchive $zip, string $root, array $manifest, string $framework): array {
         $homepage_path = (string) ($manifest['homepage']['content_file'] ?? '');
         $homepage = $zip->getFromName($root . $homepage_path);
         if (!is_string($homepage)) {
@@ -403,7 +523,7 @@ final class LCFA_Theme_Library_Validator {
             return $this->error(__('Header partial content file could not be read or is empty.', 'livecanvas-forge-ai'));
         }
 
-        if (preg_match('/<\\/?header\\b/i', $header)) {
+        if ($framework === 'picowind' && preg_match('/<\\/?header\\b/i', $header)) {
             return $this->error(__('Header partial content must not include an outer header element because LiveCanvas supplies that shell.', 'livecanvas-forge-ai'));
         }
 
@@ -413,7 +533,7 @@ final class LCFA_Theme_Library_Validator {
             return $this->error(__('Footer partial content file could not be read or is empty.', 'livecanvas-forge-ai'));
         }
 
-        if (preg_match('/<\\/?footer\\b/i', $footer)) {
+        if ($framework === 'picowind' && preg_match('/<\\/?footer\\b/i', $footer)) {
             return $this->error(__('Footer partial content must not include an outer footer element because LiveCanvas supplies that shell.', 'livecanvas-forge-ai'));
         }
 
@@ -490,21 +610,63 @@ final class LCFA_Theme_Library_Validator {
         return preg_match('/^[a-f0-9]{64}$/', $checksum) ? $checksum : '';
     }
 
+    private function get_required_files(string $framework): array {
+        $framework_files = $framework === 'picostrap'
+            ? self::PICOSTRAP_REQUIRED_FILES
+            : self::PICOWIND_REQUIRED_FILES;
+
+        return array_values(array_unique(array_merge(self::COMMON_REQUIRED_FILES, $framework_files)));
+    }
+
+    private function framework_from_template(string $template): string {
+        $template = sanitize_key($template);
+        if ($template === 'picowind' || strpos($template, 'picowind') === 0) {
+            return 'picowind';
+        }
+        if ($template === 'picostrap' || $template === 'picostrap5' || strpos($template, 'picostrap') === 0) {
+            return 'picostrap';
+        }
+
+        return '';
+    }
+
+    private function normalize_framework(string $framework): string {
+        $framework = sanitize_key($framework);
+        if (in_array($framework, ['picowind', 'tailwind', 'tailwindcss', 'daisyui'], true)) {
+            return 'picowind';
+        }
+        if (in_array($framework, ['picostrap', 'picostrap5', 'bootstrap', 'bootstrap5', 'bootstrap-5'], true)) {
+            return 'picostrap';
+        }
+
+        return '';
+    }
+
     private function build_preview_plan(array $manifest): array {
+        $framework = (string) ($manifest['theme']['framework'] ?? 'picowind');
+        $framework_label = $framework === 'picostrap' ? 'Picostrap' : 'Picowind';
+        $design_step = $framework === 'picostrap'
+            ? 'Use the packaged Picostrap SCSS sources and compiled Bootstrap bundle.'
+            : 'Import LiveCanvas settings and WindPress design data.';
+        $cache_step = $framework === 'picostrap'
+            ? 'Create menus and flush AI Bridge caches.'
+            : 'Create menus, flush WindPress and AI Bridge caches.';
+
         return [
             'theme' => [
                 'slug'    => (string) ($manifest['theme']['slug'] ?? ''),
                 'name'    => (string) ($manifest['theme']['name'] ?? ''),
                 'version' => (string) ($manifest['theme']['version'] ?? ''),
+                'framework' => $framework,
             ],
             'steps' => [
                 'Validate child theme ZIP and manifest.',
-                'Install and activate the Picowind child theme.',
-                'Import LiveCanvas settings and WindPress design data.',
+                sprintf('Install and activate the %s child theme.', $framework_label),
+                $design_step,
                 'Import media and replace placeholders.',
                 'Create or update header and footer partials.',
                 'Create or update the LiveCanvas homepage and assign it as front page.',
-                'Create menus, flush WindPress and AI Bridge caches.',
+                $cache_step,
                 'Store rollback metadata.',
             ],
         ];

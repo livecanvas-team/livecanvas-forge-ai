@@ -1,7 +1,7 @@
 # LiveCanvas Stack Integration Completeness Audit
 
-Last reviewed: 2026-08-02
-Plugin baseline: LiveCanvas AI Bridge 0.2.0-beta.1 staging beta
+Last reviewed: 2026-08-03
+Plugin baseline: LiveCanvas AI Bridge 0.2.0-beta.2 staging beta
 
 ## Purpose
 

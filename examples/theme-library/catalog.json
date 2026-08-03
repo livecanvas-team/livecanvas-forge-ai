@@ -11,12 +11,12 @@
       "css": "tailwind",
       "ui": "daisyui",
       "builder": "picowind",
-      "screenshot_path": "examples/theme-library/themes/bridge-starter/screenshots/home.svg",
-      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/screenshots/home.svg",
-      "package_path": "examples/theme-library/themes/bridge-starter/bridge-starter.zip",
-      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/bridge-starter.zip",
+      "screenshot_path": "themes/bridge-starter/screenshots/home.svg",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/bridge-starter/screenshots/home.svg",
+      "package_path": "themes/bridge-starter/bridge-starter.zip",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/bridge-starter/bridge-starter.zip",
       "checksum": "sha256:f99da5730d96bea4f04f3b13f5df83ad85956a87f346af74b8db9b22636d2fa6",
-      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/bridge-starter/metadata.json"
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/bridge-starter/metadata.json"
     },
     {
       "slug": "asteria-search",
@@ -28,12 +28,12 @@
       "css": "tailwind",
       "ui": "daisyui",
       "builder": "picowind",
-      "screenshot_path": "examples/theme-library/themes/asteria-search/screenshots/cover.jpg",
-      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/screenshots/cover.jpg",
-      "package_path": "examples/theme-library/themes/asteria-search/asteria-search.zip",
-      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/asteria-search.zip",
+      "screenshot_path": "themes/asteria-search/screenshots/cover.jpg",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/screenshots/cover.jpg",
+      "package_path": "themes/asteria-search/asteria-search.zip",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/asteria-search.zip",
       "checksum": "sha256:3dae15dec5b143837d35caf94999f50f53338def26c0327f2506cea6047e841e",
-      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/asteria-search/metadata.json"
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/metadata.json"
     },
     {
       "slug": "wordpress-theme-test-onepage",
@@ -45,12 +45,29 @@
       "css": "tailwind",
       "ui": "daisyui",
       "builder": "picowind",
-      "screenshot_path": "examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png",
-      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png",
-      "package_path": "examples/theme-library/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
-      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
+      "screenshot_path": "themes/wordpress-theme-test-onepage/screenshots/cover.png",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/wordpress-theme-test-onepage/screenshots/cover.png",
+      "package_path": "themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/wordpress-theme-test-onepage/wordpress-theme-test-onepage.zip",
       "checksum": "sha256:beda9cd4dad5443e5462a430230b9bc55ffb780c2385f49b04f118d0ef457757",
-      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/themes/wordpress-theme-test-onepage/metadata.json"
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/wordpress-theme-test-onepage/metadata.json"
+    },
+    {
+      "slug": "hearthline",
+      "name": "Hearthline",
+      "version": "1.0.0",
+      "description": "Calm family-planning one-page starter with separate LiveCanvas header and footer partials.",
+      "category": "onepage",
+      "framework": "picostrap",
+      "css": "bootstrap",
+      "ui": "bootstrap",
+      "builder": "picostrap",
+      "screenshot_path": "themes/hearthline/screenshots/cover.jpg",
+      "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/hearthline/screenshots/cover.jpg",
+      "package_path": "themes/hearthline/hearthline.zip",
+      "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/hearthline/hearthline.zip",
+      "checksum": "sha256:9bfa8c0707dd5976abfb9d5c758f2b7c324c6a3fa7c52e6766393d8b3269da85",
+      "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/hearthline/metadata.json"
     }
   ]
 }

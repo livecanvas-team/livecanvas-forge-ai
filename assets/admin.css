@@ -402,16 +402,15 @@
 .lcfa-admin .lcfa-theme-library-toolbar {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: 14px;
+    gap: 16px;
     margin: 22px 0;
 }
 
 .lcfa-admin .lcfa-theme-library-toolbar__title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    display: grid;
+    gap: 4px;
     color: var(--lcfa-text-muted);
     font-size: 13px;
     font-weight: 800;
@@ -423,10 +422,34 @@
     line-height: 1.2;
 }
 
-.lcfa-admin .lcfa-theme-library-filterbar {
+.lcfa-admin .lcfa-theme-library-filter-groups {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.lcfa-admin .lcfa-theme-library-filter-group {
+    display: grid;
+    gap: 6px;
+}
+
+.lcfa-admin .lcfa-theme-library-filter-label {
+    color: var(--lcfa-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.lcfa-admin .lcfa-theme-library-filterbar {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    box-sizing: border-box;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(8, 10, 19, 0.46);
 }
 
 .lcfa-admin .lcfa-theme-library-guide {
@@ -454,11 +477,12 @@
 .lcfa-admin .lcfa-theme-filter {
     display: inline-flex;
     align-items: center;
-    min-height: 34px;
-    padding: 0 13px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.045);
+    gap: 7px;
+    min-height: 38px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
     color: var(--lcfa-text-soft);
     font-size: 12px;
     font-weight: 800;
@@ -466,15 +490,56 @@
     cursor: pointer;
 }
 
+.lcfa-admin .lcfa-theme-filter small {
+    display: inline-grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font-size: 10px;
+    line-height: 1;
+}
+
 .lcfa-admin .lcfa-theme-filter:hover {
-    border-color: rgba(52, 213, 240, 0.34);
+    background: rgba(255, 255, 255, 0.08);
     color: #fff;
 }
 
 .lcfa-admin .lcfa-theme-filter.is-active {
-    border-color: rgba(52, 213, 240, 0.48);
     background: rgba(52, 213, 240, 0.14);
     color: #35d0f2;
+}
+
+.lcfa-admin .lcfa-theme-filter:focus-visible {
+    outline: 2px solid #35d0f2;
+    outline-offset: 2px;
+}
+
+.lcfa-admin .lcfa-theme-library-empty {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 18px;
+    padding: 16px;
+    border: 1px solid rgba(245, 158, 11, 0.34);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.lcfa-admin .lcfa-theme-library-empty[hidden] {
+    display: none;
+}
+
+.lcfa-admin .lcfa-theme-library-empty strong {
+    color: #fff;
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-theme-library-empty span {
+    color: var(--lcfa-text-soft);
+    font-size: 12px;
 }
 
 .lcfa-admin .lcfa-theme-card[hidden] {
@@ -520,6 +585,76 @@
     object-fit: cover;
     object-position: center;
     transform: scale(1.001);
+}
+
+.lcfa-admin .lcfa-theme-framework-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    width: max-content;
+    max-width: 100%;
+    min-height: 40px;
+    padding: 6px 10px 6px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background: #171a27;
+    color: #fff;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity.is-overlay {
+    position: absolute;
+    z-index: 2;
+    top: 12px;
+    left: 12px;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity__mark {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity__copy {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity__copy strong {
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity__copy small {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity--picowind {
+    border-color: rgba(52, 213, 240, 0.44);
+}
+
+.lcfa-admin .lcfa-theme-framework-identity--picowind .lcfa-theme-framework-identity__mark {
+    background: #35d0f2;
+    color: #08111f;
+}
+
+.lcfa-admin .lcfa-theme-framework-identity--picostrap {
+    border-color: rgba(124, 58, 237, 0.48);
+}
+
+.lcfa-admin .lcfa-theme-framework-identity--picostrap .lcfa-theme-framework-identity__mark {
+    background: #7c3aed;
+    color: #fff;
 }
 
 .lcfa-admin .lcfa-theme-card__overlay {
@@ -1528,6 +1663,37 @@
 
     .lcfa-admin .lcfa-theme-library-toolbar {
         align-items: flex-start;
+    }
+
+    .lcfa-admin .lcfa-theme-library-toolbar__title,
+    .lcfa-admin .lcfa-theme-library-filter-groups,
+    .lcfa-admin .lcfa-theme-library-filter-group,
+    .lcfa-admin .lcfa-theme-library-filterbar {
+        width: 100%;
+    }
+
+    .lcfa-admin .lcfa-theme-library-filter-groups {
+        justify-content: flex-start;
+    }
+
+    .lcfa-admin .lcfa-theme-filter {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 42px;
+    }
+
+    .lcfa-admin .lcfa-theme-library-filterbar--framework {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .lcfa-admin .lcfa-theme-library-filterbar--category {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .lcfa-admin .lcfa-theme-framework-identity__copy small {
+        white-space: normal;
     }
 
     .lcfa-admin .lcfa-theme-card__overlay {

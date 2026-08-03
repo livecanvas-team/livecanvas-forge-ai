@@ -1,0 +1,54 @@
+{
+  "schema": "lcfa-theme.v1",
+  "theme": {
+    "slug": "hearthline",
+    "name": "Hearthline",
+    "version": "1.0.0",
+    "stylesheet": "hearthline",
+    "framework": "picostrap",
+    "parent": "picostrap5"
+  },
+  "compatibility": {
+    "ai_bridge": ">=0.2.0-beta.2",
+    "livecanvas": ">=4.0.0",
+    "framework": "picostrap",
+    "picostrap": ">=5.3",
+    "parent_theme": "picostrap5",
+    "php": ">=8.0"
+  },
+  "homepage": {
+    "title": "Hearthline",
+    "slug": "hearthline",
+    "template": "page-templates/empty.php",
+    "content_file": "starter-data/home.html"
+  },
+  "header": {
+    "title": "Hearthline Header",
+    "variant": "1",
+    "content_file": "starter-data/header.html"
+  },
+  "footer": {
+    "title": "Hearthline Footer",
+    "variant": "1",
+    "content_file": "starter-data/footer.html"
+  },
+  "media_manifest": "starter-data/media-manifest.json",
+  "menus_file": "starter-data/menus.json",
+  "design_system_file": "starter-data/design-system.json",
+  "livecanvas_settings": "starter-data/livecanvas-settings.json",
+  "qa_report": "starter-data/qa-report.json",
+  "css_verification": {
+    "required_fragments": [
+      "--hf-purple",
+      ".houseflow-header",
+      ".houseflow-hero",
+      ".houseflow-reveal"
+    ],
+    "forbidden_fragments": [
+      "@tailwind"
+    ]
+  },
+  "rollback": {
+    "strategy": "lcfa-import-audit"
+  }
+}

@@ -3,14 +3,20 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Theme_Library_Catalog {
-    private const DEFAULT_CATALOG_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-picowind-onepage-themes/main/catalog.json';
+    private const DEFAULT_CATALOG_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/catalog.json';
     private const FALLBACK_CATALOG_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/catalog.json';
     private const CACHE_KEY = 'lcfa_theme_library_catalog';
     private const CACHE_TTL = 900;
+    private const NORMALIZATION_VERSION = 2;
 
     public function get_catalog(bool $force = false): array {
         $cached = get_transient(self::CACHE_KEY);
-        if (!$force && is_array($cached) && (int) ($cached['schema'] ?? 0) === 1) {
+        if (
+            !$force
+            && is_array($cached)
+            && (int) ($cached['schema'] ?? 0) === 1
+            && (int) ($cached['normalization_version'] ?? 0) === self::NORMALIZATION_VERSION
+        ) {
             return $cached;
         }
 
@@ -163,12 +169,14 @@ final class LCFA_Theme_Library_Catalog {
         }
 
         return [
-            'ok'         => true,
-            'schema'     => 1,
-            'source_url' => $source_url,
-            'checked_at' => current_time('mysql', true),
-            'themes'     => $themes,
-            'errors'     => $errors,
+            'ok'                    => true,
+            'schema'                => 1,
+            'normalization_version' => self::NORMALIZATION_VERSION,
+            'source_url'            => $source_url,
+            'checked_at'            => current_time('mysql', true),
+            'themes'                => $themes,
+            'frameworks'            => $this->count_frameworks($themes),
+            'errors'                => $errors,
         ];
     }
 
@@ -182,10 +190,18 @@ final class LCFA_Theme_Library_Catalog {
         $screenshot = esc_url_raw((string) ($raw['screenshot'] ?? $raw['screenshot_url'] ?? ''));
         $screenshot_path = $this->normalize_local_path((string) ($raw['screenshot_path'] ?? ''));
         $raw_stack = is_array($raw['stack'] ?? null) ? $raw['stack'] : [];
-        $framework = sanitize_key((string) ($raw['framework'] ?? $raw_stack['framework'] ?? 'picowind'));
+        $framework = $this->normalize_framework((string) ($raw['framework'] ?? $raw_stack['framework'] ?? 'picowind'));
+        if ($framework === '') {
+            return $this->error(sprintf(
+                'Theme "%s" declares an unsupported framework. Use "picowind" or "picostrap".',
+                $slug !== '' ? $slug : 'unknown'
+            ));
+        }
         $css = sanitize_key((string) ($raw['css'] ?? $raw_stack['css'] ?? ($framework === 'picostrap' ? 'bootstrap' : 'tailwind')));
         $ui = sanitize_key((string) ($raw['ui'] ?? $raw_stack['ui'] ?? ($framework === 'picostrap' ? 'bootstrap' : 'daisyui')));
         $builder = sanitize_key((string) ($raw['builder'] ?? $raw_stack['builder'] ?? ($framework === 'picostrap' ? 'picostrap' : 'picowind')));
+        $framework_label = $framework === 'picostrap' ? 'Picostrap' : 'Picowind';
+        $technology_label = $framework === 'picostrap' ? 'Bootstrap 5' : 'Tailwind CSS + DaisyUI';
 
         if ($screenshot_path !== '' && defined('LCFA_DIR') && defined('LCFA_URL') && is_readable(trailingslashit(LCFA_DIR) . $screenshot_path)) {
             $screenshot = esc_url_raw(trailingslashit(LCFA_URL) . $screenshot_path);
@@ -212,11 +228,15 @@ final class LCFA_Theme_Library_Catalog {
                 'description' => sanitize_text_field((string) ($raw['description'] ?? '')),
                 'category'    => sanitize_text_field((string) ($raw['category'] ?? '')),
                 'framework'   => $framework,
+                'framework_label' => $framework_label,
+                'technology_label'=> $technology_label,
                 'css'         => $css,
                 'ui'          => $ui,
                 'builder'     => $builder,
                 'stack'       => [
                     'framework' => $framework,
+                    'framework_label' => $framework_label,
+                    'technology_label'=> $technology_label,
                     'css'       => $css,
                     'ui'        => $ui,
                     'builder'   => $builder,
@@ -253,6 +273,8 @@ final class LCFA_Theme_Library_Catalog {
         }
 
         $remote['themes'] = array_values($themes);
+        $remote['normalization_version'] = self::NORMALIZATION_VERSION;
+        $remote['frameworks'] = $this->count_frameworks($remote['themes']);
         $errors = array_values(array_unique(array_filter(array_merge(
             (array) ($remote['errors'] ?? []),
             (array) ($local['errors'] ?? [])
@@ -271,6 +293,43 @@ final class LCFA_Theme_Library_Catalog {
         $remote['bundled_catalog_loaded'] = true;
 
         return $remote;
+    }
+
+    private function normalize_framework(string $framework): string {
+        if (trim($framework) === '') {
+            return 'picowind';
+        }
+
+        $framework = sanitize_key($framework);
+        if (in_array($framework, ['picowind', 'tailwind', 'tailwindcss', 'daisyui'], true)) {
+            return 'picowind';
+        }
+
+        if (in_array($framework, ['picostrap', 'picostrap5', 'bootstrap', 'bootstrap5', 'bootstrap-5'], true)) {
+            return 'picostrap';
+        }
+
+        return '';
+    }
+
+    private function count_frameworks(array $themes): array {
+        $counts = [
+            'picowind'  => 0,
+            'picostrap' => 0,
+        ];
+
+        foreach ($themes as $theme) {
+            if (!is_array($theme)) {
+                continue;
+            }
+
+            $framework = $this->normalize_framework((string) ($theme['framework'] ?? ''));
+            if ($framework !== '') {
+                $counts[$framework]++;
+            }
+        }
+
+        return $counts;
     }
 
     private function normalize_checksum(string $checksum): string {

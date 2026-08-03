@@ -289,26 +289,71 @@
         });
     }
 
-    function applyThemeLibraryFilter(root, filter) {
-        root.querySelectorAll('[data-lcfa-theme-filter]').forEach(function (button) {
-            var active = (button.getAttribute('data-lcfa-theme-filter') || 'all') === filter;
-            button.classList.toggle('is-active', active);
-            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    function getActiveThemeLibraryFilter(root, selector) {
+        var active = root.querySelector(selector + '.is-active');
+
+        return active ? active.getAttribute(selector.slice(1, -1)) || 'all' : 'all';
+    }
+
+    function setActiveThemeLibraryFilter(root, button, selector) {
+        root.querySelectorAll(selector).forEach(function (candidate) {
+            var active = candidate === button;
+            candidate.classList.toggle('is-active', active);
+            candidate.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+    }
+
+    function formatThemeLibraryResult(template, count) {
+        return String(template || '').replace(/%(?:\d+\$)?d/, String(count));
+    }
+
+    function applyThemeLibraryFilters(root) {
+        var framework = getActiveThemeLibraryFilter(root, '[data-lcfa-theme-framework-filter]');
+        var category = getActiveThemeLibraryFilter(root, '[data-lcfa-theme-category-filter]');
+        var visible = 0;
 
         root.querySelectorAll('[data-lcfa-theme-card]').forEach(function (card) {
-            var category = card.getAttribute('data-lcfa-theme-category') || '';
-            card.hidden = filter !== 'all' && category !== filter;
+            var cardFramework = card.getAttribute('data-lcfa-theme-framework') || '';
+            var cardCategory = card.getAttribute('data-lcfa-theme-category') || '';
+            var frameworkMatches = framework === 'all' || cardFramework === framework;
+            var categoryMatches = category === 'all' || cardCategory === category;
+            var matches = frameworkMatches && categoryMatches;
+
+            card.hidden = !matches;
+            if (matches) {
+                visible += 1;
+            }
         });
+
+        var result = root.querySelector('[data-lcfa-theme-results]');
+        if (result) {
+            var template = result.getAttribute(visible === 1 ? 'data-singular' : 'data-plural') || '%d';
+            result.textContent = formatThemeLibraryResult(template, visible);
+        }
+
+        var empty = root.querySelector('[data-lcfa-theme-empty]');
+        if (empty) {
+            empty.hidden = visible > 0;
+        }
     }
 
     function bootstrapThemeLibraryFilters() {
         document.querySelectorAll('[data-lcfa-theme-library]').forEach(function (root) {
-            root.querySelectorAll('[data-lcfa-theme-filter]').forEach(function (button) {
+            root.querySelectorAll('[data-lcfa-theme-framework-filter]').forEach(function (button) {
                 button.addEventListener('click', function () {
-                    applyThemeLibraryFilter(root, button.getAttribute('data-lcfa-theme-filter') || 'all');
+                    setActiveThemeLibraryFilter(root, button, '[data-lcfa-theme-framework-filter]');
+                    applyThemeLibraryFilters(root);
                 });
             });
+
+            root.querySelectorAll('[data-lcfa-theme-category-filter]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setActiveThemeLibraryFilter(root, button, '[data-lcfa-theme-category-filter]');
+                    applyThemeLibraryFilters(root);
+                });
+            });
+
+            applyThemeLibraryFilters(root);
         });
     }
 

@@ -191,7 +191,7 @@ final class LCFA_Theme_Library_Importer {
             $this->import_options($base_dir, (string) ($manifest['livecanvas_settings'] ?? ''), $rollback, $result);
             $this->ensure_livecanvas_partial_settings($rollback, $result);
             $css_verification = $this->normalize_css_verification($manifest['css_verification'] ?? []);
-            $design_system_state = $this->import_design_system($base_dir, $manifest, $rollback, $result);
+            $design_system_state = $this->import_design_system($base_dir, $manifest, $rollback, $result, $is_picowind);
             $media_map = $this->import_media($base_dir, (string) ($manifest['media_manifest'] ?? ''), $slug, $checksum, $rollback, $result);
             $this->maybe_inject_e2e_failure('after_media', $audit_id, $slug);
 
@@ -224,8 +224,13 @@ final class LCFA_Theme_Library_Importer {
             $result['status'] = (string) ($build['status'] ?? 'ready');
 
             if ($result['status'] === 'ready') {
-                $result['message'] = __('Theme Library starter data imported and its compiled CSS cache was verified.', 'livecanvas-forge-ai');
-                $result['steps'][] = 'windpress_compiled_cache_verified';
+                if ($is_picowind) {
+                    $result['message'] = __('Theme Library starter data imported and its compiled CSS cache was verified.', 'livecanvas-forge-ai');
+                    $result['steps'][] = 'windpress_compiled_cache_verified';
+                } else {
+                    $result['message'] = __('Theme Library starter data imported and the packaged Picostrap CSS bundle is ready.', 'livecanvas-forge-ai');
+                    $result['steps'][] = 'picostrap_compiled_bundle_verified';
+                }
             } elseif ($result['status'] === 'build_failed') {
                 $result['message'] = __('Starter data was imported, but the Tailwind CSS build failed. Retry the build or roll back the import.', 'livecanvas-forge-ai');
                 $result['warnings'][] = (string) ($build['message'] ?? '');
@@ -234,11 +239,13 @@ final class LCFA_Theme_Library_Importer {
                 $result['warnings'][] = (string) ($build['message'] ?? '');
             }
 
-            $flush = $this->windpress_bridge->flush_runtime_cache();
-            if (empty($flush['ok'])) {
-                $result['warnings'][] = (string) ($flush['message'] ?? __('WindPress cache flush was not available.', 'livecanvas-forge-ai'));
-            } else {
-                $result['steps'][] = 'windpress_cache_flushed';
+            if ($is_picowind) {
+                $flush = $this->windpress_bridge->flush_runtime_cache();
+                if (empty($flush['ok'])) {
+                    $result['warnings'][] = (string) ($flush['message'] ?? __('WindPress cache flush was not available.', 'livecanvas-forge-ai'));
+                } else {
+                    $result['steps'][] = 'windpress_cache_flushed';
+                }
             }
 
             if (function_exists('wp_cache_flush')) {
@@ -257,6 +264,7 @@ final class LCFA_Theme_Library_Importer {
                 'header_id'  => $header_id,
                 'footer_id'  => $footer_id,
                 'stylesheet' => $stylesheet,
+                'framework'  => $is_picowind ? 'picowind' : 'picostrap',
                 'css_verification' => $css_verification,
                 'build'      => $build,
             ];
@@ -728,12 +736,29 @@ final class LCFA_Theme_Library_Importer {
         ];
     }
 
-    private function import_design_system(string $base_dir, array $manifest, array &$rollback, array &$result): array {
+    private function import_design_system(string $base_dir, array $manifest, array &$rollback, array &$result, bool $is_picowind): array {
         $state = [
             'source'      => 'none',
             'cache_ready' => false,
             'error'       => '',
         ];
+
+        if (!$is_picowind) {
+            $bundle_path = $this->safe_join($base_dir, 'css-output/bundle.css');
+            if ($bundle_path === '' || !is_readable($bundle_path) || filesize($bundle_path) < 1) {
+                $state['error'] = __('The packaged Picostrap CSS bundle is missing or empty.', 'livecanvas-forge-ai');
+                $result['warnings'][] = $state['error'];
+                return $state;
+            }
+
+            $state['source'] = 'picostrap_bundle';
+            $state['cache_ready'] = true;
+            $state['bundle_sha256'] = hash_file('sha256', $bundle_path);
+            $result['steps'][] = 'picostrap_bundle_ready';
+
+            return $state;
+        }
+
         $design_path = (string) ($manifest['design_system_file'] ?? '');
         $design = $this->read_json_file($base_dir, $design_path);
         if ($design) {
@@ -774,11 +799,21 @@ final class LCFA_Theme_Library_Importer {
 
     private function finalize_build(bool $is_picowind, array $design_system_state, array $css_verification = []): array {
         if (!$is_picowind) {
+            if (empty($design_system_state['cache_ready'])) {
+                return [
+                    'ready'    => false,
+                    'status'   => 'build_failed',
+                    'strategy' => 'packaged_picostrap_bundle',
+                    'message'  => (string) ($design_system_state['error'] ?? __('The packaged Picostrap CSS bundle could not be verified.', 'livecanvas-forge-ai')),
+                ];
+            }
+
             return [
                 'ready'    => true,
                 'status'   => 'ready',
-                'strategy' => 'not_required',
-                'message'  => __('No WindPress build is required for this theme.', 'livecanvas-forge-ai'),
+                'strategy' => 'packaged_picostrap_bundle',
+                'message'  => __('The packaged Picostrap CSS bundle was verified.', 'livecanvas-forge-ai'),
+                'sha256'   => (string) ($design_system_state['bundle_sha256'] ?? ''),
             ];
         }
 
@@ -1361,6 +1396,7 @@ final class LCFA_Theme_Library_Importer {
         $expected_name = sanitize_text_field((string) ($manifest['theme']['name'] ?? $theme['name'] ?? ''));
         $expected_slug = sanitize_key((string) ($manifest['theme']['slug'] ?? $theme['slug'] ?? $stylesheet));
         $expected_text_domain = sanitize_key((string) ($manifest['theme']['text_domain'] ?? $expected_slug));
+        $expected_parent = $this->get_expected_parent($manifest, $theme);
 
         foreach (wp_get_themes() as $candidate_stylesheet => $candidate) {
             if (!$candidate->exists()) {
@@ -1372,7 +1408,7 @@ final class LCFA_Theme_Library_Importer {
             $candidate_template = sanitize_key((string) $candidate->get_template());
             $candidate_key = sanitize_key((string) $candidate_stylesheet);
 
-            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0 && $candidate_template === 'picowind') {
+            if ($expected_name !== '' && strcasecmp($candidate_name, $expected_name) === 0 && $candidate_template === $expected_parent) {
                 return (string) $candidate_stylesheet;
             }
 
@@ -1386,6 +1422,17 @@ final class LCFA_Theme_Library_Importer {
         }
 
         return $stylesheet;
+    }
+
+    private function get_expected_parent(array $manifest, array $theme): string {
+        $parent = sanitize_key((string) ($manifest['theme']['parent'] ?? $manifest['compatibility']['parent_theme'] ?? ''));
+        if ($parent !== '') {
+            return $parent;
+        }
+
+        $framework = sanitize_key((string) ($manifest['theme']['framework'] ?? $theme['framework'] ?? $theme['stack']['framework'] ?? 'picowind'));
+
+        return $framework === 'picostrap' ? 'picostrap5' : 'picowind';
     }
 
     private function record_post_rollback(int $post_id, array &$rollback): void {
