@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.2` staging beta
+Status: `0.2.0-beta.3` staging beta
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -173,14 +173,14 @@ Updates are shown only when:
 The update channel is available under `AI Bridge > Connections > Advanced/manual fallback`:
 
 - `Stable` ignores GitHub prereleases. Existing stable installations, including `0.1.31`, do not receive `0.2.0-beta.*` unless an administrator opts in.
-- `Beta` accepts stable and beta releases. A beta installation follows this channel by default, so `0.2.0-beta.2` can receive later beta releases.
+- `Beta` accepts stable and beta releases. A beta installation follows this channel by default, so `0.2.0-beta.3` can receive later beta releases.
 
 The updater tries the LiveCanvas licensed update endpoint first. If that endpoint is unavailable and the local LiveCanvas license check passed, AI Bridge falls back to the public GitHub latest release API.
 
 The GitHub fallback requires:
 
 - a public repository;
-- a valid stable or beta tag for the selected channel, such as `v0.2.0-beta.2`;
+- a valid stable or beta tag for the selected channel, such as `v0.2.0-beta.3`;
 - an uploaded asset named exactly `livecanvas-forge-ai.zip`;
 - a plugin version inside the zip that matches the release version.
 
@@ -215,7 +215,7 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
 
-The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.2`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
+The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.3`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
 
 The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
 

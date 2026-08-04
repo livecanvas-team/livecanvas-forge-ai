@@ -164,7 +164,7 @@ final class LCFA_Connection_Tester {
 
             if ($active !== []) {
                 $session = $active[0];
-                $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.2';
+                $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.3';
                 $package_detected = sanitize_text_field((string) ($session['mcp_package_version'] ?? ''));
                 $package_matches = $package_detected !== '' && hash_equals($package_expected, $package_detected);
                 return [

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 define('ABSPATH', '/tmp/lcfa-remote-package-test/');
-define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.2');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.3');
 
 function __(string $text, string $domain = ''): string { return $text; }
 function sanitize_key(string $value): string { return strtolower((string) preg_replace('/[^a-z0-9_-]/i', '', $value)); }
@@ -51,7 +51,7 @@ if (!empty($stale['ok']) || ($stale['checks']['remote_rest']['details']['package
     exit(1);
 }
 
-LCFA_MCP_Session_Manager::$version = '0.2.0-beta.2';
+LCFA_MCP_Session_Manager::$version = '0.2.0-beta.3';
 $ready = $tester->run_checks(['mode' => 'remote']);
 if (empty($ready['ok']) || ($ready['checks']['remote_rest']['details']['package_version_matches'] ?? false) !== true) {
     fwrite(STDERR, "Remote smoke should accept the exact beta MCP package version.\n");
