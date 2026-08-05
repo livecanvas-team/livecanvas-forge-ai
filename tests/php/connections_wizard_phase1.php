@@ -1234,10 +1234,10 @@ ob_start();
 $active_step_panel_method->invoke(
     $admin_instance,
     [
-        'title'       => 'Are these connection details correct?',
-        'description' => 'Review the generated connection details before you create the client bundle.',
+        'title'       => 'Confirm the detected connection',
+        'description' => 'AI Bridge has already chosen the connection for this site. Check the summary, then confirm to create the client setup.',
         'primary_cta' => [
-            'label' => 'Confirm details',
+            'label' => 'Confirm connection',
         ],
     ],
     'confirm_details',
@@ -1270,7 +1270,8 @@ $active_step_panel_method->invoke(
 );
 $confirm_details_markup = (string) ob_get_clean();
 
-lcfa_assert_true(strpos($confirm_details_markup, 'Confirm details') !== false, 'confirm details step should expose the primary CTA directly in the panel');
+lcfa_assert_true(strpos($confirm_details_markup, 'Confirm connection') !== false, 'confirm details step should expose the primary CTA directly in the panel');
+lcfa_assert_true(strpos($confirm_details_markup, 'There is nothing to choose in this step') !== false, 'confirm details step should explain that local target is already selected');
 lcfa_assert_false(strpos($confirm_details_markup, 'Thread tools') !== false, 'confirm details step should not hide the primary CTA inside a thread tools disclosure');
 
 ob_start();

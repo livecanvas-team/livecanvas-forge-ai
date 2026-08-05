@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.2.0-beta.3.2
+ * Version: 0.2.0-beta.3.3
  * Requires at least: 6.8
  * Tested up to: 7.0
  * Requires PHP: 8.0
@@ -15,7 +15,7 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.2.0-beta.3.2');
+define('LCFA_VERSION', '0.2.0-beta.3.3');
 define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.3');
 define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@' . LCFA_MCP_PACKAGE_VERSION);
 define('LCFA_FILE', __FILE__);

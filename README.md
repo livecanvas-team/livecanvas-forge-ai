@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.3.2` staging beta hotfix
+Status: `0.2.0-beta.3.3` staging beta hotfix
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 

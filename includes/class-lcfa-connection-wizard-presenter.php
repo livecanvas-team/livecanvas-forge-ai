@@ -142,8 +142,8 @@ final class LCFA_Connection_Wizard_Presenter {
 
             case 'choose_mode':
                 return [
-                    'title'       => __('Is this local or remote?', 'livecanvas-forge-ai'),
-                    'description' => __('Choose where the coding agent should connect before generating any bundle.', 'livecanvas-forge-ai'),
+                    'title'       => __('Where does this WordPress site run?', 'livecanvas-forge-ai'),
+                    'description' => __('Choose Local only for a WordPress site on this computer. Choose Remote for an online HTTPS site such as your staging or production website.', 'livecanvas-forge-ai'),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
                         'label'  => __('Continue', 'livecanvas-forge-ai'),
@@ -153,11 +153,11 @@ final class LCFA_Connection_Wizard_Presenter {
 
             case 'confirm_details':
                 return [
-                    'title'       => __('Are these connection details correct?', 'livecanvas-forge-ai'),
-                    'description' => __('Review the generated connection details before you create the client bundle.', 'livecanvas-forge-ai'),
+                    'title'       => __('Confirm the detected connection', 'livecanvas-forge-ai'),
+                    'description' => __('AI Bridge has already chosen the connection for this site. Check the summary, then confirm to create the client setup.', 'livecanvas-forge-ai'),
                     'alert'       => $this->build_confirm_details_alert($bundle),
                     'primary_cta' => [
-                        'label'  => __('Confirm details', 'livecanvas-forge-ai'),
+                        'label'  => __('Confirm connection', 'livecanvas-forge-ai'),
                         'action' => 'save_selection',
                     ],
                 ];
@@ -230,11 +230,11 @@ final class LCFA_Connection_Wizard_Presenter {
 
         return [
             'eyebrow' => __('What to do now', 'livecanvas-forge-ai'),
-            'title'   => __('Review the connection details', 'livecanvas-forge-ai'),
+            'title'   => __('No connection choice is needed here', 'livecanvas-forge-ai'),
             'body'    => $mode === 'remote'
-                ? __('This bundle will be downloaded and used on your machine. The remote WordPress server cannot write the client configuration directly.', 'livecanvas-forge-ai')
-                : __('Make sure the local workspace root matches the real project path on your machine before you generate the bundle.', 'livecanvas-forge-ai'),
-            'next'    => __('Once confirmed, AI Bridge will generate the correct client bundle for the selected agent.', 'livecanvas-forge-ai'),
+                ? __('The bundle will connect your coding agent to the remote WordPress site. Confirm only after checking the site address.', 'livecanvas-forge-ai')
+                : __('This WordPress site is already detected as local. Confirm the details, then check that the project folder is the real folder on your computer.', 'livecanvas-forge-ai'),
+            'next'    => __('Click Confirm connection to generate the setup for the selected coding agent.', 'livecanvas-forge-ai'),
         ];
     }
 

@@ -1122,6 +1122,7 @@ final class LCFA_Admin {
 
                 $connections = array_merge($connections, [
                     'preferred_client' => $ai_tool === 'other' ? 'generic' : $ai_tool,
+                    'connection_mode'  => $site_mode === 'remote' || $site_mode === 'hybrid' ? 'remote' : 'local',
                 ]);
 
                 if ($previous_framework !== '' && $previous_framework !== $framework && $this->has_verified_connection($connections)) {
@@ -3792,8 +3793,18 @@ final class LCFA_Admin {
         $connections      = LCFA_Settings::get_connections();
         $stored_preferred_client = trim((string) ($connections['preferred_client'] ?? ''));
         $preferred_client = $this->normalize_connection_client($stored_preferred_client !== '' ? $stored_preferred_client : 'codex');
-        $default_mode     = $preferred_client === 'codex' ? 'remote' : 'local';
-        $selected_mode    = $this->normalize_connection_mode((string) ($connections['connection_mode'] ?: $default_mode));
+        $site_profile     = sanitize_key((string) (($settings['site_mode'] ?? '') ?: ($snapshot['site_mode'] ?? '')));
+        $default_mode     = in_array($site_profile, ['remote', 'hybrid'], true)
+            ? 'remote'
+            : ($site_profile === 'local' ? 'local' : ($preferred_client === 'codex' ? 'remote' : 'local'));
+        $stored_mode      = $this->normalize_connection_mode((string) ($connections['connection_mode'] ?? ''));
+        $selected_mode    = $stored_mode !== '' ? $stored_mode : $default_mode;
+        if ($stored_mode === 'local' && in_array($site_profile, ['remote', 'hybrid'], true)) {
+            // The setup profile is the source of truth for the default target.
+            $selected_mode = 'remote';
+            $connections['connection_mode'] = 'remote';
+            LCFA_Settings::update_connections($connections);
+        }
         if ($selected_mode === 'local' && method_exists('LCFA_Settings', 'sync_local_workspace_root')) {
             $connections = LCFA_Settings::sync_local_workspace_root(true);
         }
@@ -5286,7 +5297,7 @@ final class LCFA_Admin {
                 break;
 
             case 'confirm_details':
-                $this->render_connection_confirm_details_form($bundle, $preferred_client, $claude_connection_target, $selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Confirm details', 'livecanvas-forge-ai')));
+                $this->render_connection_confirm_details_form($bundle, $preferred_client, $claude_connection_target, $selected_mode, (string) ($panel['primary_cta']['label'] ?? __('Confirm connection', 'livecanvas-forge-ai')));
                 break;
 
             case 'generate_bundle':
@@ -5365,8 +5376,8 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="workspace_root" value="' . esc_attr($workspace_root) . '">';
         echo '<label><span>' . esc_html__('Connection mode', 'livecanvas-forge-ai') . '</span>';
         echo '<select name="connection_mode">';
-        echo '<option value="local"' . selected($selected_mode, 'local', false) . '>' . esc_html__('This local site', 'livecanvas-forge-ai') . '</option>';
-        echo '<option value="remote"' . selected($selected_mode, 'remote', false) . '>' . esc_html__('Remote site', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="local"' . selected($selected_mode, 'local', false) . '>' . esc_html__('Local WordPress site (this computer)', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="remote"' . selected($selected_mode, 'remote', false) . '>' . esc_html__('Remote WordPress site (online)', 'livecanvas-forge-ai') . '</option>';
         echo '</select></label>';
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('rocket') . '<span>' . esc_html($button_label) . '</span></button>';
@@ -5384,6 +5395,7 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="connection_mode" value="' . esc_attr($selected_mode) . '">';
 
         echo '<div class="lcfa-wizard__details">';
+        echo '<div class="lcfa-wizard__connection-target"><span>' . esc_html__('Connection target', 'livecanvas-forge-ai') . '</span><strong>' . esc_html($selected_mode === 'remote' ? __('Remote WordPress site', 'livecanvas-forge-ai') : __('This local WordPress site', 'livecanvas-forge-ai')) . '</strong><small>' . esc_html($selected_mode === 'remote' ? __('The client will connect to the online site shown below.', 'livecanvas-forge-ai') : __('The site is already detected as local. There is nothing to choose in this step.', 'livecanvas-forge-ai')) . '</small></div>';
         if ((string) ($bundle['connection_strategy'] ?? '') === 'ai-bridge-session') {
             echo '<div><span>' . esc_html__('Target site', 'livecanvas-forge-ai') . '</span><code>' . esc_html((string) ($bundle['environment']['LCFA_SITE_URL'] ?? '')) . '</code></div>';
             echo '<div><span>' . esc_html__('Site fingerprint', 'livecanvas-forge-ai') . '</span><code>' . esc_html((string) ($bundle['environment']['LCFA_SITE_FINGERPRINT'] ?? '')) . '</code></div>';
