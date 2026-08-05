@@ -289,6 +289,86 @@
         });
     }
 
+    function updateFrameworkSubmit(form) {
+        var selected = form.querySelector('input[name="framework"]:checked');
+        var submit = form.querySelector('[data-lcfa-framework-submit]');
+        var label = form.querySelector('[data-lcfa-framework-submit-label]');
+        var note = form.querySelector('[data-lcfa-framework-submit-note]');
+
+        if (!submit) {
+            return;
+        }
+
+        submit.disabled = !selected;
+
+        if (!selected) {
+            return;
+        }
+
+        if (label) {
+            label.textContent = selected.getAttribute('data-lcfa-framework-label') || 'Confirm framework';
+        }
+
+        if (note) {
+            note.textContent = selected.getAttribute('data-lcfa-framework-note') || '';
+        }
+    }
+
+    function bootstrapFrameworkForms() {
+        document.querySelectorAll('[data-lcfa-framework-form]').forEach(function (form) {
+            var submit = form.querySelector('[data-lcfa-framework-submit]');
+            var label = form.querySelector('[data-lcfa-framework-submit-label]');
+
+            updateFrameworkSubmit(form);
+            form.addEventListener('change', function (event) {
+                var target = event.target;
+
+                if (target && target.matches && target.matches('input[name="framework"]')) {
+                    updateFrameworkSubmit(form);
+                }
+            });
+            form.addEventListener('submit', function () {
+                var selected = form.querySelector('input[name="framework"]:checked');
+
+                if (!selected || !submit) {
+                    return;
+                }
+
+                form.classList.add('is-submitting');
+                submit.disabled = true;
+                submit.setAttribute('aria-busy', 'true');
+                if (label) {
+                    label.textContent = selected.getAttribute('data-lcfa-framework-progress') || 'Preparing framework...';
+                }
+            });
+        });
+    }
+
+    function updateSetupProfileFramework(form) {
+        var select = form.querySelector('[data-lcfa-profile-framework]');
+        var help = form.querySelector('[data-lcfa-profile-framework-help]');
+
+        if (!select || !help || select.selectedIndex < 0) {
+            return;
+        }
+
+        var option = select.options[select.selectedIndex];
+        help.textContent = option.getAttribute('data-lcfa-framework-help') || '';
+    }
+
+    function bootstrapSetupProfileForms() {
+        document.querySelectorAll('[data-lcfa-setup-profile-form]').forEach(function (form) {
+            var select = form.querySelector('[data-lcfa-profile-framework]');
+
+            updateSetupProfileFramework(form);
+            if (select) {
+                select.addEventListener('change', function () {
+                    updateSetupProfileFramework(form);
+                });
+            }
+        });
+    }
+
     function getActiveThemeLibraryFilter(root, selector) {
         var active = root.querySelector(selector + '.is-active');
 
@@ -511,6 +591,8 @@
             bootstrapConnectionsSecondaryPanels();
             bootstrapStudioRoots();
             bootstrapModeSwitches();
+            bootstrapFrameworkForms();
+            bootstrapSetupProfileForms();
             bootstrapThemeLibraryFilters();
         });
     } else {
@@ -519,6 +601,8 @@
         bootstrapConnectionsSecondaryPanels();
         bootstrapStudioRoots();
         bootstrapModeSwitches();
+        bootstrapFrameworkForms();
+        bootstrapSetupProfileForms();
         bootstrapThemeLibraryFilters();
     }
 })();

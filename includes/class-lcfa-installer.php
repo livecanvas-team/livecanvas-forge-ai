@@ -28,7 +28,23 @@ final class LCFA_Installer {
             return new WP_Error('lcfa_framework_php_upgrade_required', (string) $prerequisites['message']);
         }
 
+        $windpress_status = 'not-required';
+
+        // Picowind depends on the WindPress runtime. Prepare it before the
+        // theme is downloaded or activated so the site never enters a
+        // Picowind-without-Tailwind intermediate state.
+        if ($framework === 'picowind') {
+            $windpress_result = $this->ensure_windpress_active();
+
+            if (is_wp_error($windpress_result)) {
+                return $windpress_result;
+            }
+
+            $windpress_status = $windpress_result;
+        }
+
         $stylesheet = $this->environment->get_preferred_theme_stylesheet($framework);
+        $theme_status = 'already-installed';
 
         if (!$stylesheet) {
             $install_result = $this->install_framework_package($framework);
@@ -42,6 +58,7 @@ final class LCFA_Installer {
             }
 
             $stylesheet = $this->environment->get_preferred_theme_stylesheet($framework);
+            $theme_status = 'installed';
         }
 
         if (!$stylesheet) {
@@ -56,21 +73,10 @@ final class LCFA_Installer {
             $switched = true;
         }
 
-        $windpress_status = 'not-required';
-
-        if ($framework === 'picowind') {
-            $windpress_result = $this->ensure_windpress_active();
-
-            if (is_wp_error($windpress_result)) {
-                return $windpress_result;
-            }
-
-            $windpress_status = $windpress_result;
-        }
-
         return [
             'framework'        => $framework,
             'theme_stylesheet' => $stylesheet,
+            'theme_status'     => $theme_status,
             'theme_switched'   => $switched,
             'windpress_status' => $windpress_status,
         ];

@@ -115,7 +115,7 @@ $picowind_output = (string) ob_get_clean();
 lcfa_assert_contains('picowind-child', $picowind_output, 'preflight should list the detected Picowind theme');
 lcfa_assert_contains('WindPress active for Picowind', $picowind_output, 'preflight should make WindPress explicit when Picowind is detected');
 lcfa_assert_contains('AI Bridge will install or activate WindPress when Picowind is confirmed.', $picowind_output, 'preflight should explain automatic WindPress remediation');
-lcfa_assert_contains('Continue to project settings', $picowind_output, 'inactive WindPress should be repaired in the project step instead of blocking onboarding');
+lcfa_assert_contains('Review project settings', $picowind_output, 'inactive WindPress should be repaired in the project step instead of blocking onboarding');
 
 $clean_snapshot = $picostrap_snapshot;
 $clean_snapshot['detected_framework'] = 'unknown';
@@ -125,8 +125,9 @@ ob_start();
 $render_method->invoke($admin, $clean_snapshot);
 $clean_output = (string) ob_get_clean();
 
-lcfa_assert_contains('Not installed yet. Choose Picostrap or Picowind in the next step and AI Bridge will install it.', $clean_output, 'clean sites should get an explicit automatic-install next step');
-lcfa_assert_contains('Next', $clean_output, 'missing theme stack should be presented as the next task, not a false OK');
-lcfa_assert_contains('Core requirements passed. Choose the theme stack to install next.', $clean_output, 'clean sites should be allowed to continue to automatic stack installation');
+lcfa_assert_contains('No compatible theme is installed. Continue below, then choose Picostrap or Picowind.', $clean_output, 'clean sites should get an explicit framework choice next step');
+lcfa_assert_contains('Choose theme', $clean_output, 'missing theme stack should use a meaningful action label instead of an ambiguous status');
+lcfa_assert_contains('Choose frontend framework', $clean_output, 'clean sites should get a direct framework-selection action');
+lcfa_assert_not_contains('>Next<', $clean_output, 'the preflight should not show the ambiguous Next status');
 
 echo "PASS\n";

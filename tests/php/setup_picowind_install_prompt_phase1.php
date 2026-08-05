@@ -102,14 +102,29 @@ $render_method->invoke($admin, ['framework' => ''], $snapshot);
 $markup = (string) ob_get_clean();
 
 lcfa_assert_contains(
-    'Selecting Picowind installs the latest Picowind release from GitHub before the wizard switches the stack.',
+    'Automatic setup order',
     $markup,
-    'framework step should explain that missing Picowind can be installed from the latest GitHub release'
+    'framework step should show the automatic Picowind dependency order'
 );
 lcfa_assert_contains(
-    'https://github.com/livecanvas-team/picowind/releases/latest',
+    'Install first from WordPress.org',
     $markup,
-    'framework step should expose the latest Picowind release source'
+    'framework step should explain that WindPress is installed first from WordPress.org'
+);
+lcfa_assert_contains(
+    'Download second from GitHub',
+    $markup,
+    'framework step should explain that Picowind is downloaded after WindPress'
+);
+lcfa_assert_contains(
+    'Install WindPress + Picowind',
+    $markup,
+    'framework step should expose a concrete automatic installation action'
+);
+lcfa_assert_contains(
+    'data-lcfa-framework-submit',
+    $markup,
+    'framework step should expose a stateful primary action'
 );
 
 echo "PASS\n";

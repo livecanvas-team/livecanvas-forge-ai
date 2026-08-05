@@ -7226,7 +7226,7 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card lcfa-setup-panel">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('sliders');
-        echo '<div><h2>' . esc_html__('Confirm this project', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('AI Bridge detected the site automatically. Confirm these four choices, then continue to the coding-agent connection.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Check your project settings', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('AI Bridge filled these in from your site. Review each choice, then save and continue.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
         echo '<div class="lcfa-setup-detected">';
@@ -7235,38 +7235,42 @@ final class LCFA_Admin {
         echo '<span>' . esc_html(sprintf(__('WordPress: %s', 'livecanvas-forge-ai'), (string) ($snapshot['wordpress_version'] ?? get_bloginfo('version')))) . '</span>';
         echo '</div>';
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-setup-profile-form">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form lcfa-setup-profile-form" data-lcfa-setup-profile-form>';
         wp_nonce_field('lcfa_setup');
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="20">';
 
-        echo '<div class="lcfa-setup-field-grid">';
-        echo '<label><span>' . esc_html__('Frontend framework', 'livecanvas-forge-ai') . '</span>';
-        echo '<select name="framework">';
-        echo '<option value="picostrap"' . selected($framework, 'picostrap', false) . '>' . esc_html__('Picostrap / Bootstrap', 'livecanvas-forge-ai') . '</option>';
-        echo '<option value="picowind"' . selected($framework, 'picowind', false) . '>' . esc_html__('Picowind / Tailwind + WindPress', 'livecanvas-forge-ai') . '</option>';
-        echo '</select><small>' . esc_html__('Changing this can install or activate the matching theme stack.', 'livecanvas-forge-ai') . '</small></label>';
+        $picostrap_help = __('Choose Bootstrap when your pages and theme use Picostrap. WindPress is not needed.', 'livecanvas-forge-ai');
+        $picowind_help = $this->get_framework_submit_note('picowind', $snapshot);
+        $framework_help = $framework === 'picowind' ? $picowind_help : $picostrap_help;
 
-        echo '<label><span>' . esc_html__('Where WordPress runs', 'livecanvas-forge-ai') . '</span>';
-        echo '<select name="site_mode">';
+        echo '<div class="lcfa-setup-field-grid">';
+        echo '<label class="lcfa-setup-field"><span class="lcfa-setup-field__label">' . esc_html__('Frontend framework', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-select-control"><select name="framework" data-lcfa-profile-framework>';
+        echo '<option value="picostrap" data-lcfa-framework-help="' . esc_attr($picostrap_help) . '"' . selected($framework, 'picostrap', false) . '>' . esc_html__('Picostrap / Bootstrap', 'livecanvas-forge-ai') . '</option>';
+        echo '<option value="picowind" data-lcfa-framework-help="' . esc_attr($picowind_help) . '"' . selected($framework, 'picowind', false) . '>' . esc_html__('Picowind / Tailwind + WindPress', 'livecanvas-forge-ai') . '</option>';
+        echo '</select></span><small data-lcfa-profile-framework-help>' . esc_html($framework_help) . '</small></label>';
+
+        echo '<label class="lcfa-setup-field"><span class="lcfa-setup-field__label">' . esc_html__('Where WordPress runs', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-select-control"><select name="site_mode">';
         echo '<option value="local"' . selected($site_mode, 'local', false) . '>' . esc_html__('Local or private site', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="remote"' . selected($site_mode, 'remote', false) . '>' . esc_html__('Online HTTPS site', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="hybrid"' . selected($site_mode, 'hybrid', false) . '>' . esc_html__('Both local and online targets', 'livecanvas-forge-ai') . '</option>';
-        echo '</select><small>' . esc_html__('This chooses the recommended connection method. It does not change the WordPress URL.', 'livecanvas-forge-ai') . '</small></label>';
+        echo '</select></span><small>' . esc_html__('This only changes how the coding agent connects. Your WordPress address stays the same.', 'livecanvas-forge-ai') . '</small></label>';
 
-        echo '<label><span>' . esc_html__('Coding agent', 'livecanvas-forge-ai') . '</span>';
-        echo '<select name="ai_tool">';
+        echo '<label class="lcfa-setup-field"><span class="lcfa-setup-field__label">' . esc_html__('Coding agent', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-select-control"><select name="ai_tool">';
         echo '<option value="codex"' . selected($ai_tool, 'codex', false) . '>' . esc_html__('Codex (recommended)', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="opencode"' . selected($ai_tool, 'opencode', false) . '>' . esc_html__('OpenCode', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="claude"' . selected($ai_tool, 'claude', false) . '>' . esc_html__('Claude', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="cursor"' . selected($ai_tool, 'cursor', false) . '>' . esc_html__('Cursor', 'livecanvas-forge-ai') . '</option>';
         echo '<option value="other"' . selected($ai_tool, 'other', false) . '>' . esc_html__('Other MCP client', 'livecanvas-forge-ai') . '</option>';
-        echo '</select><small>' . esc_html__('You can add another client later without resetting the site.', 'livecanvas-forge-ai') . '</small></label>';
+        echo '</select></span><small>' . esc_html__('Choose the app you want to connect first. You can add another one later.', 'livecanvas-forge-ai') . '</small></label>';
         echo '</div>';
 
         echo '<label class="lcfa-checkbox lcfa-setup-access">';
         echo '<input type="checkbox" name="enable_full_access" value="1"' . checked($full_access, true, false) . '>';
-        echo '<span><strong>' . esc_html__('Allow guarded write tools', 'livecanvas-forge-ai') . '</strong><br>' . esc_html__('Recommended for building. AI Bridge still requires the correct site identity, preview-first tools, audit records, and rollback.', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-setup-access__copy"><strong>' . esc_html__('Let the coding agent make changes', 'livecanvas-forge-ai') . '</strong><small>' . esc_html__('Turn this on when you want the agent to build or edit the site. AI Bridge verifies the site, previews supported changes, and keeps a backup so you can undo them.', 'livecanvas-forge-ai') . '</small></span>';
         echo '</label>';
 
         echo '<div class="lcfa-setup-submit">';
@@ -7331,7 +7335,9 @@ final class LCFA_Admin {
             $theme_stack_ready ? true : null,
             $theme_stack_ready
                 ? $this->get_preflight_theme_summary($snapshot)
-                : __('Not installed yet. Choose Picostrap or Picowind in the next step and AI Bridge will install it.', 'livecanvas-forge-ai')
+                : __('No compatible theme is installed. Continue below, then choose Picostrap or Picowind.', 'livecanvas-forge-ai'),
+            __('Choose theme', 'livecanvas-forge-ai'),
+            'layers'
         );
 
         if ($this->has_picowind_stack($snapshot)) {
@@ -7360,9 +7366,12 @@ final class LCFA_Admin {
         } else {
             $ready_copy = $theme_stack_ready
                 ? __('Core requirements passed. Confirm the detected project settings next.', 'livecanvas-forge-ai')
-                : __('Core requirements passed. Choose the theme stack to install next.', 'livecanvas-forge-ai');
+                : __('LiveCanvas is ready. Next, choose the frontend stack AI Bridge should install.', 'livecanvas-forge-ai');
             echo '<p>' . esc_html($ready_copy) . '</p>';
-            echo '<button class="button button-primary">' . esc_html__('Continue to project settings', 'livecanvas-forge-ai') . '</button>';
+            $continue_label = $theme_stack_ready
+                ? __('Review project settings', 'livecanvas-forge-ai')
+                : __('Choose frontend framework', 'livecanvas-forge-ai');
+            echo '<button class="button button-primary lcfa-button-with-icon">' . $this->get_icon_svg('layers') . '<span>' . esc_html($continue_label) . '</span></button>';
         }
 
         echo '</form>';
@@ -7378,7 +7387,7 @@ final class LCFA_Admin {
         echo '<div><h2>' . esc_html__('Step 2. Frontend framework', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Confirm whether this site should run on Picostrap or Picowind. The wizard detects the current theme and can switch to the correct stack.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form" data-lcfa-framework-form>';
         wp_nonce_field('lcfa_setup');
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="2">';
@@ -7389,18 +7398,33 @@ final class LCFA_Admin {
             __('Picostrap / Bootstrap', 'livecanvas-forge-ai'),
             __('Recommended for classic Bootstrap-based LiveCanvas flows and Picostrap child themes.', 'livecanvas-forge-ai'),
             $selected,
-            $snapshot['picostrap_candidates']
+            $snapshot['picostrap_candidates'],
+            $snapshot
         );
         $this->render_framework_choice(
             'picowind',
             __('Picowind / Tailwind + WindPress', 'livecanvas-forge-ai'),
             __('Recommended for Tailwind-first builds, Picowind child themes, and WindPress-managed styling.', 'livecanvas-forge-ai'),
             $selected,
-            $snapshot['picowind_candidates']
+            $snapshot['picowind_candidates'],
+            $snapshot
         );
         echo '</div>';
 
-        echo '<button class="button button-primary">' . esc_html__('Confirm framework', 'livecanvas-forge-ai') . '</button>';
+        $has_selection = in_array($selected, ['picostrap', 'picowind'], true);
+        $submit_label = $has_selection
+            ? $this->get_framework_submit_label($selected, $snapshot)
+            : __('Choose a framework above', 'livecanvas-forge-ai');
+        $submit_note = $has_selection
+            ? $this->get_framework_submit_note($selected, $snapshot)
+            : __('Select one stack to see exactly what AI Bridge will install or activate.', 'livecanvas-forge-ai');
+        echo '<div class="lcfa-framework-submit">';
+        echo '<p data-lcfa-framework-submit-note>' . esc_html($submit_note) . '</p>';
+        echo '<button class="button button-primary lcfa-button-with-icon" data-lcfa-framework-submit type="submit"' . ($has_selection ? '' : ' disabled') . '>';
+        echo $this->get_icon_svg('layers');
+        echo '<span data-lcfa-framework-submit-label>' . esc_html($submit_label) . '</span>';
+        echo '</button>';
+        echo '</div>';
         echo '</form>';
         echo '</section>';
     }
@@ -7621,7 +7645,7 @@ final class LCFA_Admin {
         echo '</section>';
     }
 
-    private function render_framework_choice(string $value, string $title, string $description, string $selected, array $candidates): void {
+    private function render_framework_choice(string $value, string $title, string $description, string $selected, array $candidates, array $snapshot = []): void {
         $logo_markup = $value === 'picowind'
             ? $this->get_partner_logo('windpress')
             : $this->get_partner_logo('bootstrap');
@@ -7629,26 +7653,113 @@ final class LCFA_Admin {
             ? sprintf(__('Detected theme candidates: %s', 'livecanvas-forge-ai'), implode(', ', wp_list_pluck($candidates, 'stylesheet')))
             : __('No installed themes were detected for this family yet.', 'livecanvas-forge-ai');
 
+        $submit_label = $this->get_framework_submit_label($value, $snapshot);
+        $submit_note = $this->get_framework_submit_note($value, $snapshot);
+
         echo '<label class="lcfa-choice-card">';
-        echo '<input type="radio" name="framework" value="' . esc_attr($value) . '"' . checked($selected, $value, false) . '>';
+        echo '<input type="radio" name="framework" value="' . esc_attr($value) . '" data-lcfa-framework-label="' . esc_attr($submit_label) . '" data-lcfa-framework-note="' . esc_attr($submit_note) . '" data-lcfa-framework-progress="' . esc_attr(sprintf(__('Preparing %s...', 'livecanvas-forge-ai'), $this->get_framework_display_name($value))) . '"' . checked($selected, $value, false) . '>';
         echo '<span class="lcfa-choice-copy">';
         echo '<span class="lcfa-choice-media">' . $logo_markup . '</span>';
         echo '<strong>' . esc_html($title) . '</strong>';
         echo '<span>' . esc_html($description) . '</span>';
         echo '<small>' . esc_html($candidate_summary) . '</small>';
 
-        if ($value === 'picowind' && !$candidates) {
-            echo '<small>' . esc_html__('Selecting Picowind installs the latest Picowind release from GitHub before the wizard switches the stack.', 'livecanvas-forge-ai') . ' <code>https://github.com/livecanvas-team/picowind/releases/latest</code></small>';
+        if ($value === 'picowind' && (!$candidates || empty($snapshot['windpress_active']))) {
+            $windpress_ready = !empty($snapshot['windpress_active']);
+            $picowind_ready = !empty($candidates);
+            echo '<span class="lcfa-framework-plan">';
+            echo '<strong>' . esc_html__('Automatic setup order', 'livecanvas-forge-ai') . '</strong>';
+            $this->render_framework_plan_step(
+                1,
+                __('WindPress plugin', 'livecanvas-forge-ai'),
+                $windpress_ready
+                    ? __('Active', 'livecanvas-forge-ai')
+                    : (!empty($snapshot['windpress_installed']) ? __('Activate first', 'livecanvas-forge-ai') : __('Install first from WordPress.org', 'livecanvas-forge-ai')),
+                $windpress_ready
+            );
+            $this->render_framework_plan_step(
+                2,
+                __('Picowind theme', 'livecanvas-forge-ai'),
+                $picowind_ready ? __('Installed', 'livecanvas-forge-ai') : __('Download second from GitHub', 'livecanvas-forge-ai'),
+                $picowind_ready
+            );
+            $this->render_framework_plan_step(
+                3,
+                __('Activate Picowind', 'livecanvas-forge-ai'),
+                (string) ($snapshot['detected_framework'] ?? '') === 'picowind'
+                    ? __('Current theme', 'livecanvas-forge-ai')
+                    : __('Final step', 'livecanvas-forge-ai'),
+                (string) ($snapshot['detected_framework'] ?? '') === 'picowind'
+            );
+            echo '</span>';
         }
 
         echo '</span>';
         echo '</label>';
     }
 
-    private function render_status_row(string $label, ?bool $status, string $detail = ''): void {
+    private function render_framework_plan_step(int $number, string $label, string $status, bool $complete): void {
+        echo '<span class="lcfa-framework-plan__step' . ($complete ? ' is-complete' : '') . '">';
+        echo '<span class="lcfa-framework-plan__marker">' . ($complete ? $this->get_icon_svg('check-circle') : esc_html((string) $number)) . '</span>';
+        echo '<span class="lcfa-framework-plan__copy"><b>' . esc_html($label) . '</b><small>' . esc_html($status) . '</small></span>';
+        echo '</span>';
+    }
+
+    private function get_framework_submit_label(string $framework, array $snapshot): string {
+        if ($framework === 'picowind') {
+            $windpress_active = !empty($snapshot['windpress_active']);
+            $windpress_installed = !empty($snapshot['windpress_installed']);
+            $picowind_installed = !empty($snapshot['picowind_candidates']);
+
+            if (!$windpress_active) {
+                $windpress_action = $windpress_installed ? __('Activate WindPress', 'livecanvas-forge-ai') : __('Install WindPress', 'livecanvas-forge-ai');
+
+                return $picowind_installed
+                    ? sprintf(__('%s and use Picowind', 'livecanvas-forge-ai'), $windpress_action)
+                    : sprintf(__('%s + Picowind', 'livecanvas-forge-ai'), $windpress_action);
+            }
+
+            return $picowind_installed
+                ? __('Use Picowind', 'livecanvas-forge-ai')
+                : __('Install and activate Picowind', 'livecanvas-forge-ai');
+        }
+
+        return !empty($snapshot['picostrap_candidates'])
+            ? __('Use Picostrap', 'livecanvas-forge-ai')
+            : __('Set up Picostrap', 'livecanvas-forge-ai');
+    }
+
+    private function get_framework_submit_note(string $framework, array $snapshot): string {
+        if ($framework === 'picowind') {
+            $windpress_active = !empty($snapshot['windpress_active']);
+            $picowind_installed = !empty($snapshot['picowind_candidates']);
+
+            if (!$windpress_active && !$picowind_installed) {
+                return __('AI Bridge installs and activates WindPress from WordPress.org first, then downloads and activates Picowind from GitHub.', 'livecanvas-forge-ai');
+            }
+
+            if (!$windpress_active) {
+                return __('AI Bridge activates WindPress before switching to the installed Picowind theme.', 'livecanvas-forge-ai');
+            }
+
+            if (!$picowind_installed) {
+                return __('WindPress is ready. AI Bridge will download and activate Picowind from GitHub.', 'livecanvas-forge-ai');
+            }
+
+            return __('WindPress and Picowind are ready. AI Bridge will activate the selected stack.', 'livecanvas-forge-ai');
+        }
+
+        return !empty($snapshot['picostrap_candidates'])
+            ? __('AI Bridge will activate the installed Picostrap stack. WindPress is not required.', 'livecanvas-forge-ai')
+            : __('AI Bridge will use the configured Picostrap package source. WindPress is not required.', 'livecanvas-forge-ai');
+    }
+
+    private function render_status_row(string $label, ?bool $status, string $detail = '', string $pending_label = '', string $pending_icon = ''): void {
         $status_class = $status === true ? 'ok' : ($status === false ? 'ko' : 'pending');
-        $status_icon = $status === true ? 'check-circle' : ($status === false ? 'x-circle' : 'activity');
-        $status_label = $status === true ? __('OK', 'livecanvas-forge-ai') : ($status === false ? __('Fix', 'livecanvas-forge-ai') : __('Next', 'livecanvas-forge-ai'));
+        $status_icon = $status === true ? 'check-circle' : ($status === false ? 'x-circle' : ($pending_icon ?: 'activity'));
+        $status_label = $status === true
+            ? __('OK', 'livecanvas-forge-ai')
+            : ($status === false ? __('Fix', 'livecanvas-forge-ai') : ($pending_label ?: __('Action required', 'livecanvas-forge-ai')));
         echo '<div class="lcfa-status-row">';
         echo '<span class="lcfa-status-copy">';
         echo '<span class="lcfa-status-label">' . esc_html($label) . '</span>';
@@ -7697,7 +7808,7 @@ final class LCFA_Admin {
     }
 
     private function normalize_supported_framework(string $framework): string {
-        $framework = sanitize_key($framework);
+        $framework = $this->sanitize_key_compat($framework);
 
         return in_array($framework, ['picostrap', 'picowind'], true) ? $framework : '';
     }
