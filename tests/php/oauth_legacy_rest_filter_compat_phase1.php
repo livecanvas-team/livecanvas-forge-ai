@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 define('ABSPATH', '/tmp/lcfa-oauth-legacy-rest-filter/');
 
 final class WP_Error {
@@ -28,7 +30,7 @@ function oauth_legacy_filter_assert(bool $condition, string $message): void {
     }
 }
 
-$identity = new ReflectionProperty(LCFA_OAuth_Server::class, 'current_identity');
+$identity = lcfa_test_reflection_property(LCFA_OAuth_Server::class, 'current_identity');
 $identity->setValue(null, [
     'auth_method' => 'oauth_direct',
     'user_id' => 1,
