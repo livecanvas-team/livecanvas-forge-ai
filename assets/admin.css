@@ -2069,7 +2069,20 @@
 }
 
 .lcfa-admin .lcfa-form select option {
-    color: #111;
+    background-color: #1a1c29;
+    color: #f6f7fd;
+}
+
+/* Keep native option menus readable when WordPress or the browser inherits a light palette. */
+.lcfa-admin .lcfa-form select,
+.lcfa-admin .lcfa-form select option,
+.lcfa-admin .lcfa-form select optgroup {
+    color-scheme: dark;
+}
+
+.lcfa-admin .lcfa-form select option:checked {
+    background-color: #285561;
+    color: #ffffff;
 }
 
 .lcfa-admin .button.button-primary {
