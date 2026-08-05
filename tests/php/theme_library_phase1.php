@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/reflection-compat.php';
+
 error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-theme-library-tests/');
@@ -212,7 +214,7 @@ lcfa_theme_assert_same(['picowind' => 1, 'picostrap' => 1], $catalog['frameworks
 lcfa_theme_assert_same(2, $catalog['normalization_version'], 'catalog should invalidate normalized cache when framework metadata changes');
 lcfa_theme_assert_true(count($catalog['errors']) === 2, 'catalog should report missing data and unsupported framework entries');
 
-$merge_catalogs = new ReflectionMethod(LCFA_Theme_Library_Catalog::class, 'merge_catalogs');
+$merge_catalogs = lcfa_test_reflection_method(LCFA_Theme_Library_Catalog::class, 'merge_catalogs');
 $merged_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
     'themes' => [],
     'errors' => [
