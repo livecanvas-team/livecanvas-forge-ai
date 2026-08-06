@@ -500,8 +500,10 @@ $opencode_fast_path = $presenter->build([
     ],
 ]);
 
-lcfa_assert_same('Download opencode.json', $opencode_fast_path['active_panel']['primary_cta']['label'] ?? '', 'OpenCode fast path should use direct bundle copy');
-lcfa_assert_same('Copy command', $opencode_fast_path['active_panel']['secondary_ctas'][0]['label'] ?? '', 'non-writable local mode should expose copy command as the secondary action');
+lcfa_assert_same('Copy setup command', $opencode_fast_path['active_panel']['primary_cta']['label'] ?? '', 'OpenCode fast path should recommend the setup command when direct workspace writing is unavailable');
+lcfa_assert_same('copy_command', $opencode_fast_path['active_panel']['primary_cta']['action'] ?? '', 'non-writable OpenCode mode should make the setup command the primary action');
+lcfa_assert_same('Download opencode.json', $opencode_fast_path['active_panel']['secondary_ctas'][0]['label'] ?? '', 'OpenCode fast path should keep the downloadable config as the manual fallback');
+lcfa_assert_same('download', $opencode_fast_path['active_panel']['secondary_ctas'][0]['action'] ?? '', 'non-writable OpenCode mode should keep download as the secondary action');
 lcfa_assert_same('Finish setup in OpenCode', $opencode_fast_path['visual_help']['title'] ?? '', 'OpenCode fast path should expose an action-oriented setup guide');
 lcfa_assert_same('Check MCP: livecanvas-forge', $opencode_fast_path['visual_help']['items'][1]['title'] ?? '', 'OpenCode visual strip should explain the green MCP state');
 lcfa_assert_same('In OpenCode', $opencode_fast_path['visual_help']['items'][0]['context'] ?? '', 'OpenCode visual guide should identify where the user acts');

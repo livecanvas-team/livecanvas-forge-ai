@@ -176,24 +176,22 @@ final class LCFA_Connection_Wizard_Presenter {
                             : ($is_codex_remote_adapter
                                 ? __('Choose one path below. Recommended: copy and run the secure Codex remote shortcut on the machine where Codex runs. Use the manual option only if you want to save the helper script.', 'livecanvas-forge-ai')
                                 : __('Choose one path below. Recommended: copy and run the Codex shortcut from this exact project root. Use the manual option only if you want to install the helper yourself.', 'livecanvas-forge-ai')))
-                        : ($is_opencode_local
-                        ? __('Choose one path below. Recommended: download the OpenCode config and place it in the project root before switching to OpenCode.', 'livecanvas-forge-ai')
-                        : __('Choose one path below. Recommended: create the client configuration now. Use the manual option only if you want to place the bundle yourself.', 'livecanvas-forge-ai')),
+                        : ($local_writable
+                            ? __('Choose one path below. Recommended: let AI Bridge write the client configuration directly into this workspace. Use the manual option only if you prefer to place the file yourself.', 'livecanvas-forge-ai')
+                            : __('Choose one path below. Recommended: copy and run the setup command in your coding agent. Download the bundle only if you prefer to place the configuration files yourself.', 'livecanvas-forge-ai')),
                     'alert'       => $this->build_banner($current_step, $bundle, $workspace_access),
                     'primary_cta' => [
-                        'label'  => $is_codex && !$local_writable
-                            ? __('Copy Codex shortcut', 'livecanvas-forge-ai')
-                            : ($local_writable
+                        'label'  => $local_writable
                             ? __('Write config in workspace', 'livecanvas-forge-ai')
-                            : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download client bundle', 'livecanvas-forge-ai'))),
-                        'action' => $is_codex && !$local_writable ? 'copy_command' : ($local_writable ? 'install' : 'download'),
+                            : ($is_codex ? __('Copy Codex shortcut', 'livecanvas-forge-ai') : __('Copy setup command', 'livecanvas-forge-ai')),
+                        'action' => $local_writable ? 'install' : 'copy_command',
                     ],
                     'secondary_ctas' => [
                         [
-                            'label'  => $is_codex && !$local_writable
+                            'label'  => $is_codex
                                 ? __('Download Codex helper', 'livecanvas-forge-ai')
-                                : ($local_writable ? __('Download client bundle', 'livecanvas-forge-ai') : __('Copy command', 'livecanvas-forge-ai')),
-                            'action' => $is_codex && !$local_writable ? 'download' : ($local_writable ? 'download' : 'copy_command'),
+                                : ($is_opencode_local ? __('Download opencode.json', 'livecanvas-forge-ai') : __('Download client bundle', 'livecanvas-forge-ai')),
+                            'action' => 'download',
                         ],
                     ],
                 ];
