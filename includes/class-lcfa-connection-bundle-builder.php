@@ -374,7 +374,7 @@ final class LCFA_Connection_Bundle_Builder {
                     'path'    => $workspace_root . '/opencode.json',
                     'type'    => 'json',
                     'label'   => __('OpenCode config', 'livecanvas-forge-ai'),
-                    'content' => $this->build_opencode_config($command, $environment),
+                    'content' => $this->build_opencode_config($command, $environment, $server_name),
                 ]];
             case 'cursor':
                 return [[
@@ -422,7 +422,7 @@ final class LCFA_Connection_Bundle_Builder {
                 return [[
                     'name'    => 'opencode.json',
                     'mime'    => 'application/json',
-                    'content' => $this->build_opencode_config($command, $environment),
+                    'content' => $this->build_opencode_config($command, $environment, $server_name),
                 ]];
             case 'cursor':
                 return [[
@@ -469,19 +469,23 @@ final class LCFA_Connection_Bundle_Builder {
         }
     }
 
-    private function build_opencode_config(array $command, array $environment): string {
+    private function build_opencode_config(array $command, array $environment, string $server_name = 'livecanvas-forge'): string {
         return (string) wp_json_encode([
             '$schema' => 'https://opencode.ai/config.json',
             'mcp'     => [
-                'livecanvas-forge' => [
-                    'type'        => 'local',
-                    'command'     => $command,
-                    'enabled'     => true,
-                    'timeout'     => 60000,
-                    'environment' => (object) $environment,
-                ],
+                $server_name => $this->build_opencode_server_config($command, $environment),
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    }
+
+    private function build_opencode_server_config(array $command, array $environment): array {
+        return [
+            'type'        => 'local',
+            'command'     => $command,
+            'enabled'     => true,
+            'timeout'     => 60000,
+            'environment' => (object) $environment,
+        ];
     }
 
     private function build_cursor_config(array $command, array $environment): string {
@@ -578,6 +582,11 @@ final class LCFA_Connection_Bundle_Builder {
                     'title'   => __('Claude CLI shortcut', 'livecanvas-forge-ai'),
                     'command' => $this->build_claude_register_command($command, $environment),
                 ];
+            case 'opencode':
+                return [
+                    'title'   => __('OpenCode setup command', 'livecanvas-forge-ai'),
+                    'command' => $this->build_opencode_register_command($command, $environment, $server_name),
+                ];
             default:
                 return [
                     'title'   => '',
@@ -636,6 +645,50 @@ final class LCFA_Connection_Bundle_Builder {
         $lines[] = 'EOF';
         $lines[] = '  exit 1';
         $lines[] = 'fi';
+
+        return implode("\n", $lines);
+    }
+
+    private function build_opencode_register_command(array $command, array $environment, string $server_name): string {
+        $server_json = (string) wp_json_encode($this->build_opencode_server_config($command, $environment), JSON_UNESCAPED_SLASHES);
+        $server_payload = base64_encode($server_json);
+        $lines = [
+            'LCFA_OPENCODE_CONFIG="${OPENCODE_CONFIG:-$PWD/opencode.json}"',
+            'LCFA_OPENCODE_SERVER=' . $this->quote_shell_value($server_name),
+            'LCFA_OPENCODE_SERVER_B64=' . $this->quote_shell_value($server_payload),
+            'node - "$LCFA_OPENCODE_CONFIG" "$LCFA_OPENCODE_SERVER" "$LCFA_OPENCODE_SERVER_B64" <<\'NODE\'',
+            "const fs = require('fs');",
+            "const path = require('path');",
+            'const [configPath, serverName, payload] = process.argv.slice(2);',
+            'let config = {};',
+            'if (fs.existsSync(configPath)) {',
+            "  const raw = fs.readFileSync(configPath, 'utf8').trim();",
+            '  if (raw !== "") {',
+            '    try {',
+            '      config = JSON.parse(raw);',
+            '    } catch (error) {',
+            "      console.error('Cannot safely update ' + configPath + ': the file is not valid JSON. Use Download opencode.json and merge it manually.');",
+            '      process.exit(1);',
+            '    }',
+            '  }',
+            "  fs.copyFileSync(configPath, configPath + '.lcfa-backup');",
+            '}',
+            "const server = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));",
+            'config[\'$schema\'] = config[\'$schema\'] || \'https://opencode.ai/config.json\';',
+            "config.mcp = config.mcp && typeof config.mcp === 'object' ? config.mcp : {};",
+            "if (config.mcp.servers && typeof config.mcp.servers === 'object') {",
+            '  config.mcp.servers[serverName] = server;',
+            '} else {',
+            '  config.mcp[serverName] = server;',
+            '}',
+            'fs.mkdirSync(path.dirname(configPath), { recursive: true });',
+            "const tempPath = configPath + '.lcfa-tmp';",
+            "fs.writeFileSync(tempPath, JSON.stringify(config, null, 2) + '\\n', { mode: 0o600 });",
+            'fs.renameSync(tempPath, configPath);',
+            "console.log('OpenCode project config updated: ' + configPath);",
+            'NODE',
+            'echo "Restart OpenCode, then call get_connection_handoff. Approve the pending pairing request in WordPress when prompted."',
+        ];
 
         return implode("\n", $lines);
     }
