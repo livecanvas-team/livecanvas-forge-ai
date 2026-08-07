@@ -4,10 +4,40 @@
     }
 
     function setCopiedFeedback(button, copiedLabel, originalLabel) {
-        button.textContent = copiedLabel;
+        var label = typeof button.querySelector === 'function'
+            ? button.querySelector('span:last-child')
+            : null;
+        var originalHtml = typeof button.innerHTML === 'string' ? button.innerHTML : '';
+
+        if (label) {
+            label.textContent = copiedLabel;
+        } else {
+            button.textContent = copiedLabel;
+        }
+
         window.setTimeout(function () {
-            button.textContent = originalLabel;
+            if (label && button.contains(label)) {
+                label.textContent = originalLabel;
+            } else if (typeof button.innerHTML === 'string') {
+                button.innerHTML = originalHtml;
+            } else {
+                button.textContent = originalLabel;
+            }
         }, 1800);
+    }
+
+    function revealCopyNextStep(button) {
+        var selector = button.getAttribute('data-lcfa-copy-next') || '';
+        var target = selector ? document.querySelector(selector) : null;
+
+        if (!target) {
+            return;
+        }
+
+        target.hidden = false;
+        target.classList.add('is-active');
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({ block: 'nearest' });
     }
 
     function legacyCopyText(value) {
@@ -59,6 +89,7 @@
                     button.getAttribute('data-lcfa-copied-label') || 'Copied',
                     button.getAttribute('data-lcfa-copy-label') || button.textContent || 'Copy'
                 );
+                revealCopyNextStep(button);
             }
 
             return;
@@ -69,9 +100,11 @@
 
         clipboard.writeText(value).then(function () {
             setCopiedFeedback(button, copiedLabel, originalLabel);
+            revealCopyNextStep(button);
         }).catch(function () {
             if (legacyCopyText(value)) {
                 setCopiedFeedback(button, copiedLabel, originalLabel);
+                revealCopyNextStep(button);
             }
         });
     }

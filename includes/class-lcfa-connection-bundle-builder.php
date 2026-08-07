@@ -687,7 +687,16 @@ final class LCFA_Connection_Bundle_Builder {
             'fs.renameSync(tempPath, configPath);',
             "console.log('OpenCode project config updated: ' + configPath);",
             'NODE',
-            'echo "Restart OpenCode, then call get_connection_handoff. Approve the pending pairing request in WordPress when prompted."',
+            "cat <<'EOF'",
+            '',
+            'Setup complete. The website has not been changed.',
+            '',
+            'Next steps:',
+            '1. Close and reopen OpenCode so it loads the connection for this project.',
+            '2. In OpenCode, send: Call get_connection_handoff with {"limit":5}.',
+            '3. If OpenCode shows a pending pairing request, open its WordPress approval link and approve it.',
+            '4. Return to AI Bridge in WordPress and run the smoke test.',
+            'EOF',
         ];
 
         return implode("\n", $lines);

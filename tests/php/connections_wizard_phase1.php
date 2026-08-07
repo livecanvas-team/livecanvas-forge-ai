@@ -397,7 +397,8 @@ lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string']
 lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), 'LCFA_OPENCODE_SERVER_B64=') !== false, 'remote OpenCode setup command should include the complete encoded server configuration');
 lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), "configPath + '.lcfa-backup'") !== false, 'remote OpenCode setup command should back up an existing project config');
 lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), 'config.mcp[serverName] = server') !== false, 'remote OpenCode setup command should merge the server into the project config');
-lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), 'Restart OpenCode, then call get_connection_handoff') !== false, 'remote OpenCode setup command should explain the next connection step');
+lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), 'Close and reopen OpenCode') !== false, 'remote OpenCode setup command should explain the next connection step');
+lcfa_assert_true(strpos((string) ($remote_opencode_bundle['copy_command_string'] ?? ''), 'Return to AI Bridge in WordPress and run the smoke test') !== false, 'remote OpenCode setup command should identify the final verification step');
 lcfa_assert_true(strpos((string) ($remote_opencode_bundle['download_files'][0]['content'] ?? ''), '"LCFA_SITE_URL": "https://remote.example/"') !== false, 'remote OpenCode fallback config should contain the target site URL');
 lcfa_assert_same('get_connection_handoff', $remote_codex_bundle['agent_start_tool'] ?? '', 'remote Codex bundles should start with the AI Bridge connection handoff tool');
 lcfa_assert_same('get_agent_handoff_package', $remote_codex_bundle['handoff_package_tool'] ?? '', 'remote Codex bundles should expose the AI Bridge package tool');

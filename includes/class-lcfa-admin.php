@@ -97,6 +97,7 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_test_connections', [$this, 'handle_connection_test_post']);
         add_action('admin_post_lcfa_install_client_bundle', [$this, 'handle_install_client_bundle_post']);
         add_action('admin_post_lcfa_download_client_bundle', [$this, 'handle_download_client_bundle_post']);
+        add_action('admin_post_lcfa_confirm_client_bundle', [$this, 'handle_confirm_client_bundle_post']);
         add_action('admin_post_lcfa_repair_codex_connection', [$this, 'handle_repair_codex_connection_post']);
         add_action('admin_post_lcfa_install_mcp_adapter', [$this, 'handle_install_mcp_adapter_post']);
         add_action('admin_post_lcfa_run_connection_diagnostics', [$this, 'handle_run_connection_diagnostics_post']);
@@ -1315,6 +1316,36 @@ final class LCFA_Admin {
         header('Content-Type: ' . ((string) ($file['mime'] ?? 'text/plain')) . '; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . sanitize_file_name((string) ($file['name'] ?? 'bundle.txt')) . '"');
         echo (string) ($file['content'] ?? '');
+        exit;
+    }
+
+    public function handle_confirm_client_bundle_post(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        }
+
+        check_admin_referer('lcfa_confirm_client_bundle');
+
+        $bundle = $this->build_selected_connection_bundle($_POST);
+        $connections = LCFA_Settings::get_connections();
+        $connections['preferred_client'] = (string) ($bundle['client'] ?? $connections['preferred_client']);
+        $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
+        $connections['connection_mode'] = (string) ($bundle['mode'] ?? $connections['connection_mode']);
+        $connections['workspace_root'] = sanitize_text_field((string) ($bundle['workspace_root'] ?? $connections['workspace_root']));
+        $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, (string) ($bundle['copy_command_string'] ?? ''), $connections);
+        $connections['connection_status'] = '';
+        $connections['connection_last_verified_at'] = '';
+        $connections['connection_last_error'] = '';
+        $connections['connection_current_step'] = 'smoke_test';
+        LCFA_Settings::update_connections($connections);
+
+        $client_label = $this->get_connection_client_label((string) ($bundle['client'] ?? 'generic'));
+        LCFA_Settings::set_notice(sprintf(
+            __('Next: reopen %s, run the connection-check prompt, approve the WordPress pairing request, then run the smoke test.', 'livecanvas-forge-ai'),
+            $client_label
+        ));
+
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
         exit;
     }
 
@@ -5444,7 +5475,7 @@ final class LCFA_Admin {
             echo '<span>' . esc_html($primary_copy['description']) . '</span>';
             echo '<small>' . esc_html($primary_copy['note']) . '</small>';
             echo '</span>';
-            echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Copied', 'livecanvas-forge-ai')) . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</span></button>';
+            echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($copy_text) . '" data-lcfa-copy-next="#lcfa-after-setup-command" data-lcfa-copy-label="' . esc_attr((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '" data-lcfa-copied-label="' . esc_attr(__('Command copied', 'livecanvas-forge-ai')) . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($primary_cta['label'] ?? __('Copy command', 'livecanvas-forge-ai'))) . '</span></button>';
             echo '</div>';
         } elseif ($show_workspace_install && ($primary_cta['action'] ?? '') === 'install') {
             $primary_install = $this->get_generate_bundle_action_copy($bundle, 'install', true);
@@ -5526,6 +5557,10 @@ final class LCFA_Admin {
         }
         echo '</div>';
 
+        if ($primary_action === 'copy_command' && $copy_text !== '') {
+            $this->render_connection_copy_next_steps($bundle);
+        }
+
         if (!empty($bundle['workspace_files']) && empty($workspace_write_state['available'])) {
             echo '<div class="lcfa-workspace-note">';
             echo '<strong>' . esc_html__('Browser write disabled for this workspace', 'livecanvas-forge-ai') . '</strong>';
@@ -5537,6 +5572,38 @@ final class LCFA_Admin {
             }
             echo '</div>';
         }
+    }
+
+    private function render_connection_copy_next_steps(array $bundle): void {
+        $client = $this->normalize_connection_client((string) ($bundle['client'] ?? 'generic'));
+        $client_label = $this->get_connection_client_label($client);
+        $handoff_prompt = 'Call get_connection_handoff with {"limit":5}. If pairing is pending, show me the approval link and user code. Do not change the site.';
+
+        echo '<section id="lcfa-after-setup-command" class="lcfa-copy-next" tabindex="-1" hidden>';
+        echo '<div class="lcfa-copy-next__heading">' . $this->get_icon_svg('check-circle') . '<div>';
+        echo '<h3>' . esc_html__('Command copied. Complete the connection', 'livecanvas-forge-ai') . '</h3>';
+        echo '<p>' . esc_html(sprintf(__('Nothing has changed on the website. The copied command only links this %s project to this WordPress site.', 'livecanvas-forge-ai'), $client_label)) . '</p>';
+        echo '</div></div>';
+        echo '<ol class="lcfa-copy-next__steps">';
+        echo '<li><span>1</span><div><strong>' . esc_html__('Run the copied command', 'livecanvas-forge-ai') . '</strong><p>' . esc_html(sprintf(__('Paste it into the terminal for this %s project and wait for the setup-complete message.', 'livecanvas-forge-ai'), $client_label)) . '</p></div></li>';
+        echo '<li><span>2</span><div><strong>' . esc_html(sprintf(__('Close and reopen %s', 'livecanvas-forge-ai'), $client_label)) . '</strong><p>' . esc_html__('This reloads the new AI Bridge connection for the current project.', 'livecanvas-forge-ai') . '</p></div></li>';
+        echo '<li><span>3</span><div><strong>' . esc_html__('Ask the coding agent to connect', 'livecanvas-forge-ai') . '</strong><p>' . esc_html__('Send the prompt below. If WordPress shows a pending request, approve it before testing.', 'livecanvas-forge-ai') . '</p></div></li>';
+        echo '</ol>';
+        echo '<div class="lcfa-copy-next__prompt">';
+        echo '<code>' . esc_html($handoff_prompt) . '</code>';
+        echo '<button class="button lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($handoff_prompt) . '" data-lcfa-copy-label="' . esc_attr__('Copy connection-check prompt', 'livecanvas-forge-ai') . '" data-lcfa-copied-label="' . esc_attr__('Prompt copied', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html__('Copy connection-check prompt', 'livecanvas-forge-ai') . '</span></button>';
+        echo '</div>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-copy-next__continue">';
+        wp_nonce_field('lcfa_confirm_client_bundle');
+        echo '<input type="hidden" name="action" value="lcfa_confirm_client_bundle">';
+        echo '<input type="hidden" name="preferred_client" value="' . esc_attr($client) . '">';
+        echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr((string) ($bundle['claude_connection_target'] ?? '')) . '">';
+        echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
+        echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
+        echo '<div><strong>' . esc_html__('Final step: test the connection', 'livecanvas-forge-ai') . '</strong><span>' . esc_html__('Continue only after the command has finished. The next screen highlights the smoke test.', 'livecanvas-forge-ai') . '</span></div>';
+        echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('activity') . '<span>' . esc_html__('I ran the command — continue', 'livecanvas-forge-ai') . '</span></button>';
+        echo '</form>';
+        echo '</section>';
     }
 
     private function get_generate_bundle_action_copy(array $bundle, string $action, bool $is_primary): array {

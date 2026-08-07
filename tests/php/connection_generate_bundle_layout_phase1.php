@@ -28,6 +28,10 @@ function esc_attr(string $value): string {
     return $value;
 }
 
+function esc_attr__(string $text, string $domain = ''): string {
+    return $text;
+}
+
 function esc_url(string $value): string {
     return $value;
 }
@@ -105,5 +109,34 @@ lcfa_assert_contains('Manual option', $markup, 'generate bundle step should mark
 lcfa_assert_contains('Write the config for me', $markup, 'generate bundle step should explain the direct workspace path');
 lcfa_assert_contains('Download and place it yourself', $markup, 'generate bundle step should explain the manual download path');
 lcfa_assert_contains('lcfa-checkbox lcfa-checkbox--card', $markup, 'backup checkbox should render inside a card-specific layout');
+
+ob_start();
+$method->invoke($admin, [
+    'client' => 'opencode',
+    'mode' => 'remote',
+    'workspace_root' => '',
+    'copy_command_string' => 'project setup command',
+], [
+    'available' => false,
+], [
+    'primary_cta' => [
+        'label' => 'Copy setup command',
+        'action' => 'copy_command',
+    ],
+    'secondary_ctas' => [
+        [
+            'label' => 'Download opencode.json',
+            'action' => 'download',
+        ],
+    ],
+]);
+$copy_markup = (string) ob_get_clean();
+
+lcfa_assert_contains('data-lcfa-copy-next="#lcfa-after-setup-command"', $copy_markup, 'copy setup action should reveal the guided next steps');
+lcfa_assert_contains('Command copied. Complete the connection', $copy_markup, 'copy setup action should explain what happens after copying');
+lcfa_assert_contains('Copy connection-check prompt', $copy_markup, 'copy setup action should provide a ready-to-use handoff prompt');
+lcfa_assert_contains('Final step: test the connection', $copy_markup, 'copy setup action should emphasize the smoke test as the final step');
+lcfa_assert_contains('name="action" value="lcfa_confirm_client_bundle"', $copy_markup, 'copy setup action should expose an explicit continue action');
+lcfa_assert_contains('I ran the command — continue', $copy_markup, 'copy setup action should not advance until the user confirms execution');
 
 echo "PASS\n";
