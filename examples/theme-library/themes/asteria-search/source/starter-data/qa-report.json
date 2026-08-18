@@ -5,6 +5,7 @@
   "exported_header_partial_id": 17,
   "exported_footer_partial_id": 15,
   "notes": [
-    "Exported from the local onepage created on wordpress-theme-test."
+    "Exported from the local onepage created on wordpress-theme-test.",
+    "Shared header and footer anchors resolve against the WordPress homepage from inner pages."
   ]
 }

@@ -274,6 +274,25 @@ foreach ((array) ($example_catalog['themes'] ?? []) as $example_theme) {
     lcfa_theme_assert_same((string) ($example_theme['checksum'] ?? ''), 'sha256:' . hash_file('sha256', $example_zip_path), 'example catalog checksum should match the packaged ZIP: ' . $example_slug);
     $example_validation = $validator->validate_zip($example_zip_path, $example_theme);
     lcfa_theme_assert_true(!empty($example_validation['ok']), 'example Theme Library ZIP should pass validation: ' . $example_slug);
+
+    if ($example_slug === 'asteria-search') {
+        $asteria_zip = new ZipArchive();
+        lcfa_theme_assert_true($asteria_zip->open($example_zip_path) === true, 'Asteria package should be readable for navigation regression checks.');
+        $asteria_header = (string) $asteria_zip->getFromName('asteria-search/starter-data/header.html');
+        $asteria_footer = (string) $asteria_zip->getFromName('asteria-search/starter-data/footer.html');
+        $asteria_functions = (string) $asteria_zip->getFromName('asteria-search/functions.php');
+        $asteria_zip->close();
+
+        foreach (['asteria-page', 'thesis', 'engagements', 'work'] as $anchor) {
+            $partial = $anchor === 'asteria-page' ? $asteria_header . $asteria_footer : $asteria_header;
+            lcfa_theme_assert_true(str_contains($partial, 'href="/#' . $anchor . '"'), 'Asteria navigation should use a homepage-rooted fallback for #' . $anchor . '.');
+            lcfa_theme_assert_false(str_contains($partial, 'href="#' . $anchor . '"'), 'Asteria navigation must not resolve #' . $anchor . ' against the current inner page.');
+        }
+
+        lcfa_theme_assert_true(str_contains($asteria_functions, "add_filter('lc_modify_header_content'"), 'Asteria should resolve header anchors through the WordPress home URL.');
+        lcfa_theme_assert_true(str_contains($asteria_functions, "add_filter('lc_modify_footer_content'"), 'Asteria should resolve footer anchors through the WordPress home URL.');
+        lcfa_theme_assert_true(str_contains($asteria_functions, "home_url('/#' . \$anchor)"), 'Asteria home anchors should support WordPress subdirectory installations.');
+    }
 }
 
 $unsupported_parent_zip = lcfa_theme_create_zip([], [], [

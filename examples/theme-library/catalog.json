@@ -21,7 +21,7 @@
     {
       "slug": "asteria-search",
       "name": "Asteria Search",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "description": "One-page Picowind theme exported from the wordpress-theme-test local site.",
       "category": "onepage",
       "framework": "picowind",
@@ -32,7 +32,7 @@
       "screenshot": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/screenshots/cover.jpg",
       "package_path": "themes/asteria-search/asteria-search.zip",
       "package_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/asteria-search.zip",
-      "checksum": "sha256:3dae15dec5b143837d35caf94999f50f53338def26c0327f2506cea6047e841e",
+      "checksum": "sha256:9d9862c96c22cd71feeade7cbd4fdd5594f575d50f4c2d541c85be6c485ac503",
       "metadata_url": "https://raw.githubusercontent.com/livecanvas-team/livecanvas-theme-library/main/themes/asteria-search/metadata.json"
     },
     {
