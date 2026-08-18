@@ -20,9 +20,10 @@
 - [x] Starter data import completes.
 - [x] Clean rerun imported homepage #24, header #22, footer #23, media, LiveCanvas settings, and design system. Audit: `theme-import-asteria-search-cjt36ptu`.
 - [x] Native WindPress Performance generation produced a 50.75 kB compiled cache at 2026-08-18 12:37:18.
-- [ ] AI Bridge import audit is reconciled with the verified native cache after installing 0.2.0-beta.3.10.
-- [ ] Desktop/mobile visual QA passes.
-- [ ] Contact page is created and matched to the Asteria visual system.
+- [x] AI Bridge 0.2.0-beta.3.10 and MCP 0.2.0-beta.4 reconcile the verified native cache with audit `theme-import-asteria-search-cjt36ptu`.
+- [x] Asteria desktop/mobile visual QA passes: no horizontal overflow, broken images, console errors, or page errors; one header, main, and footer.
+- [x] Contact page #27 is created as a draft and matched to the Asteria visual system. Draft audit: `audit-kuv2tl7s40kl`.
+- [ ] Contact page publication awaits explicit final approval.
 
 ## Findings
 
@@ -52,7 +53,7 @@
 
 ### F-04 — Remote Picowind import ends in a build dead end
 
-**Status:** implemented in the 0.2.0-beta.3.10 hotfix candidate; remote verification pending.
+**Status:** fixed and remotely verified in AI Bridge 0.2.0-beta.3.10 with MCP 0.2.0-beta.4.
 
 **Observed:** the successful import ends in `build_required`, while both **Build Tailwind CSS** and **Build CSS** are disabled with “The current WordPress URL is not detected as local, so local MCP execution is disabled.” The page does not present the documented remote next step: re-pair a trusted agent with `write,cache` scopes and call `build_theme_library_css`.
 
@@ -61,6 +62,8 @@ During the clean third cycle, `build_theme_library_css` reached WordPress with a
 **Impact:** the primary Theme Library flow displays four steps but cannot complete step 4 on a normal remote host without knowledge from the README/source code.
 
 **Implemented correction:** when local compilation is unavailable, Theme Library now shows a two-action remote panel: open WindPress Performance, generate the cache, then verify it. The MCP tool first reuses an eligible native cache and otherwise returns the same exact WindPress action. Completion still requires the matching audit, import checksum, active stylesheet, semantic CSS checks, SHA-256 checksum, and a cache modification time after the import. Server filesystem paths are removed from the MCP payload.
+
+**Remote verification:** after OpenCode restarted with MCP 0.2.0-beta.4, `build_theme_library_css {"theme_slug":"asteria-search"}` returned `ready` with strategy `windpress_native_cache`. It reused the 50,758-byte cache, verified all three required and two forbidden fragments, and did not require local compilation, FTP, or SSH. Theme Library now displays **Compiled cache verified** and **Ready**.
 
 ### F-05 — “Let the coding agent make changes” does not grant remote write scopes
 
@@ -120,12 +123,30 @@ During the clean third cycle, `build_theme_library_css` reached WordPress with a
 
 **Recommended correction:** derive import state from both the durable audit and imported object markers. If they disagree, show **Import needs attention** with reconciliation, cleanup, and resume actions instead of a fresh-import CTA.
 
-## Current authoritative state before the 0.2.0-beta.3.10 release
+### F-11 — Command suggestion misclassifies a new page request as a header edit
 
-- AI Bridge 0.2.0-beta.3.9 is installed on Cloudways.
+**Observed:** the read-only Contact-page planning request explicitly said to inherit the global header/footer and create a new page. `suggest_lc_command` returned `update_header` with medium confidence because the prompt mentioned header/navigation inheritance.
+
+**Impact:** an agent that trusts the suggestion without validating intent could edit the global header instead of creating a page.
+
+**Mitigation during test:** OpenCode rejected the suggestion, validated the markup, and used `page_upsert` in dry-run mode. The reviewed payload was then applied as draft page #27 with `no_theme_edits=true`; header #22, footer #23, and theme files remained unchanged.
+
+**Recommended correction:** give explicit create/update-page intent precedence over negative or inheritance-only header/footer mentions. Add classifier fixtures for “inherit the global header/footer”, “do not edit navigation”, and other negated shell references.
+
+### F-12 — Same-version update notice remains briefly after installation
+
+**Observed:** immediately after installing 0.2.0-beta.3.10, the Plugins screen still offered an update from 0.2.0-beta.3.10 to 0.2.0-beta.3.10.
+
+**Result:** a WordPress **Check again** request regenerated the update transient. The duplicate notice disappeared, AI Bridge remained on 0.2.0-beta.3.10, and the only remaining update was Akismet. This is a transient refresh artifact, not a persistent updater defect.
+
+## Final authoritative state after the 0.2.0-beta.3.10 verification
+
+- AI Bridge 0.2.0-beta.3.10 is installed on Cloudways; GitHub prerelease `v0.2.0-beta.3.10` is public.
+- `@livecanvas/ai-bridge-mcp@0.2.0-beta.4` is published with dist-tag `beta`; npm `latest` remains `0.1.4`.
 - The clean Asteria rerun is active with homepage #24, partials #22/#23, and audit `theme-import-asteria-search-cjt36ptu`.
-- WindPress 3.2.86 generated a 50.75 kB Tailwind 4 cache in hybrid mode.
+- WindPress 3.2.86 generated a 50.75 kB Tailwind 4 cache in hybrid mode; AI Bridge verified it and marked Asteria ready.
 - OpenCode project configuration is installed with `read,preview,write,media,theme_files,debug,cache,seo`.
-- OpenCode session `sess_5panx2hu-mk8zigc` is active and its smoke test passes with 15 public write actions and zero run errors.
+- OpenCode session `sess_5panx2hu-mk8zigc` is active. The final WordPress smoke test reports 1 successful, 0 skipped, and expected/detected MCP version 0.2.0-beta.4.
 - The 0.2.0-beta.3.9 fixes for generic OpenCode pairing, active child-theme preservation, and access reset were all remotely verified.
-- The next action is installing 0.2.0-beta.3.10, restarting OpenCode with MCP 0.2.0-beta.4, and retrying `build_theme_library_css`; it should reconcile the existing native cache without FTP or SSH.
+- Asteria visual checks pass at 1280×800 and 390×844 with no horizontal overflow, broken images, console errors, or page errors.
+- Contact page #27 is a visually verified draft with the Asteria tokens, inherited global shell, SEO metadata, and rollback audit `audit-kuv2tl7s40kl`. Publication remains intentionally pending.
