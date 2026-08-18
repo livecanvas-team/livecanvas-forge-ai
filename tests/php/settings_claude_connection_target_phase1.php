@@ -86,6 +86,8 @@ lcfa_assert_true(array_key_exists('mcp_write_abilities_enabled', $defaults), 'co
 lcfa_assert_same(true, $defaults['mcp_write_abilities_enabled'], 'MCP write abilities should default to enabled for paired agents');
 lcfa_assert_true(array_key_exists('mcp_public_write_abilities', $defaults), 'connection defaults should expose the MCP write ability allowlist');
 lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $defaults['mcp_public_write_abilities'], 'MCP write ability allowlist should default to curated write abilities');
+lcfa_assert_same(array_keys(LCFA_Settings::get_mcp_write_ability_options()), LCFA_Settings::get_full_access_mcp_write_abilities(), 'full access should include every registered MCP write ability');
+lcfa_assert_true(in_array('livecanvas-forge-ai/cache-flush', LCFA_Settings::get_full_access_mcp_write_abilities(), true), 'full access should include cache operations required by remote builds');
 lcfa_assert_same('gpt-5.3-codex-spark', $defaults['codex_model'], 'Codex model should default to the fast frontend model');
 lcfa_assert_same('balanced', $defaults['codex_speed'], 'Codex speed should default to balanced');
 lcfa_assert_same('medium', $defaults['codex_reasoning_effort'], 'Codex intelligence should default to medium');

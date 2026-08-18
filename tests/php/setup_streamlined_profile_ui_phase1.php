@@ -103,8 +103,10 @@ lcfa_assert_contains('Check your project settings', $markup, 'streamlined setup 
 lcfa_assert_contains('class="lcfa-select-control"><select', $markup, 'every setup select should use the visible select control wrapper');
 lcfa_assert_contains('data-lcfa-profile-framework', $markup, 'framework selection should update its explanation');
 lcfa_assert_contains('installs and activates WindPress from WordPress.org first', $markup, 'Picowind should explain the automatic dependency order');
-lcfa_assert_contains('Let the coding agent make changes', $markup, 'write permission should use plain language');
-lcfa_assert_contains('keeps a backup so you can undo them', $markup, 'write permission should explain rollback without technical jargon');
+lcfa_assert_contains('Configure and build this site', $markup, 'build access should use one direct, outcome-based consent label');
+lcfa_assert_contains('content, theme files, media, site settings, and caches', $markup, 'build access should name the capabilities the user is approving');
+lcfa_assert_contains('Leave this off for read-only inspection', $markup, 'build access should explain the lower-permission alternative');
+lcfa_assert_contains('aria-describedby="lcfa-configure-build-access-help"', $markup, 'build access explanation should be associated with its checkbox');
 lcfa_assert_not_contains('Allow guarded write tools', $markup, 'technical write-policy wording should not be shown in the streamlined setup');
 
 echo "PASS\n";

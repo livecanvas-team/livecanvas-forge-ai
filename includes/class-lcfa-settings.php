@@ -504,6 +504,10 @@ final class LCFA_Settings {
         ];
     }
 
+    public static function get_full_access_mcp_write_abilities(): array {
+        return array_keys(self::get_mcp_write_ability_options());
+    }
+
     public static function sanitize_mcp_write_abilities($abilities): array {
         $allowed = array_keys(self::get_mcp_write_ability_options());
         $abilities = is_array($abilities) ? $abilities : [];

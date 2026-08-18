@@ -93,7 +93,10 @@ final class LCFA_Settings {
     ];
 
     public static array $connections = [
-        'preferred_client' => 'codex',
+        'preferred_client'            => 'codex',
+        'mcp_write_abilities_enabled' => false,
+        'power_mode'                  => 'auto',
+        'connection_status'           => '',
     ];
 
     public static array $notice = [
@@ -116,6 +119,20 @@ final class LCFA_Settings {
 
     public static function update_connections(array $connections): void {
         self::$connections = $connections;
+    }
+
+    public static function sanitize_power_mode(string $mode): string {
+        return in_array($mode, ['auto', 'enabled', 'disabled'], true) ? $mode : 'auto';
+    }
+
+    public static function get_full_access_mcp_write_abilities(): array {
+        return [
+            'livecanvas-forge-ai/apply-page-upsert',
+            'livecanvas-forge-ai/theme-file-write',
+            'livecanvas-forge-ai/media-upload',
+            'livecanvas-forge-ai/cache-flush',
+            'livecanvas-forge-ai/seo-tools',
+        ];
     }
 
     public static function set_notice(string $message, string $type = 'success'): void {
@@ -146,8 +163,29 @@ function lcfa_shutdown_assertions(): void {
         exit(1);
     }
 
-    if (($notice['message'] ?? '') !== 'Full access enabled.') {
-        fwrite(STDERR, "step 5 should confirm that full access is enabled\n");
+    if (($notice['message'] ?? '') !== 'Configure and build access enabled.') {
+        fwrite(STDERR, "step 5 should confirm that configure and build access is enabled\n");
+        exit(1);
+    }
+
+    $connections = LCFA_Settings::$connections;
+    if (($connections['power_mode'] ?? '') !== 'enabled') {
+        fwrite(STDERR, "step 5 should enable Power Mode\n");
+        exit(1);
+    }
+
+    if (($connections['mcp_enabled'] ?? null) !== true || ($connections['mcp_write_abilities_enabled'] ?? null) !== true) {
+        fwrite(STDERR, "step 5 should enable MCP and its write abilities\n");
+        exit(1);
+    }
+
+    if (($connections['mcp_public_write_abilities'] ?? []) !== LCFA_Settings::get_full_access_mcp_write_abilities()) {
+        fwrite(STDERR, "step 5 should enable the complete write ability allowlist\n");
+        exit(1);
+    }
+
+    if (($connections['mcp_public_write_abilities_configured'] ?? null) !== true) {
+        fwrite(STDERR, "step 5 should persist the write allowlist as an explicit administrator choice\n");
         exit(1);
     }
 

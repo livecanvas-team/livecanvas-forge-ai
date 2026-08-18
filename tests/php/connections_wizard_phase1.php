@@ -755,6 +755,16 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     }), $remote_client . ' remote setup must not expose legacy WordPress or MCP credentials');
 }
 
+$remote_opencode_full_access = $remote_agent_payload_method->invoke($admin_instance, 'opencode', [
+    'remote_site_url' => 'https://remote.example',
+    'remote_project_label' => 'Remote Example',
+    'power_mode' => 'enabled',
+], []);
+lcfa_assert_true(
+    in_array('LCFA_PAIRING_SCOPES=read,preview,write,media,theme_files,debug,cache,seo', (array) ($remote_opencode_full_access['client_payload']['env'] ?? []), true),
+    'Configure and build access should request the complete OpenCode pairing scope on remote sites'
+);
+
 $pairing_test_prompt = (string) $remote_codex_test_prompt_method->invoke($admin_instance, [
     'connection_strategy' => 'ai-bridge-session',
 ], []);

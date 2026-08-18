@@ -90,10 +90,11 @@ $render_permissions_step->invoke($admin, [
 ]);
 $markup = (string) ob_get_clean();
 
-lcfa_assert_contains('Step 5. Enable Full Access', $markup, 'permissions step should expose the explicit full-access title');
+lcfa_assert_contains('Step 5. Configure and build this site', $markup, 'permissions step should use the same outcome-based consent title as streamlined onboarding');
 lcfa_assert_contains('name="step" value="5"', $markup, 'permissions step should still post step 5');
-lcfa_assert_contains('This grants the companion the broadest operating scope', $markup, 'permissions step should explain the full-access consent clearly');
-lcfa_assert_contains('Continue', $markup, 'permissions step should use a continue CTA');
+lcfa_assert_contains('enables Power Mode and the full pairing scope', $markup, 'permissions step should explain that the single consent enables every required layer');
+lcfa_assert_contains('content, theme files, media, site settings, debug tools, caches, SEO, and visual checks', $markup, 'permissions step should name the complete capability set');
+lcfa_assert_contains('Enable and continue', $markup, 'permissions step should use an explicit consent CTA');
 lcfa_assert_not_contains('name="permission_profile"', $markup, 'permissions step should no longer expose permission profile radios');
 lcfa_assert_not_contains('name="allow_file_fallback"', $markup, 'permissions step should no longer expose the file fallback checkbox');
 

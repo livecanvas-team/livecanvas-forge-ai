@@ -1073,7 +1073,11 @@ final class LCFA_Admin {
                     'last_completed_step' => max(5, (int) $settings['last_completed_step']),
                 ]);
 
-                LCFA_Settings::set_notice(__('Full access enabled.', 'livecanvas-forge-ai'));
+                LCFA_Settings::update_connections(
+                    $this->apply_setup_access_choice(LCFA_Settings::get_connections(), true)
+                );
+
+                LCFA_Settings::set_notice(__('Configure and build access enabled.', 'livecanvas-forge-ai'));
                 $this->redirect_to_step(6);
                 break;
 
@@ -1125,6 +1129,7 @@ final class LCFA_Admin {
                     'preferred_client' => $ai_tool === 'other' ? 'generic' : $ai_tool,
                     'connection_mode'  => $site_mode === 'remote' || $site_mode === 'hybrid' ? 'remote' : 'local',
                 ]);
+                $connections = $this->apply_setup_access_choice($connections, $full_access);
 
                 if ($previous_framework !== '' && $previous_framework !== $framework && $this->has_verified_connection($connections)) {
                     $connections = array_merge($connections, [
@@ -1137,7 +1142,11 @@ final class LCFA_Admin {
                 }
                 LCFA_Settings::update_connections($connections);
 
-                LCFA_Settings::set_notice(__('Project profile saved. Next: connect your coding agent.', 'livecanvas-forge-ai'));
+                LCFA_Settings::set_notice(
+                    $full_access
+                        ? __('Project saved. Configure and build access is on. Next: connect your coding agent.', 'livecanvas-forge-ai')
+                        : __('Project saved in inspect-only mode. Next: connect your coding agent.', 'livecanvas-forge-ai')
+                );
                 $this->redirect_to_step(3);
                 break;
 
@@ -1707,6 +1716,38 @@ final class LCFA_Admin {
 
     private function build_remote_codex_mcp_adapter_payload(array $connections, array $remote_status): array {
         return $this->build_remote_agent_mcp_payload('codex', $connections, $remote_status);
+    }
+
+    private function apply_setup_access_choice(array $connections, bool $configure_and_build): array {
+        $previous_power_mode = LCFA_Settings::sanitize_power_mode((string) ($connections['power_mode'] ?? 'auto'));
+        $previous_write_enabled = !empty($connections['mcp_write_abilities_enabled']);
+        $next_power_mode = $configure_and_build ? 'enabled' : 'disabled';
+        $access_changed = $previous_power_mode !== $next_power_mode
+            || $previous_write_enabled !== $configure_and_build;
+
+        $connections = array_merge($connections, [
+            'mcp_enabled'                              => true,
+            'mcp_write_abilities_enabled'              => $configure_and_build,
+            'mcp_public_write_abilities'               => $configure_and_build
+                ? LCFA_Settings::get_full_access_mcp_write_abilities()
+                : [],
+            'mcp_public_write_abilities_submitted'     => true,
+            'mcp_public_write_abilities_configured'    => true,
+            'power_mode'                               => $next_power_mode,
+        ]);
+
+        if ($access_changed) {
+            $connections['connection_last_bundle_hash'] = '';
+            $connections['connection_last_verified_at'] = '';
+
+            if (trim((string) ($connections['connection_status'] ?? '')) !== '') {
+                $connections['connection_status'] = 'needs_attention';
+                $connections['connection_last_error'] = __('Site access changed. Regenerate the coding-agent setup and approve a new pairing session.', 'livecanvas-forge-ai');
+                $connections['connection_current_step'] = 'generate_bundle';
+            }
+        }
+
+        return $connections;
     }
 
     private function build_remote_agent_mcp_payload(string $client_key, array $connections, array $remote_status): array {
@@ -4943,7 +4984,7 @@ final class LCFA_Admin {
         echo '<summary>' . esc_html__('Power Mode and write access', 'livecanvas-forge-ai') . '</summary>';
         echo '<div class="lcfa-technical-details__body">';
         echo '<p><strong>' . esc_html__('Power Mode status', 'livecanvas-forge-ai') . '</strong></p>';
-        echo '<p>' . esc_html__('Full Access unlocks content patching, theme files, media, debug, cache, SEO, Polylang, and visual checks for approved sessions.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p>' . esc_html__('Configure and build access unlocks content, theme files, media, debug, cache, SEO, Polylang, and visual checks for approved sessions.', 'livecanvas-forge-ai') . '</p>';
         echo '<div class="lcfa-chip-row">';
         echo '<span class="lcfa-chip' . ($enabled ? ' is-warning' : ' is-positive') . '">' . esc_html($enabled ? __('Policy: enabled', 'livecanvas-forge-ai') : __('Policy: disabled', 'livecanvas-forge-ai')) . '</span>';
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Setting: %s', 'livecanvas-forge-ai'), (string) ($power_state['setting'] ?? 'auto'))) . '</span>';
@@ -4951,7 +4992,11 @@ final class LCFA_Admin {
         echo '<span class="lcfa-chip">' . esc_html(sprintf(__('Environment: %s', 'livecanvas-forge-ai'), (string) ($power_state['environment_type'] ?? 'production'))) . '</span>';
         echo '</div>';
         echo '<p class="lcfa-guide-copy">' . esc_html((string) ($power_state['reason'] ?? '')) . '</p>';
-        echo '<p class="description">' . esc_html__('For remote production sites, set Power Mode to Enabled by administrator, regenerate the Codex prompt, re-pair the session, and approve only trusted projects.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p class="description">' . esc_html(
+            $enabled
+                ? __('This access was approved during onboarding. New coding-agent pairings request the complete scoped toolset; approve only projects you trust.', 'livecanvas-forge-ai')
+                : __('To enable changes, return to Setup and choose “Configure and build this site”, then regenerate the coding-agent setup and pair again.', 'livecanvas-forge-ai')
+        ) . '</p>';
         echo '</div>';
         echo '</details>';
     }
@@ -7348,8 +7393,8 @@ final class LCFA_Admin {
         echo '</div>';
 
         echo '<label class="lcfa-checkbox lcfa-setup-access">';
-        echo '<input type="checkbox" name="enable_full_access" value="1"' . checked($full_access, true, false) . '>';
-        echo '<span class="lcfa-setup-access__copy"><strong>' . esc_html__('Let the coding agent make changes', 'livecanvas-forge-ai') . '</strong><small>' . esc_html__('Turn this on when you want the agent to build or edit the site. AI Bridge verifies the site, previews supported changes, and keeps a backup so you can undo them.', 'livecanvas-forge-ai') . '</small></span>';
+        echo '<input id="lcfa-configure-build-access" type="checkbox" name="enable_full_access" value="1" aria-describedby="lcfa-configure-build-access-help"' . checked($full_access, true, false) . '>';
+        echo '<span class="lcfa-setup-access__copy"><strong>' . esc_html__('Configure and build this site', 'livecanvas-forge-ai') . '</strong><small id="lcfa-configure-build-access-help">' . esc_html__('Allow the coding agent to create and edit content, theme files, media, site settings, and caches. AI Bridge verifies the project during pairing and records supported changes for review or rollback. Leave this off for read-only inspection.', 'livecanvas-forge-ai') . '</small></span>';
         echo '</label>';
 
         echo '<div class="lcfa-setup-submit">';
@@ -7376,7 +7421,7 @@ final class LCFA_Admin {
         echo '<div><dt>' . esc_html__('Framework', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html($this->get_framework_display_name($framework)) . '</dd></div>';
         echo '<div><dt>' . esc_html__('Site type', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html(ucfirst($site_mode)) . '</dd></div>';
         echo '<div><dt>' . esc_html__('Coding agent', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html(ucfirst(str_replace('-', ' ', $ai_tool))) . '</dd></div>';
-        echo '<div><dt>' . esc_html__('Write tools', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html($full_access ? __('Enabled with guardrails', 'livecanvas-forge-ai') : __('Preview only', 'livecanvas-forge-ai')) . '</dd></div>';
+        echo '<div><dt>' . esc_html__('Site access', 'livecanvas-forge-ai') . '</dt><dd>' . esc_html($full_access ? __('Configure and build', 'livecanvas-forge-ai') : __('Inspect only', 'livecanvas-forge-ai')) . '</dd></div>';
         echo '</dl>';
 
         echo '<div class="lcfa-next-action">';
@@ -7579,7 +7624,7 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('shield-lock');
-        echo '<div><h2>' . esc_html__('Step 5. Enable Full Access', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Continue only if you want AI Bridge to operate with the broadest execution scope for this project.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Step 5. Configure and build this site', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Continue to let the coding agent build and edit this WordPress site with the complete AI Bridge toolset.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-form">';
@@ -7587,14 +7632,14 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="action" value="lcfa_setup">';
         echo '<input type="hidden" name="step" value="5">';
 
-        echo '<p>' . esc_html__('This grants the companion the broadest operating scope: it can create and update pages, sections, templates, headers, footers, and other advanced outputs without stopping on intermediate policy choices.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p>' . esc_html__('This enables Power Mode and the full pairing scope for content, theme files, media, site settings, debug tools, caches, SEO, and visual checks.', 'livecanvas-forge-ai') . '</p>';
         echo '<ul class="lcfa-bullets">';
-        echo '<li>' . esc_html__('Advanced template actions are enabled immediately.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('Theme or PHP file fallback is allowed only as a last resort when the active stack requires it.', 'livecanvas-forge-ai') . '</li>';
-        echo '<li>' . esc_html__('By continuing, you are explicitly authorizing AI Bridge to operate with these permissions on this site.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('The next coding-agent pairing will request every required build scope automatically.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Supported changes keep audit records and backups for review or rollback.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('By continuing, you authorize these capabilities for this site and trusted pairing sessions.', 'livecanvas-forge-ai') . '</li>';
         echo '</ul>';
 
-        echo '<button class="button button-primary">' . esc_html__('Continue', 'livecanvas-forge-ai') . '</button>';
+        echo '<button class="button button-primary">' . esc_html__('Enable and continue', 'livecanvas-forge-ai') . '</button>';
         echo '</form>';
         echo '</section>';
     }
@@ -7610,7 +7655,7 @@ final class LCFA_Admin {
         echo '<li>' . esc_html(sprintf(__('Confirmed framework: %s.', 'livecanvas-forge-ai'), $settings['framework'] ?: $snapshot['detected_framework'])) . '</li>';
         echo '<li>' . esc_html(sprintf(__('Site profile: %s.', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode'])) . '</li>';
         echo '<li>' . esc_html(sprintf(__('Primary AI client: %s.', 'livecanvas-forge-ai'), $settings['ai_tool'] ?: 'codex')) . '</li>';
-        echo '<li>' . esc_html__('Access mode: Full access enabled.', 'livecanvas-forge-ai') . '</li>';
+        echo '<li>' . esc_html__('Access mode: Configure and build.', 'livecanvas-forge-ai') . '</li>';
         echo '<li>' . esc_html__('Fallback policy: theme or PHP file fallback is available only as a last resort.', 'livecanvas-forge-ai') . '</li>';
         echo '</ul>';
 

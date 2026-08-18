@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.3.7` staging beta
+Status: `0.2.0-beta.3.8` staging beta
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -487,9 +487,9 @@ Expected result for a write-capable project:
 
 ```text
 auth_method: ai_bridge_session
-scopes: read, preview, write
+scopes: read, preview, write, media, theme_files, debug, cache, seo
 connection status: ready
-public write abilities: at least apply-page-upsert when the write policy allows it
+public write abilities: every registered AI Bridge write ability
 ```
 
 If the result is still:
@@ -499,12 +499,18 @@ scopes: read, preview
 public write abilities: 0
 ```
 
-then the session is still preview-only. Review `Connections > Advanced settings`, enable `Expose curated write abilities through the AI Bridge MCP server`, select the required write abilities in the allowlist, save, revoke the old session, and pair again.
+then the session is still preview-only. Return to Setup, choose **Configure and build this site**, save, regenerate the coding-agent setup, revoke the old session, and pair again. That single onboarding choice enables Power Mode, the complete write allowlist, and the full remote pairing scope.
 
-The current MCP package requests `read, preview, write` by default. To force a read/preview-only Codex session, add this environment variable to the MCP config before pairing:
+The generated setup always declares the scope selected during onboarding. **Inspect only** uses:
 
 ```text
 LCFA_PAIRING_SCOPES="read,preview"
+```
+
+**Configure and build this site** uses:
+
+```text
+LCFA_PAIRING_SCOPES="read,preview,write,media,theme_files,debug,cache,seo"
 ```
 
 ## How To Test This Build
