@@ -139,14 +139,33 @@ During the clean third cycle, `build_theme_library_css` reached WordPress with a
 
 **Result:** a WordPress **Check again** request regenerated the update transient. The duplicate notice disappeared, AI Bridge remained on 0.2.0-beta.3.10, and the only remaining update was Akismet. This is a transient refresh artifact, not a persistent updater defect.
 
-## Final authoritative state after the 0.2.0-beta.3.10 verification
+### F-13 — Bundled catalog hides a newer remote child-theme release
 
-- AI Bridge 0.2.0-beta.3.10 is installed on Cloudways; GitHub prerelease `v0.2.0-beta.3.10` is public.
+**Observed:** after Asteria Search 1.0.3 was published in the canonical catalog, a forced catalog refresh still showed 1.0.2. The merge always replaced a remote theme with the bundled entry sharing its slug.
+
+**Correction:** AI Bridge now keeps whichever same-slug entry has the newer semantic version and prefers the canonical remote entry when versions are equal. The normalized catalog schema was advanced to invalidate stale cached merges. Fixed in 0.2.0-beta.3.11 and retained in 0.2.0-beta.3.12.
+
+### F-14 — Installed child themes cannot be updated from Theme Library
+
+**Observed:** Theme Library recognized Asteria 1.0.3 but disabled installation as **Current child theme**, even though the active installation was 1.0.2. The installer also returned `already_installed` without replacing files.
+
+**Correction:** AI Bridge 0.2.0-beta.3.12 compares the installed `style.css` version with the catalog version, requires a fresh package preview, offers **Update child theme**, and performs a WordPress overwrite install while preserving the active stylesheet. The Cloudways site successfully advanced from Asteria 1.0.2 to 1.0.3.
+
+### F-15 — Asteria one-page anchors resolve against inner pages
+
+**Observed:** the shared header used links such as `#thesis`, so the Contact page resolved them as `/contact/#thesis`.
+
+**Correction:** Asteria Search 1.0.3 ships homepage-rooted fallbacks and resolves the final URLs through WordPress `home_url()`, including subdirectory installations. Logo, Thesis, Engagements, Results, and Back to top now target the homepage. A live click from Contact to Thesis ended at `/#thesis` and loaded the homepage section.
+
+## Final authoritative state after the 0.2.0-beta.3.12 and Asteria 1.0.3 verification
+
+- AI Bridge 0.2.0-beta.3.12 is installed on Cloudways; GitHub prerelease `v0.2.0-beta.3.12` is public.
 - `@livecanvas/ai-bridge-mcp@0.2.0-beta.4` is published with dist-tag `beta`; npm `latest` remains `0.1.4`.
-- The clean Asteria rerun is active with homepage #24, partials #22/#23, and audit `theme-import-asteria-search-cjt36ptu`.
+- Asteria Search 1.0.3 is published in the canonical and fallback catalogs, installed, and active on Cloudways. The existing homepage #24, partials #22/#23, and audit `theme-import-asteria-search-cjt36ptu` were preserved.
 - WindPress 3.2.86 generated a 50.75 kB Tailwind 4 cache in hybrid mode; AI Bridge verified it and marked Asteria ready.
 - OpenCode project configuration is installed with `read,preview,write,media,theme_files,debug,cache,seo`.
 - OpenCode session `sess_5panx2hu-mk8zigc` is active. The final WordPress smoke test reports 1 successful, 0 skipped, and expected/detected MCP version 0.2.0-beta.4.
 - The 0.2.0-beta.3.9 fixes for generic OpenCode pairing, active child-theme preservation, and access reset were all remotely verified.
 - Asteria visual checks pass at 1280×800 and 390×844 with no horizontal overflow, broken images, console errors, or page errors.
 - Contact page #27 is published at `/contact/` with the Asteria tokens, inherited global shell, SEO metadata, and rollback audit `audit-kuv2tl7s40kl`. The public URL was verified without preview parameters.
+- Contact navigation now resolves to the homepage URLs `/#asteria-page`, `/#thesis`, `/#engagements`, and `/#work`; the footer Back to top uses `/#asteria-page` as well.
