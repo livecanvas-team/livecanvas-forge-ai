@@ -284,6 +284,35 @@ final class LCFA_MCP_Session_Manager {
         ];
     }
 
+    public static function reset_access_state(): array {
+        $sessions = self::get_sessions();
+        $revoked_sessions = 0;
+        $revoked_at = gmdate('c');
+
+        foreach ($sessions as $session_id => $session) {
+            if (trim((string) ($session['revoked_at'] ?? '')) !== '' || self::session_is_expired($session)) {
+                continue;
+            }
+
+            $sessions[$session_id]['revoked_at'] = $revoked_at;
+            $revoked_sessions++;
+        }
+
+        if ($sessions !== []) {
+            update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
+        }
+
+        $pairing_ids = self::get_pairing_index();
+        foreach ($pairing_ids as $pairing_id) {
+            self::delete_pairing($pairing_id);
+        }
+
+        return [
+            'revoked_sessions' => $revoked_sessions,
+            'cleared_pairings' => count($pairing_ids),
+        ];
+    }
+
     public static function get_session_from_request(?WP_REST_Request $request, string $required_scope = 'read') {
         if (!$request instanceof WP_REST_Request) {
             return false;

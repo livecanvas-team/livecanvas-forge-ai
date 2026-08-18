@@ -1112,6 +1112,66 @@ $connection_wizard_markup = (string) ob_get_clean();
 lcfa_assert_false(strpos($connection_wizard_markup, 'lcfa-wizard__alert') !== false, 'wizard should stop rendering the redundant What to do now banner');
 lcfa_assert_false(strpos($connection_wizard_markup, 'What to do now') !== false, 'wizard should not repeat the step callout above the blocking panel');
 
+$remote_opencode_pairing_view = $presenter->build([
+    'state' => [
+        'status' => 'not_connected',
+        'current_step' => 'smoke_test',
+    ],
+    'bundle' => [
+        'client' => 'opencode',
+        'mode' => 'remote',
+        'connection_strategy' => 'ai-bridge-session',
+        'copy_command_string' => 'setup-opencode',
+        'workspace_root' => '',
+    ],
+    'workspace_access' => [
+        'available' => false,
+        'reason' => 'missing',
+        'path' => '',
+    ],
+]);
+LCFA_MCP_Session_Manager::$pending = [[
+    'pairing_id' => 'pair_opencode',
+    'project_label' => 'OpenCode Project',
+    'user_code' => '2FXL-MCYH',
+    'client' => 'opencode',
+    'scopes' => ['read', 'preview', 'write', 'media', 'theme_files', 'debug', 'cache', 'seo'],
+    'expires_at' => '2030-01-01T00:00:00+00:00',
+]];
+ob_start();
+$connection_wizard_method->invoke(
+    $admin_instance,
+    $remote_opencode_pairing_view,
+    [
+        'client' => 'opencode',
+        'mode' => 'remote',
+        'connection_strategy' => 'ai-bridge-session',
+        'copy_command_string' => 'setup-opencode',
+        'workspace_root' => '',
+    ],
+    [
+        'preferred_client' => 'opencode',
+        'connection_mode' => 'remote',
+        'workspace_root' => '',
+    ],
+    'opencode',
+    'remote',
+    [],
+    [],
+    [],
+    [],
+    ['current_step' => 'smoke_test'],
+    ['available' => false, 'reason' => 'missing', 'path' => '']
+);
+$remote_opencode_pairing_markup = (string) ob_get_clean();
+LCFA_MCP_Session_Manager::$pending = [];
+
+lcfa_assert_true(strpos($remote_opencode_pairing_markup, 'id="lcfa-secure-codex-pairing-sessions"') !== false, 'remote OpenCode wizard should render the secure pairing panel');
+lcfa_assert_true(strpos($remote_opencode_pairing_markup, '2FXL-MCYH') !== false, 'remote OpenCode wizard should show the matching pairing code');
+lcfa_assert_true(strpos($remote_opencode_pairing_markup, 'Approve OpenCode') !== false, 'remote OpenCode wizard should expose the approval action');
+lcfa_assert_true(strpos($remote_opencode_pairing_markup, 'Requested access: Configure and build') !== false, 'remote OpenCode wizard should explain the requested access profile before approval');
+lcfa_assert_true(strpos($remote_opencode_pairing_markup, 'theme_files') !== false, 'remote OpenCode wizard should list the requested scopes before approval');
+
 $ready_state = $onboarding->derive_state([
     'preferred_client'            => 'opencode',
     'workspace_root'              => '/Users/commander/Studio/consultala',

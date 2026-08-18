@@ -221,4 +221,18 @@ $opencode_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $openco
 lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $opencode_status['session_token'], 'read'), 'OpenCode session should validate');
 lcfa_assert_same('opencode', $GLOBALS['lcfa_test_connections']['preferred_client'] ?? '', 'OpenCode session usage should store the correct preferred client');
 
+$pending_before_reset = LCFA_MCP_Session_Manager::start_pairing([
+    'client' => 'cursor',
+    'project_label' => 'Pending Before Reset',
+    'site_fingerprint' => 'site-fp',
+]);
+lcfa_assert_true(!empty($pending_before_reset['ok']), 'reset coverage should start with a pending pairing');
+
+$access_reset = LCFA_MCP_Session_Manager::reset_access_state();
+lcfa_assert_true((int) ($access_reset['revoked_sessions'] ?? 0) >= 2, 'reset should revoke every active coding-agent session');
+lcfa_assert_true((int) ($access_reset['cleared_pairings'] ?? 0) >= 1, 'reset should remove pending and consumed pairing records');
+lcfa_assert_same([], LCFA_MCP_Session_Manager::get_pending_pairings(), 'reset should remove all pending pairing requests');
+lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'read'), 'reset should invalidate the read-only session token');
+lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $opencode_status['session_token'], 'read'), 'reset should invalidate the OpenCode session token');
+
 echo "PASS\n";

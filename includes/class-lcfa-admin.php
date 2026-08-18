@@ -2077,8 +2077,19 @@ final class LCFA_Admin {
 
         check_admin_referer('lcfa_reset_setup');
 
+        $access_reset = class_exists('LCFA_MCP_Session_Manager', false)
+            ? LCFA_MCP_Session_Manager::reset_access_state()
+            : ['revoked_sessions' => 0, 'cleared_pairings' => 0];
+
         LCFA_Settings::reset_setup_state();
-        LCFA_Settings::set_notice(__('AI Bridge state reset. Setup and connection status were cleared, a new MCP token was generated, and existing workspace files were left untouched.', 'livecanvas-forge-ai'), 'success');
+        LCFA_Settings::set_notice(
+            sprintf(
+                __('AI Bridge state reset. Setup and connection status were cleared, %1$d coding-agent session(s) were revoked, %2$d pending pairing request(s) were removed, a new MCP token was generated, and existing workspace files were left untouched.', 'livecanvas-forge-ai'),
+                (int) ($access_reset['revoked_sessions'] ?? 0),
+                (int) ($access_reset['cleared_pairings'] ?? 0)
+            ),
+            'success'
+        );
 
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=1'));
         exit;
@@ -4389,10 +4400,22 @@ final class LCFA_Admin {
             foreach ($pending as $pairing) {
                 $client_key = $this->normalize_connection_client((string) ($pairing['client'] ?? 'codex'));
                 $client_label = (string) ($client_labels[$client_key] ?? $client_labels['generic']);
+                $requested_scopes = array_values(array_filter(array_map('sanitize_key', (array) ($pairing['scopes'] ?? []))));
+                $can_configure_and_build = array_intersect($requested_scopes, ['write', 'media', 'theme_files', 'debug', 'cache', 'seo']) !== [];
+                $access_label = $can_configure_and_build
+                    ? __('Configure and build', 'livecanvas-forge-ai')
+                    : __('Inspect only', 'livecanvas-forge-ai');
                 echo '<div class="lcfa-stack-item">';
                 echo '<div>';
                 echo '<strong>' . esc_html((string) ($pairing['project_label'] ?? __('Coding-agent project', 'livecanvas-forge-ai'))) . '</strong>';
                 echo '<p>' . esc_html(sprintf(__('Code: %1$s · Client: %2$s · Expires: %3$s', 'livecanvas-forge-ai'), (string) ($pairing['user_code'] ?? ''), $client_label, (string) ($pairing['expires_at'] ?? ''))) . '</p>';
+                if ($requested_scopes !== []) {
+                    echo '<p>' . esc_html(sprintf(
+                        __('Requested access: %1$s · Permissions: %2$s', 'livecanvas-forge-ai'),
+                        $access_label,
+                        implode(', ', $requested_scopes)
+                    )) . '</p>';
+                }
                 echo '</div>';
                 echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
                 wp_nonce_field('lcfa_mcp_pairing_approve');
@@ -5192,6 +5215,13 @@ final class LCFA_Admin {
         $this->render_connection_stepper((array) ($wizard_view['steps'] ?? []));
         echo '</div>';
         $this->render_connection_active_step_panel($panel, $current_step, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $workspace_write_state);
+        if ($selected_mode === 'remote') {
+            // Secure pairing is shared by every remote MCP client. Keep the
+            // approval and revocation panel in the generic wizard as well as
+            // the dedicated Codex path so OpenCode, Claude, and Cursor users
+            // are never sent to an anchor that is absent from the page.
+            $this->render_codex_mcp_sessions_panel((string) ($bundle['connection_strategy'] ?? ''));
+        }
         $this->render_connection_visual_help_strip($wizard_view);
         $this->render_agent_connection_guide($mcp_bootstrap, $settings, $snapshot, $preferred_client, $mcp_status, true);
         $this->render_connection_technical_summary($bundle, !empty($wizard_view['technical_summary']['expanded']));
@@ -7672,7 +7702,7 @@ final class LCFA_Admin {
         echo '<details class="lcfa-technical-details lcfa-reset-setup">';
         echo '<summary>' . esc_html__('Reset setup', 'livecanvas-forge-ai') . '</summary>';
         echo '<div class="lcfa-technical-details__body">';
-        echo '<p>' . esc_html__('Reset clears the connection state and rotates the MCP token. It keeps WordPress content, the project brief, command history, and existing workspace files.', 'livecanvas-forge-ai') . '</p>';
+        echo '<p>' . esc_html__('Reset clears the connection state, revokes active coding-agent sessions, removes pending pairing requests, and rotates the MCP token. It keeps WordPress content, the project brief, command history, and existing workspace files.', 'livecanvas-forge-ai') . '</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-inline-form">';
         wp_nonce_field('lcfa_reset_setup');
         echo '<input type="hidden" name="action" value="lcfa_reset_setup">';

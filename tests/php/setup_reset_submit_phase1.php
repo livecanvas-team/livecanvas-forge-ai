@@ -73,6 +73,19 @@ function wp_safe_redirect(string $location): void {
     $GLOBALS['lcfa_test_redirect'] = $location;
 }
 
+final class LCFA_MCP_Session_Manager {
+    public static bool $reset_called = false;
+
+    public static function reset_access_state(): array {
+        self::$reset_called = true;
+
+        return [
+            'revoked_sessions' => 2,
+            'cleared_pairings' => 1,
+        ];
+    }
+}
+
 final class LCFA_Settings {
     public static bool $reset_called = false;
     public static array $notice = [
@@ -98,10 +111,15 @@ function lcfa_shutdown_assertions(): void {
         exit(1);
     }
 
+    if (!LCFA_MCP_Session_Manager::$reset_called) {
+        fwrite(STDERR, "reset submit should revoke coding-agent access\n");
+        exit(1);
+    }
+
     $notice = LCFA_Settings::$notice;
     $redirect = $GLOBALS['lcfa_test_redirect'] ?? '';
 
-    if (($notice['message'] ?? '') !== 'AI Bridge state reset. Setup and connection status were cleared, a new MCP token was generated, and existing workspace files were left untouched.') {
+    if (($notice['message'] ?? '') !== 'AI Bridge state reset. Setup and connection status were cleared, 2 coding-agent session(s) were revoked, 1 pending pairing request(s) were removed, a new MCP token was generated, and existing workspace files were left untouched.') {
         fwrite(STDERR, "reset submit should set the updated reset notice\n");
         exit(1);
     }

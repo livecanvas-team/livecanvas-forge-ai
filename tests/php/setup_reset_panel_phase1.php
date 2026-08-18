@@ -76,7 +76,7 @@ $method->invoke($admin);
 $markup = (string) ob_get_clean();
 
 lcfa_assert_contains('Reset setup', $markup, 'setup should expose a reset panel at the bottom');
-lcfa_assert_contains('Reset clears the connection state and rotates the MCP token.', $markup, 'reset panel should explain the connection reset');
+lcfa_assert_contains('Reset clears the connection state, revokes active coding-agent sessions, removes pending pairing requests, and rotates the MCP token.', $markup, 'reset panel should explain the connection and authorization reset');
 lcfa_assert_contains('It keeps WordPress content, the project brief, command history, and existing workspace files.', $markup, 'reset panel should explain preserved data without a long warning list');
 lcfa_assert_contains('<details', $markup, 'reset controls should stay collapsed until requested');
 lcfa_assert_contains('name="action" value="lcfa_reset_setup"', $markup, 'reset panel should post the setup reset action');

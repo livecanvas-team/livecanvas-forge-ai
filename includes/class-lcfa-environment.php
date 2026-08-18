@@ -412,6 +412,17 @@ final class LCFA_Environment {
     public function get_preferred_theme_stylesheet(string $family): ?string {
         $candidates = $this->find_theme_candidates($family);
 
+        // Re-confirming an already compatible framework must not switch away
+        // from the child theme the administrator is currently using. This is
+        // especially important when WordPress has multiple Picowind child
+        // themes whose slugs differ only by an installer suffix.
+        $current_stylesheet = wp_get_theme()->get_stylesheet();
+        foreach ($candidates as $candidate) {
+            if ((string) ($candidate['stylesheet'] ?? '') === $current_stylesheet) {
+                return $current_stylesheet;
+            }
+        }
+
         return $candidates[0]['stylesheet'] ?? null;
     }
 
