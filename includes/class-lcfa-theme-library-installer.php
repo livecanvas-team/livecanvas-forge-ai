@@ -71,35 +71,47 @@ final class LCFA_Theme_Library_Installer {
         }
         $stylesheet = sanitize_key((string) ($manifest['theme']['stylesheet'] ?? $manifest['theme']['slug'] ?? $theme['slug'] ?? ''));
 
+        $overwrite_existing = false;
         if ($stylesheet !== '') {
             $installed_stylesheet = $this->resolve_installed_stylesheet($stylesheet, $manifest, $theme);
             $existing_theme = wp_get_theme($installed_stylesheet);
             if ($existing_theme->exists()) {
-                $this->delete_file($zip_path);
-                $activation = $this->activate_theme_with_rollback(
-                    $installed_stylesheet,
-                    $manifest,
-                    $theme,
-                    (string) ($validation['checksum'] ?? '')
-                );
-                if (empty($activation['ok'])) {
-                    return $activation;
-                }
+                $installed_version = sanitize_text_field((string) $existing_theme->get('Version'));
+                $target_version = sanitize_text_field((string) ($manifest['theme']['version'] ?? $theme['version'] ?? ''));
+                $overwrite_existing = $installed_version !== ''
+                    && $target_version !== ''
+                    && version_compare($target_version, $installed_version, '>');
 
-                return [
-                    'ok'               => true,
-                    'status'           => 'already_installed',
-                    'message'          => __('Theme Library child theme was already installed and has been activated.', 'livecanvas-forge-ai'),
-                    'theme'            => $theme,
-                    'manifest'         => $manifest,
-                    'theme_stylesheet' => $installed_stylesheet,
-                ];
+                if (!$overwrite_existing) {
+                    $this->delete_file($zip_path);
+                    $activation = $this->activate_theme_with_rollback(
+                        $installed_stylesheet,
+                        $manifest,
+                        $theme,
+                        (string) ($validation['checksum'] ?? '')
+                    );
+                    if (empty($activation['ok'])) {
+                        return $activation;
+                    }
+
+                    return [
+                        'ok'               => true,
+                        'status'           => 'already_installed',
+                        'message'          => __('Theme Library child theme was already installed and has been activated.', 'livecanvas-forge-ai'),
+                        'theme'            => $theme,
+                        'manifest'         => $manifest,
+                        'theme_stylesheet' => $installed_stylesheet,
+                    ];
+                }
             }
         }
 
         $this->load_upgrader_dependencies();
         $upgrader = new Theme_Upgrader(new Automatic_Upgrader_Skin());
-        $result = $upgrader->install($zip_path);
+        $result = $upgrader->install($zip_path, [
+            'clear_update_cache' => true,
+            'overwrite_package'  => $overwrite_existing,
+        ]);
         $this->delete_file($zip_path);
 
         if (is_wp_error($result)) {
@@ -134,7 +146,10 @@ final class LCFA_Theme_Library_Installer {
 
         return [
             'ok'              => true,
-            'message'         => __('Theme Library child theme installed and activated.', 'livecanvas-forge-ai'),
+            'status'          => $overwrite_existing ? 'updated' : 'installed',
+            'message'         => $overwrite_existing
+                ? __('Theme Library child theme updated and kept active.', 'livecanvas-forge-ai')
+                : __('Theme Library child theme installed and activated.', 'livecanvas-forge-ai'),
             'theme'           => $theme,
             'manifest'        => $manifest,
             'theme_stylesheet'=> $installed_stylesheet !== '' ? $installed_stylesheet : $stylesheet,

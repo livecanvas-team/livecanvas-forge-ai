@@ -460,6 +460,8 @@ lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, "
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'admin.php?page=windpress#/settings/performance'), 'Theme Library remote build guidance should link directly to WindPress Performance');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$child_active'), 'Theme Library UI should distinguish an installed child theme from the currently active child theme');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Current child theme'), 'Theme Library UI should not offer to activate the child theme that is already active');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Update child theme'), 'Theme Library UI should offer a validated package update when the catalog version is newer');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$child_update_available'), 'Theme Library UI should compare installed and catalog child-theme versions');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_theme_library_rollback_history'), 'Theme Library UI should expose older unresolved import audits for chained rollback');
 
 @unlink($valid_zip);

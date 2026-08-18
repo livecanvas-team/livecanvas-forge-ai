@@ -3048,6 +3048,13 @@ final class LCFA_Admin {
                 $windpress_ready = $framework !== 'picowind' || (!empty($snapshot['windpress_installed']) && !empty($snapshot['windpress_active']));
                 $installed_stylesheet = $this->find_theme_library_child_stylesheet($theme);
                 $child_installed = $installed_stylesheet !== '';
+                $installed_child_version = $child_installed
+                    ? sanitize_text_field((string) wp_get_theme($installed_stylesheet)->get('Version'))
+                    : '';
+                $child_update_available = $child_installed
+                    && $version !== ''
+                    && $installed_child_version !== ''
+                    && version_compare($version, $installed_child_version, '>');
                 $active_stylesheet = sanitize_key((string) ($snapshot['current_theme_stylesheet'] ?? ''));
                 $child_active = $child_installed && sanitize_key($installed_stylesheet) === $active_stylesheet;
                 $import_status = (string) ($import['status'] ?? '');
@@ -3103,9 +3110,11 @@ final class LCFA_Admin {
                 }
                 $this->render_theme_library_check(__('Package preview', 'livecanvas-forge-ai'), $preview_ready, $preview_ready ? __('Validated for 30 minutes', 'livecanvas-forge-ai') : __('Required before first install', 'livecanvas-forge-ai'));
                 $child_theme_detail = $child_installed
-                    ? ($child_active
-                        ? sprintf(__('%s (active)', 'livecanvas-forge-ai'), $installed_stylesheet)
-                        : $installed_stylesheet)
+                    ? sprintf(
+                        $child_active ? __('%1$s %2$s (active)', 'livecanvas-forge-ai') : __('%1$s %2$s', 'livecanvas-forge-ai'),
+                        $installed_stylesheet,
+                        $installed_child_version !== '' ? $installed_child_version : __('version unknown', 'livecanvas-forge-ai')
+                    )
                     : __('Not installed yet', 'livecanvas-forge-ai');
                 $this->render_theme_library_check(__('Child theme', 'livecanvas-forge-ai'), $child_installed, $child_theme_detail);
                 $this->render_theme_library_check(__('Starter data', 'livecanvas-forge-ai'), $is_imported, $is_imported ? __('Imported', 'livecanvas-forge-ai') : __('Not imported yet', 'livecanvas-forge-ai'));
@@ -3157,8 +3166,11 @@ final class LCFA_Admin {
                         empty($framework_prerequisites['ready']) ? (string) ($framework_prerequisites['message'] ?? '') : ''
                     );
                 }
-                $install_disabled = $child_active || !$parent_ready || (!$child_installed && !$preview_ready);
-                if ($child_active) {
+                $package_write_required = !$child_installed || $child_update_available;
+                $install_disabled = ($child_active && !$child_update_available)
+                    || !$parent_ready
+                    || ($package_write_required && !$preview_ready);
+                if ($child_active && !$child_update_available) {
                     $install_disabled_reason = __('This child theme is already active.', 'livecanvas-forge-ai');
                 } elseif (!$runtime_ready) {
                     $install_disabled_reason = (string) ($theme_prerequisites['message'] ?? __('Upgrade PHP before installing this theme.', 'livecanvas-forge-ai'));
@@ -3167,9 +3179,11 @@ final class LCFA_Admin {
                 } else {
                     $install_disabled_reason = __('Preview and validate the package before installing it.', 'livecanvas-forge-ai');
                 }
-                $install_label = $child_active
-                    ? __('Current child theme', 'livecanvas-forge-ai')
-                    : ($child_installed ? __('Activate child theme', 'livecanvas-forge-ai') : __('Install child theme', 'livecanvas-forge-ai'));
+                $install_label = $child_update_available
+                    ? __('Update child theme', 'livecanvas-forge-ai')
+                    : ($child_active
+                        ? __('Current child theme', 'livecanvas-forge-ai')
+                        : ($child_installed ? __('Activate child theme', 'livecanvas-forge-ai') : __('Install child theme', 'livecanvas-forge-ai')));
                 $this->render_theme_library_action_form($slug, 'install', $install_label, false, $install_disabled, $install_disabled_reason);
                 $import_disabled_reason = !$runtime_ready
                     ? (string) ($theme_prerequisites['message'] ?? __('Upgrade PHP before importing this theme.', 'livecanvas-forge-ai'))

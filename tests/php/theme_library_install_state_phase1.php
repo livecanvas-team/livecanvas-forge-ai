@@ -8,12 +8,18 @@ $GLOBALS['lcfa_installer_root'] = sys_get_temp_dir() . '/lcfa-theme-installer-' 
 $GLOBALS['lcfa_installer_options'] = [];
 $GLOBALS['lcfa_installer_active_theme'] = 'original-child';
 $GLOBALS['lcfa_installer_theme_mods'] = ['primary' => 42];
+$GLOBALS['lcfa_installer_installed_version'] = '1.0.0';
+$GLOBALS['lcfa_installer_target_version'] = '1.0.0';
+$GLOBALS['lcfa_installer_upgrader_args'] = [];
 
 define('ABSPATH', $GLOBALS['lcfa_installer_root'] . '/wordpress/');
 define('LCFA_DIR', $GLOBALS['lcfa_installer_root'] . '/plugin/');
 @mkdir(ABSPATH . 'wp-admin/includes', 0777, true);
 @mkdir(LCFA_DIR . 'packages', 0777, true);
 file_put_contents(ABSPATH . 'wp-admin/includes/file.php', "<?php\n");
+file_put_contents(ABSPATH . 'wp-admin/includes/misc.php', "<?php\n");
+file_put_contents(ABSPATH . 'wp-admin/includes/class-wp-upgrader.php', "<?php\n");
+file_put_contents(ABSPATH . 'wp-admin/includes/theme.php', "<?php\n");
 file_put_contents(LCFA_DIR . 'packages/sample-theme.zip', 'fake-package');
 
 function __(string $text, string $domain = ''): string { return $text; }
@@ -41,7 +47,18 @@ final class LCFA_Installer_Test_Theme {
 
     public function exists(): bool { return $this->exists; }
     public function get_stylesheet(): string { return $this->stylesheet; }
-    public function get(string $field): string { return $field === 'Name' ? 'Sample Theme' : ($field === 'TextDomain' ? 'sample-theme' : ''); }
+    public function get(string $field): string {
+        if ($field === 'Name') {
+            return 'Sample Theme';
+        }
+        if ($field === 'TextDomain') {
+            return 'sample-theme';
+        }
+        if ($field === 'Version' && $this->stylesheet === 'sample-theme') {
+            return (string) $GLOBALS['lcfa_installer_installed_version'];
+        }
+        return '';
+    }
     public function get_template(): string { return $this->stylesheet === 'sample-theme' ? 'picowind' : 'picowind'; }
 }
 
@@ -64,10 +81,21 @@ class LCFA_Theme_Library_Validator {
                     'slug'       => 'sample-theme',
                     'stylesheet' => 'sample-theme',
                     'name'       => 'Sample Theme',
-                    'version'    => '1.0.0',
+                    'version'    => (string) $GLOBALS['lcfa_installer_target_version'],
                 ],
             ],
         ];
+    }
+}
+
+class Automatic_Upgrader_Skin {}
+class Theme_Upgrader {
+    public function __construct($skin = null) {}
+
+    public function install(string $zip_path, array $args = []): bool {
+        $GLOBALS['lcfa_installer_upgrader_args'] = $args;
+        $GLOBALS['lcfa_installer_installed_version'] = (string) $GLOBALS['lcfa_installer_target_version'];
+        return true;
     }
 }
 
@@ -148,6 +176,18 @@ $second = $installer->install([
 ]);
 lcfa_installer_assert(!empty($second['ok']), 'Reactivating the current theme should remain idempotent.');
 lcfa_installer_assert(count($windpress->captured) === 1, 'The current active theme should not create a redundant runtime backup.');
+
+$GLOBALS['lcfa_installer_target_version'] = '1.0.1';
+$updated = $installer->install([
+    'slug'         => 'sample-theme',
+    'name'         => 'Sample Theme',
+    'version'      => '1.0.1',
+    'package_path' => 'packages/sample-theme.zip',
+]);
+lcfa_installer_assert(!empty($updated['ok']) && ($updated['status'] ?? '') === 'updated', 'A newer Theme Library package should update an installed child theme.');
+lcfa_installer_assert(!empty($GLOBALS['lcfa_installer_upgrader_args']['overwrite_package']), 'Child-theme updates should explicitly replace the existing package.');
+lcfa_installer_assert($GLOBALS['lcfa_installer_installed_version'] === '1.0.1', 'The installed child theme should advance to the catalog version.');
+lcfa_installer_assert($GLOBALS['lcfa_installer_active_theme'] === 'sample-theme', 'Updating the active child theme should keep it active.');
 
 $GLOBALS['lcfa_installer_active_theme'] = 'original-child';
 $blocked_installer = new LCFA_Theme_Library_Installer(
