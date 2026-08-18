@@ -7,7 +7,7 @@ final class LCFA_Theme_Library_Catalog {
     private const FALLBACK_CATALOG_URL = 'https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/examples/theme-library/catalog.json';
     private const CACHE_KEY = 'lcfa_theme_library_catalog';
     private const CACHE_TTL = 900;
-    private const NORMALIZATION_VERSION = 2;
+    private const NORMALIZATION_VERSION = 3;
 
     public function get_catalog(bool $force = false): array {
         $cached = get_transient(self::CACHE_KEY);
@@ -268,7 +268,14 @@ final class LCFA_Theme_Library_Catalog {
 
         foreach ((array) ($local['themes'] ?? []) as $theme) {
             if (is_array($theme) && !empty($theme['slug'])) {
-                $themes[(string) $theme['slug']] = $theme;
+                $slug = (string) $theme['slug'];
+                $remote_theme = is_array($themes[$slug] ?? null) ? $themes[$slug] : [];
+                $remote_version = (string) ($remote_theme['version'] ?? '');
+                $local_version = (string) ($theme['version'] ?? '');
+
+                if (!$remote_theme || ($local_version !== '' && version_compare($local_version, $remote_version, '>'))) {
+                    $themes[$slug] = $theme;
+                }
             }
         }
 

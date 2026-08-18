@@ -211,7 +211,7 @@ lcfa_theme_assert_same('picostrap', $catalog['themes'][1]['framework'], 'catalog
 lcfa_theme_assert_same('Picostrap', $catalog['themes'][1]['framework_label'], 'catalog should expose a readable Picostrap label');
 lcfa_theme_assert_same('Bootstrap 5', $catalog['themes'][1]['technology_label'], 'catalog should expose the Picostrap technology label');
 lcfa_theme_assert_same(['picowind' => 1, 'picostrap' => 1], $catalog['frameworks'], 'catalog should expose framework counts for filtering');
-lcfa_theme_assert_same(2, $catalog['normalization_version'], 'catalog should invalidate normalized cache when framework metadata changes');
+lcfa_theme_assert_same(3, $catalog['normalization_version'], 'catalog should invalidate normalized cache when merge semantics change');
 lcfa_theme_assert_true(count($catalog['errors']) === 2, 'catalog should report missing data and unsupported framework entries');
 
 $merge_catalogs = lcfa_test_reflection_method(LCFA_Theme_Library_Catalog::class, 'merge_catalogs');
@@ -226,6 +226,34 @@ $merged_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
     'errors' => [],
 ]);
 lcfa_theme_assert_same([], $merged_catalog['errors'], 'a valid bundled theme should clear duplicate stale errors for the same slug');
+
+$remote_newer_theme = $catalog['themes'][0];
+$remote_newer_theme['version'] = '1.0.3';
+$remote_newer_theme['package_url'] = 'https://example.test/remote-1.0.3.zip';
+$bundled_older_theme = $catalog['themes'][0];
+$bundled_older_theme['version'] = '1.0.2';
+$bundled_older_theme['package_url'] = 'https://example.test/bundled-1.0.2.zip';
+$remote_newer_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
+    'themes' => [$remote_newer_theme],
+    'errors' => [],
+], [
+    'themes' => [$bundled_older_theme],
+    'errors' => [],
+]);
+lcfa_theme_assert_same('1.0.3', $remote_newer_catalog['themes'][0]['version'] ?? '', 'an older bundled theme must not hide a newer remote release');
+lcfa_theme_assert_same('https://example.test/remote-1.0.3.zip', $remote_newer_catalog['themes'][0]['package_url'] ?? '', 'equal-slug catalog merges should preserve the newer remote package');
+
+$bundled_newer_theme = $bundled_older_theme;
+$bundled_newer_theme['version'] = '1.0.4';
+$bundled_newer_theme['package_url'] = 'https://example.test/bundled-1.0.4.zip';
+$bundled_newer_catalog = $merge_catalogs->invoke(new LCFA_Theme_Library_Catalog(), [
+    'themes' => [$remote_newer_theme],
+    'errors' => [],
+], [
+    'themes' => [$bundled_newer_theme],
+    'errors' => [],
+]);
+lcfa_theme_assert_same('1.0.4', $bundled_newer_catalog['themes'][0]['version'] ?? '', 'a newer bundled fallback should remain available when it leads the remote catalog');
 
 $validator = new LCFA_Theme_Library_Validator();
 $valid = $validator->validate_zip($valid_zip, ['checksum' => $checksum]);
