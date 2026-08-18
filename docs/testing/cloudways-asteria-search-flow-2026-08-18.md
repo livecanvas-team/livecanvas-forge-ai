@@ -22,8 +22,8 @@
 - [x] Native WindPress Performance generation produced a 50.75 kB compiled cache at 2026-08-18 12:37:18.
 - [x] AI Bridge 0.2.0-beta.3.10 and MCP 0.2.0-beta.4 reconcile the verified native cache with audit `theme-import-asteria-search-cjt36ptu`.
 - [x] Asteria desktop/mobile visual QA passes: no horizontal overflow, broken images, console errors, or page errors; one header, main, and footer.
-- [x] Contact page #27 is created as a draft and matched to the Asteria visual system. Draft audit: `audit-kuv2tl7s40kl`.
-- [ ] Contact page publication awaits explicit final approval.
+- [x] Contact page #27 is created, matched to the Asteria visual system, and published at `/contact/` after explicit approval. Audit: `audit-kuv2tl7s40kl`.
+- [x] The public URL was rechecked without preview parameters; page content, inherited header, and inherited footer are present.
 
 ## Findings
 
@@ -149,4 +149,4 @@ During the clean third cycle, `build_theme_library_css` reached WordPress with a
 - OpenCode session `sess_5panx2hu-mk8zigc` is active. The final WordPress smoke test reports 1 successful, 0 skipped, and expected/detected MCP version 0.2.0-beta.4.
 - The 0.2.0-beta.3.9 fixes for generic OpenCode pairing, active child-theme preservation, and access reset were all remotely verified.
 - Asteria visual checks pass at 1280×800 and 390×844 with no horizontal overflow, broken images, console errors, or page errors.
-- Contact page #27 is a visually verified draft with the Asteria tokens, inherited global shell, SEO metadata, and rollback audit `audit-kuv2tl7s40kl`. Publication remains intentionally pending.
+- Contact page #27 is published at `/contact/` with the Asteria tokens, inherited global shell, SEO metadata, and rollback audit `audit-kuv2tl7s40kl`. The public URL was verified without preview parameters.
