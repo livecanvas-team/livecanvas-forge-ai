@@ -408,6 +408,9 @@ lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'PHP upgrade required'), 'Theme Library UI should show a guided PHP compatibility blocker');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_framework_prerequisites'), 'Theme Library UI should check framework PHP requirements before enabling install');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$needs_build_capability'), 'Theme Library UI should probe the local build bridge only when a CSS build is pending');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Finish Tailwind CSS on this remote site'), 'Theme Library UI should replace an unavailable local compiler with an actionable remote WindPress step');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, "'verify_native_build'"), 'Theme Library UI should let administrators verify a native WindPress cache after generation');
+lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'admin.php?page=windpress#/settings/performance'), 'Theme Library remote build guidance should link directly to WindPress Performance');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, '$child_active'), 'Theme Library UI should distinguish an installed child theme from the currently active child theme');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'Current child theme'), 'Theme Library UI should not offer to activate the child theme that is already active');
 lcfa_theme_assert_true(is_string($admin_source) && str_contains($admin_source, 'get_theme_library_rollback_history'), 'Theme Library UI should expose older unresolved import audits for chained rollback');

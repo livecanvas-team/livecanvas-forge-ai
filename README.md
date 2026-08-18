@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.3.9` staging beta
+Status: `0.2.0-beta.3.10` staging beta
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -215,7 +215,7 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
 
-The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.3`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
+The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.4`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing.
 
 The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
 
@@ -251,8 +251,8 @@ Theme Library flow:
 2. Click `Preview` to download the ZIP, verify checksum, validate the manifest, and inspect the import plan. This does not write.
 3. Click `Install child theme` to install and activate the selected Picowind or Picostrap child theme through WordPress theme APIs.
 4. Click `Import starter data` to import LiveCanvas settings, design system data, media, header/footer partials, homepage, menus, and homepage option. If a step fails, AI Bridge automatically attempts the stored transaction rollback and reports both outcomes.
-5. For Picowind, AI Bridge compiles Tailwind through the local WindPress runtime when available. If compilation must happen in the connected coding-agent runtime, the item remains `Build required` instead of being reported as ready.
-6. From the paired agent, call `build_theme_library_css` for a pending Picowind theme. The tool reads the server-owned audit ID and import checksum, compiles and stores CSS, then asks WordPress to verify the active theme and cache checksum.
+5. For Picowind, AI Bridge compiles Tailwind through the local WindPress runtime when available. On a remote host, open `WindPress > Settings > Performance`, select `Generate`, and wait for `Last Generated` to update.
+6. Return to Theme Library and select `Verify generated CSS`, or call `build_theme_library_css` from the paired agent. AI Bridge reuses an eligible native WindPress cache before attempting local compilation and verifies that it was generated after the import, matches the active theme and audit, passes package semantic checks, and has the expected checksum.
 7. Picostrap packages reach `Ready` after the packaged Bootstrap bundle passes checksum and required-fragment verification. Use `Rollback` to restore the previous site state.
 
 Required files shared by both frameworks:
@@ -301,8 +301,9 @@ Theme Library beta acceptance:
 - a Picowind item reaches `Ready` only after its persistent WindPress CSS cache exists, is readable, and no longer contains Tailwind source directives;
 - a Picostrap item reaches `Ready` only after its packaged Bootstrap bundle contains the declared theme fragments and passes checksum verification;
 - remote build completion requires a paired session with `write` and `cache` scopes plus matching site fingerprint, import audit ID, import checksum, active stylesheet, and compiled CSS checksum;
+- native WindPress cache completion additionally requires a semantically valid cache generated after the pending import; server filesystem paths are never exposed to the agent;
 - Tailwind 4 is the fully supported beta path; a verified Tailwind 3 build is reported as usable but degraded;
-- unavailable compilers return `build_required`; compiler or cache-verification failures return `build_failed` with a retry action;
+- unavailable local compilers return `native_build_required` with the exact WindPress Performance action; compiler or cache-verification failures return `build_failed` with a retry action;
 - failed imports expose an audit ID, the original error, and the automatic rollback outcome;
 - successful automatic recovery returns `failed_rolled_back`; failed recovery returns `rollback_failed` and preserves the manual rollback action;
 - `Rollback` restores previous theme, homepage settings, content, media, menus, and imported options where possible.

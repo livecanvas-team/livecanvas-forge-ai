@@ -448,13 +448,21 @@ The importer creates missing menus, adds menu items, and assigns `nav_menu_locat
 Theme Library uses explicit completion states:
 
 - `ready`: starter data is imported and the persistent CSS cache is verified;
-- `build_required`: starter data is imported, but a compatible local build runtime is unavailable;
+- `build_required`: starter data is imported, but Tailwind CSS still needs a local MCP build or a native WindPress cache generated after the import;
 - `build_failed`: the compiler failed or returned without producing a verifiable cache;
 - `failed_rolled_back`: the import failed, then automatic rollback restored the previous state;
 - `rollback_failed`: both import and automatic rollback failed; manual recovery remains available;
 - `failed`: the import failed and automatic rollback was disabled or unavailable.
 
 `POST /wp-json/lcfa/v1/theme-library/build` retries only the CSS build for an existing import. It does not duplicate pages, partials, media, or menus. The route is admin-only and is not MCP-public in v1.
+
+On remote WordPress hosts, the supported zero-credential path is:
+
+1. Open `WindPress > Settings > Performance`.
+2. Select `Generate` and wait for `Last Generated` to update.
+3. Return to Theme Library and select `Verify generated CSS`, or retry `build_theme_library_css` from the paired agent.
+
+Native completion is accepted only when the cache is readable, contains no Tailwind source directives, passes the package-required/forbidden fragment checks, has a valid SHA-256 checksum, and was modified after the pending import. The MCP response exposes only safe cache metadata and never the server filesystem path.
 
 ## Idempotency
 

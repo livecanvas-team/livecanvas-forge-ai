@@ -304,6 +304,67 @@ async function run() {
   assert.equal(themeBuildCalls[3][1].import_audit_id, 'theme-import-sample-abc123', 'Theme Library completion should reuse the server-issued audit ID')
   assert.equal(themeBuildCalls[3][1].cache_sha256, 'a'.repeat(64), 'Theme Library completion should submit the verified cache checksum')
   assert.equal(themeBuildCalls[3][1].candidate_count, 12, 'Theme Library completion should submit candidate scan evidence')
+  assert.equal(themeBuildCalls[3][1].build_strategy, 'windpress_remote_mcp', 'Locally compiled Theme Library CSS should record the remote MCP strategy')
+
+  const nativeBuildCalls = []
+  const nativeBuildClient = {
+    ...themeBuildClient,
+    async getPendingThemeLibraryBuild(themeSlug) {
+      nativeBuildCalls.push(['pending', themeSlug])
+      return {
+        result: {
+          ok: true,
+          pending: {
+            theme_slug: themeSlug,
+            import_audit_id: 'theme-import-native-abc123',
+            expected_import_checksum: 'c'.repeat(64),
+            tailwind_version: 4,
+            existing_cache: {
+              ready: true,
+              eligible: true,
+              generated_after_import: true,
+              cache: { sha256: 'd'.repeat(64) }
+            }
+          }
+        }
+      }
+    },
+    async completeThemeLibraryBuild(payload) {
+      nativeBuildCalls.push(['complete', payload])
+      return { result: { ok: true, ready: true, status: 'ready' } }
+    }
+  }
+  const nativeBuildCompiler = {
+    async buildCache() {
+      throw new Error('A verified native cache must skip local compilation')
+    }
+  }
+  const nativeBuildRegistry = createToolRegistry(
+    nativeBuildClient,
+    createNoopThemeFiles(),
+    nativeBuildCompiler,
+    createNoopPicostrapCompiler()
+  )
+  const nativeBuildResult = await nativeBuildRegistry.invoke('build_theme_library_css', { theme_slug: 'sample-theme' })
+  assert.equal(nativeBuildResult.result.status, 'ready', 'build_theme_library_css should complete a verified native WindPress cache')
+  assert.deepEqual(nativeBuildCalls.map((call) => call[0]), ['pending', 'complete'], 'A verified native WindPress cache should skip local compilation and storage')
+  assert.equal(nativeBuildCalls[1][1].build_strategy, 'windpress_native_cache', 'Native cache completion should declare its strategy')
+  assert.equal(nativeBuildCalls[1][1].candidate_count, 0, 'Native cache completion should not invent local candidate evidence')
+
+  const remoteBuildRegistry = createToolRegistry(
+    themeBuildClient,
+    createNoopThemeFiles(),
+    {
+      async buildCache() {
+        throw new Error('Unable to resolve the local WordPress root for WindPress compilation.')
+      }
+    },
+    createNoopPicostrapCompiler()
+  )
+  const remoteBuildResult = await remoteBuildRegistry.invoke('build_theme_library_css', { theme_slug: 'sample-theme' })
+  assert.equal(remoteBuildResult.status, 'native_build_required', 'Remote hosts without a local WordPress root should return the native WindPress build step')
+  assert.equal(remoteBuildResult.next_action, 'generate_windpress_cache', 'Remote build fallback should expose a machine-readable next action')
+  assert.match(remoteBuildResult.message, /WindPress > Settings > Performance/, 'Remote build fallback should identify the exact WordPress screen')
 
   const rejectedBuildCalls = []
   const rejectedBuildClient = {

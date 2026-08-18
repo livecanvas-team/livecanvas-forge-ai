@@ -228,6 +228,43 @@
     padding: 20px;
 }
 
+.lcfa-admin .lcfa-theme-card__notice--remote-build {
+    gap: 8px;
+    border-color: #806824;
+    border-radius: var(--lcfa-v2-radius);
+    background: #2a2518;
+}
+
+.lcfa-admin .lcfa-theme-card__notice--remote-build strong {
+    color: var(--lcfa-v2-amber);
+    font-size: 13px;
+}
+
+.lcfa-admin .lcfa-theme-card__notice--remote-build span,
+.lcfa-admin .lcfa-theme-card__notice--remote-build small {
+    max-width: 70ch;
+    color: var(--lcfa-v2-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.lcfa-admin .lcfa-theme-card__remote-build-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.lcfa-admin .lcfa-theme-card__notice--remote-build.is-compact {
+    display: inline-flex;
+    padding: 8px;
+}
+
+.lcfa-admin .lcfa-theme-card__notice--remote-build.is-compact .lcfa-theme-card__remote-build-actions {
+    flex-direction: column;
+    align-items: stretch;
+}
+
 .lcfa-admin .lcfa-card-head {
     gap: 12px;
     margin-bottom: 16px;

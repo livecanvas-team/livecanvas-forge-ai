@@ -6,7 +6,7 @@
 - WordPress: 7.0.4
 - PHP: 8.2.33
 - LiveCanvas: 4.9.3, active license
-- AI Bridge: 0.2.0-beta.3.8 during the second-cycle test; 0.2.0-beta.3.9 hotfix candidate
+- AI Bridge: 0.2.0-beta.3.8 during the second-cycle test; 0.2.0-beta.3.9 during the clean third cycle; 0.2.0-beta.3.10 remote-build hotfix candidate
 - WindPress: 3.2.86, Tailwind 4, hybrid mode
 - Initial child theme: `picowind-child-1`
 - Target child theme: Asteria Search 1.0.2 (`asteria-search`)
@@ -18,8 +18,9 @@
 - [x] Asteria Search package preview passes ZIP, checksum, manifest, child-theme header, content, and media validation.
 - [x] Asteria Search installs and activates; project context changes to `asteria-search`.
 - [x] Starter data import completes.
-- [x] Homepage #14, header #12, footer #13, media, LiveCanvas settings, and design system are imported.
-- [ ] WindPress compiled cache is built and verified.
+- [x] Clean rerun imported homepage #24, header #22, footer #23, media, LiveCanvas settings, and design system. Audit: `theme-import-asteria-search-cjt36ptu`.
+- [x] Native WindPress Performance generation produced a 50.75 kB compiled cache at 2026-08-18 12:37:18.
+- [ ] AI Bridge import audit is reconciled with the verified native cache after installing 0.2.0-beta.3.10.
 - [ ] Desktop/mobile visual QA passes.
 - [ ] Contact page is created and matched to the Asteria visual system.
 
@@ -51,11 +52,15 @@
 
 ### F-04 — Remote Picowind import ends in a build dead end
 
+**Status:** implemented in the 0.2.0-beta.3.10 hotfix candidate; remote verification pending.
+
 **Observed:** the successful import ends in `build_required`, while both **Build Tailwind CSS** and **Build CSS** are disabled with “The current WordPress URL is not detected as local, so local MCP execution is disabled.” The page does not present the documented remote next step: re-pair a trusted agent with `write,cache` scopes and call `build_theme_library_css`.
+
+During the clean third cycle, `build_theme_library_css` reached WordPress with all required scopes but failed because the OpenCode host has no local WordPress root (`LCFA_WP_ROOT`). WindPress itself compiled the remote site successfully through `WindPress > Settings > Performance > Generate`, proving that FTP/SSH credentials are not required. The remaining gap was reconciling that native cache with the pending Theme Library audit.
 
 **Impact:** the primary Theme Library flow displays four steps but cannot complete step 4 on a normal remote host without knowledge from the README/source code.
 
-**Recommended correction:** when `build_required` and local build is unavailable, replace the disabled button with an actionable remote-build panel. Show required scopes, active agent, current session scopes, a regenerate/re-pair action, and a copy-ready `build_theme_library_css {"theme_slug":"asteria-search"}` prompt.
+**Implemented correction:** when local compilation is unavailable, Theme Library now shows a two-action remote panel: open WindPress Performance, generate the cache, then verify it. The MCP tool first reuses an eligible native cache and otherwise returns the same exact WindPress action. Completion still requires the matching audit, import checksum, active stylesheet, semantic CSS checks, SHA-256 checksum, and a cache modification time after the import. Server filesystem paths are removed from the MCP payload.
 
 ### F-05 — “Let the coding agent make changes” does not grant remote write scopes
 
@@ -115,12 +120,12 @@
 
 **Recommended correction:** derive import state from both the durable audit and imported object markers. If they disagree, show **Import needs attention** with reconciliation, cleanup, and resume actions instead of a fresh-import CTA.
 
-## Current authoritative state before the hotfix release
+## Current authoritative state before the 0.2.0-beta.3.10 release
 
-- AI Bridge 0.2.0-beta.3.8 is installed on Cloudways.
-- Asteria page #14, partials #12/#13, media #8–#11, and the `asteria-search` theme were removed for the clean rerun.
-- The homepage is set to latest posts and Breeze cache was purged.
+- AI Bridge 0.2.0-beta.3.9 is installed on Cloudways.
+- The clean Asteria rerun is active with homepage #24, partials #22/#23, and audit `theme-import-asteria-search-cjt36ptu`.
+- WindPress 3.2.86 generated a 50.75 kB Tailwind 4 cache in hybrid mode.
 - OpenCode project configuration is installed with `read,preview,write,media,theme_files,debug,cache,seo`.
-- OpenCode reached WordPress and created pending pairing code `2FXL-MCYH`, exposing F-07.
-- Saving setup unexpectedly activated `picowind-child` instead of preserving `picowind-child-1`, exposing F-08.
-- The next cycle starts after installing 0.2.0-beta.3.9, resetting access, restoring `picowind-child-1`, and repeating onboarding from step 1.
+- OpenCode session `sess_5panx2hu-mk8zigc` is active and its smoke test passes with 15 public write actions and zero run errors.
+- The 0.2.0-beta.3.9 fixes for generic OpenCode pairing, active child-theme preservation, and access reset were all remotely verified.
+- The next action is installing 0.2.0-beta.3.10, restarting OpenCode with MCP 0.2.0-beta.4, and retrying `build_theme_library_css`; it should reconcile the existing native cache without FTP or SSH.

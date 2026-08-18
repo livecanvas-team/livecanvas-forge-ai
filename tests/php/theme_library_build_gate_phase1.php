@@ -36,6 +36,13 @@ final class LCFA_WindPress_Bridge {
         $this->last_requirements = $requirements;
         return $this->verification;
     }
+
+    public function get_status(): array {
+        return [
+            'available' => true,
+            'tailwind_version' => 4,
+        ];
+    }
 }
 
 class LCFA_Design_System_Build_Gateway {
@@ -72,6 +79,7 @@ function lcfa_build_gate_seed(string $status = 'build_required'): void {
             'import_key' => 'sample-theme:1.0.0:checksum',
             'checksum' => str_repeat('b', 64),
             'stylesheet' => 'sample-theme',
+            'imported_at' => '2026-08-02 09:00:00',
             'css_verification' => [
                 'required_fragments' => ['.sample-theme-marker'],
                 'forbidden_fragments' => ['.foreign-theme-marker'],
@@ -131,7 +139,9 @@ $windpress->verification = [
     'cache' => [
         'exists' => true,
         'bytes' => 4096,
+        'modified_at' => '2026-08-02T09:30:00+00:00',
         'sha256' => str_repeat('a', 64),
+        'path' => '/secret/server/path/tailwind.css',
     ],
 ];
 $ready = $importer->build('sample-theme');
@@ -146,6 +156,8 @@ $pending = $importer->get_pending_build('sample-theme');
 lcfa_build_gate_assert(!empty($pending['ok']) && ($pending['pending']['import_audit_id'] ?? '') === 'theme-import-sample-theme-abc123', 'Pending remote build should expose the bound import audit ID.');
 lcfa_build_gate_assert(($pending['pending']['expected_import_checksum'] ?? '') === str_repeat('b', 64), 'Pending remote build should expose the expected import checksum.');
 lcfa_build_gate_assert(($pending['pending']['css_verification']['required_fragments'][0] ?? '') === '.sample-theme-marker', 'Pending remote build should expose package-bound CSS verification fragments.');
+lcfa_build_gate_assert(!empty($pending['pending']['existing_cache']['eligible']), 'Pending remote build should recognize a verified WindPress cache generated after the import.');
+lcfa_build_gate_assert(!isset($pending['pending']['existing_cache']['cache']['path']), 'Pending remote build must not expose the server cache path.');
 
 $audit_mismatch = $importer->complete_remote_build([
     'theme_slug' => 'sample-theme',
@@ -174,6 +186,13 @@ $missing_evidence = $importer->complete_remote_build([
     'candidate_count' => 0,
 ]);
 lcfa_build_gate_assert(empty($missing_evidence['ok']) && ($missing_evidence['status'] ?? '') === 'missing_build_evidence', 'Tailwind 4 remote completion must reject a build without scanned candidates.');
+
+lcfa_build_gate_seed();
+$native_ready = $importer->complete_native_cache_build('sample-theme');
+lcfa_build_gate_assert(!empty($native_ready['ok']) && !empty($native_ready['ready']) && ($native_ready['status'] ?? '') === 'ready', 'A verified native WindPress cache generated after import should complete the pending build without local compiler evidence.');
+lcfa_build_gate_assert(($native_ready['build']['strategy'] ?? '') === 'windpress_native_cache', 'Native WindPress completion should record its build strategy.');
+
+lcfa_build_gate_seed();
 
 $remote_ready = $importer->complete_remote_build([
     'theme_slug' => 'sample-theme',

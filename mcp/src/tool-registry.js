@@ -913,7 +913,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'build_theme_library_css',
-      description: 'Complete the pending CSS build for an admin-imported Picowind Theme Library item. Reads the bound import audit/checksum, compiles Tailwind locally, stores the CSS through WindPress, then verifies the active theme and cache checksum before WordPress marks the import ready. Requires write and cache session scopes.',
+      description: 'Complete the pending CSS build for an admin-imported Picowind Theme Library item. Reuses a verified native WindPress cache when available; otherwise compiles locally and stores the CSS. On remote hosts without a local WordPress root, it returns the exact WindPress Generate step before retrying. Requires write and cache session scopes.',
       inputSchema: {
         type: 'object',
         required: ['theme_slug'],
@@ -938,13 +938,47 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
         }
 
         const pending = pendingResult.pending
-        const build = await windpressCompiler.buildCache({
-          provider_ids: argumentsMap.provider_ids,
-          kind: argumentsMap.kind || 'full',
-          store: false,
-          source_map: argumentsMap.source_map === true,
-          max_batches: argumentsMap.max_batches
-        })
+        const existingCache = pending && pending.existing_cache && typeof pending.existing_cache === 'object'
+          ? pending.existing_cache
+          : null
+        const existingCacheSha256 = existingCache && existingCache.cache
+          ? String(existingCache.cache.sha256 || '')
+          : ''
+
+        if (existingCache && existingCache.eligible === true && /^[a-f0-9]{64}$/i.test(existingCacheSha256)) {
+          return client.completeThemeLibraryBuild({
+            theme_slug: themeSlug,
+            import_audit_id: pending.import_audit_id,
+            expected_import_checksum: pending.expected_import_checksum,
+            cache_sha256: existingCacheSha256.toLowerCase(),
+            tailwind_version: Number(pending.tailwind_version || 4),
+            candidate_count: 0,
+            build_strategy: 'windpress_native_cache'
+          })
+        }
+
+        let build
+        try {
+          build = await windpressCompiler.buildCache({
+            provider_ids: argumentsMap.provider_ids,
+            kind: argumentsMap.kind || 'full',
+            store: false,
+            source_map: argumentsMap.source_map === true,
+            max_batches: argumentsMap.max_batches
+          })
+        } catch (error) {
+          return {
+            ok: false,
+            ready: false,
+            status: 'native_build_required',
+            message: 'This remote project cannot use the local WindPress compiler. In WordPress, open WindPress > Settings > Performance, select Generate, wait for Last Generated to update, then retry build_theme_library_css.',
+            theme_slug: themeSlug,
+            next_action: 'generate_windpress_cache',
+            wordpress_path: 'admin.php?page=windpress#/settings/performance',
+            retry_tool: 'build_theme_library_css',
+            diagnostic: error instanceof Error ? error.message : String(error || '')
+          }
+        }
         const compiledCss = build && build.css
           ? String(build.css.sourcemap ? build.css.normal || '' : build.css.minified || build.css.normal || '')
           : ''
@@ -993,7 +1027,8 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           expected_import_checksum: pending.expected_import_checksum,
           cache_sha256: cacheSha256,
           tailwind_version: Number(build.tailwind_version || 4),
-          candidate_count: Number(build.candidate_count || 0)
+          candidate_count: Number(build.candidate_count || 0),
+          build_strategy: 'windpress_remote_mcp'
         })
       }
     },

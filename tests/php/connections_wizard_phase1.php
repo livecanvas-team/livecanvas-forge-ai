@@ -733,7 +733,7 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
     ],
 ]);
 
-lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.3', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
+lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.4', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
 lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point LCFA_SITE_URL at the target site');
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
@@ -747,7 +747,7 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     $remote_env = (array) ($remote_agent_payload['client_payload']['env'] ?? []);
 
     lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
-    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.3', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
+    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.4', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
     lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
     lcfa_assert_true(in_array('LCFA_PAIRING_SCOPES=read,preview', $remote_env, true), $remote_client . ' pairing should default to read and preview scopes when Power Mode is disabled');
     lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {

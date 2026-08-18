@@ -510,6 +510,12 @@ final class LCFA_Theme_Library_Importer {
         $imports = self::get_imports();
         $pending = [];
 
+        $windpress_status = method_exists($this->windpress_bridge, 'get_status')
+            ? $this->windpress_bridge->get_status()
+            : [];
+        $tailwind_version = (int) ($windpress_status['tailwind_version'] ?? 4);
+        $tailwind_version = $tailwind_version === 3 ? 3 : 4;
+
         foreach ($imports as $import_slug => $import) {
             if (!is_array($import)) {
                 continue;
@@ -525,6 +531,8 @@ final class LCFA_Theme_Library_Importer {
                 continue;
             }
 
+            $existing_cache = $this->get_native_cache_build_state($import);
+
             $pending[] = [
                 'theme_slug'              => $import_slug,
                 'theme_version'           => sanitize_text_field((string) ($import['version'] ?? '')),
@@ -535,6 +543,8 @@ final class LCFA_Theme_Library_Importer {
                 'build'                   => is_array($import['build'] ?? null) ? $import['build'] : [],
                 'css_verification'        => $this->normalize_css_verification($import['css_verification'] ?? []),
                 'required_scopes'         => ['write', 'cache'],
+                'tailwind_version'        => $tailwind_version,
+                'existing_cache'          => $existing_cache,
             ];
         }
 
@@ -562,11 +572,45 @@ final class LCFA_Theme_Library_Importer {
         ];
     }
 
+    public function complete_native_cache_build(string $slug): array {
+        $pending_response = $this->get_pending_build($slug);
+        if (empty($pending_response['ok']) || !is_array($pending_response['pending'] ?? null)) {
+            return $pending_response;
+        }
+
+        $pending = $pending_response['pending'];
+        $existing_cache = is_array($pending['existing_cache'] ?? null) ? $pending['existing_cache'] : [];
+        $cache_sha256 = strtolower(trim((string) ($existing_cache['cache']['sha256'] ?? '')));
+
+        if (empty($existing_cache['eligible']) || !preg_match('/^[a-f0-9]{64}$/', $cache_sha256)) {
+            return [
+                'ok'          => false,
+                'ready'       => false,
+                'status'      => 'native_build_required',
+                'message'     => (string) ($existing_cache['message'] ?? __('Generate the Tailwind CSS cache in WindPress, then verify it again.', 'livecanvas-forge-ai')),
+                'theme_slug'  => sanitize_key($slug),
+                'next_action' => 'generate_windpress_cache',
+            ];
+        }
+
+        return $this->complete_remote_build([
+            'theme_slug'              => (string) ($pending['theme_slug'] ?? $slug),
+            'import_audit_id'         => (string) ($pending['import_audit_id'] ?? ''),
+            'expected_import_checksum'=> (string) ($pending['expected_import_checksum'] ?? ''),
+            'cache_sha256'            => $cache_sha256,
+            'tailwind_version'        => (int) ($pending['tailwind_version'] ?? 4),
+            'candidate_count'         => 0,
+            'build_strategy'          => 'windpress_native_cache',
+        ]);
+    }
+
     public function complete_remote_build(array $payload): array {
         $slug = sanitize_key((string) ($payload['theme_slug'] ?? $payload['slug'] ?? ''));
         $audit_id = sanitize_key((string) ($payload['import_audit_id'] ?? $payload['audit_id'] ?? ''));
         $expected_import_checksum = strtolower(trim((string) ($payload['expected_import_checksum'] ?? '')));
         $cache_sha256 = strtolower(trim((string) ($payload['cache_sha256'] ?? '')));
+        $build_strategy = sanitize_key((string) ($payload['build_strategy'] ?? 'windpress_remote_mcp'));
+        $native_cache_build = $build_strategy === 'windpress_native_cache';
         $tailwind_version = (int) ($payload['tailwind_version'] ?? 0);
         $candidate_count = max(0, (int) ($payload['candidate_count'] ?? 0));
         $imports = self::get_imports();
@@ -630,7 +674,7 @@ final class LCFA_Theme_Library_Importer {
         }
 
         $tailwind_version = $tailwind_version === 3 ? 3 : 4;
-        if ($tailwind_version === 4 && $candidate_count < 1) {
+        if ($tailwind_version === 4 && $candidate_count < 1 && !$native_cache_build) {
             return [
                 'ok'      => false,
                 'ready'   => false,
@@ -652,6 +696,19 @@ final class LCFA_Theme_Library_Importer {
             ];
         }
 
+        if ($native_cache_build) {
+            $native_cache_state = $this->get_native_cache_build_state($import, $verification);
+            if (empty($native_cache_state['eligible'])) {
+                return [
+                    'ok'           => false,
+                    'ready'        => false,
+                    'status'       => 'native_build_required',
+                    'message'      => (string) ($native_cache_state['message'] ?? __('Generate the Tailwind CSS cache in WindPress after importing this theme.', 'livecanvas-forge-ai')),
+                    'verification' => $verification,
+                ];
+            }
+        }
+
         $degraded = $tailwind_version === 3;
         $status = $degraded ? 'ready_degraded' : 'ready';
         $build = [
@@ -659,7 +716,7 @@ final class LCFA_Theme_Library_Importer {
             'usable'            => true,
             'status'            => $status,
             'support_level'     => $degraded ? 'degraded' : 'full',
-            'strategy'          => 'windpress_remote_mcp',
+            'strategy'          => $native_cache_build ? 'windpress_native_cache' : 'windpress_remote_mcp',
             'tailwind_version'  => $tailwind_version,
             'candidate_count'   => $candidate_count,
             'cache_sha256'      => $verified_checksum,
@@ -667,7 +724,9 @@ final class LCFA_Theme_Library_Importer {
             'verified_at'       => current_time('mysql', true),
             'message'           => $degraded
                 ? __('Tailwind 3 CSS was compiled and verified. This runtime remains in guided degraded mode; prefer Tailwind 4 for full beta support.', 'livecanvas-forge-ai')
-                : __('Tailwind 4 CSS was compiled, stored, and verified for this Theme Library import.', 'livecanvas-forge-ai'),
+                : ($native_cache_build
+                    ? __('The native WindPress Tailwind CSS cache was generated and verified for this Theme Library import.', 'livecanvas-forge-ai')
+                    : __('Tailwind 4 CSS was compiled, stored, and verified for this Theme Library import.', 'livecanvas-forge-ai')),
         ];
 
         $import['status'] = $status;
@@ -685,6 +744,46 @@ final class LCFA_Theme_Library_Importer {
             'theme_slug'      => $slug,
             'import_audit_id' => $stored_audit_id,
             'build'           => $build,
+        ];
+    }
+
+    private function get_native_cache_build_state(array $import, ?array $verification = null): array {
+        $requirements = $this->normalize_css_verification($import['css_verification'] ?? []);
+        $verification = is_array($verification)
+            ? $verification
+            : $this->windpress_bridge->get_compiled_cache_state($requirements);
+        $cache = is_array($verification['cache'] ?? null) ? $verification['cache'] : [];
+        $safe_cache = [
+            'exists'      => !empty($cache['exists']),
+            'bytes'       => max(0, (int) ($cache['bytes'] ?? 0)),
+            'modified_at' => sanitize_text_field((string) ($cache['modified_at'] ?? '')),
+            'sha256'      => strtolower(trim((string) ($cache['sha256'] ?? ''))),
+        ];
+
+        $imported_at = sanitize_text_field((string) ($import['imported_at'] ?? ''));
+        $cache_timestamp = $safe_cache['modified_at'] !== '' ? strtotime($safe_cache['modified_at']) : false;
+        $import_timestamp = $imported_at !== '' ? strtotime($imported_at . ' UTC') : false;
+        $generated_after_import = $cache_timestamp !== false
+            && $import_timestamp !== false
+            && $cache_timestamp >= $import_timestamp;
+        $checksum_valid = (bool) preg_match('/^[a-f0-9]{64}$/', $safe_cache['sha256']);
+        $eligible = !empty($verification['ready']) && $checksum_valid && $generated_after_import;
+        $status = sanitize_key((string) ($verification['status'] ?? 'missing'));
+        $message = sanitize_text_field((string) ($verification['message'] ?? __('Generate the Tailwind CSS cache in WindPress, then verify it again.', 'livecanvas-forge-ai')));
+
+        if (!empty($verification['ready']) && !$generated_after_import) {
+            $status = 'stale_cache';
+            $message = __('The WindPress CSS cache predates this import. Open WindPress Performance and generate it again.', 'livecanvas-forge-ai');
+        }
+
+        return [
+            'ready'                  => !empty($verification['ready']),
+            'eligible'               => $eligible,
+            'status'                 => $status,
+            'message'                => $message,
+            'generated_after_import' => $generated_after_import,
+            'cache'                  => $safe_cache,
+            'semantic'               => is_array($verification['semantic'] ?? null) ? $verification['semantic'] : [],
         ];
     }
 

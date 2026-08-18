@@ -3152,7 +3152,7 @@ final class LCFA_Rest_Api {
         $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
         $custom_server = is_array($adapter['custom_server'] ?? null) ? $adapter['custom_server'] : [];
         $stack_capabilities = is_array($summary['stack_capabilities'] ?? null) ? $summary['stack_capabilities'] : [];
-        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.3';
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.4';
         $package_detected = $request instanceof WP_REST_Request && method_exists($request, 'get_header')
             ? sanitize_text_field((string) $request->get_header('x-lcfa-mcp-package-version'))
             : '';

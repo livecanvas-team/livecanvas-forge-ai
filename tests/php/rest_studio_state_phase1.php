@@ -536,7 +536,7 @@ lcfa_assert_same('connection-handoff.v1', $connection_handoff['schema_version'] 
 lcfa_assert_same('codex', $connection_handoff['client'] ?? '', 'studio connection handoff should expose selected agent client');
 lcfa_assert_same('remote', $connection_handoff['mode'] ?? '', 'studio connection handoff should expose selected connection mode');
 lcfa_assert_same('wordpress_mcp_adapter', $connection_handoff['transport'] ?? '', 'studio connection handoff should prefer WordPress MCP Adapter transport for remote Codex');
-lcfa_assert_same('0.2.0-beta.3', $connection_handoff['mcp_package_expected'] ?? '', 'studio connection handoff should expose the exact expected beta MCP package version');
+lcfa_assert_same('0.2.0-beta.4', $connection_handoff['mcp_package_expected'] ?? '', 'studio connection handoff should expose the exact expected beta MCP package version');
 lcfa_assert_same('', $connection_handoff['mcp_package_detected'] ?? '', 'studio connection handoff should leave detected MCP version empty when the request does not report one');
 lcfa_assert_same(null, $connection_handoff['package_version_matches'] ?? null, 'studio connection handoff should use an unknown match state when no MCP package version is reported');
 lcfa_assert_same('none', $connection_handoff['theme_library_build_state']['status'] ?? '', 'studio connection handoff should expose Theme Library build readiness');
