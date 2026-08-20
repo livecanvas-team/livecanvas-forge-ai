@@ -414,31 +414,43 @@ final class LCFA_Context_Builder {
         $connections = LCFA_Settings::get_connections();
         $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
         $site_url = home_url('/');
+        $rest_base = rest_url('lcfa/v1/');
+        $wp_root = untrailingslashit(ABSPATH);
         $site_fingerprint = method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '';
         $filesystem_mode = (string) ($mcp_status['filesystem_mode'] ?? '');
         $is_secure_remote = $filesystem_mode !== 'local-theme-access';
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.4';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.5';
         $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
         $project_host = (string) parse_url($site_url, PHP_URL_HOST);
-        $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {
+        $power_state = class_exists('LCFA_Power_Mode', false)
+            ? (new LCFA_Power_Mode())->get_state($connections, $snapshot)
+            : ['enabled' => false];
+        $pairing_scopes = !empty($power_state['enabled'])
+            ? 'read,preview,write,media,theme_files,debug,cache,seo'
+            : 'read,preview';
+        $secure_environment = static function (string $client) use ($site_url, $rest_base, $wp_root, $site_fingerprint, $project_host, $pairing_scopes, $is_secure_remote): array {
             return [
                 'LCFA_AGENT=' . $client,
                 'LCFA_PROJECT_LABEL=' . ($project_host !== '' ? $project_host : 'WordPress site'),
+                'LCFA_REST_BASE=' . $rest_base,
                 'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                 'LCFA_SITE_URL=' . $site_url,
-                'LCFA_PAIRING_SCOPES=read,preview',
+                'LCFA_PAIRING_SCOPES=' . $pairing_scopes,
+                ...(!$is_secure_remote && $wp_root !== '' ? ['LCFA_WP_ROOT=' . $wp_root] : []),
             ];
         };
 
         $common = [
             'site_url'       => $site_url,
-            'rest_base'      => rest_url('lcfa/v1/'),
+            'rest_base'      => $rest_base,
             'site_fingerprint' => $site_fingerprint,
             'mcp_endpoint'   => $mcp_status['endpoint'],
-            'mcp_token'      => $is_secure_remote ? '' : $mcp_status['token'],
-            'wp_root'        => untrailingslashit(ABSPATH),
+            'mcp_token'      => '',
+            'wp_root'        => $wp_root,
+            'agent_workspace_root' => (string) ($connections['workspace_root'] ?? ''),
+            'pairing_scopes' => $pairing_scopes,
             'framework'      => $snapshot['detected_framework'],
             'theme'          => $snapshot['current_theme_stylesheet'],
             'stylesheet_directory' => get_stylesheet_directory(),
@@ -446,51 +458,28 @@ final class LCFA_Context_Builder {
             'transport'      => $connections['transport'],
             'filesystem_mode'=> $filesystem_mode,
         ];
-        $filesystem_env = $common['filesystem_mode'] === 'local-theme-access'
-            ? ['LCFA_WP_ROOT=' . $common['wp_root']]
-            : [];
-
         $this->bootstrap_payload_cache = [
             'common' => $common,
             'clients'=> [
                 'codex' => [
                     'label'   => 'Codex',
                     'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('codex') : array_merge([
-                        'LCFA_SITE_URL=' . $common['site_url'],
-                        'LCFA_REST_BASE=' . $common['rest_base'],
-                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
-                        'LCFA_MCP_ENDPOINT=' . $common['mcp_endpoint'],
-                        'LCFA_MCP_TOKEN=' . $common['mcp_token'],
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('codex'),
                 ],
                 'opencode' => [
                     'label'   => 'OpenCode',
                     'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('opencode') : array_merge([
-                        'LCFA_REST_BASE=' . $common['rest_base'],
-                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
-                        'LCFA_MCP_TOKEN=' . $common['mcp_token'],
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('opencode'),
                 ],
                 'claude' => [
                     'label'   => 'Claude',
                     'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('claude') : array_merge([
-                        'LCFA_REST_BASE=' . $common['rest_base'],
-                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
-                        'LCFA_MCP_ENDPOINT=' . $common['mcp_endpoint'],
-                        'LCFA_MCP_TOKEN=' . $common['mcp_token'],
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('claude'),
                 ],
                 'cursor' => [
                     'label'   => 'Cursor',
                     'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('cursor') : array_merge([
-                        'LCFA_REST_BASE=' . $common['rest_base'],
-                        'LCFA_SITE_FINGERPRINT=' . $common['site_fingerprint'],
-                        'LCFA_MCP_TOKEN=' . $common['mcp_token'],
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('cursor'),
                 ],
             ],
         ];

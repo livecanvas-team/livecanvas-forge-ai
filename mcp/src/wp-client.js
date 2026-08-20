@@ -499,6 +499,18 @@ class WPClient {
     const data = text ? safeJsonParse(text) : {}
 
     if (!response.ok) {
+      if (
+        (response.status === 401 || response.status === 403) &&
+        auth.type === 'ai_bridge_session' &&
+        options.authRefreshAttempted !== true
+      ) {
+        this.sessionAuth.invalidateSession()
+        return this.request(method, path, {
+          ...options,
+          authRefreshAttempted: true
+        })
+      }
+
       const message = getHttpErrorMessage(response.status, data)
       const error = new Error(message)
       error.status = response.status
@@ -543,7 +555,7 @@ function getHttpErrorMessage(status, payload) {
   const code = payload && typeof payload === 'object' ? String(payload.code || '') : ''
 
   if ((status === 401 || status === 403) && (code === 'rest_forbidden' || /not allowed|forbidden|unauthorized/i.test(message))) {
-    return 'WordPress rejected the LiveCanvas AI Bridge MCP token. Sync Codex config or rotate the token and regenerate.'
+    return 'WordPress rejected the LiveCanvas AI Bridge credential. Regenerate this coding agent project config or rotate access and pair again.'
   }
 
   return message || `WordPress request failed (${status})`

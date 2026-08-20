@@ -7,14 +7,16 @@ final class LCFA_Connection_Bundle_Builder {
         $client         = $this->normalize_client((string) ($payload['client'] ?? 'codex'));
         $mode           = $this->normalize_mode((string) ($payload['mode'] ?? 'local'));
         $common         = is_array($payload['common'] ?? null) ? $payload['common'] : [];
-        $workspace_root = $this->normalize_workspace_root((string) ($payload['workspace_root'] ?? ''), $common, $mode);
+        $wordpress_root = $this->normalize_wordpress_root((string) ($payload['wordpress_root'] ?? ''), $common, $mode);
+        $workspace_root = $this->normalize_workspace_root((string) ($payload['workspace_root'] ?? ''), $wordpress_root, $common, $mode);
         $mcp_url        = $this->normalize_remote_url((string) ($payload['client_payload']['url'] ?? ($common['mcp_url'] ?? '')));
         $oauth_resource = $this->normalize_remote_url((string) ($common['oauth_resource'] ?? $mcp_url));
         $command_input  = trim((string) ($payload['client_payload']['command'] ?? ''));
-        $command        = $this->normalize_command($this->tokenize_command($command_input), $workspace_root, $mode);
+        $command        = $this->normalize_command($this->tokenize_command($command_input), $wordpress_root, $mode);
         $command_string = $this->join_shell_tokens($command);
-        $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $workspace_root, $mode);
+        $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $wordpress_root, $workspace_root, $mode, $client, $common);
         $claude_connection_target = $this->normalize_claude_target($payload, $client);
+        $claude_desktop_config_path = $this->normalize_claude_desktop_config_path((string) ($payload['claude_desktop_config_path'] ?? ''));
         $server_name = $this->resolve_server_name($client, $mode, $common, $command, $mcp_url);
         $agent_start_tool = $this->build_connection_handoff_tool($environment, $command, $mcp_url);
         $handoff_package_tool = $this->build_handoff_package_tool($environment, $command, $mcp_url);
@@ -23,6 +25,8 @@ final class LCFA_Connection_Bundle_Builder {
             : '';
 
         $shortcut = $this->build_client_shortcut($client, $mode, $claude_connection_target, $command, $environment, $server_name, $mcp_url, $oauth_resource);
+        $workspace_files = $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment, $server_name);
+        $install_files = $this->build_install_files($client, $mode, $claude_connection_target, $claude_desktop_config_path, $workspace_files);
 
         return [
             'client'              => $client,
@@ -30,6 +34,8 @@ final class LCFA_Connection_Bundle_Builder {
             'mode'                => $mode,
             'server_name'         => $server_name,
             'workspace_root'      => $workspace_root,
+            'agent_workspace_root'=> $workspace_root,
+            'wordpress_root'      => $wordpress_root,
             'connection_strategy' => (string) ($common['connection_strategy'] ?? ($mode === 'remote' ? 'remote-rest' : 'local-mcp')),
             'mcp_adapter_url'     => (string) ($common['mcp_adapter_url'] ?? ''),
             'mcp_url'             => $mcp_url,
@@ -42,8 +48,13 @@ final class LCFA_Connection_Bundle_Builder {
             'shortcut_command'    => $shortcut['command'],
             'codex_config_snippet' => $codex_config_snippet,
             'codex_project_config_path' => $client === 'codex' ? ($mode === 'local' && $workspace_root !== '' ? $workspace_root . '/.codex/config.toml' : '.codex/config.toml') : '',
+            'claude_desktop_config_path' => $claude_desktop_config_path,
             'environment'         => $environment,
-            'workspace_files'     => $this->build_workspace_files($client, $mode, $workspace_root, $claude_connection_target, $command, $environment, $server_name),
+            'workspace_files'     => $workspace_files,
+            'install_files'       => $install_files,
+            'install_target'      => $client === 'claude' && $mode === 'local' && $claude_connection_target === 'desktop_app' && $claude_desktop_config_path !== ''
+                ? 'claude_desktop'
+                : 'workspace',
             'download_files'      => $this->build_download_files($client, $mode, $claude_connection_target, $command, $environment, $server_name, $mcp_url, $oauth_resource),
             'smoke_test_command'  => $this->build_smoke_test_command($environment, $command, $server_name, $mcp_url, $client),
             'agent_start_tool'    => $agent_start_tool,
@@ -85,6 +96,19 @@ final class LCFA_Connection_Bundle_Builder {
         return $mode === 'remote' ? 'remote' : 'local';
     }
 
+    private function normalize_claude_desktop_config_path(string $path): string {
+        $path = trim(wp_normalize_path($path));
+        if ($path === '' || !preg_match('#^(?:/|[A-Za-z]:/)#', $path)) {
+            return '';
+        }
+
+        if (basename($path) !== 'claude_desktop_config.json') {
+            return '';
+        }
+
+        return $path;
+    }
+
     private function normalize_remote_url(string $url): string {
         $url = trim($url);
 
@@ -107,20 +131,23 @@ final class LCFA_Connection_Bundle_Builder {
         return 'livecanvas-forge';
     }
 
-    private function normalize_workspace_root(string $workspace_root, array $common, string $mode): string {
+    private function normalize_workspace_root(string $workspace_root, string $wordpress_root, array $common, string $mode): string {
         $workspace_root = trim($workspace_root);
-        $candidates = $this->collect_workspace_root_candidates($common);
-        $preferred_candidate = $candidates[0] ?? '';
 
         if ($workspace_root !== '') {
             $normalized_workspace_root = untrailingslashit($workspace_root);
 
             if ($this->looks_like_runtime_workspace_root($normalized_workspace_root)) {
-                return $preferred_candidate;
+                return $wordpress_root !== '' && !$this->looks_like_runtime_workspace_root($wordpress_root)
+                    ? $this->infer_agent_workspace_root($wordpress_root)
+                    : '';
             }
 
-            if ($this->should_replace_runtime_workspace_root($normalized_workspace_root, $preferred_candidate, $common)) {
-                return $preferred_candidate;
+            if (
+                $wordpress_root !== ''
+                && wp_normalize_path($normalized_workspace_root) === wp_normalize_path($wordpress_root)
+            ) {
+                return $this->infer_agent_workspace_root($wordpress_root);
             }
 
             return $normalized_workspace_root;
@@ -130,20 +157,33 @@ final class LCFA_Connection_Bundle_Builder {
             return '';
         }
 
-        foreach ($candidates as $candidate) {
-            $candidate = trim((string) $candidate);
-
-            if ($candidate === '') {
-                continue;
-            }
-
-            return untrailingslashit($candidate);
+        $common_workspace_root = trim((string) ($common['agent_workspace_root'] ?? ''));
+        if ($common_workspace_root !== '' && !$this->looks_like_runtime_workspace_root($common_workspace_root)) {
+            return untrailingslashit($common_workspace_root);
         }
 
-        return '';
+        return $wordpress_root !== '' && !$this->looks_like_runtime_workspace_root($wordpress_root)
+            ? $this->infer_agent_workspace_root($wordpress_root)
+            : '';
     }
 
-    private function collect_workspace_root_candidates(array $common): array {
+    private function normalize_wordpress_root(string $wordpress_root, array $common, string $mode): string {
+        if ($mode !== 'local') {
+            return '';
+        }
+
+        $wordpress_root = untrailingslashit(trim($wordpress_root));
+        $candidates = $this->collect_wordpress_root_candidates($common);
+        $preferred_candidate = $candidates[0] ?? '';
+
+        if ($wordpress_root !== '' && !$this->looks_like_runtime_workspace_root($wordpress_root)) {
+            return $wordpress_root;
+        }
+
+        return $preferred_candidate;
+    }
+
+    private function collect_wordpress_root_candidates(array $common): array {
         $candidates = [];
 
         if (defined('WP_CONTENT_DIR') && is_string(WP_CONTENT_DIR)) {
@@ -202,31 +242,6 @@ final class LCFA_Connection_Bundle_Builder {
         return array_values(array_unique($normalized_candidates));
     }
 
-    private function should_replace_runtime_workspace_root(string $workspace_root, string $preferred_candidate, array $common): bool {
-        $workspace_root = wp_normalize_path(untrailingslashit($workspace_root));
-        $preferred_candidate = wp_normalize_path(untrailingslashit($preferred_candidate));
-
-        if ($workspace_root === '' || $preferred_candidate === '' || $workspace_root === $preferred_candidate) {
-            return false;
-        }
-
-        $runtime_roots = [];
-
-        if (!empty($common['wp_root'])) {
-            $runtime_roots[] = wp_normalize_path(untrailingslashit((string) $common['wp_root']));
-        }
-
-        if (defined('ABSPATH') && is_string(ABSPATH)) {
-            $runtime_roots[] = wp_normalize_path(untrailingslashit((string) ABSPATH));
-        }
-
-        $runtime_roots = array_values(array_unique(array_filter($runtime_roots, static function (string $value): bool {
-            return $value !== '';
-        })));
-
-        return in_array($workspace_root, $runtime_roots, true) && !in_array($preferred_candidate, $runtime_roots, true);
-    }
-
     private function derive_wordpress_root_from_content_dir(string $content_dir): string {
         $content_dir = wp_normalize_path(untrailingslashit($content_dir));
         $needle = '/wp-content';
@@ -261,6 +276,17 @@ final class LCFA_Connection_Bundle_Builder {
         return is_dir($path . '/wp-content') || file_exists($path . '/wp-config.php');
     }
 
+    private function infer_agent_workspace_root(string $wordpress_root): string {
+        $wordpress_root = untrailingslashit($wordpress_root);
+        $normalized = wp_normalize_path($wordpress_root);
+
+        if (basename($normalized) === 'public' && basename(dirname($normalized)) === 'app') {
+            return dirname(dirname($wordpress_root));
+        }
+
+        return $wordpress_root;
+    }
+
     private function looks_like_runtime_workspace_root(string $path): bool {
         $path = wp_normalize_path(untrailingslashit($path));
 
@@ -280,7 +306,7 @@ final class LCFA_Connection_Bundle_Builder {
         ], true);
     }
 
-    private function normalize_environment(array $environment, string $workspace_root, string $mode): array {
+    private function normalize_environment(array $environment, string $wordpress_root, string $workspace_root, string $mode, string $client, array $common): array {
         $normalized = [];
 
         foreach ($environment as $key => $value) {
@@ -305,15 +331,71 @@ final class LCFA_Connection_Bundle_Builder {
         }
 
         if ($mode === 'local') {
-            if ($workspace_root !== '') {
-                $normalized['LCFA_WP_ROOT'] = $workspace_root;
+            unset(
+                $normalized['LCFA_MCP_TOKEN'],
+                $normalized['LCFA_MCP_SESSION'],
+                $normalized['LCFA_MCP_SESSION_TOKEN'],
+                $normalized['WP_API_PASSWORD']
+            );
+
+            if ($wordpress_root !== '') {
+                $normalized['LCFA_WP_ROOT'] = $wordpress_root;
             } else {
                 unset($normalized['LCFA_WP_ROOT']);
+            }
+            if ($workspace_root !== '') {
+                $normalized['LCFA_AGENT_WORKSPACE_ROOT'] = $workspace_root;
+            } else {
+                unset($normalized['LCFA_AGENT_WORKSPACE_ROOT']);
+            }
+
+            $normalized['LCFA_AGENT'] = $client;
+            $normalized['LCFA_PAIRING_SCOPES'] = trim((string) ($common['pairing_scopes'] ?? ($normalized['LCFA_PAIRING_SCOPES'] ?? 'read,preview')));
+            if ($client === 'opencode') {
+                $normalized['LCFA_TOOL_PROFILE'] = 'compact';
+            }
+
+            $framework = sanitize_key((string) ($common['framework'] ?? ($normalized['LCFA_FRAMEWORK'] ?? '')));
+            if (in_array($framework, ['picowind', 'picostrap'], true)) {
+                $normalized['LCFA_FRAMEWORK'] = $framework;
+            } else {
+                unset($normalized['LCFA_FRAMEWORK']);
+            }
+
+            foreach ([
+                'LCFA_REST_BASE' => 'rest_base',
+                'LCFA_SITE_URL' => 'site_url',
+                'LCFA_SITE_FINGERPRINT' => 'site_fingerprint',
+            ] as $environment_key => $common_key) {
+                if (empty($normalized[$environment_key]) && !empty($common[$common_key])) {
+                    $normalized[$environment_key] = (string) $common[$common_key];
+                }
+            }
+
+            if (empty($normalized['LCFA_PROJECT_LABEL'])) {
+                $site_host = !empty($normalized['LCFA_SITE_URL'])
+                    ? (string) (function_exists('wp_parse_url')
+                        ? wp_parse_url((string) $normalized['LCFA_SITE_URL'], PHP_URL_HOST)
+                        : parse_url((string) $normalized['LCFA_SITE_URL'], PHP_URL_HOST))
+                    : '';
+                $normalized['LCFA_PROJECT_LABEL'] = $site_host !== ''
+                    ? $site_host
+                    : ($workspace_root !== '' ? basename($workspace_root) : ucfirst($client) . ' project');
             }
         }
 
         if ($mode === 'remote') {
-            unset($normalized['LCFA_WP_ROOT']);
+            unset($normalized['LCFA_WP_ROOT'], $normalized['LCFA_AGENT_WORKSPACE_ROOT']);
+            if ($client === 'opencode') {
+                $normalized['LCFA_TOOL_PROFILE'] = 'compact';
+            }
+
+            $framework = sanitize_key((string) ($common['framework'] ?? ($normalized['LCFA_FRAMEWORK'] ?? '')));
+            if (in_array($framework, ['picowind', 'picostrap'], true)) {
+                $normalized['LCFA_FRAMEWORK'] = $framework;
+            } else {
+                unset($normalized['LCFA_FRAMEWORK']);
+            }
         }
 
         ksort($normalized);
@@ -342,12 +424,12 @@ final class LCFA_Connection_Bundle_Builder {
         }, $matches[0] ?? [])));
     }
 
-    private function normalize_command(array $command, string $workspace_root, string $mode): array {
-        if ($command === [] || $mode !== 'local' || $workspace_root === '') {
+    private function normalize_command(array $command, string $wordpress_root, string $mode): array {
+        if ($command === [] || $mode !== 'local' || $wordpress_root === '') {
             return $command;
         }
 
-        $workspace_root = untrailingslashit($workspace_root);
+        $wordpress_root = untrailingslashit($wordpress_root);
         $relative_script = 'wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
 
         foreach ($command as $index => $token) {
@@ -357,7 +439,7 @@ final class LCFA_Connection_Bundle_Builder {
                 continue;
             }
 
-            $command[$index] = $workspace_root . '/' . $relative_script;
+            $command[$index] = $wordpress_root . '/' . $relative_script;
         }
 
         return $command;
@@ -373,6 +455,8 @@ final class LCFA_Connection_Bundle_Builder {
                 return [[
                     'path'    => $workspace_root . '/opencode.json',
                     'type'    => 'json',
+                    'client'  => 'opencode',
+                    'server_name' => $server_name,
                     'label'   => __('OpenCode config', 'livecanvas-forge-ai'),
                     'content' => $this->build_opencode_config($command, $environment, $server_name),
                 ]];
@@ -380,31 +464,39 @@ final class LCFA_Connection_Bundle_Builder {
                 return [[
                     'path'    => $workspace_root . '/.cursor/mcp.json',
                     'type'    => 'json',
+                    'client'  => 'cursor',
+                    'server_name' => 'livecanvas-forge',
                     'label'   => __('Cursor MCP config', 'livecanvas-forge-ai'),
                     'content' => $this->build_cursor_config($command, $environment),
                 ]];
             case 'codex':
                 return [[
-                    'path'    => $workspace_root . '/livecanvas-forge.codex.sh',
-                    'type'    => 'shell',
-                    'label'   => __('Codex registration helper', 'livecanvas-forge-ai'),
-                    'content' => $this->build_codex_script($command, $environment, $server_name),
+                    'path'    => $workspace_root . '/.codex/config.toml',
+                    'type'    => 'toml',
+                    'client'  => 'codex',
+                    'server_name' => $server_name,
+                    'label'   => __('Codex project MCP config', 'livecanvas-forge-ai'),
+                    'content' => $this->build_codex_config_snippet($command, $environment, $server_name),
                 ]];
             case 'claude':
                 if ($claude_connection_target === 'desktop_app') {
                     return [[
                         'path'    => $workspace_root . '/livecanvas-forge.claude-desktop.json',
                         'type'    => 'json',
+                        'client'  => 'claude-desktop',
+                        'server_name' => 'livecanvas-forge',
                         'label'   => __('Claude Desktop config', 'livecanvas-forge-ai'),
                         'content' => $this->build_claude_desktop_config($command, $environment),
                     ]];
                 }
 
                 return [[
-                    'path'    => $workspace_root . '/livecanvas-forge.claude-cli.sh',
-                    'type'    => 'shell',
-                    'label'   => __('Claude CLI registration helper', 'livecanvas-forge-ai'),
-                    'content' => $this->build_claude_script($command, $environment),
+                    'path'    => $workspace_root . '/.mcp.json',
+                    'type'    => 'json',
+                    'client'  => 'claude',
+                    'server_name' => 'livecanvas-forge',
+                    'label'   => __('Claude Code project MCP config', 'livecanvas-forge-ai'),
+                    'content' => $this->build_claude_project_config($command, $environment),
                 ]];
             default:
                 return [[
@@ -414,6 +506,25 @@ final class LCFA_Connection_Bundle_Builder {
                     'content' => $this->build_generic_snippet($command, $environment),
                 ]];
         }
+    }
+
+    private function build_install_files(string $client, string $mode, string $claude_connection_target, string $claude_desktop_config_path, array $workspace_files): array {
+        if (
+            $client !== 'claude'
+            || $mode !== 'local'
+            || $claude_connection_target !== 'desktop_app'
+            || $claude_desktop_config_path === ''
+            || !isset($workspace_files[0])
+            || !is_array($workspace_files[0])
+        ) {
+            return $workspace_files;
+        }
+
+        $artifact = $workspace_files[0];
+        $artifact['path'] = $claude_desktop_config_path;
+        $artifact['label'] = __('Claude Desktop app config', 'livecanvas-forge-ai');
+
+        return [$artifact];
     }
 
     private function build_download_files(string $client, string $mode, string $claude_connection_target, array $command, array $environment, string $server_name, string $mcp_url = '', string $oauth_resource = ''): array {
@@ -440,9 +551,9 @@ final class LCFA_Connection_Bundle_Builder {
                 }
 
                 return [[
-                    'name'    => 'livecanvas-forge.codex.sh',
-                    'mime'    => 'text/x-shellscript',
-                    'content' => $this->build_codex_script($command, $environment, $server_name),
+                    'name'    => 'livecanvas-forge.codex.toml',
+                    'mime'    => 'text/plain',
+                    'content' => $this->build_codex_config_snippet($command, $environment, $server_name),
                 ]];
             case 'claude':
                 if ($claude_connection_target === 'desktop_app') {
@@ -456,9 +567,9 @@ final class LCFA_Connection_Bundle_Builder {
                 }
 
                 return [[
-                    'name'    => 'livecanvas-forge.claude-cli.sh',
-                    'mime'    => 'text/x-shellscript',
-                    'content' => $this->build_claude_script($command, $environment),
+                    'name'    => '.mcp.json',
+                    'mime'    => 'application/json',
+                    'content' => $this->build_claude_project_config($command, $environment),
                 ]];
             default:
                 return [[
@@ -492,12 +603,17 @@ final class LCFA_Connection_Bundle_Builder {
         return (string) wp_json_encode([
             'mcpServers' => [
                 'livecanvas-forge' => [
+                    'type'    => 'stdio',
                     'command' => $command[0] ?? 'node',
                     'args'    => array_slice($command, 1),
                     'env'     => (object) $environment,
                 ],
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    }
+
+    private function build_claude_project_config(array $command, array $environment): string {
+        return $this->build_claude_desktop_config($command, $environment);
     }
 
     private function build_claude_desktop_config(array $command, array $environment): string {
@@ -733,7 +849,7 @@ final class LCFA_Connection_Bundle_Builder {
 
     private function build_claude_register_command(array $command, array $environment): string {
         $lines = [
-            'claude mcp add --transport stdio livecanvas-forge \\',
+            'claude mcp add --scope project --transport stdio livecanvas-forge \\',
         ];
 
         foreach ($environment as $key => $value) {

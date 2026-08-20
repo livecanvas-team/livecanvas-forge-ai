@@ -1571,7 +1571,8 @@ final class LCFA_Rest_Api {
             $payload = [];
         }
 
-        $workspace_root = sanitize_text_field((string) ($payload['workspace_root'] ?? ''));
+        $workspace_root = sanitize_text_field((string) ($payload['agent_workspace_root'] ?? ($payload['workspace_root'] ?? '')));
+        $wordpress_root = sanitize_text_field((string) ($payload['wordpress_root'] ?? ''));
         $snapshot = $this->environment->get_snapshot();
 
         if (($snapshot['site_mode'] ?? '') !== 'local') {
@@ -1598,14 +1599,27 @@ final class LCFA_Rest_Api {
 
         $connections = LCFA_Settings::get_connections();
         $connections['workspace_root'] = $workspace_root;
+        if (
+            $wordpress_root !== ''
+            && !$this->is_runtime_workspace_root($wordpress_root)
+            && $this->looks_like_absolute_path($wordpress_root)
+            && (is_file(untrailingslashit($wordpress_root) . '/wp-config.php') || is_file(untrailingslashit($wordpress_root) . '/wp-load.php'))
+        ) {
+            $connections['wordpress_root'] = untrailingslashit($wordpress_root);
+        }
         $connections['connection_mode'] = 'local';
+        if (method_exists('LCFA_Settings', 'normalize_local_workspace_root')) {
+            $connections = LCFA_Settings::normalize_local_workspace_root($connections, true);
+        }
         LCFA_Settings::update_connections($connections);
 
         return new WP_REST_Response([
             'result' => [
                 'ok'             => true,
                 'updated'        => true,
-                'workspace_root' => $workspace_root,
+                'workspace_root' => (string) ($connections['workspace_root'] ?? $workspace_root),
+                'agent_workspace_root' => (string) ($connections['workspace_root'] ?? $workspace_root),
+                'wordpress_root' => (string) ($connections['wordpress_root'] ?? ''),
                 'source'         => sanitize_key((string) ($payload['source'] ?? '')),
                 'agent'          => sanitize_key((string) ($payload['agent'] ?? '')),
             ],
@@ -3123,6 +3137,13 @@ final class LCFA_Rest_Api {
         } elseif ($is_oauth_direct) {
             $transport = 'wordpress_mcp_oauth';
         }
+        $native_mcp_adapter_ready = !empty($summary['mcp_adapter_ready']);
+        $mcp_adapter_required = $is_remote_adapter;
+        $transport_ready = $session !== []
+            || $is_oauth_direct
+            || ($is_remote_adapter && $native_mcp_adapter_ready)
+            || ($mode === 'local' && $status === 'ready');
+        $connection_mcp_ready = $mcp_adapter_required ? $native_mcp_adapter_ready : $transport_ready;
         $auth_method = $is_oauth_direct
             ? 'oauth_direct'
             : (($session !== [] || $is_ai_bridge_session)
@@ -3137,6 +3158,7 @@ final class LCFA_Rest_Api {
             ),
             __('If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.', 'livecanvas-forge-ai'),
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),
+            __('Use transport_ready for the selected connection. The native WordPress MCP Adapter matters only when mcp_adapter_required is true.', 'livecanvas-forge-ai'),
             sprintf(
                 /* translators: %s: MCP tool or WordPress Ability name. */
                 __('Then call %s with {"limit":5} only if you need the full runbook, smoke tests, readiness files, ability manifest, MCP write policy, or recent run summary.', 'livecanvas-forge-ai'),
@@ -3152,7 +3174,7 @@ final class LCFA_Rest_Api {
         $prompt_lines = array_values(array_map('sanitize_text_field', $prompt_lines));
         $custom_server = is_array($adapter['custom_server'] ?? null) ? $adapter['custom_server'] : [];
         $stack_capabilities = is_array($summary['stack_capabilities'] ?? null) ? $summary['stack_capabilities'] : [];
-        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.4';
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.5';
         $package_detected = $request instanceof WP_REST_Request && method_exists($request, 'get_header')
             ? sanitize_text_field((string) $request->get_header('x-lcfa-mcp-package-version'))
             : '';
@@ -3171,6 +3193,10 @@ final class LCFA_Rest_Api {
             'current_step'   => $current_step,
             'last_verified_at' => sanitize_text_field((string) ($connections['connection_last_verified_at'] ?? '')),
             'transport'      => $transport,
+            'transport_ready'=> $transport_ready,
+            'mcp_adapter_required' => $mcp_adapter_required,
+            'mcp_adapter_ready' => $connection_mcp_ready,
+            'native_mcp_adapter_ready' => $native_mcp_adapter_ready,
             'auth_method'    => $auth_method,
             'wordpress_mode' => sanitize_key((string) ($stack_capabilities['wordpress_mode'] ?? 'legacy_rest')),
             'mcp_package_expected' => $package_expected,
@@ -3233,7 +3259,10 @@ final class LCFA_Rest_Api {
             'summary'        => [
                 'framework'          => sanitize_key((string) ($summary['framework'] ?? '')),
                 'setup_complete'     => !empty($summary['setup_complete']),
-                'mcp_adapter_ready'  => !empty($summary['mcp_adapter_ready']),
+                'transport_ready'    => $transport_ready,
+                'mcp_adapter_required' => $mcp_adapter_required,
+                'mcp_adapter_ready'  => $connection_mcp_ready,
+                'native_mcp_adapter_ready' => $native_mcp_adapter_ready,
                 'public_writes'      => (int) ($summary['public_writes'] ?? 0),
                 'run_errors'         => (int) ($summary['run_errors'] ?? 0),
             ],

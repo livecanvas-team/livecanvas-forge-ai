@@ -1,10 +1,29 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-function resolveWorkspaceRoot({ wpRoot = '', cwd = process.cwd(), existsSync = fs.existsSync } = {}) {
-  const candidates = [wpRoot, cwd]
+function resolveWorkspaceRoot({ agentWorkspaceRoot = '', wpRoot = '', cwd = process.cwd(), existsSync = fs.existsSync } = {}) {
+  const normalizedWpRoot = resolveWordPressRoot({ wpRoot, cwd, existsSync })
+  const candidates = [agentWorkspaceRoot, cwd, inferAgentWorkspaceRoot(normalizedWpRoot)]
 
   for (const candidate of candidates) {
+    const normalized = normalizeWorkspaceRoot(candidate)
+
+    if (!normalized || looksLikeRuntimeWorkspaceRoot(normalized) || !existsSync(normalized)) {
+      continue
+    }
+
+    if (normalizedWpRoot && !isPathInside(normalizedWpRoot, normalized)) {
+      continue
+    }
+
+    return normalized
+  }
+
+  return ''
+}
+
+function resolveWordPressRoot({ wpRoot = '', cwd = process.cwd(), existsSync = fs.existsSync } = {}) {
+  for (const candidate of [wpRoot, cwd]) {
     const normalized = normalizeWorkspaceRoot(candidate)
 
     if (!normalized || looksLikeRuntimeWorkspaceRoot(normalized)) {
@@ -20,7 +39,13 @@ function resolveWorkspaceRoot({ wpRoot = '', cwd = process.cwd(), existsSync = f
 }
 
 async function syncWorkspaceRoot({ client, config, cwd = process.cwd(), existsSync = fs.existsSync, logger = console } = {}) {
+  const wordpressRoot = resolveWordPressRoot({
+    wpRoot: config && typeof config.wpRoot === 'string' ? config.wpRoot : '',
+    cwd,
+    existsSync
+  })
   const workspaceRoot = resolveWorkspaceRoot({
+    agentWorkspaceRoot: config && typeof config.agentWorkspaceRoot === 'string' ? config.agentWorkspaceRoot : '',
     wpRoot: config && typeof config.wpRoot === 'string' ? config.wpRoot : '',
     cwd,
     existsSync
@@ -36,6 +61,8 @@ async function syncWorkspaceRoot({ client, config, cwd = process.cwd(), existsSy
 
   try {
     await client.syncWorkspaceRoot({
+      agent_workspace_root: workspaceRoot,
+      wordpress_root: wordpressRoot,
       workspace_root: workspaceRoot,
       source: 'mcp-bridge',
       agent: config && typeof config.agent === 'string' ? config.agent : ''
@@ -44,7 +71,8 @@ async function syncWorkspaceRoot({ client, config, cwd = process.cwd(), existsSy
     return {
       ok: true,
       skipped: false,
-      workspaceRoot
+      workspaceRoot,
+      wordpressRoot
     }
   } catch (error) {
     if (config && config.verbose && logger && typeof logger.error === 'function') {
@@ -81,6 +109,24 @@ function normalizeWorkspaceRoot(candidate) {
   return trimmed.replace(/[\\/]+$/, '')
 }
 
+function inferAgentWorkspaceRoot(wpRoot) {
+  const normalized = normalizeWorkspaceRoot(wpRoot)
+  if (!normalized) {
+    return ''
+  }
+
+  if (path.basename(normalized) === 'public' && path.basename(path.dirname(normalized)) === 'app') {
+    return path.dirname(path.dirname(normalized))
+  }
+
+  return normalized
+}
+
+function isPathInside(candidate, root) {
+  const relative = path.relative(root, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
 function looksLikeRuntimeWorkspaceRoot(candidate) {
   return [
     '/wordpress',
@@ -96,5 +142,6 @@ function looksLikeRuntimeWorkspaceRoot(candidate) {
 
 module.exports = {
   resolveWorkspaceRoot,
+  resolveWordPressRoot,
   syncWorkspaceRoot
 }

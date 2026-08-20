@@ -18,7 +18,11 @@ async function runCli(argv = []) {
   const picostrapCompiler = new PicostrapCompiler({ client, config, themeFiles })
   const visualCheck = new VisualCheck({ config })
   const assetDiscovery = new AssetDiscovery()
-  const tools = createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler, visualCheck, assetDiscovery)
+  const tools = createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler, visualCheck, assetDiscovery, {
+    toolProfile: config.toolProfile,
+    framework: config.framework,
+    connectionMode: config.wpRoot ? 'local' : 'remote'
+  })
 
   if (config.tool) {
     if (config.wpRoot) {

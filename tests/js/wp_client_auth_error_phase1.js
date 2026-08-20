@@ -26,8 +26,8 @@ server.listen(0, '127.0.0.1', async () => {
   } catch (error) {
     assert.strictEqual(error.status, 401, 'WPClient should preserve the HTTP status code')
     assert.ok(
-      error.message.includes('Sync Codex config') || error.message.includes('rotate the token'),
-      'WPClient should explain that 401 usually means a stale MCP token'
+      error.message.includes('coding agent project config') && error.message.includes('pair again'),
+      'WPClient should provide client-neutral recovery guidance for rejected credentials'
     )
   } finally {
     server.close()

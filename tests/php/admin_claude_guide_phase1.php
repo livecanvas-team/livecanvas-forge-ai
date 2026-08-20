@@ -145,7 +145,7 @@ $markup = (string) ob_get_clean();
 lcfa_assert_contains('Manual Claude setup', $markup, 'wizard context should keep Claude setup available in a clearly labelled disclosure');
 lcfa_assert_contains('lcfa-agent-setup-details', $markup, 'wizard context should keep raw Claude configuration collapsed until requested');
 lcfa_assert_contains('Desktop App', $markup, 'Claude guide should expose the Desktop App mode');
-lcfa_assert_contains('Command Line Interface', $markup, 'Claude guide should expose the CLI mode');
+lcfa_assert_contains('Claude Code (CLI)', $markup, 'Claude guide should expose the Claude Code mode explicitly');
 lcfa_assert_not_contains('>Claude Code<', $markup, 'wizard setup label should not use Claude Code as the client name');
 lcfa_assert_contains('/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', $markup, 'Claude Desktop guide should render an absolute MCP script path for Desktop App');
 lcfa_assert_contains('Merge the JSON block under mcpServers inside your existing Claude Desktop config.', $markup, 'Claude Desktop guide should explain that the JSON must be merged into the existing config');

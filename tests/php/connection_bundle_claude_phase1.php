@@ -73,6 +73,7 @@ $desktop_bundle = $builder->build([
     'claude_connection_target'  => 'desktop_app',
     'mode'                      => 'local',
     'workspace_root'            => '/Users/commander/Studio/consultala',
+    'claude_desktop_config_path'=> '/Users/commander/Library/Application Support/Claude/claude_desktop_config.json',
     'common'                    => [
         'rest_base' => 'http://localhost:8887/wp-json/lcfa/v1/',
         'mcp_token' => 'desktop-token',
@@ -93,12 +94,34 @@ lcfa_assert_same('claude', $desktop_bundle['client'] ?? '', 'Claude desktop bund
 lcfa_assert_same('livecanvas-forge.claude-desktop.json', $desktop_bundle['download_files'][0]['name'] ?? '', 'Desktop local bundle should download a Claude Desktop JSON config');
 lcfa_assert_same('Claude Desktop config', $desktop_bundle['shortcut_title'] ?? '', 'Desktop local bundle should advertise the Desktop config block');
 lcfa_assert_same('/Users/commander/Studio/consultala/livecanvas-forge.claude-desktop.json', $desktop_bundle['workspace_files'][0]['path'] ?? '', 'Desktop local bundle should expose a Claude Desktop config file in the workspace');
+lcfa_assert_same('claude_desktop', $desktop_bundle['install_target'] ?? '', 'Desktop local bundle should distinguish the app config from the workspace fallback');
+lcfa_assert_same('/Users/commander/Library/Application Support/Claude/claude_desktop_config.json', $desktop_bundle['install_files'][0]['path'] ?? '', 'Desktop local bundle should expose the resolved Claude Desktop app config as its direct install target');
+lcfa_assert_same('Claude Desktop app config', $desktop_bundle['install_files'][0]['label'] ?? '', 'Desktop direct install artifact should be labelled as the app config');
+lcfa_assert_same($desktop_bundle['workspace_files'][0]['content'] ?? '', $desktop_bundle['install_files'][0]['content'] ?? '', 'Desktop direct install and workspace fallback should use the same sanitized server snippet');
 lcfa_assert_true(strpos((string) ($desktop_bundle['download_files'][0]['content'] ?? ''), '"mcpServers"') !== false, 'Desktop local bundle should serialize a Claude Desktop config JSON block');
 lcfa_assert_true(strpos((string) ($desktop_bundle['copy_command_string'] ?? ''), '"type": "stdio"') !== false, 'Desktop local bundle should prefer copying the Claude Desktop JSON snippet');
 lcfa_assert_same('get_connection_handoff', $desktop_bundle['agent_start_tool'] ?? '', 'Desktop local bundle should start with the local connection handoff tool');
 lcfa_assert_same('get_agent_handoff_package', $desktop_bundle['handoff_package_tool'] ?? '', 'Desktop local bundle should expose the full handoff package tool');
 lcfa_assert_true(strpos((string) ($desktop_bundle['agent_start_prompt'] ?? ''), 'get_connection_handoff') !== false, 'Desktop local bundle should include the lightweight first handoff prompt');
 lcfa_assert_true(strpos((string) ($desktop_bundle['agent_start_prompt'] ?? ''), 'get_agent_handoff_package') !== false, 'Desktop local bundle should mention the full handoff package follow-up');
+
+$unsafe_desktop_path_bundle = $builder->build([
+    'client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'mode' => 'local',
+    'workspace_root' => '/Users/commander/Studio/consultala',
+    'claude_desktop_config_path' => '/Users/commander/Documents/unrelated.json',
+    'common' => [
+        'rest_base' => 'http://localhost:8887/wp-json/lcfa/v1/',
+        'wp_root' => '/wordpress',
+    ],
+    'client_payload' => [
+        'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --agent=claude',
+        'env' => ['LCFA_REST_BASE=http://localhost:8887/wp-json/lcfa/v1/', 'LCFA_WP_ROOT=/wordpress'],
+    ],
+]);
+lcfa_assert_same('', $unsafe_desktop_path_bundle['claude_desktop_config_path'] ?? 'unsafe', 'Desktop direct install should reject arbitrary config filenames');
+lcfa_assert_same('workspace', $unsafe_desktop_path_bundle['install_target'] ?? '', 'Rejected Desktop paths should fall back to the workspace snippet');
 
 $cli_bundle = $builder->build([
     'client'                    => 'claude',
@@ -121,11 +144,12 @@ $cli_bundle = $builder->build([
     ],
 ]);
 
-lcfa_assert_same('livecanvas-forge.claude-cli.sh', $cli_bundle['download_files'][0]['name'] ?? '', 'CLI local bundle should download a Claude CLI shell helper');
+lcfa_assert_same('.mcp.json', $cli_bundle['download_files'][0]['name'] ?? '', 'Claude Code local bundle should download the project-scoped MCP config');
 lcfa_assert_same('Claude CLI shortcut', $cli_bundle['shortcut_title'] ?? '', 'CLI local bundle should advertise the CLI shortcut explicitly');
-lcfa_assert_same('/Users/commander/Studio/consultala/livecanvas-forge.claude-cli.sh', $cli_bundle['workspace_files'][0]['path'] ?? '', 'CLI local bundle should expose a Claude CLI helper in the workspace');
-lcfa_assert_true(strpos((string) ($cli_bundle['shortcut_command'] ?? ''), 'claude mcp add --transport stdio') !== false, 'CLI bundle should expose the Claude CLI registration shortcut');
-lcfa_assert_true(strpos((string) ($cli_bundle['download_files'][0]['content'] ?? ''), 'get_connection_handoff') !== false, 'CLI helper should print the first connection handoff prompt for the agent operator');
+lcfa_assert_same('/Users/commander/Studio/consultala/.mcp.json', $cli_bundle['workspace_files'][0]['path'] ?? '', 'Claude Code local bundle should target the project .mcp.json');
+lcfa_assert_true(strpos((string) ($cli_bundle['shortcut_command'] ?? ''), 'claude mcp add --scope project --transport stdio') !== false, 'CLI bundle should expose a project-scoped Claude Code registration shortcut');
+lcfa_assert_true(strpos((string) ($cli_bundle['download_files'][0]['content'] ?? ''), '"mcpServers"') !== false, 'Claude Code download should serialize the project MCP server');
+lcfa_assert_true(strpos((string) ($cli_bundle['download_files'][0]['content'] ?? ''), 'LCFA_MCP_TOKEN') === false, 'Claude Code project config should not contain a static token');
 
 $remote_desktop_bundle = $builder->build([
     'client'                    => 'claude',

@@ -30,6 +30,7 @@ final class LCFA_MCP_Session_Manager {
 
         $now = time();
         $client = self::sanitize_client((string) ($payload['client'] ?? 'codex'));
+        $connection_mode = self::sanitize_connection_mode((string) ($payload['connection_mode'] ?? 'remote'));
         $client_label = self::get_client_label($client);
         $project_label = sanitize_text_field((string) ($payload['project_label'] ?? ''));
         if ($project_label === '') {
@@ -42,6 +43,7 @@ final class LCFA_MCP_Session_Manager {
             'pairing_id'         => $pairing_id,
             'user_code'          => $user_code,
             'client'             => $client,
+            'connection_mode'    => $connection_mode,
             'project_label'      => $project_label,
             'site_fingerprint'   => $site_fingerprint !== '' ? $site_fingerprint : $expected_fingerprint,
             'scopes'             => self::sanitize_scopes((array) ($payload['scopes'] ?? ['read', 'preview', 'write'])),
@@ -64,6 +66,11 @@ final class LCFA_MCP_Session_Manager {
             'user_code'        => $user_code,
             'verification_url' => self::get_verification_url(),
             'expires_at'       => $record['expires_at'],
+            'client'           => $client,
+            'connection_mode'  => $connection_mode,
+            'project_label'    => $project_label,
+            'site_fingerprint' => (string) $record['site_fingerprint'],
+            'scopes'           => (array) $record['scopes'],
             'message'          => sprintf(
                 __('Approve this %s pairing request in LiveCanvas AI Bridge.', 'livecanvas-forge-ai'),
                 self::get_client_label((string) $record['client'])
@@ -137,6 +144,11 @@ final class LCFA_MCP_Session_Manager {
             'session_id'    => (string) ($record['session_id'] ?? ''),
             'session_token' => $session_token,
             'expires_at'    => self::get_session_expires_at((string) ($record['session_id'] ?? '')),
+            'client'        => self::sanitize_client((string) ($record['client'] ?? 'codex')),
+            'connection_mode' => self::sanitize_connection_mode((string) ($record['connection_mode'] ?? 'remote')),
+            'project_label' => sanitize_text_field((string) ($record['project_label'] ?? '')),
+            'site_fingerprint' => sanitize_text_field((string) ($record['site_fingerprint'] ?? '')),
+            'scopes'        => self::sanitize_scopes((array) ($record['scopes'] ?? [])),
             'message'       => sprintf(
                 __('%s pairing approved. The AI Bridge session token was issued once.', 'livecanvas-forge-ai'),
                 $client_label
@@ -167,6 +179,7 @@ final class LCFA_MCP_Session_Manager {
         $session = [
             'session_id'       => $session_id,
             'client'           => $client,
+            'connection_mode'  => self::sanitize_connection_mode((string) ($record['connection_mode'] ?? 'remote')),
             'project_label'    => $project_label,
             'site_fingerprint' => sanitize_text_field((string) ($record['site_fingerprint'] ?? self::get_site_fingerprint())),
             'scopes'           => self::sanitize_scopes((array) ($record['scopes'] ?? ['read', 'preview', 'write'])),
@@ -196,7 +209,10 @@ final class LCFA_MCP_Session_Manager {
             'ok'         => true,
             'session_id' => $session_id,
             'client'     => $client,
+            'connection_mode' => (string) $session['connection_mode'],
             'project_label' => $project_label,
+            'site_fingerprint' => (string) $session['site_fingerprint'],
+            'scopes' => (array) $session['scopes'],
             'message'    => sprintf(
                 __('%1$s pairing approved. Ask %1$s to retry the connection handoff.', 'livecanvas-forge-ai'),
                 $client_label
@@ -350,6 +366,10 @@ final class LCFA_MCP_Session_Manager {
             }
         }
 
+        if (self::is_connection_handoff_request($request)) {
+            self::mark_connection_handoff_from_session($session);
+        }
+
         return $session;
     }
 
@@ -381,7 +401,6 @@ final class LCFA_MCP_Session_Manager {
             $sessions[$session_id]['last_seen_at'] = gmdate('c');
             update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
             unset($sessions[$session_id]['token_hash']);
-            self::mark_connection_verified_from_session($sessions[$session_id]);
 
             return $sessions[$session_id];
         }
@@ -397,6 +416,44 @@ final class LCFA_MCP_Session_Manager {
         }
 
         return false;
+    }
+
+    public static function get_latest_verified_session(string $client = '', string $connection_mode = ''): array {
+        if (!class_exists('LCFA_Settings', false)) {
+            return [];
+        }
+
+        $client = $client !== '' ? self::sanitize_client($client) : '';
+        $connection_mode = $connection_mode !== '' ? self::sanitize_connection_mode($connection_mode) : '';
+        $connections = LCFA_Settings::get_connections();
+        $verified_session_id = sanitize_key((string) ($connections['connection_last_handoff_session_id'] ?? ''));
+        if ($verified_session_id === '') {
+            return [];
+        }
+
+        foreach (self::get_sessions() as $session_id => $session) {
+            $session_id = sanitize_key((string) ($session['session_id'] ?? $session_id));
+            if ($session_id === '' || !hash_equals($verified_session_id, $session_id)) {
+                continue;
+            }
+            if (trim((string) ($session['revoked_at'] ?? '')) !== '' || self::session_is_expired($session)) {
+                return [];
+            }
+            if (trim((string) ($session['last_seen_at'] ?? '')) === '') {
+                return [];
+            }
+            if ($client !== '' && self::sanitize_client((string) ($session['client'] ?? '')) !== $client) {
+                return [];
+            }
+            if ($connection_mode !== '' && self::sanitize_connection_mode((string) ($session['connection_mode'] ?? 'remote')) !== $connection_mode) {
+                return [];
+            }
+
+            unset($session['token_hash']);
+            return $session;
+        }
+
+        return [];
     }
 
     private static function get_pairing_record(string $pairing_id) {
@@ -510,6 +567,10 @@ final class LCFA_MCP_Session_Manager {
         return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $client : 'codex';
     }
 
+    private static function sanitize_connection_mode(string $mode): string {
+        return sanitize_key($mode) === 'local' ? 'local' : 'remote';
+    }
+
     private static function get_client_label(string $client): string {
         $labels = [
             'codex'    => 'Codex',
@@ -575,21 +636,41 @@ final class LCFA_MCP_Session_Manager {
         LCFA_Settings::update_connections($connections);
     }
 
-    private static function mark_connection_verified_from_session(array $session): void {
+    private static function mark_connection_handoff_from_session(array $session): void {
         if (!class_exists('LCFA_Settings', false)) {
             return;
         }
 
         $connections = LCFA_Settings::get_connections();
         $changed = false;
+        $connection_mode = self::sanitize_connection_mode((string) ($session['connection_mode'] ?? 'remote'));
+        $session_id = sanitize_key((string) ($session['session_id'] ?? ''));
+        $already_ready_for_session = (string) ($connections['connection_status'] ?? '') === 'ready'
+            && $session_id !== ''
+            && hash_equals((string) ($connections['connection_last_handoff_session_id'] ?? ''), $session_id);
+        if ($already_ready_for_session) {
+            $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '';
+            $package_detected = sanitize_text_field((string) ($session['mcp_package_version'] ?? ''));
+            $package_verified = sanitize_text_field((string) ($connections['connection_last_verified_mcp_package_version'] ?? ''));
+            $already_ready_for_session = $package_expected !== ''
+                && $package_detected !== ''
+                && $package_verified !== ''
+                && hash_equals($package_expected, $package_detected)
+                && hash_equals($package_verified, $package_detected);
+        }
         $updates = [
             'preferred_client'       => self::sanitize_client((string) ($session['client'] ?? 'codex')),
-            'connection_mode'        => 'remote',
-            'connection_strategy'    => 'ai-bridge-session',
-            'connection_status'      => 'ready',
-            'connection_current_step' => 'ready',
+            'connection_mode'        => $connection_mode,
+            'connection_strategy'    => $connection_mode === 'local' ? 'local-mcp-bridge' : 'ai-bridge-session',
             'connection_last_error'  => '',
+            'connection_last_handoff_session_id' => $session_id,
         ];
+
+        if (!$already_ready_for_session) {
+            $updates['connection_status'] = '';
+            $updates['connection_current_step'] = 'smoke_test';
+            $updates['connection_last_verified_at'] = '';
+        }
 
         foreach ($updates as $key => $value) {
             if ((string) ($connections[$key] ?? '') !== $value) {
@@ -598,14 +679,14 @@ final class LCFA_MCP_Session_Manager {
             }
         }
 
-        $verified_at = function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s');
-        if ((string) ($connections['connection_last_verified_at'] ?? '') !== $verified_at) {
-            $connections['connection_last_verified_at'] = $verified_at;
+        $handoff_at = function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s');
+        if ((string) ($connections['connection_last_handoff_at'] ?? '') !== $handoff_at) {
+            $connections['connection_last_handoff_at'] = $handoff_at;
             $changed = true;
         }
 
         $project_label = sanitize_text_field((string) ($session['project_label'] ?? ''));
-        if ($project_label !== '' && trim((string) ($connections['remote_project_label'] ?? '')) === '') {
+        if ($connection_mode === 'remote' && $project_label !== '' && trim((string) ($connections['remote_project_label'] ?? '')) === '') {
             $connections['remote_project_label'] = $project_label;
             $changed = true;
         }
@@ -613,6 +694,17 @@ final class LCFA_MCP_Session_Manager {
         if ($changed) {
             LCFA_Settings::update_connections($connections);
         }
+    }
+
+    private static function is_connection_handoff_request(WP_REST_Request $request): bool {
+        if (!method_exists($request, 'get_route')) {
+            return false;
+        }
+
+        $route = rtrim((string) $request->get_route(), '/');
+        $suffix = '/studio/connection-handoff';
+
+        return $route !== '' && substr($route, -strlen($suffix)) === $suffix;
     }
 
     private static function get_site_fingerprint(): string {

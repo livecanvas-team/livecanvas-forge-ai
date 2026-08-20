@@ -12,6 +12,8 @@ async function main() {
 
   const requests = []
   let approved = false
+  let revokeCurrentSession = false
+  let pairingExpired = false
   const expectedBasicAuth = `Basic ${Buffer.from('staging-user:staging-pass').toString('base64')}`
 
   const server = http.createServer((req, res) => {
@@ -32,6 +34,7 @@ async function main() {
         const payload = JSON.parse(body || '{}')
         assert.ok(['codex', 'opencode'].includes(payload.client), 'pairing should send the configured coding-agent identity')
         assert.deepStrictEqual(payload.scopes, ['read', 'preview', 'write'], 'default pairing should request read, preview, and write scopes')
+        assert.strictEqual(payload.connection_mode, payload.client === 'codex' ? 'local' : 'remote', 'pairing should derive local mode from LCFA_WP_ROOT')
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true,
@@ -47,6 +50,14 @@ async function main() {
       if (req.url && req.url.startsWith('/wp-json/lcfa/v1/mcp/pairing/status')) {
         assert.strictEqual(req.headers.authorization, expectedBasicAuth, 'pairing polling should pass optional HTTP Basic protection')
         res.writeHead(200, { 'Content-Type': 'application/json' })
+        if (pairingExpired) {
+          res.end(JSON.stringify({
+            ok: false,
+            status: 'expired',
+            message: 'The pairing request expired.'
+          }))
+          return
+        }
         res.end(JSON.stringify(approved
           ? {
               ok: true,
@@ -65,6 +76,15 @@ async function main() {
       }
 
       if (req.url === '/wp-json/lcfa/v1/snapshot') {
+        if (revokeCurrentSession) {
+          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            code: 'rest_forbidden',
+            message: 'Sorry, you are not allowed to do that.'
+          }))
+          return
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ snapshot: { ok: true } }))
         return
@@ -89,6 +109,7 @@ async function main() {
       projectLabel: 'Remote Example',
       agent: 'codex',
       transport: 'stdio',
+      wpRoot: '/tmp/local-site/app/public',
       httpBasicUsername: 'staging-user',
       httpBasicPassword: 'staging-pass'
     }
@@ -105,13 +126,25 @@ async function main() {
     const snapshotRequest = requests.find((request) => request.url === '/wp-json/lcfa/v1/snapshot')
     assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-session'], 'session_secret', 'protected requests should use the AI Bridge session header')
     assert.ok(!snapshotRequest.headers['x-lcfa-mcp-token'], 'protected requests should not send a legacy MCP token')
-    assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-package-version'], '0.2.0-beta.4', 'protected requests should report the running MCP package version')
+    assert.strictEqual(snapshotRequest.headers['x-lcfa-mcp-package-version'], '0.2.0-beta.5', 'protected requests should report the running MCP package version')
     assert.strictEqual(snapshotRequest.headers.authorization, expectedBasicAuth, 'protected REST requests should pass optional HTTP Basic protection')
 
+    revokeCurrentSession = true
     approved = false
+    const renewedPending = await client.getSnapshot()
+    assert.strictEqual(renewedPending.status, 'pairing_pending', 'a revoked cached session should be discarded and start a fresh pairing')
+    assert.strictEqual(renewedPending.user_code, 'ABCD-1234', 'the renewed pairing should return the new user code')
+    assert.strictEqual(
+      requests.filter((request) => request.url === '/wp-json/lcfa/v1/mcp/pairing/start').length,
+      2,
+      'a revoked cached session should trigger exactly one replacement pairing request'
+    )
+
+    revokeCurrentSession = false
     const openCodeClient = new WPClient({
       ...config,
       agent: 'opencode',
+      wpRoot: '',
       sessionToken: ''
     })
     const openCodePending = await openCodeClient.getSnapshot()
@@ -121,6 +154,11 @@ async function main() {
     const pairingRequests = requests.filter((request) => request.url === '/wp-json/lcfa/v1/mcp/pairing/start')
     const openCodePairing = JSON.parse(pairingRequests[pairingRequests.length - 1].body || '{}')
     assert.strictEqual(openCodePairing.client, 'opencode', 'OpenCode pairing should be registered with the correct client identity')
+
+    pairingExpired = true
+    const renewedOpenCodePending = await openCodeClient.getSnapshot()
+    assert.strictEqual(renewedOpenCodePending.status, 'pairing_pending', 'an expired pending request should be replaced in the same call')
+    assert.ok(renewedOpenCodePending.message.includes('OpenCode pairing'), 'renewed pairing guidance should keep the selected client identity')
   } finally {
     process.env.HOME = originalHome
     server.close()

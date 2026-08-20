@@ -2476,7 +2476,7 @@ final class LCFA_Ability_Registry {
         $picostrap_design_system = is_array($summary['picostrap_design_system'] ?? null)
             ? $summary['picostrap_design_system']
             : [];
-        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.4';
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.5';
         $package_detected = sanitize_text_field((string) ($_SERVER['HTTP_X_LCFA_MCP_PACKAGE_VERSION'] ?? ''));
         $package_matches = $package_detected === '' ? null : hash_equals($package_expected, $package_detected);
         $theme_library_build_state = class_exists('LCFA_Theme_Library_Importer', false) && method_exists('LCFA_Theme_Library_Importer', 'get_build_state_summary')

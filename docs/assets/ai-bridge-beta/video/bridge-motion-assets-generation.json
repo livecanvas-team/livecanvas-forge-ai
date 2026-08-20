@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-08-05T10:06:03.806Z",
+  "provider": "WaveSpeedAI",
+  "stage": "complete",
+  "assets": {
+    "hero": {
+      "poster": {
+        "output": "docs/assets/ai-bridge-beta/video/bridge-mobius-hero-v2-poster.jpg",
+        "publicUrl": "https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-poster.jpg",
+        "model": "https://api.wavespeed.ai/api/v3/openai/gpt-image-2/edit"
+      },
+      "video": {
+        "output": "docs/assets/ai-bridge-beta/video/bridge-mobius-hero-v2-loop.mp4",
+        "publicUrl": "https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-loop.mp4",
+        "model": "https://api.wavespeed.ai/api/v3/kwaivgi/kling-v3.0-std/image-to-video",
+        "prompt": "A single abstract lamellar Mobius ribbon sculpture performs one complete calm sinusoidal motion cycle over exactly ten seconds. The layered fins breathe outward, twist gently around the central aperture, and settle back into precisely the starting pose at the final frame. Movement is continuous, slow, fluid, mathematically smooth, and restrained, like a soft ribbon moving under water without turbulence. Keep the sculpture entirely in the right 45 percent of the frame and keep the left side empty for typography. The camera, framing, background, focus, exposure, cyan light, magenta light, and material remain absolutely locked. No cut, no camera move, no zoom, no shape collapse, no new objects. The first and final frames must match for a seamless loop.",
+        "negativePrompt": "camera movement, zoom, dolly, pan, tilt, scene change, cut, jump, flicker, jitter, warping background, shape collapse, melting, liquid, chrome, glass, particles, smoke, text, logo, watermark, blur, low quality",
+        "duration": 10,
+        "firstAndLastFrame": "same poster",
+        "validatedDurationSeconds": 10.041667,
+        "firstLastFrameRmse": 0.00872539
+      }
+    },
+    "signal": {
+      "poster": {
+        "output": "docs/assets/ai-bridge-beta/video/bridge-torus-signal-v2-poster.jpg",
+        "publicUrl": "https://livecanvas.com/wp-content/uploads/2026/08/bridge-torus-signal-v2-poster.jpg",
+        "model": "https://api.wavespeed.ai/api/v3/openai/gpt-image-2/edit"
+      },
+      "video": {
+        "output": "docs/assets/ai-bridge-beta/video/bridge-torus-signal-v2-loop.mp4",
+        "publicUrl": "https://livecanvas.com/wp-content/uploads/2026/08/bridge-torus-signal-v2-loop.mp4",
+        "model": "https://api.wavespeed.ai/api/v3/kwaivgi/kling-v3.0-std/image-to-video",
+        "prompt": "A single layered toroidal signal ring performs one complete calm sinusoidal breathing cycle over exactly ten seconds. The lamellar ribbons open by a few millimeters, rotate together by a very small angle, pass a soft cyan-to-magenta light pulse around the ring, then return precisely to the starting pose at the final frame. Motion is slow, fluid, coherent, premium, and understated. The ring remains structurally stable and fully visible. The camera, framing, background, focus, exposure, and material remain absolutely locked. No cut, no camera move, no zoom, no shape collapse, no new objects. The first and final frames must match for a seamless loop.",
+        "negativePrompt": "camera movement, zoom, dolly, pan, tilt, scene change, cut, jump, flicker, jitter, warping background, shape collapse, melting, liquid, chrome, glass, particles, smoke, text, logo, watermark, blur, low quality",
+        "duration": 10,
+        "firstAndLastFrame": "same poster",
+        "validatedDurationSeconds": 10.041667,
+        "firstLastFrameRmse": 0.0132746
+      }
+    }
+  }
+}

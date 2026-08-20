@@ -1,5 +1,5 @@
 const PROTOCOL_VERSION = '2024-11-05'
-const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-11-25']
+const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-06-18', '2025-11-25']
 const fs = require('node:fs')
 const PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
 
@@ -80,8 +80,10 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
   if (method === 'tools/list') {
     writeResponse(message.id, {
       tools: tools.list(),
-      ttlMs: 30000,
-      cacheScope: 'site_session'
+      _meta: {
+        'io.livecanvas/cache-ttl-ms': 30000,
+        'io.livecanvas/cache-scope': 'site_session'
+      }
     }, debugLogPath, format)
 
     return
@@ -279,7 +281,7 @@ function resolveProtocolVersion(message) {
     return requested
   }
 
-  return requested || PROTOCOL_VERSION
+  return PROTOCOL_VERSION
 }
 
 function buildServerDiscovery(tools) {

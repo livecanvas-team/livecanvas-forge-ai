@@ -70,7 +70,7 @@ $capabilities = new LCFA_Stack_Capabilities();
 
 $picowind = $capabilities->evaluate(lcfa_stack_snapshot('picowind'), lcfa_stack_runtime('picowind'));
 lcfa_stack_assert(($picowind['status'] ?? '') === 'supported', 'A tested Picowind/WindPress stack should be supported.');
-lcfa_stack_assert(($picowind['profile_version'] ?? '') === '2026.08.2', 'The versioned compatibility profile should be exposed.');
+lcfa_stack_assert(($picowind['profile_version'] ?? '') === '2026.08.3', 'The versioned compatibility profile should be exposed.');
 lcfa_stack_assert(($picowind['wordpress_mode'] ?? '') === 'abilities', 'WordPress 7 should expose the Abilities operating mode when available.');
 lcfa_stack_assert(($picowind['components']['windpress']['status'] ?? '') === 'supported', 'WindPress should be supported inside its tested range.');
 
@@ -81,6 +81,16 @@ $wordpress68_runtime['wordpress']['abilities_api'] = false;
 $wordpress68 = $capabilities->evaluate($wordpress68_snapshot, $wordpress68_runtime);
 lcfa_stack_assert(($wordpress68['status'] ?? '') === 'supported', 'WordPress 6.8 REST mode should be fully supported without the Abilities API.');
 lcfa_stack_assert(($wordpress68['wordpress_mode'] ?? '') === 'legacy_rest', 'WordPress 6.8 should identify the supported legacy REST operating mode.');
+
+$wordpress71_snapshot = lcfa_stack_snapshot('picostrap');
+$wordpress71_snapshot['wordpress_version'] = '7.1.0';
+$wordpress71 = $capabilities->evaluate($wordpress71_snapshot, lcfa_stack_runtime('picostrap'));
+lcfa_stack_assert(($wordpress71['status'] ?? '') === 'supported', 'WordPress 7.1 should be inside the tested profile.');
+
+$wordpress72_snapshot = lcfa_stack_snapshot('picostrap');
+$wordpress72_snapshot['wordpress_version'] = '7.2.0';
+$wordpress72 = $capabilities->evaluate($wordpress72_snapshot, lcfa_stack_runtime('picostrap'));
+lcfa_stack_assert(($wordpress72['status'] ?? '') === 'degraded', 'A future WordPress version should be usable but outside the tested profile.');
 
 $wordpress7_without_abilities_runtime = lcfa_stack_runtime('picostrap');
 $wordpress7_without_abilities_runtime['wordpress']['abilities_api'] = false;

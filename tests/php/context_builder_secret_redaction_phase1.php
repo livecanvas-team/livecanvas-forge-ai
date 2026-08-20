@@ -114,7 +114,7 @@ lcfa_assert_not_contains('LCFA_MCP_TOKEN=', $public_bootstrap, 'public bootstrap
 $internal_bootstrap = json_encode($builder->get_bootstrap_payload(), JSON_UNESCAPED_SLASHES) ?: '';
 lcfa_assert_not_contains('super-secret-token', $internal_bootstrap, 'remote admin bootstrap should not expose the legacy MCP token');
 lcfa_assert_not_contains('LCFA_MCP_TOKEN=', $internal_bootstrap, 'remote admin bootstrap should not generate legacy MCP token environment entries');
-lcfa_assert_same(true, strpos($internal_bootstrap, '@livecanvas/ai-bridge-mcp@0.2.0-beta.4') !== false, 'remote admin bootstrap should use the pinned secure MCP package');
+lcfa_assert_same(true, strpos($internal_bootstrap, '@livecanvas/ai-bridge-mcp@0.2.0-beta.5') !== false, 'remote admin bootstrap should use the pinned secure MCP package');
 lcfa_assert_same(true, strpos($internal_bootstrap, 'LCFA_PAIRING_SCOPES=read,preview') !== false, 'remote admin bootstrap should request read and preview scopes by default');
 
 echo "PASS\n";

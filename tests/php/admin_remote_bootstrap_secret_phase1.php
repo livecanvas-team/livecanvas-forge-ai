@@ -17,6 +17,10 @@ function __(string $text, string $domain = ''): string {
     return $text;
 }
 
+function sanitize_key(string $value): string {
+    return (string) preg_replace('/[^a-z0-9_\-]/', '', strtolower($value));
+}
+
 function trailingslashit(string $value): string {
     return rtrim($value, "/\\") . '/';
 }
@@ -86,5 +90,24 @@ foreach (['codex', 'opencode', 'claude', 'cursor'] as $client) {
     lcfa_remote_bootstrap_assert(in_array('LCFA_AGENT=' . $client, $environment, true), $client . ' should identify itself during pairing');
     lcfa_remote_bootstrap_assert(in_array('LCFA_PAIRING_SCOPES=read,preview', $environment, true), $client . ' should default to read and preview scopes');
 }
+
+$local_payload = $method->invoke($admin, [
+    'connection_mode' => 'local',
+    'mcp_token' => 'must-not-leak',
+    'mcp_server_command' => 'node local-bridge.js --transport=stdio',
+    'transport' => 'rest',
+], [
+    // The explicit wizard choice must win even if environment detection is
+    // stale or ambiguous for a Local-hosted site.
+    'site_mode' => 'remote',
+    'detected_framework' => 'picowind',
+    'current_theme_stylesheet' => 'picowind-child',
+]);
+
+$local_opencode = (array) ($local_payload['clients']['opencode'] ?? []);
+$local_environment = (array) ($local_opencode['env'] ?? []);
+lcfa_remote_bootstrap_assert(($local_opencode['command'] ?? '') === 'node local-bridge.js --transport=stdio', 'explicit local mode should use the local MCP command even when snapshot detection says remote');
+lcfa_remote_bootstrap_assert(in_array('LCFA_WP_ROOT=' . untrailingslashit(ABSPATH), $local_environment, true), 'explicit local mode should include the WordPress root for local file access');
+lcfa_remote_bootstrap_assert(!in_array('LCFA_MCP_TOKEN=must-not-leak', $local_environment, true), 'explicit local mode should still use secure pairing without a static token');
 
 echo "PASS\n";

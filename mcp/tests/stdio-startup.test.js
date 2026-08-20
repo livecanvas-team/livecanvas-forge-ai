@@ -146,6 +146,67 @@ async function run() {
 
   assert.match(ndjsonOutput, /"protocolVersion":"2025-11-25"/, 'stdio server should negotiate the client-requested protocol version for newline-delimited JSON-RPC clients')
   assert.ok(!ndjsonOutput.includes('Content-Length:'), 'newline-delimited JSON-RPC clients should receive newline-delimited responses, not Content-Length framing')
+
+  const codexChild = spawn(process.execPath, [
+    mcpScript,
+    '--transport=stdio',
+    '--agent=codex'
+  ], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      LCFA_REST_BASE: restBase,
+      LCFA_MCP_TOKEN: 'test-token',
+      LCFA_WP_ROOT: wpRoot
+    },
+    stdio: ['pipe', 'pipe', 'pipe']
+  })
+
+  codexChild.stdin.write([
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'codex-mcp-client', version: '0.148.0' }
+      }
+    }),
+    JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+      params: {}
+    }),
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/list',
+      params: {}
+    }),
+    ''
+  ].join('\n'))
+
+  const codexListResponse = await waitForNdjsonResponse(codexChild, 2, initializeTimeoutMs)
+  codexChild.kill('SIGKILL')
+
+  assert.ok(Array.isArray(codexListResponse.result.tools), 'Codex protocol negotiation should return a valid MCP tools list')
+  assert.equal(codexListResponse.result._meta['io.livecanvas/cache-scope'], 'site_session', 'tools/list should put vendor cache metadata in the MCP extension field')
+
+  const standardAnnotationKeys = new Set([
+    'title',
+    'readOnlyHint',
+    'destructiveHint',
+    'idempotentHint',
+    'openWorldHint'
+  ])
+
+  for (const tool of codexListResponse.result.tools) {
+    const unsupportedKeys = Object.keys(tool.annotations || {})
+      .filter((key) => !standardAnnotationKeys.has(key))
+
+    assert.deepEqual(unsupportedKeys, [], `${tool.name} should serialize MCP-compliant ToolAnnotations for Codex`)
+  }
 }
 
 function waitForStdout(child, timeoutMs) {
@@ -207,6 +268,59 @@ function waitForRequest(requests, expectedPath, timeoutMs) {
     }
 
     tick()
+  })
+}
+
+function waitForNdjsonResponse(child, expectedId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let stdout = ''
+    let stderr = ''
+
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timed out after ${timeoutMs}ms waiting for NDJSON response ${expectedId}. stderr=${stderr}`))
+    }, timeoutMs)
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      child.stdout.off('data', onStdout)
+      child.stderr.off('data', onStderr)
+      child.off('exit', onExit)
+    }
+
+    const onStdout = (chunk) => {
+      stdout += chunk.toString('utf8')
+
+      for (const line of stdout.split(/\r?\n/)) {
+        if (line.trim() === '') {
+          continue
+        }
+
+        try {
+          const message = JSON.parse(line)
+          if (message.id === expectedId) {
+            cleanup()
+            resolve(message)
+            return
+          }
+        } catch (_error) {
+          // The final line may still be an incomplete chunk.
+        }
+      }
+    }
+
+    const onStderr = (chunk) => {
+      stderr += chunk.toString('utf8')
+    }
+
+    const onExit = (code) => {
+      cleanup()
+      reject(new Error(`Child exited before NDJSON response ${expectedId} (code ${code}). stderr=${stderr}`))
+    }
+
+    child.stdout.on('data', onStdout)
+    child.stderr.on('data', onStderr)
+    child.on('exit', onExit)
   })
 }
 

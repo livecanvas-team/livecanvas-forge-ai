@@ -14,15 +14,22 @@ final class LCFA_Codex_Config_Manager {
     public function get_expected_config(array $connections = []): array {
         $connections = $connections !== [] ? $connections : LCFA_Settings::get_connections();
         $wp_root = $this->resolve_wp_root($connections);
+        $workspace_root = $this->resolve_workspace_root($connections, $wp_root);
         $config_scope = $this->resolve_config_scope($connections);
         $site_fingerprint = $this->get_site_fingerprint();
         $script_path = LCFA_DIR . 'mcp/bin/livecanvas-forge-mcp.js';
+        $site_url = trailingslashit(home_url('/'));
+        $site_host = function_exists('wp_parse_url')
+            ? (string) wp_parse_url($site_url, PHP_URL_HOST)
+            : (string) parse_url($site_url, PHP_URL_HOST);
         $environment = [
-            'LCFA_MCP_ENDPOINT' => LCFA_Settings::get_mcp_endpoint(),
-            'LCFA_MCP_TOKEN'    => (string) ($connections['mcp_token'] ?? ''),
+            'LCFA_AGENT'        => 'codex',
+            'LCFA_PAIRING_SCOPES' => $this->resolve_pairing_scopes($connections),
+            'LCFA_PROJECT_LABEL'=> $site_host !== '' ? $site_host : basename($workspace_root),
             'LCFA_REST_BASE'    => trailingslashit(rest_url('lcfa/v1/')),
-            'LCFA_SITE_URL'     => trailingslashit(home_url('/')),
+            'LCFA_SITE_URL'     => $site_url,
             'LCFA_SITE_FINGERPRINT' => $site_fingerprint,
+            'LCFA_AGENT_WORKSPACE_ROOT' => $workspace_root,
             'LCFA_WP_ROOT'      => $wp_root,
         ];
         $command = $this->resolve_node_command();
@@ -35,19 +42,21 @@ final class LCFA_Codex_Config_Manager {
             'site_url'    => $environment['LCFA_SITE_URL'],
             'site_fingerprint' => $site_fingerprint,
             'wp_root'     => $environment['LCFA_WP_ROOT'],
-            'mcp_token'   => $environment['LCFA_MCP_TOKEN'],
+            'workspace_root' => $environment['LCFA_AGENT_WORKSPACE_ROOT'],
+            'pairing_scopes' => $environment['LCFA_PAIRING_SCOPES'],
         ];
 
         return [
             'server_name'    => self::SERVER_NAME,
             'config_scope'   => $config_scope,
-            'config_path'    => $this->get_config_path($config_scope, $wp_root),
+            'config_path'    => $this->get_config_path($config_scope, $workspace_root),
             'global_config_path' => $this->get_global_config_path(),
             'command'        => $command,
             'args'           => $args,
             'environment'    => $environment,
             'script_path'    => $script_path,
             'wp_root'        => $wp_root,
+            'workspace_root' => $workspace_root,
             'site_fingerprint' => $site_fingerprint,
             'hash'           => md5((string) wp_json_encode($fingerprint, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)),
             'snippet'        => $this->build_toml_snippet($command, $args, $environment),
@@ -135,10 +144,15 @@ final class LCFA_Codex_Config_Manager {
                     'expected'=> $expected,
                 ];
             }
+            @chmod($backup_path, 0600);
         }
 
         $updated = $this->replace_livecanvas_sections($current, (string) $expected['snippet']);
-        if (@file_put_contents($config_path, $updated) === false) {
+        $temp_path = @tempnam($directory, '.lcfa-codex-');
+        if (!is_string($temp_path) || $temp_path === '' || @file_put_contents($temp_path, $updated, LOCK_EX) === false || !@chmod($temp_path, 0600) || !@rename($temp_path, $config_path)) {
+            if (is_string($temp_path) && $temp_path !== '') {
+                @unlink($temp_path);
+            }
             return [
                 'ok'          => false,
                 'message'     => sprintf(__('Could not write Codex config: %s', 'livecanvas-forge-ai'), $config_path),
@@ -146,6 +160,7 @@ final class LCFA_Codex_Config_Manager {
                 'backup_path' => $backup_path,
             ];
         }
+        @chmod($config_path, 0600);
 
         return [
             'ok'               => true,
@@ -196,11 +211,12 @@ final class LCFA_Codex_Config_Manager {
     }
 
     private function check_rest_health(array $expected): array {
+        $connections = LCFA_Settings::get_connections();
         $response = wp_remote_get(trailingslashit((string) $expected['environment']['LCFA_REST_BASE']) . 'mcp/health', [
             'timeout' => 8,
             'headers' => [
                 'Accept'           => 'application/json',
-                'X-LCFA-MCP-Token' => (string) $expected['environment']['LCFA_MCP_TOKEN'],
+                'X-LCFA-MCP-Token' => (string) ($connections['mcp_token'] ?? ''),
             ],
         ]);
 
@@ -323,7 +339,9 @@ final class LCFA_Codex_Config_Manager {
             'site_url'  => strpos($contents, (string) $expected['environment']['LCFA_SITE_URL']) !== false,
             'site_fingerprint' => strpos($contents, (string) $expected['environment']['LCFA_SITE_FINGERPRINT']) !== false,
             'wp_root'   => strpos($contents, (string) $expected['environment']['LCFA_WP_ROOT']) !== false,
-            'token'     => strpos($contents, (string) $expected['environment']['LCFA_MCP_TOKEN']) !== false,
+            'agent'     => strpos($contents, 'LCFA_AGENT = "codex"') !== false,
+            'pairing_scopes' => strpos($contents, (string) $expected['environment']['LCFA_PAIRING_SCOPES']) !== false,
+            'no_static_token' => strpos($contents, 'LCFA_MCP_TOKEN') === false,
         ];
     }
 
@@ -360,6 +378,8 @@ final class LCFA_Codex_Config_Manager {
             '[mcp_servers.' . self::SERVER_NAME . ']',
             'command = ' . $this->quote_toml_string($command),
             'args = [' . implode(', ', array_map([$this, 'quote_toml_string'], $args)) . ']',
+            'startup_timeout_sec = 60',
+            'default_tools_approval_mode = "writes"',
             '',
             '[mcp_servers.' . self::SERVER_NAME . '.env]',
         ];
@@ -426,9 +446,9 @@ final class LCFA_Codex_Config_Manager {
         return array_values(array_unique(array_map('strval', $candidates)));
     }
 
-    private function get_config_path(string $scope, string $wp_root): string {
-        if ($scope === 'project' && $wp_root !== '') {
-            return rtrim($wp_root, '/\\') . '/.codex/config.toml';
+    private function get_config_path(string $scope, string $workspace_root): string {
+        if ($scope === 'project' && $workspace_root !== '') {
+            return rtrim($workspace_root, '/\\') . '/.codex/config.toml';
         }
 
         return $this->get_global_config_path();
@@ -472,12 +492,27 @@ final class LCFA_Codex_Config_Manager {
     }
 
     private function resolve_wp_root(array $connections): string {
-        $workspace_root = untrailingslashit(trim((string) ($connections['workspace_root'] ?? '')));
-        if ($this->looks_like_wordpress_root($workspace_root)) {
-            return $workspace_root;
+        $wordpress_root = untrailingslashit(trim((string) ($connections['wordpress_root'] ?? '')));
+        if ($this->looks_like_wordpress_root($wordpress_root)) {
+            return $wordpress_root;
         }
 
         return defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
+    }
+
+    private function resolve_workspace_root(array $connections, string $wp_root): string {
+        $workspace_root = untrailingslashit(trim((string) ($connections['workspace_root'] ?? '')));
+
+        return $workspace_root !== '' ? $workspace_root : $wp_root;
+    }
+
+    private function resolve_pairing_scopes(array $connections): string {
+        $power_mode = sanitize_key((string) ($connections['power_mode'] ?? 'auto'));
+        $write_enabled = !empty($connections['mcp_write_abilities_enabled']);
+
+        return $power_mode !== 'disabled' && $write_enabled
+            ? 'read,preview,write,media,theme_files,debug,cache,seo'
+            : 'read,preview';
     }
 
     private function looks_like_wordpress_root(string $path): bool {

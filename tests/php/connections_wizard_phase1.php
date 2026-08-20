@@ -190,6 +190,7 @@ $bundle = $builder->build([
         'rest_base' => 'http://localhost:8887/wp-json/lcfa/v1/',
         'mcp_token' => 'test-token',
         'wp_root'   => '/wordpress',
+        'framework' => 'picowind',
     ],
     'client_payload' => [
         'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --agent=opencode',
@@ -205,7 +206,12 @@ lcfa_assert_same('opencode', $bundle['client'], 'bundle should preserve the sele
 lcfa_assert_same('local', $bundle['mode'], 'bundle should preserve local mode');
 lcfa_assert_same('/Users/commander/Studio/consultala/opencode.json', $bundle['workspace_files'][0]['path'] ?? '', 'local OpenCode bundle should target workspace opencode.json');
 lcfa_assert_same('/Users/commander/Studio/consultala', $bundle['environment']['LCFA_WP_ROOT'] ?? '', 'local bundle should replace runtime wp_root with workspace_root');
+lcfa_assert_same('/Users/commander/Studio/consultala', $bundle['environment']['LCFA_AGENT_WORKSPACE_ROOT'] ?? '', 'local bundle should expose the separate agent workspace root explicitly');
 lcfa_assert_same('/Users/commander/Studio/consultala', $bundle['workspace_root'] ?? '', 'local bundle should expose the normalized workspace root');
+lcfa_assert_same('/Users/commander/Studio/consultala', $bundle['wordpress_root'] ?? '', 'local bundle should expose the WordPress root separately');
+lcfa_assert_false(isset($bundle['environment']['LCFA_MCP_TOKEN']), 'local bundle should use secure pairing instead of a static MCP token');
+lcfa_assert_same('compact', $bundle['environment']['LCFA_TOOL_PROFILE'] ?? '', 'OpenCode should use a provider-compatible compact MCP catalog');
+lcfa_assert_same('picowind', $bundle['environment']['LCFA_FRAMEWORK'] ?? '', 'OpenCode should receive the detected framework for contextual tool filtering');
 lcfa_assert_same('generated', $bundle['status'] ?? '', 'bundle should expose generated status');
 $opencode_config = json_decode((string) ($bundle['workspace_files'][0]['content'] ?? ''), true);
 lcfa_assert_true(is_array($opencode_config), 'local OpenCode bundle should serialize a valid JSON config');
@@ -264,13 +270,57 @@ lcfa_assert_true(strpos((string) ($legacy_saved_bundle['shortcut_command'] ?? ''
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['codex_config_snippet'] ?? ''), 'startup_timeout_sec = 60') !== false, 'Codex stdio config should allow the npm MCP package enough time to start');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['codex_config_snippet'] ?? ''), 'default_tools_approval_mode = "writes"') !== false, 'Codex should run read-only MCP tools without prompting and still require approval for writes');
 lcfa_assert_same((string) ($legacy_saved_bundle['shortcut_command'] ?? ''), (string) ($legacy_saved_bundle['copy_command_string'] ?? ''), 'codex bundles should prefer copying the Codex shortcut, not the raw MCP command');
-lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '/Applications/Codex.app/Contents/Resources/codex') !== false, 'codex helper script should auto-detect the desktop app CLI');
-lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'codex helper script should include a config.toml fallback snippet');
+lcfa_assert_same('/Users/commander/Studio/consultala/.codex/config.toml', $legacy_saved_bundle['workspace_files'][0]['path'] ?? '', 'Codex local config should be project-scoped');
+lcfa_assert_true(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), '[mcp_servers.livecanvas-forge]') !== false, 'Codex workspace artifact should be a TOML server snippet');
+lcfa_assert_false(strpos((string) ($legacy_saved_bundle['workspace_files'][0]['content'] ?? ''), 'LCFA_MCP_TOKEN') !== false, 'Codex project config should not store a static MCP token');
 lcfa_assert_same('get_connection_handoff', $legacy_saved_bundle['agent_start_tool'] ?? '', 'local Codex bundles should start with the lightweight connection handoff tool');
 lcfa_assert_same('get_agent_handoff_package', $legacy_saved_bundle['handoff_package_tool'] ?? '', 'local Codex bundles should still expose the full handoff package tool');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'get_connection_handoff') !== false, 'local Codex bundles should expose a first prompt that fetches the connection handoff');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'get_agent_handoff_package') !== false, 'local Codex bundles should mention the full handoff package as the follow-up tool');
 lcfa_assert_true(strpos((string) ($legacy_saved_bundle['agent_start_prompt'] ?? ''), 'Stay read-only') !== false, 'local Codex first prompt should keep the initial handoff read-only');
+
+$local_flywheel_bundle = $builder->build([
+    'client'         => 'cursor',
+    'mode'           => 'local',
+    'workspace_root' => '/Users/example/Local Sites/demo-site',
+    'wordpress_root' => '/Users/example/Local Sites/demo-site/app/public',
+    'common'         => [
+        'rest_base'        => 'http://demo-site.local/wp-json/lcfa/v1/',
+        'site_url'         => 'http://demo-site.local/',
+        'site_fingerprint' => 'local-fingerprint',
+        'pairing_scopes'   => 'read,preview,write,theme_files',
+    ],
+    'client_payload' => [
+        'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --agent=cursor',
+        'env'     => [
+            'LCFA_REST_BASE=http://demo-site.local/wp-json/lcfa/v1/',
+            'LCFA_MCP_TOKEN=must-be-removed',
+        ],
+    ],
+]);
+
+lcfa_assert_same('/Users/example/Local Sites/demo-site', $local_flywheel_bundle['agent_workspace_root'] ?? '', 'Local bundle should keep the agent project root');
+lcfa_assert_same('/Users/example/Local Sites/demo-site/app/public', $local_flywheel_bundle['wordpress_root'] ?? '', 'Local bundle should keep the nested WordPress root');
+lcfa_assert_same('/Users/example/Local Sites/demo-site/.cursor/mcp.json', $local_flywheel_bundle['workspace_files'][0]['path'] ?? '', 'Cursor config should be written at the agent project root');
+lcfa_assert_same('/Users/example/Local Sites/demo-site/app/public', $local_flywheel_bundle['environment']['LCFA_WP_ROOT'] ?? '', 'LCFA_WP_ROOT should point to the nested WordPress root');
+lcfa_assert_same('/Users/example/Local Sites/demo-site/app/public/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js', $local_flywheel_bundle['command'][1] ?? '', 'MCP script should resolve inside the nested WordPress root');
+lcfa_assert_same('stdio', json_decode((string) ($local_flywheel_bundle['workspace_files'][0]['content'] ?? ''), true)['mcpServers']['livecanvas-forge']['type'] ?? '', 'Cursor project config should declare stdio explicitly');
+lcfa_assert_false(strpos((string) ($local_flywheel_bundle['workspace_files'][0]['content'] ?? ''), 'LCFA_MCP_TOKEN') !== false, 'Cursor project config should not store a static token');
+
+$claude_code_bundle = $builder->build([
+    'client'         => 'claude-code',
+    'mode'           => 'local',
+    'workspace_root' => '/Users/example/Local Sites/demo-site',
+    'wordpress_root' => '/Users/example/Local Sites/demo-site/app/public',
+    'client_payload' => [
+        'command' => 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio --agent=claude',
+        'env'     => ['LCFA_MCP_TOKEN=must-be-removed'],
+    ],
+]);
+
+lcfa_assert_same('/Users/example/Local Sites/demo-site/.mcp.json', $claude_code_bundle['workspace_files'][0]['path'] ?? '', 'Claude Code should use the project-scoped .mcp.json');
+lcfa_assert_true(strpos((string) ($claude_code_bundle['shortcut_command'] ?? ''), '--scope project') !== false, 'Claude Code CLI fallback should register the MCP server at project scope');
+lcfa_assert_false(strpos((string) ($claude_code_bundle['workspace_files'][0]['content'] ?? ''), 'LCFA_MCP_TOKEN') !== false, 'Claude Code project config should not store a static token');
 
 $runtime_only_script = <<<'PHP'
 <?php
@@ -584,6 +634,76 @@ $opencode_smoke = $presenter->build([
 lcfa_assert_same('Run smoke test', $opencode_smoke['active_panel']['primary_cta']['label'] ?? '', 'smoke test CTA should remain explicit');
 lcfa_assert_same('Return here and run the smoke test', $opencode_smoke['visual_help']['items'][2]['title'] ?? '', 'OpenCode smoke step should keep the return-to-WordPress cue');
 
+$cursor_smoke = $presenter->build([
+    'state' => [
+        'status'       => 'not_connected',
+        'current_step' => 'smoke_test',
+    ],
+    'bundle' => [
+        'client'         => 'cursor',
+        'mode'           => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+    ],
+    'workspace_access' => [
+        'available' => true,
+        'reason'    => 'writable',
+        'path'      => '/Users/commander/Studio/consultala',
+    ],
+]);
+
+lcfa_assert_same('Enable, reload, and verify livecanvas-forge', $cursor_smoke['visual_help']['items'][1]['title'] ?? '', 'Cursor guide should make the client-side enable step explicit');
+lcfa_assert_true(strpos((string) ($cursor_smoke['visual_help']['items'][1]['caption'] ?? ''), 'Customize → MCPs') !== false, 'Cursor guide should point to the exact MCP settings location');
+lcfa_assert_true(strpos((string) ($cursor_smoke['visual_help']['items'][1]['caption'] ?? ''), 'click Reload') !== false, 'Cursor guide should explain the reload required after enabling the server');
+
+$claude_desktop_bundle_view = $presenter->build([
+    'state' => [
+        'status' => 'not_connected',
+        'current_step' => 'generate_bundle',
+    ],
+    'bundle' => [
+        'client' => 'claude',
+        'claude_connection_target' => 'desktop_app',
+        'mode' => 'local',
+        'workspace_root' => '/Users/commander/Studio/consultala',
+        'workspace_files' => [['path' => '/Users/commander/Studio/consultala/livecanvas-forge.claude-desktop.json']],
+        'install_files' => [['path' => '/Users/commander/Library/Application Support/Claude/claude_desktop_config.json']],
+        'install_target' => 'claude_desktop',
+    ],
+    'workspace_access' => [
+        'available' => true,
+        'reason' => 'ready',
+        'path' => '/Users/commander/Library/Application Support/Claude',
+    ],
+]);
+
+lcfa_assert_same('Configure Claude Desktop', $claude_desktop_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Claude Desktop should offer direct safe app configuration as the primary local action');
+lcfa_assert_same('install', $claude_desktop_bundle_view['active_panel']['primary_cta']['action'] ?? '', 'Claude Desktop direct configuration should use the structural install action');
+lcfa_assert_same('Download Claude Desktop snippet', $claude_desktop_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Claude Desktop should keep the workspace snippet as a manual fallback');
+lcfa_assert_same('Finish setup in Claude Desktop', $claude_desktop_bundle_view['visual_help']['title'] ?? '', 'Desktop target should never be labelled Claude Code');
+lcfa_assert_same('Reopen Claude Desktop', $claude_desktop_bundle_view['visual_help']['items'][0]['title'] ?? '', 'Desktop visual guide should ask users to reopen the app instead of opening a project in Claude Code');
+lcfa_assert_true(strpos((string) ($claude_desktop_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'normal Chat screen') !== false, 'Desktop visual guide should point Free users to normal Chat');
+
+$claude_desktop_smoke = $presenter->build([
+    'state' => [
+        'status' => 'not_connected',
+        'current_step' => 'smoke_test',
+    ],
+    'bundle' => [
+        'client' => 'claude',
+        'claude_connection_target' => 'desktop_app',
+        'mode' => 'local',
+        'install_files' => [['path' => '/Users/commander/Library/Application Support/Claude/claude_desktop_config.json']],
+        'install_target' => 'claude_desktop',
+    ],
+    'workspace_access' => [
+        'available' => true,
+        'reason' => 'ready',
+        'path' => '/Users/commander/Library/Application Support/Claude',
+    ],
+]);
+lcfa_assert_same('Ready to verify Claude Desktop?', $claude_desktop_smoke['active_panel']['title'] ?? '', 'Claude Desktop smoke step should name the selected app target');
+lcfa_assert_true(strpos((string) ($claude_desktop_smoke['active_panel']['description'] ?? ''), 'Claude Code is not required') !== false, 'Claude Desktop smoke step should make Free-plan compatibility explicit');
+
 $codex_bundle_view = $presenter->build([
     'state' => [
         'status'       => 'not_connected',
@@ -597,8 +717,8 @@ $codex_bundle_view = $presenter->build([
         'copy_command_string' => "codex mcp add livecanvas-forge \\\n  --env LCFA_REST_BASE='http://localhost:8887/wp-json/lcfa/v1/' \\\n  --env LCFA_MCP_TOKEN='test-token' \\\n  --env LCFA_WP_ROOT='/Users/commander/Studio/consultala' \\\n  -- 'node' '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js' '--transport=stdio'",
         'shortcut_title'      => 'Codex shortcut',
         'shortcut_command'    => "codex mcp add livecanvas-forge \\\n  --env LCFA_REST_BASE='http://localhost:8887/wp-json/lcfa/v1/' \\\n  --env LCFA_MCP_TOKEN='test-token' \\\n  --env LCFA_WP_ROOT='/Users/commander/Studio/consultala' \\\n  -- 'node' '/Users/commander/Studio/consultala/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js' '--transport=stdio'",
-        'workspace_files'     => [['path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
-        'download_files'      => [['name' => 'livecanvas-forge.codex.sh', 'content' => '#!/usr/bin/env bash']],
+        'workspace_files'     => [['path' => '/Users/commander/Studio/consultala/.codex/config.toml', 'content' => '[mcp_servers.livecanvas-forge]']],
+        'download_files'      => [['name' => 'livecanvas-forge.codex.toml', 'content' => '[mcp_servers.livecanvas-forge]']],
     ],
     'workspace_access' => [
         'available' => false,
@@ -607,10 +727,12 @@ $codex_bundle_view = $presenter->build([
     ],
 ]);
 
-lcfa_assert_same('Copy Codex shortcut', $codex_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex local flow should elevate the registration shortcut to the primary action');
-lcfa_assert_same('Download Codex helper', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should still offer the helper script as a fallback');
+lcfa_assert_same('Download Codex config snippet', $codex_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex local fallback should prioritize the project-scoped TOML snippet');
+lcfa_assert_same('download', $codex_bundle_view['active_panel']['primary_cta']['action'] ?? '', 'Codex local fallback should download the project config when WordPress cannot write it');
+lcfa_assert_same('Download Codex config snippet', $codex_bundle_view['active_panel']['secondary_ctas'][0]['label'] ?? '', 'Codex local flow should keep the project snippet available');
 lcfa_assert_same('Finish setup in Codex', $codex_bundle_view['visual_help']['title'] ?? '', 'Codex local flow should expose a Codex-specific action guide');
-lcfa_assert_true(strpos((string) ($codex_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex visual help should point to the connection handoff tool instead of the legacy snapshot tool');
+lcfa_assert_true(strpos((string) ($codex_bundle_view['visual_help']['items'][1]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex visual help should point to the connection handoff tool before returning to WordPress');
+lcfa_assert_true(strpos((string) ($codex_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'Restricted Mode') !== false, 'Codex guide should explain that VS Code workspace trust is required for project MCP config');
 
 $codex_remote_bundle_view = $presenter->build([
     'state' => [
@@ -637,7 +759,7 @@ $codex_remote_bundle_view = $presenter->build([
     ],
 ]);
 
-lcfa_assert_same('Copy Codex shortcut', $codex_remote_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex remote flow should elevate the remote registration shortcut to the primary action');
+lcfa_assert_same('Copy secure Codex command', $codex_remote_bundle_view['active_panel']['primary_cta']['label'] ?? '', 'Codex remote flow should elevate the secure registration command to the primary action');
 lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['active_panel']['description'] ?? ''), 'secure Codex remote shortcut') !== false, 'Codex remote flow should explain that the shortcut is secure');
 lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][0]['caption'] ?? ''), 'secure AI Bridge pairing proxy') !== false, 'Codex remote visual help should mention the secure pairing proxy');
 lcfa_assert_true(strpos((string) ($codex_remote_bundle_view['visual_help']['items'][2]['title'] ?? ''), 'get_connection_handoff') !== false, 'Codex remote visual help should use the AI Bridge connection handoff tool');
@@ -660,7 +782,7 @@ $codex_smoke = $presenter->build([
 ]);
 
 lcfa_assert_same('Ready to verify Codex?', $codex_smoke['active_panel']['title'] ?? '', 'Codex smoke-test step should explain that Codex registration must happen first');
-lcfa_assert_true(strpos((string) ($codex_smoke['active_panel']['description'] ?? ''), 'Codex shortcut') !== false, 'Codex smoke-test description should mention the shortcut explicitly');
+lcfa_assert_true(strpos((string) ($codex_smoke['active_panel']['description'] ?? ''), 'get_connection_handoff') !== false, 'Codex smoke-test description should require the secure handoff');
 
 $admin_reflection = new ReflectionClass('LCFA_Admin');
 $admin_instance = $admin_reflection->newInstanceWithoutConstructor();
@@ -687,6 +809,8 @@ $codex_other_clients_panel_method = lcfa_test_reflection_method('LCFA_Admin', 'r
 $secondary_panels_method = lcfa_test_reflection_method('LCFA_Admin', 'render_connections_secondary_panels');
 $ability_diagnostics_card_method = lcfa_test_reflection_method('LCFA_Admin', 'render_ability_diagnostics_card');
 $power_mode_status_card_method = lcfa_test_reflection_method('LCFA_Admin', 'render_power_mode_status_card');
+$merge_pairing_approval_method = lcfa_test_reflection_method('LCFA_Admin', 'merge_mcp_pairing_approval_result');
+$artifact_install_state_method = lcfa_test_reflection_method('LCFA_Admin', 'apply_connection_artifact_install_state');
 
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
@@ -695,6 +819,42 @@ lcfa_assert_same('setup', $default_tab_method->invoke($admin_instance, [
     'completed' => false,
 ]), 'incomplete setup should still default the dashboard to Setup');
 lcfa_assert_same('connections', $post_setup_redirect_method->invoke($admin_instance), 'setup completion should redirect to Connections');
+
+$ready_install_state = $artifact_install_state_method->invoke($admin_instance, [
+    'preferred_client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'connection_mode' => 'local',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+    'connection_last_bundle_hash' => md5('same-config'),
+    'workspace_root' => '/Users/example/project',
+    'wordpress_root' => '/Users/example/project/app/public',
+], [
+    'client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'mode' => 'local',
+    'wordpress_root' => '/Users/example/project/app/public',
+], '/Users/example/project', 'same-config');
+lcfa_assert_same('ready', $ready_install_state['connection_status'] ?? '', 'reinstalling an identical verified client bundle should preserve Ready status');
+lcfa_assert_same('ready', $ready_install_state['connection_current_step'] ?? '', 'reinstalling an identical verified client bundle should preserve the Ready step');
+
+$changed_install_state = $artifact_install_state_method->invoke($admin_instance, [
+    'preferred_client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'connection_mode' => 'local',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+    'connection_last_bundle_hash' => md5('old-config'),
+    'workspace_root' => '/Users/example/project',
+    'wordpress_root' => '/Users/example/project/app/public',
+], [
+    'client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'mode' => 'local',
+    'wordpress_root' => '/Users/example/project/app/public',
+], '/Users/example/project', 'new-config');
+lcfa_assert_same('needs_attention', $changed_install_state['connection_status'] ?? '', 'changing a verified client bundle should invalidate Ready until it is rechecked');
+lcfa_assert_same('smoke_test', $changed_install_state['connection_current_step'] ?? '', 'changing a verified client bundle should return to the smoke-test step');
 
 $genesis_hero = $hero_content_method->invoke($admin_instance, 'genesis');
 lcfa_assert_same('Build Plan', $genesis_hero['title'] ?? '', 'genesis hero should use the concise primary navigation label');
@@ -733,7 +893,7 @@ $admin_remote_codex_payload = $remote_codex_payload_method->invoke($admin_instan
     ],
 ]);
 
-lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.4', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
+lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.5', $admin_remote_codex_payload['client_payload']['command'] ?? '', 'admin remote Codex payload should use the secure AI Bridge MCP package');
 lcfa_assert_true(in_array('LCFA_SITE_URL=https://remote.example/', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should point LCFA_SITE_URL at the target site');
 lcfa_assert_true(in_array('LCFA_PROJECT_LABEL=Remote Example', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should preserve the project label');
 lcfa_assert_false(in_array('WP_API_PASSWORD=abcd efgh ijkl mnop', $admin_remote_codex_payload['client_payload']['env'] ?? [], true), 'admin remote Codex payload should not expose a WordPress Application Password');
@@ -747,7 +907,7 @@ foreach (['opencode', 'claude', 'cursor'] as $remote_client) {
     $remote_env = (array) ($remote_agent_payload['client_payload']['env'] ?? []);
 
     lcfa_assert_same('ai-bridge-session', $remote_agent_payload['common']['connection_strategy'] ?? '', $remote_client . ' remote setup should use secure AI Bridge pairing');
-    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.4', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
+    lcfa_assert_same('npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.5', $remote_agent_payload['client_payload']['command'] ?? '', $remote_client . ' remote setup should use the AI Bridge MCP package');
     lcfa_assert_true(in_array('LCFA_AGENT=' . $remote_client, $remote_env, true), $remote_client . ' pairing should identify the coding agent');
     lcfa_assert_true(in_array('LCFA_PAIRING_SCOPES=read,preview', $remote_env, true), $remote_client . ' pairing should default to read and preview scopes when Power Mode is disabled');
     lcfa_assert_false((bool) array_filter($remote_env, static function (string $entry): bool {
@@ -948,6 +1108,49 @@ lcfa_assert_true(strpos($codex_pairing_markup, 'Review pending Codex pairing') !
 lcfa_assert_true(strpos($codex_pairing_markup, 'href="#lcfa-secure-codex-pairing-sessions"') !== false, 'pending pairing CTA should jump directly to the matching session panel');
 lcfa_assert_false(strpos($codex_pairing_markup, 'lcfa-codex-setup-command" open') !== false, 'technical setup prompt should collapse after Codex reaches WordPress');
 
+LCFA_MCP_Session_Manager::$pending = [[
+    'pairing_id' => 'pair_local_codex',
+    'project_label' => 'Local WordPress Project',
+    'user_code' => 'LOCAL-5678',
+    'client' => 'codex',
+    'connection_mode' => 'local',
+    'scopes' => ['read', 'preview', 'write', 'theme_files'],
+    'expires_at' => '2030-01-01T00:00:00+00:00',
+]];
+ob_start();
+$codex_fast_path_panel_method->invoke(
+    $admin_instance,
+    [
+        'status' => 'restart_required',
+        'connection_mode' => 'local',
+        'mode' => 'local',
+        'primary_action' => 'run_smoke',
+        'strategy' => 'ai-bridge-session',
+        'checks' => [],
+        'manual_fallback' => [],
+    ],
+    [
+        'client' => 'codex',
+        'mode' => 'local',
+        'connection_strategy' => 'ai-bridge-session',
+        'workspace_root' => '/Users/commander/Local Sites/wordpress-theme-test',
+        'wordpress_root' => '/Users/commander/Local Sites/wordpress-theme-test/app/public',
+        'workspace_files' => [],
+    ],
+    [
+        'workspace_root' => '/Users/commander/Local Sites/wordpress-theme-test',
+        'wordpress_root' => '/Users/commander/Local Sites/wordpress-theme-test/app/public',
+    ],
+    'local',
+    ['available' => true, 'reason' => 'ready', 'path' => '/Users/commander/Local Sites/wordpress-theme-test']
+);
+$local_codex_pairing_markup = (string) ob_get_clean();
+LCFA_MCP_Session_Manager::$pending = [];
+lcfa_assert_true(strpos($local_codex_pairing_markup, 'Approve the matching Codex pairing') !== false, 'local Codex should replace reload instructions when its pairing reaches WordPress');
+lcfa_assert_true(strpos($local_codex_pairing_markup, 'LOCAL-5678') !== false, 'local Codex should show the pending pairing code in the main onboarding panel');
+lcfa_assert_true(strpos($local_codex_pairing_markup, 'Approve Codex') !== false, 'local Codex should expose the pairing approval action without switching modes');
+lcfa_assert_true(strpos($local_codex_pairing_markup, 'href="#lcfa-secure-codex-pairing-sessions"') !== false, 'local Codex pairing CTA should jump to the visible approval panel');
+
 ob_start();
 $power_mode_status_card_method->invoke($admin_instance, [
     'power_mode' => 'auto',
@@ -1077,6 +1280,14 @@ lcfa_assert_true(strpos($ability_diagnostics_markup, 'AI text ready') !== false,
 lcfa_assert_true(strpos($ability_diagnostics_markup, 'Connectors: 2') !== false, 'ability diagnostics card should show connector count');
 lcfa_assert_true(strpos($ability_diagnostics_markup, 'livecanvas-forge-ai/preview-page-upsert') !== false, 'ability diagnostics card should list public preview abilities');
 
+LCFA_MCP_Session_Manager::$pending = [[
+    'pairing_id' => 'pair_claude_local',
+    'project_label' => 'Local Claude Project',
+    'user_code' => 'LOCAL-1234',
+    'client' => 'claude',
+    'scopes' => ['read', 'preview'],
+    'expires_at' => '2030-01-01T00:00:00+00:00',
+]];
 ob_start();
 $connection_wizard_method->invoke(
     $admin_instance,
@@ -1108,9 +1319,13 @@ $connection_wizard_method->invoke(
     ]
 );
 $connection_wizard_markup = (string) ob_get_clean();
+LCFA_MCP_Session_Manager::$pending = [];
 
 lcfa_assert_false(strpos($connection_wizard_markup, 'lcfa-wizard__alert') !== false, 'wizard should stop rendering the redundant What to do now banner');
 lcfa_assert_false(strpos($connection_wizard_markup, 'What to do now') !== false, 'wizard should not repeat the step callout above the blocking panel');
+lcfa_assert_true(strpos($connection_wizard_markup, 'id="lcfa-secure-codex-pairing-sessions"') !== false, 'local generic wizard should render secure pairing at the smoke-test step');
+lcfa_assert_true(strpos($connection_wizard_markup, 'LOCAL-1234') !== false, 'local generic wizard should expose the pending pairing code inside the guided flow');
+lcfa_assert_true(strpos($connection_wizard_markup, 'Approve Claude') !== false, 'local generic wizard should expose the matching pairing approval action');
 
 $remote_opencode_pairing_view = $presenter->build([
     'state' => [
@@ -1247,7 +1462,7 @@ lcfa_assert_true(strpos($ready_card_markup, 'lcfa-code-explanation') !== false, 
 lcfa_assert_true(strpos($ready_card_markup, 'data-lcfa-read-more') !== false, 'long generated bundle explanations should expose a read-more control');
 lcfa_assert_true(strpos($ready_card_markup, 'Registers livecanvas-forge inside Codex') !== false, 'Codex shortcut explanation should describe why the command is needed');
 lcfa_assert_true(strpos($ready_card_markup, 'raw MCP server command') !== false, 'server command explanation should describe its diagnostic purpose');
-lcfa_assert_true(strpos($ready_card_markup, 'REST endpoint, token, site URL, and local project root') !== false, 'environment variables explanation should describe the values passed to the MCP server');
+lcfa_assert_true(strpos($ready_card_markup, 'agent project folder, and the separate WordPress root') !== false, 'environment variables explanation should distinguish the agent workspace from the WordPress root');
 lcfa_assert_true(strpos($ready_card_markup, 'get_snapshot') !== false && strpos($ready_card_markup, 'confirms the MCP bridge') !== false, 'smoke test explanation should describe the snapshot verification command');
 
 ob_start();
@@ -1292,6 +1507,34 @@ lcfa_assert_same('', $reconfigured_connections['connection_status'] ?? '', 'reco
 lcfa_assert_same('', $reconfigured_connections['connection_last_verified_at'] ?? '', 'reconfiguring should clear the verification timestamp');
 lcfa_assert_same('', $reconfigured_connections['connection_last_error'] ?? '', 'reconfiguring should clear the last error state');
 lcfa_assert_same('choose_client', $reconfigured_connections['connection_current_step'] ?? '', 'reconfiguring should reopen the wizard from choose_client');
+
+$expired_pairing_connections = $merge_pairing_approval_method->invoke($admin_instance, [
+    'preferred_client' => 'opencode',
+    'connection_mode' => 'local',
+    'connection_status' => '',
+    'connection_current_step' => 'smoke_test',
+], [
+    'ok' => false,
+    'message' => 'The pairing request expired or was not found.',
+]);
+lcfa_assert_same('opencode', $expired_pairing_connections['preferred_client'] ?? '', 'an expired approval should preserve the selected coding agent');
+lcfa_assert_same('local', $expired_pairing_connections['connection_mode'] ?? '', 'an expired approval should preserve the selected connection mode');
+lcfa_assert_same('smoke_test', $expired_pairing_connections['connection_current_step'] ?? '', 'an expired approval should preserve the current wizard step');
+
+$approved_local_pairing_connections = $merge_pairing_approval_method->invoke($admin_instance, [
+    'preferred_client' => 'cursor',
+    'connection_mode' => 'remote',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+], [
+    'ok' => true,
+    'client' => 'opencode',
+    'connection_mode' => 'local',
+    'message' => 'OpenCode pairing approved.',
+]);
+lcfa_assert_same('opencode', $approved_local_pairing_connections['preferred_client'] ?? '', 'a successful approval should switch to the approved coding agent');
+lcfa_assert_same('local', $approved_local_pairing_connections['connection_mode'] ?? '', 'a successful local pairing should stay local');
+lcfa_assert_same('smoke_test', $approved_local_pairing_connections['connection_current_step'] ?? '', 'a successful approval should return to the smoke-test step');
 
 ob_start();
 $active_step_panel_method->invoke(
@@ -1416,7 +1659,7 @@ $active_step_panel_method->invoke(
     $admin_instance,
     [
         'title'       => 'Ready to verify Codex?',
-        'description' => 'Run the smoke test after you have executed the Codex shortcut and verified that Codex can see livecanvas-forge.',
+        'description' => 'Open the project in VS Code, call get_connection_handoff, approve pairing, then run the smoke test.',
     ],
     'smoke_test',
     [
@@ -1425,7 +1668,7 @@ $active_step_panel_method->invoke(
         'workspace_root'  => '/Users/commander/Studio/consultala',
         'workspace_files' => [
             [
-                'path' => '/Users/commander/Studio/consultala/livecanvas-forge.codex.sh',
+                'path' => '/Users/commander/Studio/consultala/.codex/config.toml',
             ],
         ],
     ],
@@ -1449,14 +1692,11 @@ $active_step_panel_method->invoke(
 );
 $codex_smoke_step_markup = (string) ob_get_clean();
 
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'livecanvas-forge.codex.sh') !== false, 'Codex smoke panel should tell the user exactly which helper script to run');
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'codex mcp list') !== false, 'Codex smoke panel should tell the user how to verify the MCP registration');
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'livecanvas-forge') !== false, 'Codex smoke panel should tell the user which MCP server name must appear');
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="sh &quot;/Users/commander/Studio/consultala/livecanvas-forge.codex.sh&quot;"') !== false, 'Codex helper command should expose a copy button');
+lcfa_assert_true(strpos($codex_smoke_step_markup, '.codex/config.toml') !== false, 'Codex smoke panel should identify the project-scoped config');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'get_connection_handoff') !== false, 'Codex smoke panel should require the secure handoff');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'codex mcp list') !== false, 'Codex smoke panel should keep the optional CLI verification');
 lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="codex mcp list"') !== false, 'Codex mcp list command should expose a copy button');
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'data-lcfa-copy-text="/Applications/Codex.app/Contents/Resources/codex mcp list"') !== false, 'Codex desktop mcp list command should expose a copy button');
 lcfa_assert_true(strpos($codex_smoke_step_markup, 'lcfa-codex-smoke-alert') !== false, 'Codex reopen warning should render as a prominent alert');
-lcfa_assert_true(strpos($codex_smoke_step_markup, 'If the output does not show livecanvas-forge, the connection is not ready yet.') !== false, 'Codex MCP output requirement should combine the expected and failure state in one step');
-lcfa_assert_false(strpos($codex_smoke_step_markup, 'If it does not show livecanvas-forge, the connection is not ready yet.') !== false, 'Codex MCP output warning should not be a separate repeated step');
+lcfa_assert_true(strpos($codex_smoke_step_markup, 'Writing the config alone does not make the connection Ready.') !== false, 'Codex smoke panel should explain that handoff is required before Ready');
 
 echo "PASS\n";

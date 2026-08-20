@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 
 const {
   resolveWorkspaceRoot,
+  resolveWordPressRoot,
   syncWorkspaceRoot
 } = require('../src/workspace-root-sync')
 
@@ -15,8 +16,10 @@ function createExistsSync(existingPaths) {
 
 async function run() {
   const existsSync = createExistsSync([
+    '/Users/commander/Studio/consultala',
     '/Users/commander/Studio/consultala/wp-content',
     '/Users/commander/Studio/consultala/wp-config.php',
+    '/Users/commander/Studio/consultala/custom',
     '/Users/commander/Studio/consultala/custom/wp-content',
     '/Users/commander/Studio/consultala/custom/wp-config.php'
   ])
@@ -41,6 +44,18 @@ async function run() {
     'should prefer an explicit host-side wpRoot when it points to a valid WordPress project'
   )
 
+  const localWpRoot = '/Users/commander/Local Sites/example/app/public'
+  const localProjectRoot = '/Users/commander/Local Sites/example'
+  const localExistsSync = createExistsSync([
+    localProjectRoot,
+    localWpRoot,
+    `${localWpRoot}/wp-content`,
+    `${localWpRoot}/wp-config.php`
+  ])
+
+  assert.equal(resolveWordPressRoot({ wpRoot: localWpRoot, cwd: localProjectRoot, existsSync: localExistsSync }), localWpRoot, 'should preserve the nested Local WordPress root')
+  assert.equal(resolveWorkspaceRoot({ agentWorkspaceRoot: localProjectRoot, wpRoot: localWpRoot, cwd: localProjectRoot, existsSync: localExistsSync }), localProjectRoot, 'should preserve the separate Local agent project root')
+
   assert.equal(
     resolveWorkspaceRoot({
       wpRoot: '/wordpress',
@@ -61,7 +76,8 @@ async function run() {
     },
     config: {
       agent: 'opencode',
-      wpRoot: '',
+      wpRoot: '/Users/commander/Studio/consultala',
+      agentWorkspaceRoot: '/Users/commander/Studio/consultala',
       verbose: false
     },
     cwd: '/Users/commander/Studio/consultala',
@@ -71,10 +87,35 @@ async function run() {
   assert.equal(syncResult.ok, true, 'successful sync should report ok')
   assert.equal(syncResult.workspaceRoot, '/Users/commander/Studio/consultala', 'sync should use the inferred cwd workspace root')
   assert.deepEqual(calls[0], {
+    agent_workspace_root: '/Users/commander/Studio/consultala',
+    wordpress_root: '/Users/commander/Studio/consultala',
     workspace_root: '/Users/commander/Studio/consultala',
     source: 'mcp-bridge',
     agent: 'opencode'
   }, 'sync should send the inferred workspace root to WordPress')
+
+  const localCalls = []
+  const localSyncResult = await syncWorkspaceRoot({
+    client: {
+      async syncWorkspaceRoot(payload) {
+        localCalls.push(payload)
+        return { result: { ok: true } }
+      }
+    },
+    config: {
+      agent: 'opencode',
+      wpRoot: localWpRoot,
+      agentWorkspaceRoot: localProjectRoot,
+      verbose: false
+    },
+    cwd: localProjectRoot,
+    existsSync: localExistsSync
+  })
+
+  assert.equal(localSyncResult.workspaceRoot, localProjectRoot, 'Local sync should report the agent project root')
+  assert.equal(localSyncResult.wordpressRoot, localWpRoot, 'Local sync should report the nested WordPress root separately')
+  assert.equal(localCalls[0].agent_workspace_root, localProjectRoot, 'Local sync should send the agent project root separately')
+  assert.equal(localCalls[0].wordpress_root, localWpRoot, 'Local sync should send the nested WordPress root separately')
 
   const failureResult = await syncWorkspaceRoot({
     client: {
