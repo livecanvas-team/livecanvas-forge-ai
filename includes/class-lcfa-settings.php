@@ -140,16 +140,26 @@ final class LCFA_Settings {
             return $connections;
         }
 
+        $connections['wordpress_root'] = $wp_root;
         $workspace_root = untrailingslashit(trim((string) ($connections['workspace_root'] ?? '')));
-        if ($workspace_root !== '' && self::looks_like_wordpress_root($workspace_root)) {
+        $inferred_workspace_root = self::infer_agent_workspace_root($wp_root);
+        $workspace_is_legacy_wordpress_root = $workspace_root !== ''
+            && wp_normalize_path($workspace_root) === wp_normalize_path($wp_root)
+            && wp_normalize_path($inferred_workspace_root) !== wp_normalize_path($wp_root);
+
+        if (
+            $workspace_root !== ''
+            && !$workspace_is_legacy_wordpress_root
+            && !self::looks_like_runtime_workspace_root($workspace_root)
+        ) {
             return $connections;
         }
 
-        $connections['workspace_root'] = $wp_root;
+        $connections['workspace_root'] = $inferred_workspace_root;
         $connections['connection_last_bundle_hash'] = '';
         if ((string) ($connections['connection_status'] ?? '') === 'ready') {
             $connections['connection_status'] = 'needs_attention';
-            $connections['connection_last_error'] = __('Workspace root changed. Sync Codex config and rerun the smoke test.', 'livecanvas-forge-ai');
+            $connections['connection_last_error'] = __('Agent workspace root changed. Sync the project MCP config and rerun the smoke test.', 'livecanvas-forge-ai');
             $connections['connection_current_step'] = 'smoke_test';
         }
 
@@ -185,6 +195,7 @@ final class LCFA_Settings {
             'preferred_client'            => '',
             'claude_connection_target'    => '',
             'workspace_root'              => '',
+            'wordpress_root'              => '',
             'codex_config_scope'          => 'project',
             'codex_model'                 => 'gpt-5.3-codex-spark',
             'codex_speed'                 => 'balanced',
@@ -194,7 +205,10 @@ final class LCFA_Settings {
             'connection_status'           => '',
             'connection_mode'             => '',
             'connection_strategy'         => '',
+            'connection_last_handoff_at'  => '',
+            'connection_last_handoff_session_id' => '',
             'connection_last_verified_at' => '',
+            'connection_last_verified_mcp_package_version' => '',
             'connection_last_error'       => '',
             'connection_last_bundle_hash' => '',
             'connection_current_step'     => '',
@@ -284,6 +298,7 @@ final class LCFA_Settings {
             'preferred_client'            => $preferred_client,
             'claude_connection_target'    => $claude_connection_target,
             'workspace_root'              => sanitize_text_field($connections['workspace_root'] ?? ''),
+            'wordpress_root'              => sanitize_text_field($connections['wordpress_root'] ?? ($current['wordpress_root'] ?? '')),
             'codex_config_scope'          => self::sanitize_codex_config_scope((string) ($connections['codex_config_scope'] ?? ($current['codex_config_scope'] ?? 'project'))),
             'codex_model'                 => $codex_options['model'],
             'codex_speed'                 => $codex_options['speed'],
@@ -293,7 +308,10 @@ final class LCFA_Settings {
             'connection_status'           => sanitize_key($connections['connection_status'] ?? ''),
             'connection_mode'             => in_array($connections['connection_mode'] ?? '', ['local', 'remote'], true) ? $connections['connection_mode'] : '',
             'connection_strategy'         => self::sanitize_connection_strategy((string) ($connections['connection_strategy'] ?? ($current['connection_strategy'] ?? ''))),
+            'connection_last_handoff_at'  => sanitize_text_field($connections['connection_last_handoff_at'] ?? ''),
+            'connection_last_handoff_session_id' => sanitize_key($connections['connection_last_handoff_session_id'] ?? ''),
             'connection_last_verified_at' => sanitize_text_field($connections['connection_last_verified_at'] ?? ''),
+            'connection_last_verified_mcp_package_version' => sanitize_text_field($connections['connection_last_verified_mcp_package_version'] ?? ''),
             'connection_last_error'       => sanitize_text_field($connections['connection_last_error'] ?? ''),
             'connection_last_bundle_hash' => sanitize_text_field($connections['connection_last_bundle_hash'] ?? ''),
             'connection_current_step'     => in_array($connection_current_step, ['', 'choose_client', 'choose_claude_target', 'choose_mode', 'confirm_details', 'generate_bundle', 'smoke_test', 'ready'], true) ? $connection_current_step : '',
@@ -616,6 +634,27 @@ final class LCFA_Settings {
         $connections['codex_sandbox'] = $codex_options['sandbox'];
         $connections['power_mode'] = self::sanitize_power_mode((string) ($connections['power_mode'] ?? 'auto'));
 
+        $expected_mcp_package = defined('LCFA_MCP_PACKAGE_VERSION')
+            ? sanitize_text_field((string) LCFA_MCP_PACKAGE_VERSION)
+            : '';
+        $verified_mcp_package = sanitize_text_field((string) ($connections['connection_last_verified_mcp_package_version'] ?? ''));
+        $has_verified_session = sanitize_key((string) ($connections['connection_last_handoff_session_id'] ?? '')) !== '';
+        $uses_direct_oauth = sanitize_key((string) ($connections['connection_strategy'] ?? '')) === 'oauth-direct';
+        if (
+            sanitize_key((string) ($connections['connection_status'] ?? '')) === 'ready'
+            && $has_verified_session
+            && !$uses_direct_oauth
+            && $expected_mcp_package !== ''
+            && ($verified_mcp_package === '' || !hash_equals($expected_mcp_package, $verified_mcp_package))
+        ) {
+            $connections['connection_status'] = 'needs_attention';
+            $connections['connection_current_step'] = 'smoke_test';
+            $connections['connection_last_error'] = sprintf(
+                self::translate('AI Bridge now requires MCP package %s. Reload or restart the coding agent, call get_connection_handoff, then rerun the smoke test.'),
+                $expected_mcp_package
+            );
+        }
+
         return $connections;
     }
 
@@ -646,11 +685,14 @@ final class LCFA_Settings {
     }
 
     public static function rotate_mcp_token(): array {
-        $connections = self::get_connections();
+        $connections = self::normalize_local_workspace_root(self::get_connections());
         $connections['mcp_token'] = self::generate_mcp_token();
         $connections['connection_last_bundle_hash'] = '';
         $connections['connection_status'] = '';
+        $connections['connection_last_handoff_at'] = '';
+        $connections['connection_last_handoff_session_id'] = '';
         $connections['connection_last_verified_at'] = '';
+        $connections['connection_last_verified_mcp_package_version'] = '';
         $connections['connection_last_error'] = __('MCP token rotated. Sync Codex config and rerun the smoke test.', 'livecanvas-forge-ai');
         $connections['connection_current_step'] = trim((string) ($connections['preferred_client'] ?? '')) !== '' ? 'smoke_test' : 'choose_client';
         self::update_connections($connections);
@@ -680,6 +722,32 @@ final class LCFA_Settings {
         $path = untrailingslashit($path);
 
         return $path !== '' && (is_file($path . '/wp-load.php') || is_dir($path . '/wp-content'));
+    }
+
+    private static function infer_agent_workspace_root(string $wp_root): string {
+        $wp_root = untrailingslashit($wp_root);
+        $normalized = wp_normalize_path($wp_root);
+
+        if (basename($normalized) === 'public' && basename(dirname($normalized)) === 'app') {
+            return dirname(dirname($wp_root));
+        }
+
+        return $wp_root;
+    }
+
+    private static function looks_like_runtime_workspace_root(string $path): bool {
+        $path = wp_normalize_path(untrailingslashit($path));
+
+        return in_array($path, [
+            '/wordpress',
+            '/app',
+            '/app/public',
+            '/var/www',
+            '/var/www/html',
+            '/srv/www',
+            '/srv/www/html',
+            '/usr/share/nginx/html',
+        ], true);
     }
 
     private static function looks_like_local_site_url(string $url): bool {

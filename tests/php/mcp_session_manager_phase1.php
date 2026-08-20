@@ -6,6 +6,7 @@ error_reporting(E_ALL);
 
 define('LCFA_DIR', dirname(__DIR__, 2) . '/');
 define('ABSPATH', '/tmp/lcfa-tests/');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.5');
 
 $GLOBALS['lcfa_test_options'] = [];
 $GLOBALS['lcfa_test_transients'] = [];
@@ -36,9 +37,11 @@ class WP_Error {
 
 class WP_REST_Request {
     private array $headers;
+    private string $route;
 
-    public function __construct(array $headers = []) {
+    public function __construct(array $headers = [], string $route = '') {
         $this->headers = array_change_key_case($headers, CASE_LOWER);
+        $this->route = $route;
     }
 
     public function get_header(string $name): string {
@@ -47,6 +50,10 @@ class WP_REST_Request {
 
     public function get_param(string $name) {
         return null;
+    }
+
+    public function get_route(): string {
+        return $this->route;
     }
 }
 
@@ -157,6 +164,7 @@ lcfa_assert_true(!empty($pairing['ok']), 'pairing start should succeed');
 lcfa_assert_true(!empty($pairing['pairing_id']), 'pairing start should return a pairing id');
 lcfa_assert_true(!empty($pairing['device_secret']), 'pairing start should return the device secret to the MCP client');
 lcfa_assert_true(!empty($pairing['user_code']), 'pairing start should return a user code');
+lcfa_assert_same('remote', $pairing['connection_mode'] ?? '', 'pairing without a local WordPress root should default to remote mode');
 lcfa_assert_true(strpos((string) ($pairing['verification_url'] ?? ''), '#lcfa-secure-codex-pairing-sessions') !== false, 'pairing verification URL should deep-link to the approval panel');
 delete_transient('lcfa_mcp_pairing_' . sanitize_key((string) $pairing['pairing_id']));
 lcfa_assert_true(LCFA_MCP_Session_Manager::get_pending_pairings() !== [], 'pending pairing should be visible to admins');
@@ -171,23 +179,60 @@ lcfa_assert_true(!empty($status['session_token']), 'approved pairing status shou
 $sessions = LCFA_MCP_Session_Manager::get_sessions();
 $session = reset($sessions);
 lcfa_assert_true(is_array($session), 'session should be stored');
+lcfa_assert_same('remote', $session['connection_mode'] ?? '', 'remote pairing mode should be stored on the session');
 lcfa_assert_true(!empty($session['token_hash']), 'session should store only a token hash');
 lcfa_assert_false(isset($session['session_token']), 'session option should not store the raw token');
 
 $validated = LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'read');
 lcfa_assert_true(is_array($validated), 'session token should validate for read scope');
 lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $status['session_token'], 'write'), 'default session token should validate for write scope');
-lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'valid session usage should mark the connection ready');
-lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_current_step'] ?? '', 'valid session usage should move the connection to ready');
-lcfa_assert_same('ai-bridge-session', $GLOBALS['lcfa_test_connections']['connection_strategy'] ?? '', 'valid session usage should store the secure strategy');
+lcfa_assert_same([], LCFA_MCP_Session_Manager::get_latest_verified_session('codex', 'remote'), 'ordinary token validation must not expose a session as a verified handoff');
 
 $reported = LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
     'X-LCFA-MCP-Session' => (string) $status['session_token'],
     'X-LCFA-MCP-Package-Version' => '0.2.0-beta.1',
-]), 'read');
+], '/lcfa/v1/snapshot'), 'read');
 lcfa_assert_same('0.2.0-beta.1', $reported['mcp_package_version'] ?? '', 'session requests should record the detected MCP package version');
 $reported_sessions = LCFA_MCP_Session_Manager::get_public_sessions();
 lcfa_assert_same('0.2.0-beta.1', $reported_sessions[0]['mcp_package_version'] ?? '', 'public session diagnostics should expose the detected MCP package version without exposing the token');
+lcfa_assert_same('', $GLOBALS['lcfa_test_connections']['connection_last_handoff_session_id'] ?? '', 'ordinary authenticated requests must not satisfy the connection handoff gate');
+
+$handoff_reported = LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $status['session_token'],
+    'X-LCFA-MCP-Package-Version' => '0.2.0-beta.1',
+], '/lcfa/v1/studio/connection-handoff'), 'read');
+lcfa_assert_true(is_array($handoff_reported), 'connection handoff requests should validate the approved session');
+lcfa_assert_same('', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'verified handoff should still wait for the WordPress smoke test before Ready');
+lcfa_assert_same('smoke_test', $GLOBALS['lcfa_test_connections']['connection_current_step'] ?? '', 'verified handoff should move the connection to the smoke-test step');
+lcfa_assert_true(!empty($GLOBALS['lcfa_test_connections']['connection_last_handoff_at']), 'verified handoff should record its timestamp');
+lcfa_assert_same((string) ($validated['session_id'] ?? ''), $GLOBALS['lcfa_test_connections']['connection_last_handoff_session_id'] ?? '', 'verified handoff should bind to the approved session');
+lcfa_assert_same('ai-bridge-session', $GLOBALS['lcfa_test_connections']['connection_strategy'] ?? '', 'verified handoff should store the secure strategy');
+lcfa_assert_same((string) ($validated['session_id'] ?? ''), LCFA_MCP_Session_Manager::get_latest_verified_session('codex', 'remote')['session_id'] ?? '', 'session manager should expose the exact session that completed the remote Codex handoff without its token hash');
+
+$ready_connections = LCFA_Settings::get_connections();
+$ready_connections['connection_status'] = 'ready';
+$ready_connections['connection_current_step'] = 'ready';
+$ready_connections['connection_last_verified_at'] = '2026-08-20 10:00:00';
+$ready_connections['connection_last_verified_mcp_package_version'] = '0.2.0-beta.1';
+LCFA_Settings::update_connections($ready_connections);
+LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $status['session_token'],
+    'X-LCFA-MCP-Package-Version' => '0.2.0-beta.1',
+], '/lcfa/v1/studio/connection-handoff'), 'read');
+lcfa_assert_same('', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'a handoff from a stale MCP package should clear Ready and require another smoke test');
+lcfa_assert_same('', $GLOBALS['lcfa_test_connections']['connection_last_verified_at'] ?? '', 'a stale package handoff should clear the previous verification timestamp');
+
+$ready_connections = LCFA_Settings::get_connections();
+$ready_connections['connection_status'] = 'ready';
+$ready_connections['connection_current_step'] = 'ready';
+$ready_connections['connection_last_verified_at'] = '2026-08-20 10:05:00';
+$ready_connections['connection_last_verified_mcp_package_version'] = '0.2.0-beta.5';
+LCFA_Settings::update_connections($ready_connections);
+LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $status['session_token'],
+    'X-LCFA-MCP-Package-Version' => '0.2.0-beta.5',
+], '/lcfa/v1/studio/connection-handoff'), 'read');
+lcfa_assert_same('ready', $GLOBALS['lcfa_test_connections']['connection_status'] ?? '', 'a handoff from the exact verified MCP package should preserve Ready for the same session');
 
 $second_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $pairing['pairing_id'], (string) $pairing['device_secret']);
 lcfa_assert_same('consumed', $second_status['status'] ?? '', 'pairing status should not return the session token twice');
@@ -219,7 +264,37 @@ lcfa_assert_true(strpos((string) ($opencode_approve['message'] ?? ''), 'OpenCode
 lcfa_assert_same('opencode', $opencode_approve['client'] ?? '', 'approval result should preserve the OpenCode client identity');
 $opencode_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $opencode_pairing['pairing_id'], (string) $opencode_pairing['device_secret']);
 lcfa_assert_true((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $opencode_status['session_token'], 'read'), 'OpenCode session should validate');
+$opencode_handoff = LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $opencode_status['session_token'],
+], '/lcfa/v1/studio/connection-handoff'), 'read');
+lcfa_assert_true(is_array($opencode_handoff), 'OpenCode connection handoff should validate');
 lcfa_assert_same('opencode', $GLOBALS['lcfa_test_connections']['preferred_client'] ?? '', 'OpenCode session usage should store the correct preferred client');
+
+$local_cursor_pairing = LCFA_MCP_Session_Manager::start_pairing([
+    'client' => 'cursor',
+    'connection_mode' => 'local',
+    'project_label' => 'Local Flywheel Project',
+    'site_fingerprint' => 'site-fp',
+    'scopes' => ['read', 'preview', 'write', 'theme_files'],
+]);
+lcfa_assert_true(!empty($local_cursor_pairing['ok']), 'local Cursor pairing should start');
+lcfa_assert_same('local', $local_cursor_pairing['connection_mode'] ?? '', 'local pairing response should preserve local mode');
+$local_cursor_approve = LCFA_MCP_Session_Manager::approve_pairing((string) $local_cursor_pairing['pairing_id']);
+lcfa_assert_same('local', $local_cursor_approve['connection_mode'] ?? '', 'local pairing approval should preserve local mode');
+lcfa_assert_same('Local Flywheel Project', $local_cursor_approve['project_label'] ?? '', 'local pairing approval should preserve the agent project label');
+$local_cursor_status = LCFA_MCP_Session_Manager::get_pairing_status((string) $local_cursor_pairing['pairing_id'], (string) $local_cursor_pairing['device_secret']);
+lcfa_assert_same('local', $local_cursor_status['connection_mode'] ?? '', 'local pairing status should return local mode to the client');
+$local_cursor_session = LCFA_MCP_Session_Manager::validate_session_token((string) $local_cursor_status['session_token'], 'theme_files');
+lcfa_assert_true(is_array($local_cursor_session), 'local Cursor session should validate for approved theme-file scope');
+lcfa_assert_same('local', $local_cursor_session['connection_mode'] ?? '', 'validated local session should retain its mode');
+$local_cursor_handoff = LCFA_MCP_Session_Manager::get_session_from_request(new WP_REST_Request([
+    'X-LCFA-MCP-Session' => (string) $local_cursor_status['session_token'],
+], '/lcfa/v1/studio/connection-handoff'), 'read');
+lcfa_assert_true(is_array($local_cursor_handoff), 'local Cursor connection handoff should validate');
+lcfa_assert_same('local', $GLOBALS['lcfa_test_connections']['connection_mode'] ?? '', 'local session usage should mark the saved connection as local');
+lcfa_assert_same('local-mcp-bridge', $GLOBALS['lcfa_test_connections']['connection_strategy'] ?? '', 'local session usage should store the local bridge strategy');
+lcfa_assert_same('cursor', $GLOBALS['lcfa_test_connections']['preferred_client'] ?? '', 'local session usage should store the Cursor identity');
+lcfa_assert_same((string) ($local_cursor_session['session_id'] ?? ''), LCFA_MCP_Session_Manager::get_latest_verified_session('cursor', 'local')['session_id'] ?? '', 'session manager should expose the latest verified local Cursor handoff');
 
 $pending_before_reset = LCFA_MCP_Session_Manager::start_pairing([
     'client' => 'cursor',
@@ -229,7 +304,7 @@ $pending_before_reset = LCFA_MCP_Session_Manager::start_pairing([
 lcfa_assert_true(!empty($pending_before_reset['ok']), 'reset coverage should start with a pending pairing');
 
 $access_reset = LCFA_MCP_Session_Manager::reset_access_state();
-lcfa_assert_true((int) ($access_reset['revoked_sessions'] ?? 0) >= 2, 'reset should revoke every active coding-agent session');
+lcfa_assert_true((int) ($access_reset['revoked_sessions'] ?? 0) >= 3, 'reset should revoke every active coding-agent session');
 lcfa_assert_true((int) ($access_reset['cleared_pairings'] ?? 0) >= 1, 'reset should remove pending and consumed pairing records');
 lcfa_assert_same([], LCFA_MCP_Session_Manager::get_pending_pairings(), 'reset should remove all pending pairing requests');
 lcfa_assert_false((bool) LCFA_MCP_Session_Manager::validate_session_token((string) $read_only_status['session_token'], 'read'), 'reset should invalidate the read-only session token');

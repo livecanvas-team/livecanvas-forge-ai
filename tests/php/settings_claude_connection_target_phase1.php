@@ -6,6 +6,8 @@ error_reporting(E_ALL);
 
 define('ABSPATH', '/tmp/lcfa-tests/');
 define('LCFA_DIR', dirname(__DIR__, 2) . '/');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.5');
+@mkdir(ABSPATH . 'wp-content', 0777, true);
 
 $GLOBALS['lcfa_options'] = [];
 
@@ -13,6 +15,10 @@ function sanitize_key(string $value): string {
     $value = strtolower($value);
 
     return (string) preg_replace('/[^a-z0-9_\-]/', '', $value);
+}
+
+function __(string $text, string $domain = ''): string {
+    return $text;
 }
 
 function sanitize_text_field($value): string {
@@ -29,6 +35,18 @@ function esc_url_raw(string $value): string {
 
 function rest_url(string $path = ''): string {
     return 'http://example.test/wp-json/' . ltrim($path, '/');
+}
+
+function home_url(string $path = ''): string {
+    return 'http://wordpress-theme-test.local/' . ltrim($path, '/');
+}
+
+function untrailingslashit(string $value): string {
+    return rtrim($value, '/\\');
+}
+
+function wp_normalize_path(string $value): string {
+    return str_replace('\\', '/', $value);
 }
 
 function absint($value): int {
@@ -79,6 +97,11 @@ $defaults = LCFA_Settings::connection_defaults();
 
 lcfa_assert_true(array_key_exists('claude_connection_target', $defaults), 'connection defaults should expose claude_connection_target');
 lcfa_assert_same('', $defaults['claude_connection_target'], 'claude_connection_target should default to an empty string');
+lcfa_assert_true(array_key_exists('wordpress_root', $defaults), 'connection defaults should expose wordpress_root separately from the agent workspace');
+lcfa_assert_same('', $defaults['wordpress_root'], 'wordpress_root should default to an empty string');
+lcfa_assert_true(array_key_exists('connection_last_handoff_at', $defaults), 'connection defaults should track the verified agent handoff separately from the smoke test');
+lcfa_assert_true(array_key_exists('connection_last_handoff_session_id', $defaults), 'connection defaults should bind the handoff to a specific secure session');
+lcfa_assert_true(array_key_exists('connection_last_verified_mcp_package_version', $defaults), 'connection defaults should record the MCP package that passed the smoke test');
 lcfa_assert_true(array_key_exists('codex_model', $defaults), 'connection defaults should expose a Codex model default');
 lcfa_assert_true(array_key_exists('codex_speed', $defaults), 'connection defaults should expose a Codex speed default');
 lcfa_assert_true(array_key_exists('codex_reasoning_effort', $defaults), 'connection defaults should expose a Codex intelligence default');
@@ -91,6 +114,34 @@ lcfa_assert_true(in_array('livecanvas-forge-ai/cache-flush', LCFA_Settings::get_
 lcfa_assert_same('gpt-5.3-codex-spark', $defaults['codex_model'], 'Codex model should default to the fast frontend model');
 lcfa_assert_same('balanced', $defaults['codex_speed'], 'Codex speed should default to balanced');
 lcfa_assert_same('medium', $defaults['codex_reasoning_effort'], 'Codex intelligence should default to medium');
+
+$GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge($defaults, [
+    'preferred_client' => 'cursor',
+    'connection_mode' => 'local',
+    'connection_strategy' => 'local-mcp-bridge',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+    'connection_last_verified_at' => '2026-08-20 10:00:00',
+    'connection_last_handoff_session_id' => 'sess_cursor_local',
+    'connection_last_verified_mcp_package_version' => '0.2.0-beta.4',
+]);
+$stale_runtime = LCFA_Settings::get_connections();
+lcfa_assert_same('needs_attention', $stale_runtime['connection_status'] ?? '', 'an upgraded AI Bridge should invalidate Ready when the verified MCP package is stale');
+lcfa_assert_same('smoke_test', $stale_runtime['connection_current_step'] ?? '', 'stale MCP packages should return the wizard to the smoke test');
+lcfa_assert_true(strpos((string) ($stale_runtime['connection_last_error'] ?? ''), '0.2.0-beta.5') !== false, 'stale MCP guidance should name the package required by the current plugin');
+
+$GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge($defaults, [
+    'preferred_client' => 'cursor',
+    'connection_mode' => 'local',
+    'connection_strategy' => 'local-mcp-bridge',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+    'connection_last_verified_at' => '2026-08-20 10:00:00',
+    'connection_last_handoff_session_id' => 'sess_cursor_local',
+    'connection_last_verified_mcp_package_version' => '0.2.0-beta.5',
+]);
+$current_runtime = LCFA_Settings::get_connections();
+lcfa_assert_same('ready', $current_runtime['connection_status'] ?? '', 'Ready should remain valid when the exact MCP package passed the smoke test');
 
 $sanitized_legacy = LCFA_Settings::sanitize_connections([
     'preferred_client'         => 'claude-code',
@@ -107,6 +158,36 @@ $sanitized_desktop = LCFA_Settings::sanitize_connections([
 
 lcfa_assert_same('claude', $sanitized_desktop['preferred_client'] ?? '', 'claude should remain the canonical preferred_client');
 lcfa_assert_same('desktop_app', $sanitized_desktop['claude_connection_target'] ?? '', 'claude desktop target should be preserved');
+
+$sanitized_roots = LCFA_Settings::sanitize_connections([
+    'connection_mode' => 'local',
+    'workspace_root'  => '/tmp/agent-project',
+    'wordpress_root'  => '/tmp/agent-project/app/public',
+]);
+lcfa_assert_same('/tmp/agent-project', $sanitized_roots['workspace_root'] ?? '', 'agent workspace should be sanitized independently');
+lcfa_assert_same('/tmp/agent-project/app/public', $sanitized_roots['wordpress_root'] ?? '', 'WordPress root should be sanitized independently');
+
+$preserved_roots = LCFA_Settings::normalize_local_workspace_root([
+    'connection_mode' => 'local',
+    'workspace_root'  => '/tmp/agent-project',
+    'wordpress_root'  => '',
+], true);
+lcfa_assert_same('/tmp/agent-project', $preserved_roots['workspace_root'] ?? '', 'local root sync should preserve a valid agent project folder');
+lcfa_assert_same(untrailingslashit(ABSPATH), $preserved_roots['wordpress_root'] ?? '', 'local root sync should record ABSPATH separately as the WordPress root');
+
+$GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
+    LCFA_Settings::connection_defaults(),
+    [
+        'connection_mode' => 'local',
+        'preferred_client' => 'cursor',
+        'workspace_root' => '/tmp/agent-project',
+        'wordpress_root' => '/tmp/agent-project/app/public',
+    ]
+);
+$rotated_roots = LCFA_Settings::rotate_mcp_token();
+lcfa_assert_same('/tmp/agent-project', $rotated_roots['workspace_root'] ?? '', 'token rotation should preserve the separate agent project root');
+lcfa_assert_same(untrailingslashit(ABSPATH), $rotated_roots['wordpress_root'] ?? '', 'token rotation should refresh the WordPress root independently');
+lcfa_assert_same('smoke_test', $rotated_roots['connection_current_step'] ?? '', 'token rotation should keep the selected client at the smoke-test step');
 
 $sanitized_codex = LCFA_Settings::sanitize_connections([
     'preferred_client' => 'codex',

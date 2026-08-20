@@ -13,12 +13,14 @@ final class LCFA_Local_MCP_Bridge {
     }
 
     public function get_status(): array {
-        if ($this->status_cache !== null) {
+        $rest_request_verified = $this->current_request_proves_rest_reachability();
+
+        if ($this->status_cache !== null && (!$rest_request_verified || !empty($this->status_cache['rest_reachable']))) {
             return $this->status_cache;
         }
 
         $cached = get_transient($this->get_status_cache_key());
-        if (is_array($cached)) {
+        if (is_array($cached) && (!$rest_request_verified || !empty($cached['rest_reachable']))) {
             $this->status_cache = $cached;
 
             return $this->status_cache;
@@ -37,7 +39,12 @@ final class LCFA_Local_MCP_Bridge {
         if ($local_site) {
             $node_binary = $this->resolve_node_binary();
             $node_probe = $this->probe_node_binary($node_binary);
-            $loopback = $this->probe_rest_loopback();
+            $loopback = $rest_request_verified
+                ? [
+                    'ok' => true,
+                    'message' => __('The current REST request reached AI Bridge, so an additional self-loopback probe is unnecessary.', 'livecanvas-forge-ai'),
+                ]
+                : $this->probe_rest_loopback();
         }
         $script_ok   = is_readable($script_path);
 
@@ -75,6 +82,10 @@ final class LCFA_Local_MCP_Bridge {
         set_transient($this->get_status_cache_key(), $this->status_cache, self::STATUS_TTL);
 
         return $this->status_cache;
+    }
+
+    private function current_request_proves_rest_reachability(): bool {
+        return defined('REST_REQUEST') && REST_REQUEST;
     }
 
     public function refresh_status(): array {

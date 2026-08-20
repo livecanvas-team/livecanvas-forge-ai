@@ -108,7 +108,43 @@ lcfa_assert_contains('Recommended', $markup, 'generate bundle step should mark t
 lcfa_assert_contains('Manual option', $markup, 'generate bundle step should mark the fallback path as manual');
 lcfa_assert_contains('Write the config for me', $markup, 'generate bundle step should explain the direct workspace path');
 lcfa_assert_contains('Download and place it yourself', $markup, 'generate bundle step should explain the manual download path');
-lcfa_assert_contains('lcfa-checkbox lcfa-checkbox--card', $markup, 'backup checkbox should render inside a card-specific layout');
+lcfa_assert_contains('automatic backup is created', $markup, 'direct write path should explain that backup is automatic');
+lcfa_assert_contains('0600 permissions', $markup, 'direct write path should explain private config permissions');
+
+ob_start();
+$method->invoke($admin, [
+    'client' => 'claude',
+    'claude_connection_target' => 'desktop_app',
+    'mode' => 'local',
+    'workspace_root' => '/Users/example/project',
+    'workspace_files' => [
+        ['path' => '/Users/example/project/livecanvas-forge.claude-desktop.json'],
+    ],
+    'install_files' => [
+        ['path' => '/Users/example/Library/Application Support/Claude/claude_desktop_config.json'],
+    ],
+    'install_target' => 'claude_desktop',
+], [
+    'available' => true,
+    'path' => '/Users/example/Library/Application Support/Claude',
+], [
+    'primary_cta' => [
+        'label' => 'Configure Claude Desktop',
+        'action' => 'install',
+    ],
+    'secondary_ctas' => [
+        [
+            'label' => 'Download Claude Desktop snippet',
+            'action' => 'download',
+        ],
+    ],
+]);
+$claude_markup = (string) ob_get_clean();
+
+lcfa_assert_contains('Configure Claude Desktop for me', $claude_markup, 'Claude Desktop direct action should describe app-level configuration');
+lcfa_assert_contains('Configure Claude Desktop', $claude_markup, 'Claude Desktop direct action should use a target-specific CTA');
+lcfa_assert_contains('Existing preferences and connectors are preserved', $claude_markup, 'Claude Desktop direct action should promise a structural merge that preserves app settings');
+lcfa_assert_contains('Download the Claude Desktop snippet', $claude_markup, 'Claude Desktop should retain a clear manual fallback');
 
 ob_start();
 $method->invoke($admin, [

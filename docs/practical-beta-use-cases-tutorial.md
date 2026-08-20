@@ -47,7 +47,7 @@ The result remained editable in LiveCanvas and did not require placing the heade
 
 You need:
 
-- WordPress 6.8 or 7.0 on a staging site;
+- WordPress 6.8 through 7.1 on a staging site;
 - an active and licensed LiveCanvas installation;
 - LiveCanvas AI Bridge installed and activated;
 - one coding-agent project dedicated to this WordPress site;

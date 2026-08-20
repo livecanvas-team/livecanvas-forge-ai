@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 $tmp = sys_get_temp_dir() . '/lcfa-codex-config-manager-' . getmypid();
-$wp_root = $tmp . '/site';
+$workspace_root = $tmp . '/project';
+$wp_root = $workspace_root . '/app/public';
 $plugin_root = $wp_root . '/wp-content/plugins/livecanvas-forge-ai';
 $home = $tmp . '/home';
 $node_binary = $tmp . '/bin/node';
@@ -22,6 +23,7 @@ putenv('HOME=' . $home);
 putenv('LCFA_NODE_BINARY=' . $node_binary);
 
 function __($text, $domain = null) { return $text; }
+function sanitize_key($value) { return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $value)); }
 function trailingslashit($value) { return rtrim((string) $value, '/') . '/'; }
 function untrailingslashit($value) { return rtrim((string) $value, '/'); }
 function home_url($path = '') { return 'http://example.test/' . ltrim((string) $path, '/'); }
@@ -35,8 +37,11 @@ final class LCFA_Settings {
             'mcp_token'          => 'new-token',
             'mcp_host'           => '127.0.0.1',
             'mcp_port'           => '7681',
-            'workspace_root'     => untrailingslashit(ABSPATH),
+            'workspace_root'     => $GLOBALS['lcfa_codex_workspace_root'],
+            'wordpress_root'     => untrailingslashit(ABSPATH),
             'codex_config_scope' => 'project',
+            'power_mode'         => 'enabled',
+            'mcp_write_abilities_enabled' => true,
         ];
     }
 
@@ -52,6 +57,8 @@ final class LCFA_Settings {
         return 'site-fp-test';
     }
 }
+
+$GLOBALS['lcfa_codex_workspace_root'] = $workspace_root;
 
 require dirname(__DIR__, 2) . '/includes/class-lcfa-codex-config-manager.php';
 
@@ -73,12 +80,16 @@ $manager = new LCFA_Codex_Config_Manager();
 $expected = $manager->get_expected_config(LCFA_Settings::get_connections());
 lcfa_config_assert_contains('command = "' . $node_binary . '"', $expected['snippet'], 'expected TOML should use an explicit Node binary when LCFA_NODE_BINARY is available');
 lcfa_config_assert_contains($plugin_root . '/mcp/bin/livecanvas-forge-mcp.js', $expected['snippet'], 'expected TOML should point to the current plugin MCP script');
-lcfa_config_assert_contains('LCFA_MCP_TOKEN = "new-token"', $expected['snippet'], 'expected TOML should contain the current MCP token');
 lcfa_config_assert_contains('LCFA_SITE_FINGERPRINT = "site-fp-test"', $expected['snippet'], 'expected TOML should contain the current site fingerprint');
 lcfa_config_assert_contains('LCFA_WP_ROOT = "' . untrailingslashit(ABSPATH) . '"', $expected['snippet'], 'expected TOML should contain the current WordPress root');
+lcfa_config_assert_contains('LCFA_AGENT_WORKSPACE_ROOT = "' . $workspace_root . '"', $expected['snippet'], 'expected TOML should contain the separate Codex agent workspace root');
+lcfa_config_assert_contains('LCFA_PAIRING_SCOPES = "read,preview,write,media,theme_files,debug,cache,seo"', $expected['snippet'], 'expected TOML should request full pairing scopes when Power Mode is enabled');
+lcfa_config_assert_true(strpos($expected['snippet'], 'LCFA_MCP_TOKEN') === false, 'expected project TOML should not contain a static MCP token');
 lcfa_config_assert_true(($expected['config_scope'] ?? '') === 'project', 'manager should default to project-scoped Codex config');
+lcfa_config_assert_true(($expected['workspace_root'] ?? '') === $workspace_root, 'manager should preserve the agent project root separately');
+lcfa_config_assert_true(($expected['wp_root'] ?? '') === $wp_root, 'manager should resolve the nested WordPress root separately');
 
-$config_path = $wp_root . '/.codex/config.toml';
+$config_path = $workspace_root . '/.codex/config.toml';
 @mkdir(dirname($config_path), 0777, true);
 file_put_contents($config_path, implode("\n", [
     '[profile.default]',
@@ -103,9 +114,11 @@ lcfa_config_assert_true(is_file($sync['backup_path'] ?? ''), 'manager should cre
 $contents = file_get_contents($config_path);
 lcfa_config_assert_contains('[profile.default]', $contents, 'manager should preserve unrelated TOML sections');
 lcfa_config_assert_contains($plugin_root . '/mcp/bin/livecanvas-forge-mcp.js', $contents, 'manager should replace stale script path');
-lcfa_config_assert_contains('LCFA_MCP_TOKEN = "new-token"', $contents, 'manager should replace stale token');
 lcfa_config_assert_contains('LCFA_SITE_FINGERPRINT = "site-fp-test"', $contents, 'manager should write the site fingerprint');
 lcfa_config_assert_true(strpos($contents, 'old-token') === false, 'manager should remove stale token from livecanvas-forge section');
+lcfa_config_assert_true(strpos($contents, 'LCFA_MCP_TOKEN') === false, 'manager should remove the legacy static token key entirely');
+lcfa_config_assert_true(substr(sprintf('%o', (int) fileperms($config_path)), -4) === '0600', 'manager should save the project config with private permissions');
+lcfa_config_assert_true(substr(sprintf('%o', (int) fileperms((string) ($sync['backup_path'] ?? ''))), -4) === '0600', 'manager should save the automatic backup with private permissions');
 
 $synced = $manager->inspect(LCFA_Settings::get_connections());
 lcfa_config_assert_true(!empty($synced['synced']), 'manager should report synced after writing expected config');

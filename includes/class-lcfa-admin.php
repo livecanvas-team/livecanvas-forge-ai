@@ -1240,6 +1240,9 @@ final class LCFA_Admin {
         $connections['connection_status'] = !empty($result['ok']) ? 'ready' : 'needs_attention';
         $connections['connection_last_error'] = !empty($result['ok']) ? '' : (string) ($result['summary'] ?? '');
         $connections['connection_current_step'] = !empty($result['ok']) ? 'ready' : 'smoke_test';
+        if (!empty($result['ok'])) {
+            $connections['connection_last_verified_mcp_package_version'] = $this->get_verified_mcp_package_from_connection_result($result);
+        }
         if (!empty($result['ok']) && $this->is_codex_local_connection($connections) && class_exists('LCFA_Codex_Config_Manager', false)) {
             $connections['connection_last_bundle_hash'] = (string) $this->get_codex_config_manager()->get_expected_config($connections)['hash'];
         }
@@ -1263,9 +1266,13 @@ final class LCFA_Admin {
         check_admin_referer('lcfa_install_client_bundle');
 
         $bundle = $this->build_selected_connection_bundle($_POST);
-        $target = $bundle['workspace_files'][0] ?? null;
+        $install_files = is_array($bundle['install_files'] ?? null)
+            ? $bundle['install_files']
+            : (is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : []);
+        $target = $install_files[0] ?? null;
         $workspace_root = (string) ($bundle['workspace_root'] ?? '');
-        $workspace_write_state = LCFA_Workspace_Access::inspect($workspace_root);
+        $install_root = $this->get_connection_install_root($bundle, is_array($target) ? $target : []);
+        $workspace_write_state = LCFA_Workspace_Access::inspect($install_root);
 
         if (!is_array($target) || empty($target['path'])) {
             LCFA_Settings::set_notice(__('No writable workspace artifact was generated for this client.', 'livecanvas-forge-ai'), 'error');
@@ -1279,23 +1286,35 @@ final class LCFA_Admin {
             exit;
         }
 
-        $this->write_connection_artifact(
-            (string) $target['path'],
-            (string) ($target['content'] ?? ''),
-            $workspace_root,
-            !empty($_POST['create_backup'])
+        $write_result = $this->write_connection_artifact(
+            $target,
+            $install_root,
+            (string) ($bundle['wordpress_root'] ?? '')
         );
+        if (empty($write_result['ok'])) {
+            LCFA_Settings::set_notice((string) ($write_result['message'] ?? __('Failed to write the project config.', 'livecanvas-forge-ai')), 'error');
+            wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
+            exit;
+        }
 
         $connections = LCFA_Settings::get_connections();
-        $connections['preferred_client'] = (string) $bundle['client'];
-        $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
-        $connections['connection_mode'] = (string) $bundle['mode'];
-        $connections['workspace_root'] = sanitize_text_field($workspace_root !== '' ? $workspace_root : (string) $connections['workspace_root']);
-        $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, (string) ($target['content'] ?? ''), $connections);
-        $connections['connection_current_step'] = 'smoke_test';
+        $connections = $this->apply_connection_artifact_install_state(
+            $connections,
+            $bundle,
+            $workspace_root,
+            (string) ($target['content'] ?? '')
+        );
         LCFA_Settings::update_connections($connections);
 
-        LCFA_Settings::set_notice(__('Client bundle written to the local workspace.', 'livecanvas-forge-ai'));
+        if ($this->is_claude_desktop_bundle($bundle)) {
+            LCFA_Settings::set_notice(!empty($write_result['backup_path'])
+                ? __('Claude Desktop configured safely. Existing preferences and connectors were preserved, and the previous config was backed up. Reopen Claude Desktop to load livecanvas-forge.', 'livecanvas-forge-ai')
+                : __('Claude Desktop configured with private file permissions. Reopen Claude Desktop to load livecanvas-forge.', 'livecanvas-forge-ai'));
+        } else {
+            LCFA_Settings::set_notice(!empty($write_result['backup_path'])
+                ? __('Project config merged safely. The previous file was backed up automatically.', 'livecanvas-forge-ai')
+                : __('Project config written with private file permissions.', 'livecanvas-forge-ai'));
+        }
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
         exit;
     }
@@ -1319,6 +1338,7 @@ final class LCFA_Admin {
         $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
         $connections['connection_mode'] = (string) ($bundle['mode'] ?? $connections['connection_mode']);
         $connections['workspace_root'] = sanitize_text_field((string) ($bundle['workspace_root'] ?? $connections['workspace_root']));
+        $connections['wordpress_root'] = sanitize_text_field((string) ($bundle['wordpress_root'] ?? ($connections['wordpress_root'] ?? '')));
         $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, (string) ($file['content'] ?? ''), $connections);
         $connections['connection_current_step'] = 'smoke_test';
         LCFA_Settings::update_connections($connections);
@@ -1343,6 +1363,7 @@ final class LCFA_Admin {
         $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? $connections['claude_connection_target']);
         $connections['connection_mode'] = (string) ($bundle['mode'] ?? $connections['connection_mode']);
         $connections['workspace_root'] = sanitize_text_field((string) ($bundle['workspace_root'] ?? $connections['workspace_root']));
+        $connections['wordpress_root'] = sanitize_text_field((string) ($bundle['wordpress_root'] ?? ($connections['wordpress_root'] ?? '')));
         $connections['connection_last_bundle_hash'] = $this->get_connection_bundle_hash($bundle, (string) ($bundle['copy_command_string'] ?? ''), $connections);
         $connections['connection_status'] = '';
         $connections['connection_last_verified_at'] = '';
@@ -1458,6 +1479,7 @@ final class LCFA_Admin {
                 $connections['connection_last_error'] = !empty($result['ok']) ? '' : (string) ($result['summary'] ?? '');
                 $connections['connection_current_step'] = !empty($result['ok']) ? 'ready' : 'smoke_test';
                 if (!empty($result['ok'])) {
+                    $connections['connection_last_verified_mcp_package_version'] = $this->get_verified_mcp_package_from_connection_result($result);
                     $bundle = $this->build_selected_connection_bundle([
                         'preferred_client' => 'codex',
                         'connection_mode'  => 'remote',
@@ -1476,12 +1498,45 @@ final class LCFA_Admin {
             }
 
             $smoke = $manager->run_smoke_test($connections);
+            $handoff_session = class_exists('LCFA_MCP_Session_Manager', false)
+                && method_exists('LCFA_MCP_Session_Manager', 'get_latest_verified_session')
+                ? LCFA_MCP_Session_Manager::get_latest_verified_session('codex', 'local')
+                : [];
+            $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.5';
+            $package_detected = sanitize_text_field((string) ($handoff_session['mcp_package_version'] ?? ''));
+            $package_matches = $package_detected !== '' && hash_equals($package_expected, $package_detected);
+            $handoff_ok = $handoff_session !== [] && $package_matches;
+            $smoke_ok = !empty($smoke['ok']) && $handoff_ok;
             $checked_at = current_time('mysql', true);
+            $summary = $handoff_session === []
+                ? __('Codex has not completed get_connection_handoff yet. Approve pairing, retry the handoff in Codex, then run the smoke test again.', 'livecanvas-forge-ai')
+                : (!$package_matches
+                    ? sprintf(
+                        __('Codex used MCP package %1$s, but this AI Bridge release requires %2$s. Reload Codex, call get_connection_handoff again, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                        $package_detected !== '' ? $package_detected : __('unknown', 'livecanvas-forge-ai'),
+                        $package_expected
+                    )
+                : (string) ($smoke['message'] ?? __('Codex MCP smoke test completed.', 'livecanvas-forge-ai')));
             $result = [
-                'ok'         => !empty($smoke['ok']),
+                'ok'         => $smoke_ok,
                 'checked_at' => $checked_at,
-                'summary'    => (string) ($smoke['message'] ?? __('Codex MCP smoke test completed.', 'livecanvas-forge-ai')),
+                'summary'    => $summary,
                 'checks'     => [
+                    'agent_handoff' => [
+                        'label'   => __('Coding-agent handoff', 'livecanvas-forge-ai'),
+                        'ok'      => $handoff_ok,
+                        'skipped' => false,
+                        'message' => $handoff_ok
+                            ? __('Codex completed a verified AI Bridge handoff with the expected MCP package.', 'livecanvas-forge-ai')
+                            : $summary,
+                        'details' => $handoff_session !== [] ? [
+                            'session_id' => (string) ($handoff_session['session_id'] ?? ''),
+                            'last_seen_at' => (string) ($handoff_session['last_seen_at'] ?? ''),
+                            'mcp_package_version' => $package_detected,
+                            'mcp_package_expected' => $package_expected,
+                            'package_version_matches' => $package_matches,
+                        ] : [],
+                    ],
                     'codex_mcp_smoke' => [
                         'label'   => __('Codex MCP smoke test', 'livecanvas-forge-ai'),
                         'ok'      => !empty($smoke['ok']),
@@ -1491,11 +1546,12 @@ final class LCFA_Admin {
                     ],
                 ],
             ];
-            $connections['connection_status'] = !empty($smoke['ok']) ? 'ready' : 'needs_attention';
-            $connections['connection_last_error'] = !empty($smoke['ok']) ? '' : (string) ($smoke['message'] ?? '');
-            $connections['connection_current_step'] = !empty($smoke['ok']) ? 'ready' : 'smoke_test';
-            if (!empty($smoke['ok'])) {
+            $connections['connection_status'] = $smoke_ok ? 'ready' : 'needs_attention';
+            $connections['connection_last_error'] = $smoke_ok ? '' : $summary;
+            $connections['connection_current_step'] = $smoke_ok ? 'ready' : 'smoke_test';
+            if ($smoke_ok) {
                 $connections['connection_last_verified_at'] = $checked_at;
+                $connections['connection_last_verified_mcp_package_version'] = $package_detected;
                 $connections['connection_last_bundle_hash'] = (string) ($smoke['expected']['hash'] ?? $manager->get_expected_config($connections)['hash']);
             } else {
                 $connections['connection_last_verified_at'] = '';
@@ -1578,12 +1634,7 @@ final class LCFA_Admin {
         }
 
         $result = LCFA_MCP_Session_Manager::approve_pairing(sanitize_key((string) ($_POST['pairing_id'] ?? '')));
-        $connections = LCFA_Settings::get_connections();
-        $connections['preferred_client'] = $this->normalize_connection_client((string) ($result['client'] ?? 'codex'));
-        $connections['connection_mode'] = 'remote';
-        $connections['connection_status'] = '';
-        $connections['connection_current_step'] = 'smoke_test';
-        $connections['connection_last_error'] = (string) ($result['message'] ?? __('Pairing approval failed.', 'livecanvas-forge-ai'));
+        $connections = $this->merge_mcp_pairing_approval_result(LCFA_Settings::get_connections(), $result);
         LCFA_Settings::update_connections($connections);
 
         LCFA_Settings::set_notice(
@@ -1592,6 +1643,27 @@ final class LCFA_Admin {
         );
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
         exit;
+    }
+
+    private function merge_mcp_pairing_approval_result(array $connections, array $result): array {
+        $message = (string) ($result['message'] ?? __('Pairing approval failed.', 'livecanvas-forge-ai'));
+        $connections['connection_last_error'] = $message;
+
+        if (empty($result['ok'])) {
+            return $connections;
+        }
+
+        $mode = sanitize_key((string) ($result['connection_mode'] ?? ($connections['connection_mode'] ?? 'remote')));
+        if (!in_array($mode, ['local', 'remote'], true)) {
+            $mode = 'remote';
+        }
+
+        $connections['preferred_client'] = $this->normalize_connection_client((string) ($result['client'] ?? ($connections['preferred_client'] ?? 'codex')));
+        $connections['connection_mode'] = $mode;
+        $connections['connection_status'] = '';
+        $connections['connection_current_step'] = 'smoke_test';
+
+        return $connections;
     }
 
     public function handle_mcp_session_revoke_post(): void {
@@ -1669,6 +1741,7 @@ final class LCFA_Admin {
         $mode          = $this->normalize_connection_mode((string) ($request['connection_mode'] ?? ($connections['connection_mode'] ?: $default_mode)));
         $claude_connection_target = $this->normalize_claude_connection_target((string) ($request['claude_connection_target'] ?? ($connections['claude_connection_target'] ?? '')));
         $workspace_root = trim((string) ($request['workspace_root'] ?? $connections['workspace_root']));
+        $wordpress_root = trim((string) ($connections['wordpress_root'] ?? ''));
 
         if ($mode === 'local') {
             $snapshot      = $this->environment->get_snapshot();
@@ -1682,6 +1755,10 @@ final class LCFA_Admin {
                 'claude_connection_target'  => $claude_connection_target,
                 'mode'                      => $mode,
                 'workspace_root'            => $workspace_root,
+                'wordpress_root'            => $wordpress_root,
+                'claude_desktop_config_path'=> $client_key === 'claude' && $claude_connection_target === 'desktop_app'
+                    ? $this->resolve_claude_desktop_config_path()
+                    : '',
                 'common'                    => is_array($mcp_bootstrap['common'] ?? null) ? $mcp_bootstrap['common'] : [],
                 'client_payload' => [
                     'command' => (string) ($client_payload['command'] ?? ''),
@@ -1708,6 +1785,8 @@ final class LCFA_Admin {
             'claude_connection_target'  => $claude_connection_target,
             'mode'                      => $mode,
             'workspace_root'            => $workspace_root,
+            'wordpress_root'            => $wordpress_root,
+            'claude_desktop_config_path'=> '',
             'common'                    => $common,
             'client_payload' => [
                 'command' => (string) ($client_payload['command'] ?? ''),
@@ -1804,10 +1883,7 @@ final class LCFA_Admin {
             ];
         }
 
-        $power_state = $this->get_power_mode()->get_state($connections, $snapshot);
-        $pairing_scopes = !empty($power_state['enabled'])
-            ? 'read,preview,write,media,theme_files,debug,cache,seo'
-            : 'read,preview';
+        $pairing_scopes = $this->get_connection_pairing_scopes($connections, $snapshot);
         $env = array_values(array_filter([
             $remote_site_url !== '' ? 'LCFA_SITE_URL=' . $remote_site_url : '',
             'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
@@ -1818,7 +1894,7 @@ final class LCFA_Admin {
 
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.4';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.5';
 
         return [
             'client_payload' => [
@@ -1895,6 +1971,14 @@ final class LCFA_Admin {
         return $this->power_mode;
     }
 
+    private function get_connection_pairing_scopes(array $connections, array $snapshot = []): string {
+        $power_state = $this->get_power_mode()->get_state($connections, $snapshot);
+
+        return !empty($power_state['enabled'])
+            ? 'read,preview,write,media,theme_files,debug,cache,seo'
+            : 'read,preview';
+    }
+
     private function get_codex_config_manager() {
         return new LCFA_Codex_Config_Manager();
     }
@@ -1907,6 +1991,7 @@ final class LCFA_Admin {
     private function get_connection_bundle_hash(array $bundle, string $content, array $connections): string {
         if ((string) ($bundle['client'] ?? '') === 'codex' && (string) ($bundle['mode'] ?? '') === 'local' && class_exists('LCFA_Codex_Config_Manager', false)) {
             $connections['workspace_root'] = (string) ($bundle['workspace_root'] ?? ($connections['workspace_root'] ?? ''));
+            $connections['wordpress_root'] = (string) ($bundle['wordpress_root'] ?? ($connections['wordpress_root'] ?? ''));
 
             return (string) $this->get_codex_config_manager()->get_expected_config($connections)['hash'];
         }
@@ -1924,24 +2009,29 @@ final class LCFA_Admin {
         $site_url = trailingslashit(home_url('/'));
         $rest_base = trailingslashit(rest_url('lcfa/v1/'));
         $mcp_endpoint = LCFA_Settings::get_mcp_endpoint();
-        $mcp_token = (string) ($connections['mcp_token'] ?? '');
         $wp_root = defined('ABSPATH') && is_string(ABSPATH) ? untrailingslashit((string) ABSPATH) : '';
         $site_fingerprint = method_exists('LCFA_Settings', 'get_site_fingerprint') ? LCFA_Settings::get_site_fingerprint() : '';
-        $filesystem_mode = ($snapshot['site_mode'] ?? 'local') === 'local' ? 'local-theme-access' : 'remote-rest-primary';
+        $configured_mode = $this->sanitize_key_compat((string) ($connections['connection_mode'] ?? ''));
+        $filesystem_mode = $configured_mode === 'local' || ($snapshot['site_mode'] ?? 'local') === 'local'
+            ? 'local-theme-access'
+            : 'remote-rest-primary';
         $local_mcp_command = 'node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js';
         $is_secure_remote = $filesystem_mode !== 'local-theme-access';
         $mcp_package_spec = defined('LCFA_MCP_PACKAGE_SPEC')
             ? (string) LCFA_MCP_PACKAGE_SPEC
-            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.4';
+            : '@livecanvas/ai-bridge-mcp@0.2.0-beta.5';
         $remote_mcp_command = 'npx -y ' . $mcp_package_spec;
         $project_host = (string) parse_url($site_url, PHP_URL_HOST);
-        $secure_remote_environment = static function (string $client) use ($site_url, $site_fingerprint, $project_host): array {
+        $pairing_scopes = $this->get_connection_pairing_scopes($connections, $snapshot);
+        $secure_environment = static function (string $client) use ($site_url, $rest_base, $site_fingerprint, $project_host, $pairing_scopes, $wp_root, $filesystem_mode): array {
             return [
                 'LCFA_AGENT=' . $client,
                 'LCFA_PROJECT_LABEL=' . ($project_host !== '' ? $project_host : 'WordPress site'),
+                'LCFA_REST_BASE=' . $rest_base,
                 'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
                 'LCFA_SITE_URL=' . $site_url,
-                'LCFA_PAIRING_SCOPES=read,preview',
+                'LCFA_PAIRING_SCOPES=' . $pairing_scopes,
+                ...($filesystem_mode === 'local-theme-access' && $wp_root !== '' ? ['LCFA_WP_ROOT=' . $wp_root] : []),
             ];
         };
         $common = [
@@ -1949,58 +2039,37 @@ final class LCFA_Admin {
             'rest_base'      => $rest_base,
             'site_fingerprint' => $site_fingerprint,
             'mcp_endpoint'   => $mcp_endpoint,
-            'mcp_token'      => $is_secure_remote ? '' : $mcp_token,
+            'mcp_token'      => '',
             'wp_root'        => $wp_root,
+            'agent_workspace_root' => (string) ($connections['workspace_root'] ?? ''),
+            'pairing_scopes' => $pairing_scopes,
             'framework'      => (string) ($snapshot['detected_framework'] ?? 'unknown'),
             'theme'          => (string) ($snapshot['current_theme_stylesheet'] ?? ''),
             'transport'      => (string) ($connections['transport'] ?? 'rest'),
             'filesystem_mode'=> $filesystem_mode,
         ];
-        $filesystem_env = $filesystem_mode === 'local-theme-access' && $wp_root !== ''
-            ? ['LCFA_WP_ROOT=' . $wp_root]
-            : [];
-
         $bootstrap = [
             'common' => $common,
             'clients' => [
                 'codex' => [
                     'label'   => 'Codex',
                     'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('codex') : array_merge([
-                        'LCFA_SITE_URL=' . $site_url,
-                        'LCFA_REST_BASE=' . $rest_base,
-                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
-                        'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
-                        'LCFA_MCP_TOKEN=' . $mcp_token,
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('codex'),
                 ],
                 'opencode' => [
                     'label'   => 'OpenCode',
                     'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('opencode') : array_merge([
-                        'LCFA_REST_BASE=' . $rest_base,
-                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
-                        'LCFA_MCP_TOKEN=' . $mcp_token,
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('opencode'),
                 ],
                 'claude' => [
                     'label'   => 'Claude',
                     'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('claude') : array_merge([
-                        'LCFA_REST_BASE=' . $rest_base,
-                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
-                        'LCFA_MCP_ENDPOINT=' . $mcp_endpoint,
-                        'LCFA_MCP_TOKEN=' . $mcp_token,
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('claude'),
                 ],
                 'cursor' => [
                     'label'   => 'Cursor',
                     'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
-                    'env'     => $is_secure_remote ? $secure_remote_environment('cursor') : array_merge([
-                        'LCFA_REST_BASE=' . $rest_base,
-                        'LCFA_SITE_FINGERPRINT=' . $site_fingerprint,
-                        'LCFA_MCP_TOKEN=' . $mcp_token,
-                    ], $filesystem_env),
+                    'env'     => $secure_environment('cursor'),
                 ],
             ],
         ];
@@ -2041,35 +2110,83 @@ final class LCFA_Admin {
         return implode("\n", $environment);
     }
 
-    private function write_connection_artifact(string $path, string $content, string $workspace_root, bool $create_backup = false): void {
-        $workspace_root = untrailingslashit($workspace_root);
-        $normalized_path = wp_normalize_path($path);
-        $normalized_root = $workspace_root !== '' ? wp_normalize_path($workspace_root) : '';
-        $workspace_state = LCFA_Workspace_Access::inspect($workspace_root);
-
-        if ($normalized_root === '' || strpos($normalized_path, $normalized_root . '/') !== 0) {
-            wp_die(esc_html__('The bundle can only be written inside the configured local workspace root.', 'livecanvas-forge-ai'));
+    private function write_connection_artifact(array $artifact, string $workspace_root, string $wordpress_root): array {
+        if (!class_exists('LCFA_Connection_Artifact_Writer', false)) {
+            return [
+                'ok' => false,
+                'message' => __('The secure project config writer is unavailable.', 'livecanvas-forge-ai'),
+            ];
         }
 
-        if (empty($workspace_state['available'])) {
-            wp_die(esc_html($this->get_workspace_write_notice($workspace_state)));
+        return (new LCFA_Connection_Artifact_Writer())->write($artifact, $workspace_root, $wordpress_root);
+    }
+
+    private function is_claude_desktop_bundle(array $bundle): bool {
+        return (string) ($bundle['client'] ?? '') === 'claude'
+            && (string) ($bundle['mode'] ?? '') === 'local'
+            && (string) ($bundle['claude_connection_target'] ?? '') === 'desktop_app';
+    }
+
+    private function resolve_claude_desktop_config_path(): string {
+        $app_data = trim((string) getenv('APPDATA'));
+        if ($app_data !== '') {
+            return rtrim(wp_normalize_path($app_data), '/\\') . '/Claude/claude_desktop_config.json';
         }
 
-        $directory = dirname($path);
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            wp_die(esc_html__('Failed to create the bundle directory.', 'livecanvas-forge-ai'));
+        $home = trim((string) getenv('HOME'));
+        if ($home === '') {
+            return '';
         }
 
-        if ($create_backup && file_exists($path)) {
-            $backup_path = $path . '.' . gmdate('YmdHis') . '.bak';
-            if (!copy($path, $backup_path)) {
-                wp_die(esc_html__('Failed to create the requested backup file.', 'livecanvas-forge-ai'));
-            }
+        $home = rtrim(wp_normalize_path($home), '/\\');
+        if (PHP_OS_FAMILY === 'Darwin') {
+            return $home . '/Library/Application Support/Claude/claude_desktop_config.json';
         }
 
-        if (file_put_contents($path, $content) === false) {
-            wp_die(esc_html__('Failed to write the generated bundle file.', 'livecanvas-forge-ai'));
+        return $home . '/.config/Claude/claude_desktop_config.json';
+    }
+
+    private function get_connection_install_root(array $bundle, array $artifact = []): string {
+        if ($artifact === []) {
+            $install_files = is_array($bundle['install_files'] ?? null)
+                ? $bundle['install_files']
+                : (is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : []);
+            $artifact = isset($install_files[0]) && is_array($install_files[0]) ? $install_files[0] : [];
         }
+
+        if ($this->is_claude_desktop_bundle($bundle) && (string) ($bundle['install_target'] ?? '') === 'claude_desktop') {
+            $path = trim((string) ($artifact['path'] ?? ''));
+            return $path !== '' ? dirname($path) : '';
+        }
+
+        return (string) ($bundle['workspace_root'] ?? '');
+    }
+
+    private function get_connection_install_access_state(array $bundle): array {
+        return LCFA_Workspace_Access::inspect($this->get_connection_install_root($bundle));
+    }
+
+    private function apply_connection_artifact_install_state(array $connections, array $bundle, string $workspace_root, string $content): array {
+        $connections['preferred_client'] = (string) ($bundle['client'] ?? ($connections['preferred_client'] ?? ''));
+        $connections['claude_connection_target'] = (string) ($bundle['claude_connection_target'] ?? ($connections['claude_connection_target'] ?? ''));
+        $connections['connection_mode'] = (string) ($bundle['mode'] ?? ($connections['connection_mode'] ?? 'local'));
+        $connections['workspace_root'] = sanitize_text_field($workspace_root !== '' ? $workspace_root : (string) ($connections['workspace_root'] ?? ''));
+        $connections['wordpress_root'] = sanitize_text_field((string) ($bundle['wordpress_root'] ?? ($connections['wordpress_root'] ?? '')));
+
+        $previous_bundle_hash = (string) ($connections['connection_last_bundle_hash'] ?? '');
+        $next_bundle_hash = $this->get_connection_bundle_hash($bundle, $content, $connections);
+        $preserve_ready = (string) ($connections['connection_status'] ?? '') === 'ready'
+            && $previous_bundle_hash !== ''
+            && hash_equals($previous_bundle_hash, $next_bundle_hash);
+
+        $connections['connection_last_bundle_hash'] = $next_bundle_hash;
+        $connections['connection_current_step'] = $preserve_ready ? 'ready' : 'smoke_test';
+        if (!$preserve_ready && (string) ($connections['connection_status'] ?? '') === 'ready') {
+            $connections['connection_status'] = 'needs_attention';
+            $connections['connection_last_error'] = __('The client config changed. Reopen the coding agent, complete the handoff, and rerun the smoke test.', 'livecanvas-forge-ai');
+        }
+
+        return $connections;
     }
 
     public function handle_reset_setup_post(): void {
@@ -2566,6 +2683,22 @@ final class LCFA_Admin {
         $connections['connection_current_step'] = 'choose_client';
 
         return $connections;
+    }
+
+    private function get_verified_mcp_package_from_connection_result(array $result): string {
+        $handoff = is_array($result['checks']['agent_handoff']['details'] ?? null)
+            ? $result['checks']['agent_handoff']['details']
+            : [];
+        $package = sanitize_text_field((string) ($handoff['mcp_package_version'] ?? ''));
+        if ($package !== '') {
+            return $package;
+        }
+
+        $remote = is_array($result['checks']['remote_rest']['details'] ?? null)
+            ? $result['checks']['remote_rest']['details']
+            : [];
+
+        return sanitize_text_field((string) ($remote['mcp_package_detected'] ?? ''));
     }
 
     private function get_framework_regenerated_connections(array $connections): array {
@@ -3957,7 +4090,7 @@ final class LCFA_Admin {
             $onboarding_state['status'] = (string) ($codex_onboarding['status'] ?? 'needs_setup');
             $onboarding_state['message'] = (string) ($codex_onboarding['message'] ?? '');
         }
-        $workspace_write_state = LCFA_Workspace_Access::inspect((string) ($bundle['workspace_root'] ?? ''));
+        $workspace_write_state = $this->get_connection_install_access_state($bundle);
         $wizard_view = $this->connection_wizard_presenter->build([
             'state'            => $onboarding_state,
             'bundle'           => $bundle,
@@ -4187,7 +4320,7 @@ final class LCFA_Admin {
         $checks = is_array($state['checks'] ?? null) ? $state['checks'] : [];
         $last_smoke = is_array($state['last_smoke'] ?? null) ? $state['last_smoke'] : [];
         $pending_pairings = [];
-        if ($mode === 'remote' && class_exists('LCFA_MCP_Session_Manager', false)) {
+        if (class_exists('LCFA_MCP_Session_Manager', false)) {
             $pending_pairings = LCFA_MCP_Session_Manager::get_pending_pairings();
         }
         $pairing_review_required = $pending_pairings !== [] && $status !== 'ready';
@@ -4298,7 +4431,7 @@ final class LCFA_Admin {
             echo '</div>';
         }
 
-        if ($mode === 'remote' && $pairing_review_required) {
+        if ($pairing_review_required) {
             $this->render_codex_mcp_sessions_panel((string) ($state['strategy'] ?? ''));
         }
 
@@ -4312,7 +4445,7 @@ final class LCFA_Admin {
             );
         }
 
-        if ($mode === 'remote' && !$pairing_review_required) {
+        if (!$pairing_review_required) {
             $this->render_codex_mcp_sessions_panel((string) ($state['strategy'] ?? ''));
         }
 
@@ -4622,7 +4755,7 @@ final class LCFA_Admin {
                     'description' => __('This is the advanced local runtime path. If you wanted the easier setup, select Direct Mode above and click Use selected mode.', 'livecanvas-forge-ai'),
                     'steps' => [
                         __('Continue local runtime only if Codex must access this machine files or local build tools.', 'livecanvas-forge-ai'),
-                        __('AI Bridge now writes a project-scoped .codex/config.toml inside this WordPress folder by default.', 'livecanvas-forge-ai'),
+                        __('AI Bridge now writes a project-scoped .codex/config.toml inside the agent project folder, separate from a nested app/public WordPress root.', 'livecanvas-forge-ai'),
                         __('Restart Codex or reload the livecanvas-forge MCP server.', 'livecanvas-forge-ai'),
                         __('Return here and run the Codex smoke test.', 'livecanvas-forge-ai'),
                     ],
@@ -4844,7 +4977,7 @@ final class LCFA_Admin {
             $config_scope = sanitize_key((string) ($manual_fallback['config_scope'] ?? 'project'));
             echo '<p class="lcfa-guide-copy">' . esc_html($config_scope === 'global'
                 ? __('Use this if PHP cannot write the global Codex config for this local machine.', 'livecanvas-forge-ai')
-                : __('Use this if PHP cannot write the project Codex config inside this WordPress folder.', 'livecanvas-forge-ai')) . '</p>';
+                : __('Use this if PHP cannot write the project-scoped Codex config inside the agent project folder.', 'livecanvas-forge-ai')) . '</p>';
             if ($config_path !== '') {
                 $this->render_code_block($config_path, [
                     'language' => 'text',
@@ -5116,11 +5249,11 @@ final class LCFA_Admin {
         echo '<section class="lcfa-card lcfa-ready-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
-        echo '<div><h2>' . esc_html__('Repair Codex Connection', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this when Codex has an old MCP token, an old plugin path, or a stale WordPress root in the project .codex/config.toml.', 'livecanvas-forge-ai') . '</p></div>';
+        echo '<div><h2>' . esc_html__('Repair Codex Connection', 'livecanvas-forge-ai') . '</h2><p>' . esc_html__('Use this when the project .codex/config.toml has an old plugin path, a stale WordPress root, or legacy token-based settings.', 'livecanvas-forge-ai') . '</p></div>';
         echo '</div>';
         echo '<div class="lcfa-chip-row">';
         echo '<span class="lcfa-chip' . ($wp_root_ok ? ' is-positive' : ' is-negative') . '">' . esc_html(sprintf(__('WordPress root: %s', 'livecanvas-forge-ai'), $wp_root_ok ? 'OK' : 'check')) . '</span>';
-        echo '<span class="lcfa-chip is-positive">' . esc_html__('MCP token: current', 'livecanvas-forge-ai') . '</span>';
+        echo '<span class="lcfa-chip is-positive">' . esc_html__('Authentication: secure pairing', 'livecanvas-forge-ai') . '</span>';
         echo '<span class="lcfa-chip' . ($synced ? ' is-positive' : ' is-negative') . '">' . esc_html(sprintf(__('Codex config: %s', 'livecanvas-forge-ai'), $config_label)) . '</span>';
         echo '<span class="lcfa-chip' . ($script_ok ? ' is-positive' : ' is-negative') . '">' . esc_html(sprintf(__('MCP script: %s', 'livecanvas-forge-ai'), $script_ok ? 'OK' : 'missing')) . '</span>';
         echo '<span class="lcfa-chip' . ($hash_matches ? ' is-positive' : '') . '">' . esc_html(sprintf(__('Smoke fingerprint: %s', 'livecanvas-forge-ai'), $hash_matches ? 'OK' : 'pending')) . '</span>';
@@ -5132,9 +5265,9 @@ final class LCFA_Admin {
         echo '</div>';
 
         echo '<div class="lcfa-choice-grid lcfa-choice-grid--actions">';
-        $this->render_codex_repair_action('sync_wp', __('Detect current WordPress path', 'livecanvas-forge-ai'), __('Sync WordPress connection settings', 'livecanvas-forge-ai'), __('Stores the current local ABSPATH as the active workspace root when the saved root is stale.', 'livecanvas-forge-ai'));
+        $this->render_codex_repair_action('sync_wp', __('Detect current WordPress path', 'livecanvas-forge-ai'), __('Sync WordPress connection settings', 'livecanvas-forge-ai'), __('Stores the current ABSPATH as the WordPress root while preserving the separate agent project folder.', 'livecanvas-forge-ai'));
         $this->render_codex_repair_action('sync_codex', __('Update Codex config', 'livecanvas-forge-ai'), __('Write project .codex/config.toml', 'livecanvas-forge-ai'), __('Updates only mcp_servers.livecanvas-forge and creates a backup first.', 'livecanvas-forge-ai'), true);
-        $this->render_codex_repair_action('smoke', __('Run smoke test', 'livecanvas-forge-ai'), __('Verify Codex MCP locally', 'livecanvas-forge-ai'), __('Runs REST health, Node, script, and get_mcp_status checks with the current token.', 'livecanvas-forge-ai'));
+        $this->render_codex_repair_action('smoke', __('Run smoke test', 'livecanvas-forge-ai'), __('Verify Codex MCP locally', 'livecanvas-forge-ai'), __('Runs REST health, Node, script, and get_mcp_status checks after secure pairing.', 'livecanvas-forge-ai'));
         echo '</div>';
 
         echo '<details class="lcfa-advanced-settings">';
@@ -5252,11 +5385,11 @@ final class LCFA_Admin {
         $this->render_connection_stepper((array) ($wizard_view['steps'] ?? []));
         echo '</div>';
         $this->render_connection_active_step_panel($panel, $current_step, $bundle, $connections, $preferred_client, $selected_mode, $mcp_bootstrap, $settings, $snapshot, $mcp_status, $workspace_write_state);
-        if ($selected_mode === 'remote') {
-            // Secure pairing is shared by every remote MCP client. Keep the
-            // approval and revocation panel in the generic wizard as well as
-            // the dedicated Codex path so OpenCode, Claude, and Cursor users
-            // are never sent to an anchor that is absent from the page.
+        if ($selected_mode === 'remote' || $current_step === 'smoke_test') {
+            // Secure pairing is shared by every MCP client and is also used
+            // for local connections that avoid static project tokens. Keep
+            // approval visible at the smoke-test step so users never have to
+            // leave the guided flow to find a pending request.
             $this->render_codex_mcp_sessions_panel((string) ($bundle['connection_strategy'] ?? ''));
         }
         $this->render_connection_visual_help_strip($wizard_view);
@@ -5311,7 +5444,11 @@ final class LCFA_Admin {
 
     private function render_connection_ready_card(array $wizard_view, array $bundle, array $connections, array $workspace_write_state): void {
         $panel = is_array($wizard_view['ready_panel'] ?? null) ? $wizard_view['ready_panel'] : [];
-        $show_workspace_install = !empty($bundle['workspace_files']) && !empty($workspace_write_state['available']);
+        $install_files = is_array($bundle['install_files'] ?? null)
+            ? $bundle['install_files']
+            : (is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : []);
+        $show_workspace_install = !empty($install_files) && !empty($workspace_write_state['available']);
+        $is_claude_desktop = $this->is_claude_desktop_bundle($bundle);
         echo '<section class="lcfa-card lcfa-ready-card">';
         echo '<div class="lcfa-card-head">';
         echo $this->get_icon_svg('command');
@@ -5341,9 +5478,10 @@ final class LCFA_Admin {
             wp_nonce_field('lcfa_install_client_bundle');
             echo '<input type="hidden" name="action" value="lcfa_install_client_bundle">';
             echo '<input type="hidden" name="preferred_client" value="' . esc_attr((string) ($bundle['client'] ?? 'codex')) . '">';
+            echo '<input type="hidden" name="claude_connection_target" value="' . esc_attr((string) ($bundle['claude_connection_target'] ?? '')) . '">';
             echo '<input type="hidden" name="connection_mode" value="' . esc_attr((string) ($bundle['mode'] ?? 'local')) . '">';
             echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
-            echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html__('Write config in workspace', 'livecanvas-forge-ai') . '</span></button>';
+            echo '<button class="button lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html($is_claude_desktop ? __('Configure Claude Desktop', 'livecanvas-forge-ai') : __('Write config in workspace', 'livecanvas-forge-ai')) . '</span></button>';
             echo '</form>';
         }
 
@@ -5363,9 +5501,9 @@ final class LCFA_Admin {
         echo '</form>';
         echo '</div>';
 
-        if (!empty($bundle['workspace_files']) && empty($workspace_write_state['available'])) {
+        if (!empty($install_files) && empty($workspace_write_state['available'])) {
             echo '<div class="lcfa-workspace-note">';
-            echo '<strong>' . esc_html__('Browser write disabled for this workspace', 'livecanvas-forge-ai') . '</strong>';
+            echo '<strong>' . esc_html($is_claude_desktop ? __('Claude Desktop config is not writable', 'livecanvas-forge-ai') : __('Browser write disabled for this workspace', 'livecanvas-forge-ai')) . '</strong>';
             echo '<p>' . esc_html($this->get_workspace_write_notice($workspace_write_state)) . '</p>';
             echo '</div>';
         }
@@ -5501,7 +5639,7 @@ final class LCFA_Admin {
         echo '<input type="hidden" name="workspace_root" value="' . esc_attr($workspace_root) . '">';
         echo '<div class="lcfa-radio-group lcfa-radio-group--inline">';
         $this->render_radio('claude_connection_target', 'desktop_app', __('Desktop App', 'livecanvas-forge-ai'), $selected_target, 'window-stack');
-        $this->render_radio('claude_connection_target', 'cli', __('Command Line Interface', 'livecanvas-forge-ai'), $selected_target, 'command');
+        $this->render_radio('claude_connection_target', 'cli', __('Claude Code (CLI)', 'livecanvas-forge-ai'), $selected_target, 'command');
         echo '</div>';
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('rocket') . '<span>' . esc_html($button_label) . '</span></button>';
@@ -5550,11 +5688,13 @@ final class LCFA_Admin {
             echo '<div><span>' . esc_html__('Remote proxy', 'livecanvas-forge-ai') . '</span><code>@automattic/mcp-wordpress-remote</code></div>';
         } else {
             echo '<div><span>' . esc_html__('REST base', 'livecanvas-forge-ai') . '</span><code>' . esc_html((string) (($bundle['environment']['LCFA_REST_BASE'] ?? ''))) . '</code></div>';
-            echo '<div><span>' . esc_html__('MCP token', 'livecanvas-forge-ai') . '</span><code>' . esc_html((string) (($bundle['environment']['LCFA_MCP_TOKEN'] ?? ''))) . '</code></div>';
+            echo '<div><span>' . esc_html__('Authentication', 'livecanvas-forge-ai') . '</span><code>' . esc_html__('Secure pairing — no token in project files', 'livecanvas-forge-ai') . '</code></div>';
         }
         if ($selected_mode === 'local') {
-            echo '<label><span>' . esc_html__('Local workspace root', 'livecanvas-forge-ai') . '</span><input type="text" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '" placeholder="/Users/you/project"></label>';
-            echo '<p class="lcfa-guide-copy">' . esc_html__('This must be the real project path on your machine, not the runtime mount path used by Local or Docker.', 'livecanvas-forge-ai') . '</p>';
+            echo '<label><span>' . esc_html__('Agent project folder', 'livecanvas-forge-ai') . '</span><input type="text" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '" placeholder="/Users/you/project"></label>';
+            echo '<p class="lcfa-guide-copy">' . esc_html__('Open this folder in Cursor, Claude Code, OpenCode, or VS Code. AI Bridge stores only that agent’s project config here.', 'livecanvas-forge-ai') . '</p>';
+            echo '<div><span>' . esc_html__('WordPress root', 'livecanvas-forge-ai') . '</span><code>' . esc_html((string) ($bundle['wordpress_root'] ?? '')) . '</code></div>';
+            echo '<p class="lcfa-guide-copy">' . esc_html__('This is the folder containing wp-config.php and wp-content. It can be nested inside the agent project folder, as with Local app/public.', 'livecanvas-forge-ai') . '</p>';
         } else {
             echo '<input type="hidden" name="workspace_root" value="">';
         }
@@ -5562,15 +5702,16 @@ final class LCFA_Admin {
         echo '<p class="lcfa-guide-copy">' . esc_html((string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter' ? __('If these values look correct, confirm them to generate the Codex remote MCP Adapter shortcut.', 'livecanvas-forge-ai') : __('If these values look correct, confirm them to generate the client bundle for the selected coding agent.', 'livecanvas-forge-ai')) . '</p>';
         echo '<div class="lcfa-cta-row">';
         echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('check-circle') . '<span>' . esc_html($button_label) . '</span></button>';
-        if ((string) ($bundle['connection_strategy'] ?? '') !== 'remote-mcp-adapter') {
-            echo '<button class="button lcfa-button-with-icon" type="submit" name="rotate_mcp_token" value="1">' . $this->get_icon_svg('shuffle') . '<span>' . esc_html__('Rotate MCP token', 'livecanvas-forge-ai') . '</span></button>';
-        }
         echo '</div>';
         echo '</form>';
     }
 
     private function render_connection_generate_bundle_actions(array $bundle, array $workspace_write_state, array $panel): void {
-        $show_workspace_install = !empty($bundle['workspace_files']) && !empty($workspace_write_state['available']);
+        $install_files = is_array($bundle['install_files'] ?? null)
+            ? $bundle['install_files']
+            : (is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : []);
+        $show_workspace_install = !empty($install_files) && !empty($workspace_write_state['available']);
+        $is_claude_desktop = $this->is_claude_desktop_bundle($bundle);
         $secondary_ctas = is_array($panel['secondary_ctas'] ?? null) ? $panel['secondary_ctas'] : [];
         $primary_cta = is_array($panel['primary_cta'] ?? null) ? $panel['primary_cta'] : [];
         $primary_action = (string) ($primary_cta['action'] ?? '');
@@ -5604,7 +5745,6 @@ final class LCFA_Admin {
             echo '<span>' . esc_html($primary_install['description']) . '</span>';
             echo '<small>' . esc_html($primary_install['note']) . '</small>';
             echo '</span>';
-            echo '<label class="lcfa-checkbox lcfa-checkbox--card"><input type="checkbox" name="create_backup" value="1"> ' . esc_html__('Create backup before overwrite', 'livecanvas-forge-ai') . '</label>';
             echo '<button class="button button-primary lcfa-button--wide lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html((string) ($panel['primary_cta']['label'] ?? __('Write config in workspace', 'livecanvas-forge-ai'))) . '</span></button>';
             echo '</form>';
         } else {
@@ -5673,12 +5813,12 @@ final class LCFA_Admin {
             $this->render_connection_copy_next_steps($bundle);
         }
 
-        if (!empty($bundle['workspace_files']) && empty($workspace_write_state['available'])) {
+        if (!empty($install_files) && empty($workspace_write_state['available'])) {
             echo '<div class="lcfa-workspace-note">';
-            echo '<strong>' . esc_html__('Browser write disabled for this workspace', 'livecanvas-forge-ai') . '</strong>';
+            echo '<strong>' . esc_html($is_claude_desktop ? __('Claude Desktop config is not writable', 'livecanvas-forge-ai') : __('Browser write disabled for this workspace', 'livecanvas-forge-ai')) . '</strong>';
             echo '<p>' . esc_html($this->get_workspace_write_notice($workspace_write_state)) . '</p>';
             if ((string) ($bundle['client'] ?? '') === 'codex' && (string) ($bundle['mode'] ?? 'local') === 'local') {
-                echo '<p>' . esc_html__('Recommended Codex flow: copy the Codex shortcut, run it once in a terminal from this workspace, let it auto-detect the embedded Codex desktop CLI if codex is not in PATH, confirm with codex mcp list or /Applications/Codex.app/Contents/Resources/codex mcp list, then come back here and run the smoke test.', 'livecanvas-forge-ai') . '</p>';
+                echo '<p>' . esc_html__('Recommended Codex fallback: download the TOML snippet, merge only livecanvas-forge into this project’s .codex/config.toml, reopen the project in VS Code or Cursor, call get_connection_handoff, then come back here for the smoke test.', 'livecanvas-forge-ai') . '</p>';
             } else {
                 echo '<p>' . esc_html__('Recommended local flow: download the client bundle, open the project in your coding agent, let the local MCP bridge start once, then come back here and run the smoke test.', 'livecanvas-forge-ai') . '</p>';
             }
@@ -5690,6 +5830,35 @@ final class LCFA_Admin {
         $client = $this->normalize_connection_client((string) ($bundle['client'] ?? 'generic'));
         $client_label = $this->get_connection_client_label($client);
         $handoff_prompt = 'Call get_connection_handoff with {"limit":5}. If pairing is pending, show me the approval link and user code. Do not change the site.';
+
+        if ($this->is_claude_desktop_bundle($bundle)) {
+            echo '<section id="lcfa-after-setup-command" class="lcfa-copy-next" tabindex="-1" hidden>';
+            echo '<div class="lcfa-copy-next__heading">' . $this->get_icon_svg('check-circle') . '<div>';
+            echo '<h3>' . esc_html__('Config copied. Complete Claude Desktop setup', 'livecanvas-forge-ai') . '</h3>';
+            echo '<p>' . esc_html__('The copied JSON only registers livecanvas-forge. It must be merged into the existing Claude Desktop config without replacing preferences or unrelated connectors.', 'livecanvas-forge-ai') . '</p>';
+            echo '</div></div>';
+            echo '<ol class="lcfa-copy-next__steps">';
+            echo '<li><span>1</span><div><strong>' . esc_html__('Open the Claude Desktop app config', 'livecanvas-forge-ai') . '</strong><p><code>~/Library/Application Support/Claude/claude_desktop_config.json</code></p></div></li>';
+            echo '<li><span>2</span><div><strong>' . esc_html__('Merge only livecanvas-forge', 'livecanvas-forge-ai') . '</strong><p>' . esc_html__('Paste the server inside mcpServers. Keep the existing preferences block and every other server, then save the file.', 'livecanvas-forge-ai') . '</p></div></li>';
+            echo '<li><span>3</span><div><strong>' . esc_html__('Reopen Claude Desktop and connect', 'livecanvas-forge-ai') . '</strong><p>' . esc_html__('Use the normal Chat screen, send the prompt below, and approve the matching pairing request in WordPress.', 'livecanvas-forge-ai') . '</p></div></li>';
+            echo '</ol>';
+            echo '<div class="lcfa-copy-next__prompt">';
+            echo '<code>' . esc_html($handoff_prompt) . '</code>';
+            echo '<button class="button lcfa-button-with-icon" type="button" data-lcfa-copy-text="' . esc_attr($handoff_prompt) . '" data-lcfa-copy-label="' . esc_attr__('Copy connection-check prompt', 'livecanvas-forge-ai') . '" data-lcfa-copied-label="' . esc_attr__('Prompt copied', 'livecanvas-forge-ai') . '">' . $this->get_icon_svg('file-earmark') . '<span>' . esc_html__('Copy connection-check prompt', 'livecanvas-forge-ai') . '</span></button>';
+            echo '</div>';
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="lcfa-copy-next__continue">';
+            wp_nonce_field('lcfa_confirm_client_bundle');
+            echo '<input type="hidden" name="action" value="lcfa_confirm_client_bundle">';
+            echo '<input type="hidden" name="preferred_client" value="claude">';
+            echo '<input type="hidden" name="claude_connection_target" value="desktop_app">';
+            echo '<input type="hidden" name="connection_mode" value="local">';
+            echo '<input type="hidden" name="workspace_root" value="' . esc_attr((string) ($bundle['workspace_root'] ?? '')) . '">';
+            echo '<div><strong>' . esc_html__('Final step: test the connection', 'livecanvas-forge-ai') . '</strong><span>' . esc_html__('Continue only after Claude Desktop has been reopened. The next screen highlights pairing and the smoke test.', 'livecanvas-forge-ai') . '</span></div>';
+            echo '<button class="button button-primary lcfa-button-with-icon" type="submit">' . $this->get_icon_svg('activity') . '<span>' . esc_html__('I reopened Claude Desktop — continue', 'livecanvas-forge-ai') . '</span></button>';
+            echo '</form>';
+            echo '</section>';
+            return;
+        }
 
         echo '<section id="lcfa-after-setup-command" class="lcfa-copy-next" tabindex="-1" hidden>';
         echo '<div class="lcfa-copy-next__heading">' . $this->get_icon_svg('check-circle') . '<div>';
@@ -5725,40 +5894,57 @@ final class LCFA_Admin {
             && (string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter';
         $is_opencode_local = $this->normalize_connection_client((string) ($bundle['client'] ?? '')) === 'opencode'
             && (($bundle['mode'] ?? 'local') === 'local');
+        $is_claude_desktop = $this->is_claude_desktop_bundle($bundle);
 
         if ($action === 'install') {
             return [
                 'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Alternative', 'livecanvas-forge-ai'),
-                'title'       => __('Write the config for me', 'livecanvas-forge-ai'),
-                'description' => $is_codex_local
-                    ? __('AI Bridge writes the generated Codex helper directly into this workspace now. This is the fastest path when the browser can reach the project folder.', 'livecanvas-forge-ai')
-                    : __('AI Bridge writes the generated client config directly into this workspace now, so you can verify the connection immediately after.', 'livecanvas-forge-ai'),
-                'note'        => __('Optional: enable the backup toggle first if you want to preserve the current file before overwrite.', 'livecanvas-forge-ai'),
+                'title'       => $is_claude_desktop ? __('Configure Claude Desktop for me', 'livecanvas-forge-ai') : __('Write the config for me', 'livecanvas-forge-ai'),
+                'description' => $is_claude_desktop
+                    ? __('AI Bridge safely merges only livecanvas-forge into the Claude Desktop app config.', 'livecanvas-forge-ai')
+                    : ($is_codex_local
+                    ? __('AI Bridge safely merges livecanvas-forge into this project’s .codex/config.toml.', 'livecanvas-forge-ai')
+                    : __('AI Bridge safely merges only livecanvas-forge into this project’s client config.', 'livecanvas-forge-ai')),
+                'note'        => $is_claude_desktop
+                    ? __('Existing preferences and connectors are preserved, an automatic backup is created, and the config is saved with private 0600 permissions.', 'livecanvas-forge-ai')
+                    : __('Existing servers are preserved, an automatic backup is created, and the config is saved with private 0600 permissions.', 'livecanvas-forge-ai'),
             ];
         }
 
         if ($action === 'copy_command') {
             return [
                 'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Alternative', 'livecanvas-forge-ai'),
-                'title'       => ($is_codex_local || $is_codex_remote_adapter) ? __('Copy and run the Codex shortcut', 'livecanvas-forge-ai') : __('Copy the setup command', 'livecanvas-forge-ai'),
-                'description' => $is_codex_remote_adapter
+                'title'       => $is_claude_desktop
+                    ? __('Copy the Claude Desktop config', 'livecanvas-forge-ai')
+                    : (($is_codex_local || $is_codex_remote_adapter) ? __('Copy and run the Codex shortcut', 'livecanvas-forge-ai') : __('Copy the setup command', 'livecanvas-forge-ai')),
+                'description' => $is_claude_desktop
+                    ? __('Merge only the livecanvas-forge entry under mcpServers in the existing Claude Desktop app config.', 'livecanvas-forge-ai')
+                    : ($is_codex_remote_adapter
                     ? __('Run it once on the machine where Codex runs. It registers the WordPress MCP Adapter remote proxy with Codex.', 'livecanvas-forge-ai')
                     : ($is_codex_local
                     ? __('Run it once from this exact project root, then return here and move to the smoke test.', 'livecanvas-forge-ai')
-                    : __('Use this if you want to execute the setup manually from your coding agent shell.', 'livecanvas-forge-ai')),
-                'note'        => $is_codex_remote_adapter
+                    : __('Use this if you want to execute the setup manually from your coding agent shell.', 'livecanvas-forge-ai'))),
+                'note'        => $is_claude_desktop
+                    ? __('Preserve the existing preferences block and every unrelated connector, then reopen Claude Desktop.', 'livecanvas-forge-ai')
+                    : ($is_codex_remote_adapter
                     ? __('Best for remote WordPress because no local WordPress filesystem is required.', 'livecanvas-forge-ai')
-                    : __('Best when the browser cannot write into the host workspace directly.', 'livecanvas-forge-ai'),
+                    : __('Best when the browser cannot write into the host workspace directly.', 'livecanvas-forge-ai')),
             ];
         }
 
         return [
             'eyebrow'     => $is_primary ? __('Recommended', 'livecanvas-forge-ai') : __('Manual option', 'livecanvas-forge-ai'),
-            'title'       => $is_opencode_local ? __('Download the OpenCode config', 'livecanvas-forge-ai') : __('Download and place it yourself', 'livecanvas-forge-ai'),
-            'description' => $is_opencode_local
+            'title'       => $is_claude_desktop
+                ? __('Download the Claude Desktop snippet', 'livecanvas-forge-ai')
+                : ($is_opencode_local ? __('Download the OpenCode config', 'livecanvas-forge-ai') : __('Download and place it yourself', 'livecanvas-forge-ai')),
+            'description' => $is_claude_desktop
+                ? __('Use this fallback when WordPress cannot update the app config. Merge only livecanvas-forge under mcpServers and preserve the existing preferences block.', 'livecanvas-forge-ai')
+                : ($is_opencode_local
                 ? __('Save the generated OpenCode config and place it in the project root before you switch back to OpenCode.', 'livecanvas-forge-ai')
-                : __('Use this if you prefer a manual install, want to move the bundle to another machine, or do not want the browser to write inside the workspace.', 'livecanvas-forge-ai'),
-            'note'        => __('After the file is in place, come back here and run the smoke test.', 'livecanvas-forge-ai'),
+                : __('Use this if you prefer a manual install, want to move the bundle to another machine, or do not want the browser to write inside the workspace.', 'livecanvas-forge-ai')),
+            'note'        => $is_claude_desktop
+                ? __('Save the merged config, reopen Claude Desktop, then call get_connection_handoff from the normal Chat screen.', 'livecanvas-forge-ai')
+                : __('After the file is in place, come back here and run the smoke test.', 'livecanvas-forge-ai'),
         ];
     }
 
@@ -5766,13 +5952,13 @@ final class LCFA_Admin {
         $is_codex = $this->normalize_connection_client((string) ($bundle['client'] ?? '')) === 'codex';
         if ($is_codex) {
             $workspace_root = trim((string) ($bundle['workspace_root'] ?? ''));
-            $helper_path = '';
+            $config_path = '';
             $workspace_files = is_array($bundle['workspace_files'] ?? null) ? $bundle['workspace_files'] : [];
             if (isset($workspace_files[0]) && is_array($workspace_files[0])) {
-                $helper_path = trim((string) ($workspace_files[0]['path'] ?? ''));
+                $config_path = trim((string) ($workspace_files[0]['path'] ?? ''));
             }
-            if ($helper_path === '' && $workspace_root !== '') {
-                $helper_path = rtrim($workspace_root, '/\\') . '/livecanvas-forge.codex.sh';
+            if ($config_path === '' && $workspace_root !== '') {
+                $config_path = rtrim($workspace_root, '/\\') . '/.codex/config.toml';
             }
 
             echo '<div class="lcfa-codex-smoke-guide">';
@@ -5780,24 +5966,16 @@ final class LCFA_Admin {
             echo '<ol>';
             if ((string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter') {
                 echo '<li>' . esc_html__('Run the generated Codex shortcut on the machine where Codex runs. It starts the WordPress MCP Adapter remote proxy.', 'livecanvas-forge-ai') . '</li>';
-            } elseif ($workspace_root !== '') {
-                echo '<li>' . esc_html__('Open Terminal in this project root:', 'livecanvas-forge-ai') . ' <code>' . esc_html($workspace_root) . '</code></li>';
             } else {
-                echo '<li>' . esc_html__('Open Terminal in the WordPress project root selected in this wizard.', 'livecanvas-forge-ai') . '</li>';
+                echo '<li>' . esc_html__('Open this agent project folder in VS Code or Cursor:', 'livecanvas-forge-ai') . ' <code>' . esc_html($workspace_root) . '</code></li>';
+                echo '<li>' . esc_html__('Confirm the project MCP config exists at:', 'livecanvas-forge-ai') . ' <code>' . esc_html($config_path) . '</code></li>';
             }
-            if ($helper_path !== '') {
-                echo '<li>' . esc_html__('Run the generated helper:', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('sh "' . $helper_path . '"') . '</li>';
-            } elseif ((string) ($bundle['connection_strategy'] ?? '') === 'remote-mcp-adapter') {
-                echo '<li>' . esc_html__('If you downloaded the helper, run it from any trusted local folder; it does not need the WordPress filesystem.', 'livecanvas-forge-ai') . '</li>';
-            } else {
-                echo '<li>' . esc_html__('Run the generated livecanvas-forge.codex.sh helper from that project root.', 'livecanvas-forge-ai') . '</li>';
-            }
-            echo '<li>' . esc_html__('Verify that Codex can see the MCP server:', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('codex mcp list') . ' ' . esc_html__('or', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('/Applications/Codex.app/Contents/Resources/codex mcp list') . '</li>';
-            echo '<li>' . esc_html__('The command output must show:', 'livecanvas-forge-ai') . ' <code>livecanvas-forge</code>. ' . esc_html__('If the output does not show livecanvas-forge, the connection is not ready yet.', 'livecanvas-forge-ai') . '</li>';
+            echo '<li>' . esc_html__('Open the Codex sidebar and ask it to call get_connection_handoff. Approve the matching request in WordPress if prompted.', 'livecanvas-forge-ai') . '</li>';
+            echo '<li>' . esc_html__('Optional terminal check from the same project folder:', 'livecanvas-forge-ai') . ' ' . $this->render_inline_copy_command('codex mcp list') . '</li>';
             echo '</ol>';
             echo '<div class="lcfa-codex-smoke-alert">';
-            echo '<strong>' . esc_html__('Important', 'livecanvas-forge-ai') . '</strong>';
-            echo '<span>' . esc_html__('Reopen Codex if the registration was added while Codex was already open, then return here and run the smoke test below.', 'livecanvas-forge-ai') . '</span>';
+            echo '<strong>' . esc_html__('Back in WordPress', 'livecanvas-forge-ai') . '</strong>';
+            echo '<span>' . esc_html__('Run the smoke test only after Codex has completed the handoff. Writing the config alone does not make the connection Ready.', 'livecanvas-forge-ai') . '</span>';
             echo '</div>';
             echo '</div>';
         }
@@ -5905,7 +6083,12 @@ final class LCFA_Admin {
         echo '<div class="lcfa-guide">';
         echo '<h3>' . esc_html__('Generated bundle', 'livecanvas-forge-ai') . '</h3>';
         if ($is_claude_desktop) {
-            echo '<p class="lcfa-guide-copy">' . esc_html__('For Claude Desktop, this JSON is a snippet. Merge livecanvas-forge into ~/Library/Application Support/Claude/claude_desktop_config.json under mcpServers. Do not paste it as a second top-level JSON object and do not replace your existing preferences block.', 'livecanvas-forge-ai') . '</p>';
+            if ((string) ($bundle['install_target'] ?? '') === 'claude_desktop' && !empty($bundle['claude_desktop_config_path'])) {
+                echo '<p class="lcfa-guide-copy">' . esc_html__('The recommended action safely merges livecanvas-forge into the Claude Desktop app config, preserving existing preferences and connectors. The generated workspace JSON remains available as a manual fallback.', 'livecanvas-forge-ai') . '</p>';
+                echo '<p class="lcfa-guide-copy"><strong>' . esc_html__('Direct install target', 'livecanvas-forge-ai') . ':</strong> <code>' . esc_html((string) $bundle['claude_desktop_config_path']) . '</code></p>';
+            } else {
+                echo '<p class="lcfa-guide-copy">' . esc_html__('For Claude Desktop, this JSON is a snippet. Merge livecanvas-forge into ~/Library/Application Support/Claude/claude_desktop_config.json under mcpServers. Do not paste it as a second top-level JSON object and do not replace your existing preferences block.', 'livecanvas-forge-ai') . '</p>';
+            }
         }
         echo '<div class="lcfa-agent-guide__bundle-layout">';
 
@@ -5961,7 +6144,7 @@ final class LCFA_Admin {
 
         echo '<div class="lcfa-agent-guide__window">';
         echo '<h3>' . esc_html__('Environment variables', 'livecanvas-forge-ai') . '</h3>';
-        $this->render_code_block_explanation(__('Defines the REST endpoint, token, site URL, and local project root passed to the MCP server. These values must match this WordPress install, otherwise the agent can connect to the wrong site or fail authorization.', 'livecanvas-forge-ai'));
+        $this->render_code_block_explanation(__('Defines the site URL, REST endpoint, secure-pairing metadata, the agent project folder, and the separate WordPress root passed to the MCP server. The agent project folder is the directory opened in Codex; the WordPress root contains wp-config.php. These values must match this project and WordPress install, otherwise the agent can connect to the wrong site or fail authorization.', 'livecanvas-forge-ai'));
         $this->render_code_block($this->build_environment_block((array) ($bundle['environment'] ?? [])), [
             'language'   => 'bash',
             'label'      => __('Environment', 'livecanvas-forge-ai'),
@@ -6522,7 +6705,7 @@ final class LCFA_Admin {
             ],
             'claude' => [
                 'label' => __('Claude', 'livecanvas-forge-ai'),
-                'intro' => __('Use this if Claude is your main agent. Choose whether you are connecting through Claude Desktop App or through the Command Line Interface.', 'livecanvas-forge-ai'),
+                'intro' => __('Use this if Claude is your main agent. Choose Claude Desktop for the chat app, or Claude Code for a project-scoped coding session.', 'livecanvas-forge-ai'),
                 'modes' => [
                     'desktop_app' => [
                         'mode_key'       => 'desktop_app',
@@ -6546,13 +6729,13 @@ final class LCFA_Admin {
                     ],
                     'cli' => [
                         'mode_key'       => 'cli',
-                        'label'          => __('Command Line Interface', 'livecanvas-forge-ai'),
-                        'summary'        => __('Use this when Claude runs from the terminal. Register the MCP server once, verify it, then keep working from the same project root.', 'livecanvas-forge-ai'),
+                        'label'          => __('Claude Code (CLI)', 'livecanvas-forge-ai'),
+                        'summary'        => __('Use this for Claude Code. Keep .mcp.json in the agent project root, approve the project MCP server, then complete the handoff from the same folder.', 'livecanvas-forge-ai'),
                         'steps'          => [
-                            __('Open a terminal in the same workspace as your WordPress project.', 'livecanvas-forge-ai'),
-                            __('Run the Claude CLI shortcut below.', 'livecanvas-forge-ai'),
-                            __('Verify the MCP registration with claude mcp list.', 'livecanvas-forge-ai'),
-                            __('Run get_snapshot before requesting any writes.', 'livecanvas-forge-ai'),
+                            __('Open the agent project folder, not the nested app/public WordPress root.', 'livecanvas-forge-ai'),
+                            __('Let AI Bridge merge livecanvas-forge into the project .mcp.json, or run the project-scoped Claude Code shortcut below.', 'livecanvas-forge-ai'),
+                            __('Approve the project MCP server when Claude Code asks, then call get_connection_handoff.', 'livecanvas-forge-ai'),
+                            __('Return to WordPress and run the smoke test before requesting writes.', 'livecanvas-forge-ai'),
                         ],
                         'note'           => $wp_root_note,
                         'shortcut_title' => __('Claude CLI shortcut', 'livecanvas-forge-ai'),

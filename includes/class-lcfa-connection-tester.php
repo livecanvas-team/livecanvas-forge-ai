@@ -20,9 +20,13 @@ final class LCFA_Connection_Tester {
 
         if ($mode === 'remote') {
             $checks['remote_rest'] = $this->test_remote_rest($connections);
+            if ((string) ($connections['connection_strategy'] ?? '') === 'ai-bridge-session') {
+                $checks['agent_handoff'] = $this->test_verified_session_handoff($connections, 'remote');
+            }
         } elseif ($mode === 'local') {
             $checks['local_rest'] = $this->test_local_rest($connections);
             $checks['local_mcp']  = $this->test_local_mcp();
+            $checks['agent_handoff'] = $this->test_verified_session_handoff($connections, 'local');
             $client_registration = $this->test_local_client_registration($connections);
             if (is_array($client_registration)) {
                 $checks['client_registration'] = $client_registration;
@@ -52,6 +56,73 @@ final class LCFA_Connection_Tester {
                 ? sprintf(__('Connection checks completed. %1$d successful, %2$d skipped.', 'livecanvas-forge-ai'), $successful, $skipped)
                 : sprintf(__('Connection checks found %1$d blocking issue(s).', 'livecanvas-forge-ai'), count($blocking_failures)),
             'checks'     => $checks,
+        ];
+    }
+
+    private function test_verified_session_handoff(array $connections, string $mode): array {
+        $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
+        if ($client === 'claude-code') {
+            $client = 'claude';
+        }
+
+        if (!class_exists('LCFA_MCP_Session_Manager', false) || !method_exists('LCFA_MCP_Session_Manager', 'get_latest_verified_session')) {
+            return [
+                'label'   => __('Coding-agent handoff', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => true,
+                'message' => __('Session handoff diagnostics are unavailable in this runtime.', 'livecanvas-forge-ai'),
+                'details' => [],
+            ];
+        }
+
+        if ($client === '') {
+            return [
+                'label'   => __('Coding-agent handoff', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('Choose a coding agent before running the smoke test.', 'livecanvas-forge-ai'),
+                'details' => [],
+            ];
+        }
+
+        $session = LCFA_MCP_Session_Manager::get_latest_verified_session($client, $mode);
+        if ($session === []) {
+            return [
+                'label'   => __('Coding-agent handoff', 'livecanvas-forge-ai'),
+                'ok'      => false,
+                'skipped' => false,
+                'message' => __('The selected coding agent has not completed get_connection_handoff yet. Approve its pairing request, retry the handoff, then run this smoke test again.', 'livecanvas-forge-ai'),
+                'details' => [
+                    'client' => $client,
+                    'connection_mode' => $mode,
+                ],
+            ];
+        }
+
+        $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.5';
+        $package_detected = sanitize_text_field((string) ($session['mcp_package_version'] ?? ''));
+        $package_matches = $package_detected !== '' && hash_equals($package_expected, $package_detected);
+
+        return [
+            'label'   => __('Coding-agent handoff', 'livecanvas-forge-ai'),
+            'ok'      => $package_matches,
+            'skipped' => false,
+            'message' => $package_matches
+                ? __('The selected coding agent completed a verified AI Bridge handoff with the expected MCP package.', 'livecanvas-forge-ai')
+                : sprintf(
+                    __('The selected coding agent used MCP package %1$s, but this AI Bridge release requires %2$s. Reload or restart the agent, call get_connection_handoff again, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                    $package_detected !== '' ? $package_detected : __('unknown', 'livecanvas-forge-ai'),
+                    $package_expected
+                ),
+            'details' => [
+                'session_id' => (string) ($session['session_id'] ?? ''),
+                'client' => (string) ($session['client'] ?? $client),
+                'connection_mode' => (string) ($session['connection_mode'] ?? $mode),
+                'last_seen_at' => (string) ($session['last_seen_at'] ?? ''),
+                'mcp_package_version' => $package_detected,
+                'mcp_package_expected' => $package_expected,
+                'package_version_matches' => $package_matches,
+            ],
         ];
     }
 
@@ -164,7 +235,7 @@ final class LCFA_Connection_Tester {
 
             if ($active !== []) {
                 $session = $active[0];
-                $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.4';
+                $package_expected = defined('LCFA_MCP_PACKAGE_VERSION') ? (string) LCFA_MCP_PACKAGE_VERSION : '0.2.0-beta.5';
                 $package_detected = sanitize_text_field((string) ($session['mcp_package_version'] ?? ''));
                 $package_matches = $package_detected !== '' && hash_equals($package_expected, $package_detected);
                 return [
@@ -358,21 +429,19 @@ final class LCFA_Connection_Tester {
             ];
         }
 
-        $config_path = $this->resolve_codex_config_path();
-        $workspace_root = trim((string) ($connections['workspace_root'] ?? ''));
+        $config_path = $this->resolve_codex_config_path($connections);
+        $wordpress_root = trim((string) ($connections['wordpress_root'] ?? ''));
         $rest_base = trim((string) ($connections['local_bridge_url'] ?? ''));
         if ($rest_base === '') {
             $rest_base = rest_url('lcfa/v1/');
         }
         $rest_base = trailingslashit($rest_base);
-        $mcp_token = trim((string) ($connections['mcp_token'] ?? ''));
-
         if ($config_path === '') {
             return [
                 'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => __('Codex config path could not be resolved. Run livecanvas-forge.codex.sh from the project root, reopen Codex, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'message' => __('Codex project config path could not be resolved. Set the agent project folder, write .codex/config.toml, reopen the project, then rerun the smoke test.', 'livecanvas-forge-ai'),
                 'details' => [],
             ];
         }
@@ -382,7 +451,7 @@ final class LCFA_Connection_Tester {
                 'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => sprintf(__('Codex config was not found at %s. Run livecanvas-forge.codex.sh from the project root, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'), $config_path),
+                'message' => sprintf(__('Codex project config was not found at %s. Write the generated TOML there, reopen the project in VS Code or Cursor, then rerun the smoke test.', 'livecanvas-forge-ai'), $config_path),
                 'details' => [
                     'config_path' => $config_path,
                 ],
@@ -395,7 +464,7 @@ final class LCFA_Connection_Tester {
                 'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => __('Codex config is empty. Run livecanvas-forge.codex.sh from the project root, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'message' => __('Codex project config is empty. Merge the generated livecanvas-forge TOML section, reopen the project, then rerun the smoke test.', 'livecanvas-forge-ai'),
                 'details' => [
                     'config_path' => $config_path,
                 ],
@@ -407,7 +476,7 @@ final class LCFA_Connection_Tester {
                 'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => __('Codex does not contain the livecanvas-forge MCP server yet. Run livecanvas-forge.codex.sh, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'message' => __('Codex does not contain the livecanvas-forge MCP server yet. Merge the generated project TOML section, reopen the project, then rerun the smoke test.', 'livecanvas-forge-ai'),
                 'details' => [
                     'config_path' => $config_path,
                 ],
@@ -415,20 +484,21 @@ final class LCFA_Connection_Tester {
         }
 
         $rest_matches = $rest_base === '' || strpos($contents, $rest_base) !== false;
-        $workspace_matches = $workspace_root === '' || strpos($contents, $workspace_root) !== false;
-        $token_matches = $mcp_token === '' || strpos($contents, $mcp_token) !== false;
+        $wordpress_root_matches = $wordpress_root === '' || strpos($contents, $wordpress_root) !== false;
+        $pairing_safe = strpos($contents, 'LCFA_MCP_TOKEN') === false
+            && strpos($contents, 'WP_API_PASSWORD') === false;
 
-        if (!$rest_matches || !$workspace_matches || !$token_matches) {
+        if (!$rest_matches || !$wordpress_root_matches || !$pairing_safe) {
             return [
                 'label'   => __('Codex MCP registration', 'livecanvas-forge-ai'),
                 'ok'      => false,
                 'skipped' => false,
-                'message' => __('Codex has a stale livecanvas-forge registration. Run the new livecanvas-forge.codex.sh helper, verify with codex mcp list, reopen Codex if needed, then rerun the smoke test.', 'livecanvas-forge-ai'),
+                'message' => __('Codex has a stale or legacy livecanvas-forge registration. Rewrite the project config with secure pairing, reopen the project, then rerun the smoke test.', 'livecanvas-forge-ai'),
                 'details' => [
                     'config_path'       => $config_path,
                     'rest_base_matches' => $rest_matches,
-                    'workspace_matches' => $workspace_matches,
-                    'token_matches'     => $token_matches,
+                    'wordpress_root_matches' => $wordpress_root_matches,
+                    'pairing_safe'           => $pairing_safe,
                 ],
             ];
         }
@@ -449,13 +519,13 @@ final class LCFA_Connection_Tester {
             || strpos($contents, 'livecanvas-forge') !== false;
     }
 
-    private function resolve_codex_config_path(): string {
-        $home = (string) getenv('HOME');
-        if ($home === '') {
-            return '';
+    private function resolve_codex_config_path(array $connections): string {
+        $workspace_root = rtrim(trim((string) ($connections['workspace_root'] ?? '')), '/\\');
+        if ($workspace_root !== '') {
+            return $workspace_root . '/.codex/config.toml';
         }
 
-        return rtrim($home, '/\\') . '/.codex/config.toml';
+        return '';
     }
 
     private function resolve_claude_desktop_config_path(): string {

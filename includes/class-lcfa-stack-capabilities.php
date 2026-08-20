@@ -4,7 +4,7 @@ defined('ABSPATH') || exit;
 
 final class LCFA_Stack_Capabilities {
     private const SCHEMA_VERSION = 'stack-capabilities.v1';
-    private const PROFILE_VERSION = '2026.08.2';
+    private const PROFILE_VERSION = '2026.08.3';
 
     public function evaluate(array $snapshot, ?array $runtime = null): array {
         $framework = sanitize_key((string) ($snapshot['detected_framework'] ?? 'unknown'));
@@ -164,7 +164,7 @@ final class LCFA_Stack_Capabilities {
             'wordpress' => [
                 'operational_min' => '6.8.0',
                 'tested_min'      => '6.8.0',
-                'tested_max'      => '8.0.0',
+                'tested_max'      => '7.2.0',
             ],
             'livecanvas' => [
                 'operational_min' => '4.0.0',

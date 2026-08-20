@@ -536,7 +536,11 @@ lcfa_assert_same('connection-handoff.v1', $connection_handoff['schema_version'] 
 lcfa_assert_same('codex', $connection_handoff['client'] ?? '', 'studio connection handoff should expose selected agent client');
 lcfa_assert_same('remote', $connection_handoff['mode'] ?? '', 'studio connection handoff should expose selected connection mode');
 lcfa_assert_same('wordpress_mcp_adapter', $connection_handoff['transport'] ?? '', 'studio connection handoff should prefer WordPress MCP Adapter transport for remote Codex');
-lcfa_assert_same('0.2.0-beta.4', $connection_handoff['mcp_package_expected'] ?? '', 'studio connection handoff should expose the exact expected beta MCP package version');
+lcfa_assert_true(!empty($connection_handoff['transport_ready']), 'remote Adapter handoff should mark the selected transport ready');
+lcfa_assert_true(!empty($connection_handoff['mcp_adapter_required']), 'remote Adapter handoff should state that the native MCP Adapter is required');
+lcfa_assert_true(!empty($connection_handoff['mcp_adapter_ready']), 'remote Adapter handoff should mark its required adapter ready');
+lcfa_assert_true(!empty($connection_handoff['native_mcp_adapter_ready']), 'remote Adapter handoff should expose native Adapter readiness separately');
+lcfa_assert_same('0.2.0-beta.5', $connection_handoff['mcp_package_expected'] ?? '', 'studio connection handoff should expose the exact expected beta MCP package version');
 lcfa_assert_same('', $connection_handoff['mcp_package_detected'] ?? '', 'studio connection handoff should leave detected MCP version empty when the request does not report one');
 lcfa_assert_same(null, $connection_handoff['package_version_matches'] ?? null, 'studio connection handoff should use an unknown match state when no MCP package version is reported');
 lcfa_assert_same('none', $connection_handoff['theme_library_build_state']['status'] ?? '', 'studio connection handoff should expose Theme Library build readiness');
@@ -547,6 +551,34 @@ lcfa_assert_true(str_contains($connection_handoff['agent_start_prompt'] ?? '', '
 lcfa_assert_true(str_contains($connection_handoff['agent_start_prompt'] ?? '', 'livecanvas-forge-ai/get-agent-handoff-package'), 'studio connection handoff prompt should mention the full handoff package as a follow-up');
 lcfa_assert_true(str_contains($connection_handoff['agent_start_prompt'] ?? '', 'get_snapshot'), 'studio connection handoff prompt should still instruct read-only smoke checks');
 lcfa_assert_true(!empty($data['operator_briefing']['agent_prompt']) && str_contains($data['operator_briefing']['agent_prompt'], 'livecanvas-forge-ai/get-connection-handoff'), 'studio briefing should reuse the connection handoff prompt');
+
+$connection_handoff_method = new ReflectionMethod(LCFA_Rest_Api::class, 'build_studio_connection_handoff');
+if (PHP_VERSION_ID < 80100) {
+    $connection_handoff_method->setAccessible(true);
+}
+$local_session_handoff = $connection_handoff_method->invoke($api, [
+    'preferred_client' => 'claude',
+    'connection_mode' => 'local',
+    'connection_status' => 'ready',
+    'connection_current_step' => 'ready',
+], [
+    'framework' => 'picowind',
+    'setup_complete' => true,
+    'mcp_adapter_ready' => false,
+    'public_writes' => 1,
+    'run_errors' => 0,
+], [
+    'available' => false,
+], [
+    'session_id' => 'sess_local_claude',
+    'project_label' => 'Local Claude Desktop',
+    'scopes' => ['read', 'preview', 'write'],
+], new WP_REST_Request());
+lcfa_assert_same('ai_bridge_session', $local_session_handoff['transport'] ?? '', 'local paired Claude handoff should identify the secure AI Bridge session transport');
+lcfa_assert_true(!empty($local_session_handoff['transport_ready']), 'an authenticated local pairing request should mark the selected transport ready');
+lcfa_assert_true(empty($local_session_handoff['mcp_adapter_required']), 'local Claude Desktop pairing should not require the native WordPress MCP Adapter');
+lcfa_assert_true(!empty($local_session_handoff['mcp_adapter_ready']), 'connection-scoped mcp_adapter_ready should be true when the selected local MCP transport is ready');
+lcfa_assert_true(empty($local_session_handoff['native_mcp_adapter_ready']), 'local handoff should still report that the optional native WordPress MCP Adapter is absent');
 $block_pattern_library = is_array($data['block_pattern_library'] ?? null) ? $data['block_pattern_library'] : [];
 lcfa_assert_same('block-pattern-library.v1', $block_pattern_library['schema_version'] ?? '', 'studio block pattern library should expose schema version');
 lcfa_assert_same('wordpress_block_patterns', $block_pattern_library['export']['format'] ?? '', 'studio block pattern library should expose export format');

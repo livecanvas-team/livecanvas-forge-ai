@@ -96,6 +96,25 @@ async function run() {
   )
 
   const tools = registry.list()
+  const standardAnnotationKeys = new Set([
+    'title',
+    'readOnlyHint',
+    'destructiveHint',
+    'idempotentHint',
+    'openWorldHint'
+  ])
+
+  for (const tool of tools) {
+    const unsupportedAnnotationKeys = Object.keys(tool.annotations || {})
+      .filter((key) => !standardAnnotationKeys.has(key))
+
+    assert.deepEqual(
+      unsupportedAnnotationKeys,
+      [],
+      `${tool.name} should keep extension metadata out of MCP ToolAnnotations`
+    )
+  }
+
   const storeThemeJson = tools.find((tool) => tool.name === 'store_windpress_theme_json')
 
   assert.ok(storeThemeJson, 'store_windpress_theme_json should be registered')
@@ -128,6 +147,40 @@ async function run() {
     /readiness summary/i,
     'get_handoff_summary should describe the readiness summary'
   )
+
+  const compactLocalPicowind = createToolRegistry(
+    createNoopClient(),
+    createNoopThemeFiles(),
+    createNoopWindPressCompiler(),
+    createNoopPicostrapCompiler(),
+    visualRuntime,
+    null,
+    { toolProfile: 'compact', connectionMode: 'local', framework: 'picowind' }
+  ).list()
+  const compactLocalNames = compactLocalPicowind.map((tool) => tool.name)
+
+  assert.ok(compactLocalPicowind.length <= 64, 'compact local Picowind catalog should stay within common provider tool limits')
+  assert.ok(compactLocalNames.includes('get_connection_handoff'), 'compact catalog should keep the secure handoff tool')
+  assert.ok(compactLocalNames.includes('get_snapshot'), 'compact catalog should keep the site snapshot tool')
+  assert.ok(compactLocalNames.includes('write_theme_file'), 'compact local catalog should keep local theme writes')
+  assert.ok(compactLocalNames.includes('restore_theme_backup'), 'compact local catalog should keep rollback support')
+  assert.ok(!compactLocalNames.includes('theme_file_write'), 'compact local catalog should hide the remote theme-write duplicate')
+  assert.ok(!compactLocalNames.includes('compile_picostrap_bundle'), 'compact Picowind catalog should hide Picostrap-only tools')
+
+  const compactRemotePicowind = createToolRegistry(
+    createNoopClient(),
+    createNoopThemeFiles(),
+    createNoopWindPressCompiler(),
+    createNoopPicostrapCompiler(),
+    visualRuntime,
+    null,
+    { toolProfile: 'compact', connectionMode: 'remote', framework: 'picowind' }
+  ).list()
+  const compactRemoteNames = compactRemotePicowind.map((tool) => tool.name)
+
+  assert.ok(compactRemotePicowind.length <= 64, 'compact remote Picowind catalog should stay within common provider tool limits')
+  assert.ok(compactRemoteNames.includes('theme_file_write'), 'compact remote catalog should keep REST-backed theme writes')
+  assert.ok(!compactRemoteNames.includes('write_theme_file'), 'compact remote catalog should hide unavailable local filesystem writes')
 
   const connectionHandoff = tools.find((tool) => tool.name === 'get_connection_handoff')
   assert.ok(connectionHandoff, 'get_connection_handoff should be registered')
@@ -197,7 +250,7 @@ async function run() {
   assert.ok(contentPatchPreview, 'content_patch_preview should be registered')
   assert.ok(contentPatchPreview.inputSchema.properties.selector, 'content_patch_preview should expose selector targeting')
   assert.ok(contentPatchPreview.outputSchema, 'content_patch_preview should expose outputSchema metadata')
-  assert.equal(contentPatchPreview.annotations.lcfaCacheScope, 'site_session', 'content_patch_preview should expose cache scope metadata')
+  assert.equal(contentPatchPreview._meta['io.livecanvas/cache-scope'], 'site_session', 'content_patch_preview should expose cache scope metadata in the MCP extension field')
 
   const contentPatchApply = tools.find((tool) => tool.name === 'content_patch_apply')
   assert.ok(contentPatchApply, 'content_patch_apply should be registered')
@@ -222,7 +275,7 @@ async function run() {
 
   const wpDebug = tools.find((tool) => tool.name === 'wp_debug')
   assert.ok(wpDebug, 'wp_debug should be registered')
-  assert.equal(wpDebug.annotations.lcfaCacheScope, 'site_session', 'wp_debug should be cache-scoped for the session')
+  assert.equal(wpDebug._meta['io.livecanvas/cache-scope'], 'site_session', 'wp_debug should be cache-scoped for the session')
 
   const visualCheck = tools.find((tool) => tool.name === 'visual_check')
   assert.ok(visualCheck, 'visual_check should be registered')

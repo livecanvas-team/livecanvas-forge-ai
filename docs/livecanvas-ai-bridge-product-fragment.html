@@ -1,0 +1,1520 @@
+<style>
+    #lcab-product {
+        --lcab-ink: #09070d;
+        --lcab-plum: #14071d;
+        --lcab-panel: #17121f;
+        --lcab-panel-2: #21182a;
+        --lcab-line: #44364f;
+        --lcab-text: #faf8fc;
+        --lcab-muted: #cbc4d1;
+        --lcab-cyan: #26c6da;
+        --lcab-cyan-dark: #159eb0;
+        --lcab-pink: #ec3e8d;
+        --lcab-violet: #712cf9;
+        overflow: hidden;
+        background: var(--lcab-ink);
+        color: var(--lcab-text);
+        font-family: var(--bs-body-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+        line-height: 1.55;
+    }
+
+    #lcab-product *,
+    #lcab-product *::before,
+    #lcab-product *::after {
+        box-sizing: border-box;
+        letter-spacing: 0;
+    }
+
+    #lcab-product a {
+        color: inherit;
+    }
+
+    #lcab-product a:focus-visible,
+    #lcab-product button:focus-visible {
+        outline: 3px solid #8cebf3;
+        outline-offset: 4px;
+    }
+
+    #lcab-product h1,
+    #lcab-product h2,
+    #lcab-product h3,
+    #lcab-product p {
+        letter-spacing: 0;
+    }
+
+    #lcab-product h1,
+    #lcab-product h2,
+    #lcab-product h3 {
+        text-wrap: balance;
+    }
+
+    #lcab-product p {
+        text-wrap: pretty;
+    }
+
+    .lcab-container {
+        width: min(calc(100% - 3rem), 1180px);
+        margin-inline: auto;
+    }
+
+    .lcab-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0 0 1.25rem;
+        color: #f6c2da;
+        font-size: 0.9rem;
+        font-weight: 750;
+    }
+
+    .lcab-kicker::before {
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: var(--lcab-pink);
+        content: "";
+    }
+
+    .lcab-hero {
+        position: relative;
+        display: flex;
+        min-height: 720px;
+        height: 86svh;
+        max-height: 900px;
+        align-items: center;
+        overflow: hidden;
+        border-bottom: 1px solid var(--lcab-line);
+        background: var(--lcab-plum);
+    }
+
+    .lcab-mask-2 {
+        -webkit-mask-image:
+            linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to left, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to top, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%);
+        mask-image:
+            linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to left, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to top, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%),
+            linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.2) 16%, rgba(0, 0, 0, 0.72) 34%, #000 50%, #000 100%);
+        -webkit-mask-composite: source-in;
+        mask-composite: intersect;
+    }
+
+    .lcab-hero__video,
+    .lcab-hero__poster {
+        position: absolute;
+        top: 4%;
+        right: -2%;
+        width: min(82vw, 1280px);
+        height: 92%;
+        object-fit: contain;
+        object-position: right center;
+    }
+
+    .lcab-hero__video {
+        opacity: 0.92;
+    }
+
+    .lcab-hero__poster {
+        display: none;
+    }
+
+    .lcab-hero::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background: linear-gradient(90deg, rgba(9, 7, 13, 0.99) 0%, rgba(9, 7, 13, 0.94) 38%, rgba(9, 7, 13, 0.48) 61%, rgba(9, 7, 13, 0.08) 80%, transparent 100%);
+        pointer-events: none;
+    }
+
+    .lcab-hero__content {
+        position: relative;
+        z-index: 2;
+        width: min(670px, 58%);
+        padding-block: clamp(5rem, 9vw, 8rem);
+    }
+
+    #lcab-product h1 {
+        max-width: 10ch;
+        margin: 0;
+        font-size: clamp(4rem, 7.5vw, 5.75rem);
+        line-height: 0.94;
+        font-weight: 740;
+    }
+
+    .lcab-hero__lead {
+        max-width: 610px;
+        margin: 1.55rem 0 0;
+        color: #e5e0e8;
+        font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+    }
+
+    .lcab-hero__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem 1.4rem;
+        margin-top: 1.4rem;
+        color: #d4ced9;
+        font-size: 0.92rem;
+    }
+
+    .lcab-hero__meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .lcab-hero__meta svg {
+        width: 1rem;
+        height: 1rem;
+        color: var(--lcab-cyan);
+    }
+
+    .lcab-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin-top: 2rem;
+    }
+
+    #lcab-product .lcab-btn {
+        display: inline-flex;
+        min-height: 3.3rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        padding: 0 1.3rem;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        appearance: none;
+        text-decoration: none !important;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    #lcab-product .lcab-btn svg {
+        width: 1.1rem;
+        height: 1.1rem;
+        flex: 0 0 auto;
+    }
+
+    #lcab-product .lcab-btn:hover {
+        transform: translateY(-2px);
+        text-decoration: none !important;
+    }
+
+    #lcab-product .lcab-btn--primary,
+    #lcab-product .lcab-btn--primary:visited {
+        border-color: var(--lcab-cyan) !important;
+        background: var(--lcab-cyan) !important;
+        color: #081014 !important;
+    }
+
+    #lcab-product .lcab-btn--primary:hover {
+        border-color: #66deea !important;
+        background: #66deea !important;
+        color: #081014 !important;
+    }
+
+    #lcab-product .lcab-btn--secondary,
+    #lcab-product .lcab-btn--secondary:visited {
+        border-color: var(--lcab-cyan) !important;
+        background: rgba(9, 7, 13, 0.68) !important;
+        color: #b8f5fb !important;
+    }
+
+    #lcab-product .lcab-btn--secondary:hover {
+        background: var(--lcab-cyan) !important;
+        color: #081014 !important;
+    }
+
+    .lcab-agents {
+        border-bottom: 1px solid var(--lcab-line);
+        background: #110c17;
+    }
+
+    .lcab-agents__inner {
+        display: flex;
+        min-height: 150px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+    }
+
+    .lcab-agents__intro {
+        max-width: 340px;
+    }
+
+    .lcab-agents__intro strong {
+        display: block;
+        font-size: 1.12rem;
+    }
+
+    .lcab-agents__intro span {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--lcab-muted);
+        font-size: 0.92rem;
+    }
+
+    .lcab-agent-list {
+        display: flex;
+        flex: 1;
+        justify-content: flex-end;
+        gap: clamp(1.3rem, 4vw, 3.5rem);
+    }
+
+    .lcab-agent {
+        display: flex;
+        min-width: 96px;
+        align-items: center;
+        gap: 0.7rem;
+        color: #fff;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .lcab-agent img {
+        width: 2rem;
+        height: 2rem;
+        filter: invert(1);
+        object-fit: contain;
+    }
+
+    .lcab-section {
+        padding-block: clamp(5.5rem, 10vw, 9rem);
+        border-bottom: 1px solid var(--lcab-line);
+    }
+
+    .lcab-section--light {
+        border-color: #d7d1da;
+        background: #f8f7f9;
+        color: #17111d;
+    }
+
+    .lcab-section--plum {
+        background: var(--lcab-plum);
+    }
+
+    .lcab-heading-row {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+        gap: clamp(2rem, 7vw, 7rem);
+        align-items: end;
+        margin-bottom: clamp(2.8rem, 6vw, 5rem);
+    }
+
+    .lcab-heading-row h2 {
+        max-width: 12ch;
+        margin: 0;
+        font-size: clamp(2.8rem, 5.5vw, 5.25rem);
+        line-height: 0.98;
+        font-weight: 720;
+    }
+
+    .lcab-heading-row p {
+        max-width: 650px;
+        margin: 0;
+        color: var(--lcab-muted);
+        font-size: 1.12rem;
+    }
+
+    .lcab-section--light .lcab-heading-row p {
+        color: #5b5360;
+    }
+
+    .lcab-demo {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+        min-height: 610px;
+        overflow: hidden;
+        border: 1px solid #4f405a;
+        border-radius: 12px;
+        background: #0c0911;
+    }
+
+    .lcab-agent-console {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        padding: clamp(1.4rem, 3vw, 2.3rem);
+        border-right: 1px solid #4f405a;
+        background: #0d0a12;
+    }
+
+    .lcab-console__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 1.2rem;
+        border-bottom: 1px solid #342b3d;
+    }
+
+    .lcab-console__agent {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        font-weight: 750;
+    }
+
+    .lcab-console__agent img {
+        width: 1.65rem;
+        height: 1.65rem;
+        filter: invert(1);
+    }
+
+    .lcab-console__status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
+        color: #a9efc9;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    .lcab-console__status::before {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: #43d98a;
+        content: "";
+    }
+
+    .lcab-prompt-label {
+        margin: 1.4rem 0 0.6rem;
+        color: #a99fb2;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .lcab-prompt {
+        min-height: 178px;
+        margin: 0;
+        color: #f6f2f8;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9rem;
+        line-height: 1.65;
+    }
+
+    .lcab-prompt span {
+        display: block;
+        width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        animation: lcab-type-line 720ms steps(28, end) forwards;
+    }
+
+    .lcab-prompt span:nth-child(1) { animation-delay: 250ms; }
+    .lcab-prompt span:nth-child(2) { animation-delay: 670ms; }
+    .lcab-prompt span:nth-child(3) { animation-delay: 1090ms; }
+    .lcab-prompt span:nth-child(4) { animation-delay: 1510ms; }
+    .lcab-prompt span:nth-child(5) { animation-delay: 1930ms; }
+    .lcab-prompt span:nth-child(6) { animation-delay: 2350ms; }
+    .lcab-prompt span:nth-child(7) { animation-delay: 2770ms; }
+    .lcab-prompt span:nth-child(8) { animation-delay: 3190ms; }
+
+    @keyframes lcab-type-line {
+        from { width: 0; }
+        to { width: 100%; }
+    }
+
+    .lcab-prompt::after {
+        display: inline-block;
+        width: 0.5rem;
+        height: 1em;
+        margin-left: 0.15rem;
+        background: var(--lcab-cyan);
+        content: "";
+        vertical-align: -0.12em;
+        animation: lcab-caret 900ms steps(1) infinite;
+    }
+
+    @keyframes lcab-caret {
+        50% { opacity: 0; }
+    }
+
+    .lcab-console__activity {
+        display: grid;
+        gap: 0.65rem;
+        margin-top: auto;
+        padding-top: 1.5rem;
+        border-top: 1px solid #342b3d;
+    }
+
+    .lcab-activity-line {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        opacity: 0;
+        color: #c7c0ce;
+        font-size: 0.82rem;
+        transform: translateY(8px);
+        animation: lcab-build-reveal 440ms ease-out forwards;
+    }
+
+    .lcab-activity-line:nth-child(1) { animation-delay: 3.95s; }
+    .lcab-activity-line:nth-child(2) { animation-delay: 4.55s; }
+    .lcab-activity-line:nth-child(3) { animation-delay: 5.15s; }
+    .lcab-activity-line:nth-child(4) { animation-delay: 5.75s; }
+    .lcab-activity-line:nth-child(5) { animation-delay: 6.5s; }
+
+    [data-lcab-site-part],
+    [data-lcab-template] {
+        opacity: 0;
+        transform: translateY(12px);
+        animation: lcab-build-reveal 620ms ease-out forwards;
+    }
+
+    .lcab-site__nav { animation-delay: 4.12s; }
+    .lcab-site__hero { animation-delay: 4.72s; }
+    .lcab-site__section:nth-child(1) { animation-delay: 5.32s; }
+    .lcab-site__section:nth-child(2) { animation-delay: 5.82s; }
+    .lcab-site__template { animation-delay: 6.42s; }
+
+    @keyframes lcab-build-reveal {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .lcab-activity-line svg {
+        width: 1rem;
+        height: 1rem;
+        flex: 0 0 auto;
+        color: var(--lcab-cyan);
+    }
+
+    .lcab-activity-line--apply svg {
+        color: #43d98a;
+    }
+
+    .lcab-browser {
+        min-width: 0;
+        background: #f4f1f0;
+        color: #19211f;
+    }
+
+    .lcab-browser__chrome {
+        display: flex;
+        height: 46px;
+        align-items: center;
+        gap: 0.8rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid #d7d1cf;
+        background: #ece9e8;
+    }
+
+    .lcab-browser__dots {
+        display: flex;
+        gap: 0.35rem;
+    }
+
+    .lcab-browser__dots span {
+        width: 0.56rem;
+        height: 0.56rem;
+        border-radius: 50%;
+        background: #b8afad;
+    }
+
+    .lcab-browser__address {
+        flex: 1;
+        overflow: hidden;
+        padding: 0.38rem 0.7rem;
+        border: 1px solid #d0c9c7;
+        border-radius: 6px;
+        background: #fff;
+        color: #706966;
+        font-size: 0.72rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lcab-site {
+        position: relative;
+        height: calc(100% - 46px);
+        overflow: hidden;
+        background: #faf8f4;
+    }
+
+    .lcab-site__nav {
+        position: absolute;
+        z-index: 3;
+        top: 0;
+        left: 0;
+        display: flex;
+        width: 100%;
+        min-height: 62px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.4rem;
+        color: #fff;
+    }
+
+    .lcab-site__brand {
+        font-size: 0.95rem;
+        font-weight: 800;
+    }
+
+    .lcab-site__links {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-size: 0.66rem;
+        font-weight: 650;
+    }
+
+    .lcab-site__links span:last-child {
+        padding: 0.45rem 0.65rem;
+        border-radius: 5px;
+        background: #f5eee4;
+        color: #17201e;
+    }
+
+    .lcab-site__hero {
+        position: relative;
+        display: flex;
+        min-height: 315px;
+        align-items: flex-end;
+        overflow: hidden;
+        padding: 5.5rem 1.5rem 1.7rem;
+        color: #fff;
+        clip-path: inset(0 0 0 0);
+    }
+
+    .lcab-site__hero img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .lcab-site__hero::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background: linear-gradient(90deg, rgba(10, 21, 19, 0.85), rgba(10, 21, 19, 0.08) 78%);
+    }
+
+    .lcab-site__hero-copy {
+        position: relative;
+        z-index: 1;
+        max-width: 310px;
+    }
+
+    .lcab-site__hero-copy span {
+        font-size: 0.65rem;
+        font-weight: 700;
+    }
+
+    .lcab-site__hero-copy h3 {
+        margin: 0.35rem 0 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(2.2rem, 4vw, 3.45rem);
+        font-weight: 500;
+        line-height: 0.92;
+    }
+
+    .lcab-site__hero-copy p {
+        max-width: 35ch;
+        margin: 0.7rem 0 0;
+        color: #f5f0e9;
+        font-size: 0.7rem;
+    }
+
+    .lcab-site__sections {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 1px;
+        background: #d9d1c6;
+    }
+
+    .lcab-site__section {
+        min-height: 140px;
+        padding: 1.2rem 1.35rem;
+        background: #faf8f4;
+    }
+
+    .lcab-site__section--sage {
+        background: #dce4da;
+    }
+
+    .lcab-site__section span {
+        color: #6a736c;
+        font-size: 0.58rem;
+        font-weight: 750;
+    }
+
+    .lcab-site__section h4 {
+        margin: 0.25rem 0 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 1.22rem;
+        font-weight: 500;
+        line-height: 1.05;
+    }
+
+    .lcab-site__room-list {
+        display: flex;
+        gap: 0.55rem;
+        margin-top: 0.8rem;
+    }
+
+    .lcab-site__room-list i {
+        display: block;
+        width: 30%;
+        height: 30px;
+        border-radius: 3px;
+        background: #d5c7b4;
+    }
+
+    .lcab-site__template {
+        position: absolute;
+        z-index: 4;
+        right: 1rem;
+        bottom: 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.52rem 0.7rem;
+        border: 1px solid rgba(255,255,255,0.65);
+        border-radius: 6px;
+        background: rgba(16, 22, 19, 0.88);
+        color: #fff;
+        font-size: 0.64rem;
+        font-weight: 700;
+    }
+
+    .lcab-site__template svg {
+        width: 0.85rem;
+        height: 0.85rem;
+        color: #a8e8be;
+    }
+
+    .lcab-demo__caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 2rem;
+        margin-top: 1.25rem;
+        color: #bdb5c4;
+        font-size: 0.9rem;
+    }
+
+    .lcab-demo__caption strong {
+        color: #fff;
+    }
+
+    .lcab-story {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: clamp(2.5rem, 7vw, 7rem);
+        align-items: center;
+    }
+
+    .lcab-story__media {
+        overflow: hidden;
+        aspect-ratio: 16 / 9;
+        background: transparent;
+    }
+
+    .lcab-story__media video,
+    .lcab-story__media img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .lcab-story__media img {
+        display: none;
+    }
+
+    .lcab-story__copy h2 {
+        max-width: 10ch;
+        margin: 0;
+        font-size: clamp(2.8rem, 5vw, 4.9rem);
+        line-height: 0.98;
+    }
+
+    .lcab-story__copy > p {
+        max-width: 580px;
+        margin: 1.35rem 0 0;
+        color: var(--lcab-muted);
+        font-size: 1.08rem;
+    }
+
+    .lcab-story__lines {
+        margin-top: 2rem;
+        border-top: 1px solid var(--lcab-line);
+    }
+
+    .lcab-story__line {
+        display: grid;
+        grid-template-columns: 8rem 1fr;
+        gap: 1rem;
+        padding-block: 0.9rem;
+        border-bottom: 1px solid var(--lcab-line);
+    }
+
+    .lcab-story__line span {
+        color: var(--lcab-cyan);
+        font-weight: 700;
+    }
+
+    .lcab-story__line p {
+        margin: 0;
+        color: #ddd7e1;
+    }
+
+    .lcab-capabilities {
+        border-top: 1px solid #d7d1da;
+    }
+
+    .lcab-capability {
+        display: grid;
+        grid-template-columns: 0.8fr 1fr 0.8fr;
+        gap: clamp(1.5rem, 5vw, 5rem);
+        align-items: center;
+        min-height: 250px;
+        padding-block: clamp(2.2rem, 5vw, 4rem);
+        border-bottom: 1px solid #d7d1da;
+    }
+
+    .lcab-capability__type {
+        color: #6a616d;
+        font-size: 0.85rem;
+        font-weight: 750;
+    }
+
+    .lcab-capability h3 {
+        margin: 0;
+        font-size: clamp(1.8rem, 3.5vw, 3.2rem);
+        line-height: 1;
+    }
+
+    .lcab-capability p {
+        margin: 0.8rem 0 0;
+        color: #5b5360;
+        font-size: 1rem;
+    }
+
+    .lcab-capability__visual {
+        position: relative;
+        min-height: 132px;
+        overflow: hidden;
+        border: 1px solid #c8c0ca;
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .lcab-capability__visual {
+        animation: lcab-fallback-float 3.2s ease-in-out infinite alternate;
+    }
+
+    .lcab-capability:nth-child(even) .lcab-capability__visual {
+        animation-delay: -1.1s;
+    }
+
+    @keyframes lcab-fallback-float {
+        from { transform: translateY(8px); }
+        to { transform: translateY(-8px); }
+    }
+
+    .lcab-mini-page__bar,
+    .lcab-mini-partial__bar {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        left: 12px;
+        height: 18px;
+        border-radius: 3px;
+        background: #18121e;
+    }
+
+    .lcab-mini-page__hero {
+        position: absolute;
+        top: 38px;
+        right: 12px;
+        left: 12px;
+        height: 48px;
+        border-radius: 3px;
+        background: var(--lcab-violet);
+    }
+
+    .lcab-mini-page__columns {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+
+    .lcab-mini-page__columns i {
+        height: 24px;
+        border-radius: 2px;
+        background: #ded8e1;
+    }
+
+    .lcab-mini-partial__bar {
+        top: 15px;
+        height: 26px;
+        background: var(--lcab-cyan);
+    }
+
+    .lcab-mini-partial__body {
+        position: absolute;
+        top: 52px;
+        right: 12px;
+        bottom: 42px;
+        left: 12px;
+        border: 1px dashed #b9afb9;
+        border-radius: 3px;
+    }
+
+    .lcab-mini-partial__footer {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        height: 20px;
+        border-radius: 3px;
+        background: var(--lcab-pink);
+    }
+
+    .lcab-mini-template__card {
+        position: absolute;
+        width: 54%;
+        height: 76%;
+        border: 1px solid #c9c0cb;
+        border-radius: 5px;
+        background: #fff;
+    }
+
+    .lcab-mini-template__card:nth-child(1) {
+        top: 12%;
+        left: 12%;
+    }
+
+    .lcab-mini-template__card:nth-child(2) {
+        top: 17%;
+        left: 24%;
+        border-color: #ad98d5;
+    }
+
+    .lcab-mini-template__card:nth-child(3) {
+        top: 22%;
+        left: 36%;
+        border-color: var(--lcab-violet);
+    }
+
+    .lcab-mini-token__swatches {
+        display: flex;
+        gap: 8px;
+        padding: 16px;
+    }
+
+    .lcab-mini-token__swatches i {
+        display: block;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+    }
+
+    .lcab-mini-token__swatches i:nth-child(1) { background: var(--lcab-cyan); }
+    .lcab-mini-token__swatches i:nth-child(2) { background: var(--lcab-pink); }
+    .lcab-mini-token__swatches i:nth-child(3) { background: var(--lcab-violet); }
+
+    .lcab-mini-token__type {
+        padding: 0 16px;
+        color: #18121e;
+        font-size: 1.6rem;
+        font-weight: 750;
+        line-height: 1;
+    }
+
+    .lcab-mini-token__rule {
+        width: calc(100% - 32px);
+        height: 8px;
+        margin: 12px 16px 0;
+        border-radius: 2px;
+        background: #ded8e1;
+    }
+
+    .lcab-safety {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: clamp(2rem, 7vw, 7rem);
+        align-items: start;
+    }
+
+    .lcab-safety h2 {
+        max-width: 10ch;
+        margin: 0;
+        font-size: clamp(2.8rem, 5vw, 5rem);
+        line-height: 0.98;
+    }
+
+    .lcab-safety > div:first-child p {
+        max-width: 500px;
+        margin: 1.4rem 0 0;
+        color: var(--lcab-muted);
+        font-size: 1.05rem;
+    }
+
+    .lcab-safety__steps {
+        border-top: 1px solid var(--lcab-line);
+    }
+
+    .lcab-safety__step {
+        display: grid;
+        grid-template-columns: 2.2rem 9rem 1fr;
+        gap: 1rem;
+        align-items: baseline;
+        padding-block: 1.1rem;
+        border-bottom: 1px solid var(--lcab-line);
+    }
+
+    .lcab-safety__step > span {
+        color: var(--lcab-pink);
+        font-weight: 800;
+    }
+
+    .lcab-safety__step strong {
+        font-size: 1rem;
+    }
+
+    .lcab-safety__step p {
+        margin: 0;
+        color: var(--lcab-muted);
+        font-size: 0.94rem;
+    }
+
+    .lcab-beta {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: clamp(2rem, 8vw, 8rem);
+        align-items: start;
+    }
+
+    .lcab-beta h2 {
+        max-width: 11ch;
+        margin: 0;
+        font-size: clamp(3rem, 5.8vw, 5.6rem);
+        line-height: 0.96;
+    }
+
+    .lcab-beta__details {
+        border-top: 1px solid var(--lcab-line);
+    }
+
+    .lcab-beta__row {
+        display: flex;
+        justify-content: space-between;
+        gap: 2rem;
+        padding-block: 1rem;
+        border-bottom: 1px solid var(--lcab-line);
+    }
+
+    .lcab-beta__row span {
+        color: var(--lcab-muted);
+    }
+
+    .lcab-beta__row strong {
+        text-align: right;
+    }
+
+    .lcab-final {
+        position: relative;
+        overflow: hidden;
+        padding-block: clamp(6rem, 12vw, 10rem);
+        background: var(--lcab-violet);
+        color: #fff;
+    }
+
+    .lcab-final::after {
+        position: absolute;
+        top: -18%;
+        right: -8%;
+        width: min(46vw, 620px);
+        aspect-ratio: 1;
+        border: 1px solid rgba(255,255,255,0.4);
+        border-radius: 50%;
+        content: "";
+    }
+
+    .lcab-final__content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .lcab-final h2 {
+        max-width: 13ch;
+        margin: 0;
+        font-size: clamp(3.2rem, 7vw, 5.8rem);
+        line-height: 0.94;
+    }
+
+    .lcab-final p {
+        max-width: 640px;
+        margin: 1.5rem 0 0;
+        font-size: 1.15rem;
+    }
+
+    #lcab-product .lcab-final .lcab-btn--primary {
+        border-color: #fff !important;
+        background: #fff !important;
+        color: #25123f !important;
+    }
+
+    #lcab-product .lcab-final .lcab-btn--primary:hover {
+        border-color: #d7fbff !important;
+        background: #d7fbff !important;
+        color: #25123f !important;
+    }
+
+    #lcab-product .lcab-final .lcab-btn--secondary {
+        border-color: rgba(255,255,255,0.78) !important;
+        background: transparent !important;
+        color: #fff !important;
+    }
+
+    #lcab-product .lcab-final .lcab-btn--secondary:hover {
+        border-color: #fff !important;
+        background: #fff !important;
+        color: #25123f !important;
+    }
+
+    @media (max-width: 980px) {
+        .lcab-agents__inner {
+            align-items: flex-start;
+            flex-direction: column;
+            padding-block: 1.6rem;
+        }
+
+        .lcab-agent-list {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .lcab-demo,
+        .lcab-story,
+        .lcab-safety,
+        .lcab-beta {
+            grid-template-columns: 1fr;
+        }
+
+        .lcab-agent-console {
+            min-height: 500px;
+            border-right: 0;
+            border-bottom: 1px solid #4f405a;
+        }
+
+        .lcab-browser {
+            min-height: 570px;
+        }
+
+        .lcab-heading-row {
+            grid-template-columns: 1fr;
+        }
+
+        .lcab-capability {
+            grid-template-columns: 0.55fr 1.15fr 0.8fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .lcab-container {
+            width: min(calc(100% - 2rem), 1180px);
+        }
+
+        .lcab-hero {
+            min-height: 760px;
+            height: 88svh;
+        }
+
+        .lcab-hero__video,
+        .lcab-hero__poster {
+            top: -2%;
+            right: -30%;
+            width: 150%;
+            height: 58%;
+            object-position: right top;
+        }
+
+        .lcab-hero::after {
+            background: linear-gradient(180deg, rgba(9, 7, 13, 0.45) 0%, rgba(9, 7, 13, 0.92) 58%, rgba(9, 7, 13, 0.99) 100%);
+        }
+
+        .lcab-hero__content {
+            width: 100%;
+            align-self: flex-end;
+            padding-block: 4.5rem;
+        }
+
+        #lcab-product h1 {
+            font-size: clamp(3.1rem, 15.8vw, 4.4rem);
+        }
+
+        .lcab-actions {
+            flex-direction: column;
+        }
+
+        #lcab-product .lcab-btn {
+            width: 100%;
+        }
+
+        .lcab-agent-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+        }
+
+        .lcab-agent {
+            min-width: 0;
+        }
+
+        .lcab-demo {
+            min-height: 0;
+        }
+
+        .lcab-agent-console {
+            min-height: 525px;
+        }
+
+        .lcab-browser {
+            min-height: 510px;
+        }
+
+        .lcab-site__links span:not(:last-child) {
+            display: none;
+        }
+
+        .lcab-site__hero {
+            min-height: 290px;
+        }
+
+        .lcab-site__sections {
+            grid-template-columns: 1fr;
+        }
+
+        .lcab-site__section {
+            min-height: 100px;
+        }
+
+        .lcab-site__section--sage {
+            display: none;
+        }
+
+        .lcab-demo__caption {
+            display: block;
+        }
+
+        .lcab-demo__caption span {
+            display: block;
+            margin-top: 0.35rem;
+        }
+
+        .lcab-story__copy h2,
+        .lcab-heading-row h2,
+        .lcab-safety h2,
+        .lcab-beta h2 {
+            font-size: clamp(2.65rem, 13vw, 4rem);
+        }
+
+        .lcab-story__line {
+            grid-template-columns: 1fr;
+            gap: 0.25rem;
+        }
+
+        .lcab-capability {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .lcab-capability__visual {
+            min-height: 150px;
+        }
+
+        .lcab-safety__step {
+            grid-template-columns: 2rem 1fr;
+        }
+
+        .lcab-safety__step p {
+            grid-column: 2;
+        }
+
+        .lcab-beta__row {
+            display: block;
+        }
+
+        .lcab-beta__row strong {
+            display: block;
+            margin-top: 0.25rem;
+            text-align: left;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .lcab-hero__video,
+        .lcab-story__media video {
+            display: none;
+        }
+
+        .lcab-hero__poster,
+        .lcab-story__media img {
+            display: block;
+        }
+
+        .lcab-prompt::after {
+            animation: none;
+        }
+
+        .lcab-prompt span {
+            width: 100%;
+            animation: none;
+        }
+
+        .lcab-activity-line,
+        [data-lcab-site-part],
+        [data-lcab-template],
+        .lcab-capability__visual {
+            opacity: 1;
+            transform: none;
+            animation: none;
+        }
+
+        #lcab-product .lcab-btn {
+            transition: none;
+        }
+    }
+</style>
+
+<div id="lcab-product">
+    <section class="lcab-hero" aria-labelledby="lcab-title">
+        <video class="lcab-hero__video lcab-mask-2" autoplay muted loop playsinline preload="metadata" poster="https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-poster.jpg" aria-hidden="true">
+            <source src="https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-loop.mp4" type="video/mp4">
+        </video>
+        <img class="lcab-hero__poster lcab-mask-2" src="https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-poster.jpg" alt="Layered cyan and magenta Mobius form arranged on the right side of the hero">
+        <div class="lcab-container">
+            <div class="lcab-hero__content">
+                <p class="lcab-kicker">Coding agents for LiveCanvas</p>
+                <h1 id="lcab-title">LiveCanvas AI Bridge</h1>
+                <p class="lcab-hero__lead">Connect Codex, Claude, Cursor or OpenCode to the real structure of your WordPress site. Your agent reasons; AI Bridge reads, previews, applies and rolls back.</p>
+                <div class="lcab-hero__meta">
+                    <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Site identity verified</span>
+                    <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>Preview-first writes</span>
+                    <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Audited rollback</span>
+                </div>
+                <div class="lcab-actions">
+                    <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                        Get the public beta
+                    </a>
+                    <a class="lcab-btn lcab-btn--secondary" href="#lcab-agent-demo">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7V5Z"/></svg>
+                        Watch the workflow
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-agents" aria-labelledby="lcab-agent-heading">
+        <div class="lcab-container lcab-agents__inner">
+            <div class="lcab-agents__intro">
+                <strong id="lcab-agent-heading">Use the coding agent you already trust.</strong>
+                <span>One LiveCanvas-aware bridge. Multiple professional agent workflows.</span>
+            </div>
+            <div class="lcab-agent-list" aria-label="Supported coding agents">
+                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt=""><span>Codex</span></div>
+                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/anthropic.svg" alt=""><span>Claude</span></div>
+                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/cursor.svg" alt=""><span>Cursor</span></div>
+                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/opencode.svg" alt=""><span>OpenCode</span></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-section" id="lcab-agent-demo">
+        <div class="lcab-container">
+            <div class="lcab-heading-row">
+                <h2>Describe the site. Watch LiveCanvas take shape.</h2>
+                <p>The coding agent turns a natural-language brief into a controlled sequence of LiveCanvas operations. In this example it builds an imaginary Lake Maggiore B&amp;B, while preserving pages, partials and templates as separate editable objects.</p>
+            </div>
+
+            <div class="lcab-demo" data-lcab-demo>
+                <div class="lcab-agent-console">
+                    <div class="lcab-console__top">
+                        <div class="lcab-console__agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt=""><span>Codex</span></div>
+                        <span class="lcab-console__status">LiveCanvas connected</span>
+                    </div>
+                    <p class="lcab-prompt-label">Prompt</p>
+                    <p class="lcab-prompt" data-lcab-prompt aria-label="Create a one-page website for Villa Azzurra, an imaginary boutique B&amp;B on Lake Maggiore. Use Picowind, Tailwind 4 and DaisyUI. Build a reusable header and footer, the homepage, and a dynamic room template. Preview before applying.">
+                        <span aria-hidden="true">Create a one-page website</span>
+                        <span aria-hidden="true">for Villa Azzurra, an imaginary</span>
+                        <span aria-hidden="true">boutique B&amp;B on Lake Maggiore.</span>
+                        <span aria-hidden="true">Use Picowind, Tailwind 4</span>
+                        <span aria-hidden="true">and DaisyUI.</span>
+                        <span aria-hidden="true">Build a reusable header and footer,</span>
+                        <span aria-hidden="true">the homepage, and a dynamic room</span>
+                        <span aria-hidden="true">template. Preview before applying.</span>
+                    </p>
+                    <div class="lcab-console__activity" aria-label="Agent activity">
+                        <div class="lcab-activity-line" data-lcab-line><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><span>Verified site and Picowind context</span></div>
+                        <div class="lcab-activity-line" data-lcab-line><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 9h16"/></svg><span>Previewed header and footer partials</span></div>
+                        <div class="lcab-activity-line" data-lcab-line><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v6H4zM4 14h7v6H4zM15 14h5v6h-5z"/></svg><span>Built the one-page homepage</span></div>
+                        <div class="lcab-activity-line" data-lcab-line><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Created the room dynamic template</span></div>
+                        <div class="lcab-activity-line lcab-activity-line--apply" data-lcab-line><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><span>Applied safely · rollback available</span></div>
+                    </div>
+                </div>
+
+                <div class="lcab-browser" aria-label="Generated Villa Azzurra website preview">
+                    <div class="lcab-browser__chrome">
+                        <div class="lcab-browser__dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                        <div class="lcab-browser__address">villa-azzurra.local</div>
+                    </div>
+                    <div class="lcab-site">
+                        <div class="lcab-site__nav" data-lcab-site-part>
+                            <span class="lcab-site__brand">Villa Azzurra</span>
+                            <div class="lcab-site__links"><span>Rooms</span><span>Lake life</span><span>Story</span><span>Book a stay</span></div>
+                        </div>
+                        <div class="lcab-site__hero" data-lcab-site-part>
+                            <img src="https://livecanvas.com/wp-content/uploads/2026/08/villa-azzurra-hero.jpg" alt="Villa Azzurra garden overlooking Lake Maggiore">
+                            <div class="lcab-site__hero-copy">
+                                <span>STRESA · LAKE MAGGIORE</span>
+                                <h3>Stay where the garden meets the lake.</h3>
+                                <p>A quiet villa, six individual rooms and mornings shaped by the water.</p>
+                            </div>
+                        </div>
+                        <div class="lcab-site__sections">
+                            <div class="lcab-site__section" data-lcab-site-part>
+                                <span>ROOMS</span>
+                                <h4>Six rooms, each with its own view.</h4>
+                                <div class="lcab-site__room-list" aria-hidden="true"><i></i><i></i><i></i></div>
+                            </div>
+                            <div class="lcab-site__section lcab-site__section--sage" data-lcab-site-part>
+                                <span>EXPERIENCES</span>
+                                <h4>Breakfast in the garden. The lake at your pace.</h4>
+                            </div>
+                        </div>
+                        <div class="lcab-site__template" data-lcab-template><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Dynamic room template ready</div>
+                    </div>
+                </div>
+            </div>
+            <div class="lcab-demo__caption"><strong>Prompt → context → preview → apply</strong><span>Animated product simulation. No existing website was copied.</span></div>
+        </div>
+    </section>
+
+    <section class="lcab-section lcab-section--plum">
+        <div class="lcab-container lcab-story">
+            <div class="lcab-story__media lcab-mask-2">
+                <video autoplay muted loop playsinline preload="metadata" poster="https://livecanvas.com/wp-content/uploads/2026/08/bridge-torus-signal-v2-poster.jpg" aria-hidden="true">
+                    <source src="https://livecanvas.com/wp-content/uploads/2026/08/bridge-torus-signal-v2-loop.mp4" type="video/mp4">
+                </video>
+                <img src="https://livecanvas.com/wp-content/uploads/2026/08/bridge-torus-signal-v2-poster.jpg" alt="Layered cyan and magenta signal ring with a violet inner bridge">
+            </div>
+            <div class="lcab-story__copy">
+                <h2>The intelligence stays in your agent. The structure stays in LiveCanvas.</h2>
+                <p>AI Bridge does not replace Codex, Claude, Cursor or OpenCode. It gives them a site-aware contract for working with WordPress without flattening everything into generic HTML.</p>
+                <div class="lcab-story__lines">
+                    <div class="lcab-story__line"><span>The agent</span><p>Plans, reasons, writes code and works from your project brief.</p></div>
+                    <div class="lcab-story__line"><span>AI Bridge</span><p>Exposes LiveCanvas pages, partials, templates, media and framework rules.</p></div>
+                    <div class="lcab-story__line"><span>WordPress</span><p>Verifies the site, scopes writes and stores an audit trail for rollback.</p></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-section lcab-section--light">
+        <div class="lcab-container">
+            <div class="lcab-heading-row">
+                <h2>Build the whole LiveCanvas system.</h2>
+                <p>Ask for a complete site or work on one precise layer. The agent receives the right object, framework and write path for the job.</p>
+            </div>
+
+            <div class="lcab-capabilities">
+                <article class="lcab-capability">
+                    <span class="lcab-capability__type">Pages</span>
+                    <div><h3>Generate complete editable pages.</h3><p>Create a one-page site from a brief, visual reference or existing content, while keeping the result inside LiveCanvas.</p></div>
+                    <div class="lcab-capability__visual lcab-mini-page" aria-hidden="true"><i class="lcab-mini-page__bar"></i><i class="lcab-mini-page__hero"></i><div class="lcab-mini-page__columns"><i></i><i></i><i></i></div></div>
+                </article>
+
+                <article class="lcab-capability">
+                    <span class="lcab-capability__type">Partials</span>
+                    <div><h3>Keep headers and footers reusable.</h3><p>Create, inspect or patch the site shell as proper LiveCanvas partials instead of embedding it in every page.</p></div>
+                    <div class="lcab-capability__visual lcab-mini-partial" aria-hidden="true"><i class="lcab-mini-partial__bar"></i><i class="lcab-mini-partial__body"></i><i class="lcab-mini-partial__footer"></i></div>
+                </article>
+
+                <article class="lcab-capability">
+                    <span class="lcab-capability__type">Dynamic templates</span>
+                    <div><h3>Design once. Feed it real WordPress data.</h3><p>Generate archives and single templates for posts, rooms, projects or custom post types, then preview the result on a real URL.</p></div>
+                    <div class="lcab-capability__visual lcab-mini-template" aria-hidden="true"><i class="lcab-mini-template__card"></i><i class="lcab-mini-template__card"></i><i class="lcab-mini-template__card"></i></div>
+                </article>
+
+                <article class="lcab-capability">
+                    <span class="lcab-capability__type">Design systems</span>
+                    <div><h3>Work natively in Picostrap or Picowind.</h3><p>Build Bootstrap/Sass or Tailwind 4/DaisyUI tokens, components and CSS without mixing incompatible framework output.</p></div>
+                    <div class="lcab-capability__visual lcab-mini-token" aria-hidden="true"><div class="lcab-mini-token__swatches"><i></i><i></i><i></i></div><div class="lcab-mini-token__type">Aa</div><i class="lcab-mini-token__rule"></i></div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-section">
+        <div class="lcab-container lcab-safety">
+            <div>
+                <p class="lcab-kicker">A controlled development loop</p>
+                <h2>Power without losing the recovery path.</h2>
+                <p>The site never becomes an anonymous remote target. Every session carries identity, scope and a deliberate route from inspection to rollback.</p>
+            </div>
+            <div class="lcab-safety__steps">
+                <div class="lcab-safety__step"><span>01</span><strong>Connect</strong><p>Pair one coding-agent project with one verified WordPress site.</p></div>
+                <div class="lcab-safety__step"><span>02</span><strong>Inspect</strong><p>Read the active theme, framework, pages, partials and templates.</p></div>
+                <div class="lcab-safety__step"><span>03</span><strong>Preview</strong><p>Validate markup and review the proposed change before writing.</p></div>
+                <div class="lcab-safety__step"><span>04</span><strong>Apply</strong><p>Use only the write abilities and scopes enabled by the administrator.</p></div>
+                <div class="lcab-safety__step"><span>05</span><strong>Roll back</strong><p>Restore the audited content or file operation when the result is wrong.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-section lcab-section--plum">
+        <div class="lcab-container lcab-beta">
+            <div>
+                <p class="lcab-kicker">Public beta</p>
+                <h2>Ready for supervised local and staging work.</h2>
+            </div>
+            <div class="lcab-beta__details">
+                <div class="lcab-beta__row"><span>Current release</span><strong>0.2.0-beta.4</strong></div>
+                <div class="lcab-beta__row"><span>WordPress</span><strong>6.8 and 7.0 paths</strong></div>
+                <div class="lcab-beta__row"><span>Coding agents</span><strong>Codex, Claude, Cursor, OpenCode</strong></div>
+                <div class="lcab-beta__row"><span>Native stacks</span><strong>Picostrap and Picowind</strong></div>
+                <div class="lcab-beta__row"><span>Default guardrail</span><strong>Preview before apply</strong></div>
+                <div class="lcab-beta__row"><span>License</span><strong>GPL-2.0-or-later</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-final">
+        <div class="lcab-container lcab-final__content">
+            <h2>Bring your coding agent into LiveCanvas.</h2>
+            <p>Install the beta, connect one project to one site and start with a read-only audit. Move to preview and apply when the target and scope are verified.</p>
+            <div class="lcab-actions">
+                <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                    Download the public beta
+                </a>
+                <a class="lcab-btn lcab-btn--secondary" href="https://github.com/livecanvas-team/livecanvas-forge-ai">
+                    View the source on GitHub
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                </a>
+            </div>
+        </div>
+    </section>
+</div>

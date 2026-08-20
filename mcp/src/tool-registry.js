@@ -1,4 +1,4 @@
-function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null, assetDiscovery = null) {
+function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null, assetDiscovery = null, registryOptions = {}) {
   const tools = [
     {
       name: 'get_snapshot',
@@ -1213,11 +1213,12 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     }
   ]
 
+  const advertisedTools = filterAdvertisedTools(tools, registryOptions)
   const toolMap = new Map(tools.map((tool) => [tool.name, tool]))
 
   return {
     list() {
-      return tools.map(({ name, description, inputSchema, outputSchema }) => {
+      return advertisedTools.map(({ name, description, inputSchema, outputSchema }) => {
         const readOnly = isReadMostlyTool(name)
 
         return {
@@ -1229,9 +1230,11 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
             readOnlyHint: readOnly,
             destructiveHint: !readOnly,
             idempotentHint: readOnly,
-            openWorldHint: name === 'visual_check',
-            lcfaCacheTtlMs: readOnly ? 30000 : 0,
-            lcfaCacheScope: readOnly ? 'site_session' : 'none'
+            openWorldHint: name === 'visual_check'
+          },
+          _meta: {
+            'io.livecanvas/cache-ttl-ms': readOnly ? 30000 : 0,
+            'io.livecanvas/cache-scope': readOnly ? 'site_session' : 'none'
           }
         }
       })
@@ -1249,6 +1252,109 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       return tool.invoke(argumentsMap)
     }
   }
+}
+
+function filterAdvertisedTools(tools, options = {}) {
+  if (String(options.toolProfile || '').trim().toLowerCase() !== 'compact') {
+    return tools
+  }
+
+  const visible = new Set([
+    'get_snapshot',
+    'get_inventory',
+    'get_context',
+    'get_theme_context',
+    'get_genesis_plan',
+    'generate_genesis_plan',
+    'get_genesis_execution_plan',
+    'execute_genesis_next',
+    'execute_genesis_task',
+    'get_page_html',
+    'get_acf_fields',
+    'list_lc_blocks',
+    'get_connection_handoff',
+    'get_block_pattern_library',
+    'content_patch_preview',
+    'content_patch_apply',
+    'media_upload',
+    'media_replace',
+    'wp_debug',
+    'cache_flush',
+    'polylang_tools',
+    'seo_tools',
+    'visual_check_status',
+    'visual_check',
+    'suggest_lc_command',
+    'validate_markup_for_framework',
+    'run_lc_command',
+    'get_mcp_status'
+  ])
+  const mode = String(options.connectionMode || '').trim().toLowerCase()
+  const framework = String(options.framework || '').trim().toLowerCase()
+
+  if (mode === 'local') {
+    for (const name of [
+      'asset_discovery',
+      'media_upload_local_assets',
+      'get_theme_roots',
+      'list_theme_files',
+      'list_theme_templates',
+      'read_theme_file',
+      'write_theme_file',
+      'list_theme_backups',
+      'restore_theme_backup'
+    ]) {
+      visible.add(name)
+    }
+  } else if (mode === 'remote') {
+    for (const name of [
+      'theme_file_read',
+      'theme_file_preview_write',
+      'theme_file_write',
+      'theme_file_backups',
+      'theme_file_restore'
+    ]) {
+      visible.add(name)
+    }
+  } else {
+    for (const name of [
+      'theme_file_read',
+      'theme_file_preview_write',
+      'theme_file_write',
+      'theme_file_backups',
+      'theme_file_restore',
+      'get_theme_roots',
+      'list_theme_files',
+      'list_theme_templates',
+      'read_theme_file',
+      'write_theme_file',
+      'list_theme_backups',
+      'restore_theme_backup'
+    ]) {
+      visible.add(name)
+    }
+  }
+
+  if (framework === 'picowind' || framework === '') {
+    for (const name of [
+      'get_windpress_status',
+      'list_windpress_providers',
+      'scan_windpress_provider_full',
+      'store_windpress_theme_json',
+      'build_windpress_cache',
+      'build_theme_library_css'
+    ]) {
+      visible.add(name)
+    }
+  }
+
+  if (framework === 'picostrap' || framework === '') {
+    visible.add('picostrap_compile_preview')
+    visible.add('picostrap_compile_apply')
+    visible.add('compile_picostrap_bundle')
+  }
+
+  return tools.filter((tool) => visible.has(tool.name))
 }
 
 async function invokeRunLcCommand(argumentsMap, client, picostrapCompiler) {

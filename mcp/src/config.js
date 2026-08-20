@@ -11,6 +11,9 @@ const DEFAULTS = {
   pairingScopes: 'read,preview,write',
   projectLabel: '',
   wpRoot: '',
+  agentWorkspaceRoot: '',
+  framework: '',
+  toolProfile: 'full',
   host: '127.0.0.1',
   port: 7681,
   tool: '',
@@ -34,6 +37,9 @@ function loadConfig(argv = []) {
     pairingScopes: process.env.LCFA_PAIRING_SCOPES || DEFAULTS.pairingScopes,
     projectLabel: process.env.LCFA_PROJECT_LABEL || DEFAULTS.projectLabel,
     wpRoot: process.env.LCFA_WP_ROOT || DEFAULTS.wpRoot,
+    agentWorkspaceRoot: process.env.LCFA_AGENT_WORKSPACE_ROOT || DEFAULTS.agentWorkspaceRoot,
+    framework: process.env.LCFA_FRAMEWORK || DEFAULTS.framework,
+    toolProfile: process.env.LCFA_TOOL_PROFILE || DEFAULTS.toolProfile,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
     port: parsePort(process.env.LCFA_MCP_PORT || DEFAULTS.port),
     tool: process.env.LCFA_TOOL || DEFAULTS.tool,
@@ -93,6 +99,15 @@ function loadConfig(argv = []) {
       case 'wp-root':
         config.wpRoot = value || config.wpRoot
         break
+      case 'agent-workspace-root':
+        config.agentWorkspaceRoot = value || config.agentWorkspaceRoot
+        break
+      case 'framework':
+        config.framework = value || config.framework
+        break
+      case 'tool-profile':
+        config.toolProfile = value || config.toolProfile
+        break
       case 'host':
         config.host = value || config.host
         break
@@ -120,6 +135,8 @@ function loadConfig(argv = []) {
   }
 
   config.restBase = normalizeRestBase(config.restBase, config.siteUrl)
+  config.framework = normalizeFramework(config.framework)
+  config.toolProfile = normalizeToolProfile(config.toolProfile)
 
   if (!['stdio', 'bridge'].includes(config.transport)) {
     throw new Error(`Unsupported transport "${config.transport}". Use stdio or bridge.`)
@@ -134,6 +151,15 @@ function loadConfig(argv = []) {
   }
 
   return config
+}
+
+function normalizeFramework(value) {
+  const framework = String(value || '').trim().toLowerCase()
+  return ['picowind', 'picostrap'].includes(framework) ? framework : ''
+}
+
+function normalizeToolProfile(value) {
+  return String(value || '').trim().toLowerCase() === 'compact' ? 'compact' : 'full'
 }
 
 function normalizeRestBase(restBase, siteUrl) {

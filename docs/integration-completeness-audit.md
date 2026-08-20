@@ -1,7 +1,7 @@
 # LiveCanvas Stack Integration Completeness Audit
 
-Last reviewed: 2026-08-03
-Plugin baseline: LiveCanvas AI Bridge 0.2.0-beta.3 staging beta
+Last reviewed: 2026-08-20
+Plugin baseline: LiveCanvas AI Bridge 0.2.0-beta.4 release candidate, staging beta
 
 ## Purpose
 
@@ -35,9 +35,9 @@ The running reference site reported WindPress 3.2.86 in `hybrid` mode with Tailw
 
 - **LiveCanvas core operations:** strong alpha, with broad contract coverage and real local/remote use.
 - **Picostrap:** strongest framework path; site generation, Sass compilation, targeted patch rollback, header behavior, and desktop/mobile visual checks pass on the LocalWP reference stack.
-- **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. Cross-host and Tailwind 3 qualification remain open.
-- **Theme Library:** functional beta. Package validation, install, import, deterministic build gating, separate LiveCanvas shell rendering, media, runtime rollback, and automatic failed-import recovery are implemented; the main flow passes on a real LocalWP stack.
-- **Secure agent transport:** functional beta. Pairing, site identity, scopes, preview-first writes, revocation, five-client setup generation, and exact MCP package detection are implemented; multi-host/five-client qualification remains open.
+- **Picowind/WindPress:** broad API coverage with a passing local Asteria import, deterministic Tailwind 4 cache build, desktop/mobile visual check, and rollback. A Cloudways Asteria flow also passes by verifying a native WindPress cache without FTP or SSH. Broader host/version and Tailwind 3 qualification remain open.
+- **Theme Library:** functional beta. Package validation, install/update, import, deterministic build gating, separate LiveCanvas shell rendering, media, runtime rollback, and automatic failed-import recovery are implemented; the main LocalWP transaction and the Cloudways Asteria update/build verification pass.
+- **Secure agent transport:** functional beta. Pairing, site identity, scopes, preview-first writes, revocation, project-safe config merging, five-client setup generation, and exact MCP package detection are implemented. OpenCode, Cursor, Claude Desktop Free, and Codex have complete local beta.5 handoff and reversible-write evidence. Claude Code configuration generation is available but remains preview-only until its CLI flow is qualified.
 
 The plugin is not yet “perfectly integrated” in the production sense. Its main remaining risk is not missing CRUD endpoints; it is proving that build output, framework state, and rollback remain coherent across versions and hosts.
 
@@ -79,7 +79,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Initialize Picowind runtime | Contract tested + source parity | `ensure_picowind_runtime()` matches Picowind's WindPress setup behavior | Verify Tailwind 3 and Tailwind 4 variants on real sites |
 | Scan providers and volume entries | Contract tested | REST/MCP WindPress endpoints | Large-volume pagination and payload limits |
 | Store `theme.json` and compiled CSS | Contract tested | WindPress bridge and design-system executor | Remote E2E and cache-plugin matrix |
-| Build WindPress cache locally | Local E2E | Asteria build produced and verified a 59,097-byte Tailwind 4 cache through the local MCP gateway | Deterministic remote build strategy when no local filesystem bridge exists |
+| Build WindPress cache locally or verify it remotely | Local/remote E2E | Local Asteria produced a verified 59,097-byte Tailwind 4 cache; Cloudways reused and verified a 50,758-byte native WindPress cache without FTP/SSH | Additional host/version and cache-plugin matrix |
 | Import Tailwind source from Theme Library | Local E2E | Asteria 1.0.1 imported, compiled, persisted, and rendered through WindPress hybrid mode | Remote-host and Tailwind 3 qualification |
 | Backup and restore runtime/options/cache | Local E2E | focused tests plus Asteria import/rollback on LocalWP | Retention cleanup and multi-version/host matrix |
 | Prevent WindPress runtime on Picostrap | Local E2E | framework compatibility filter | Confirm behavior across WindPress releases |
@@ -96,14 +96,14 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | Idempotent re-import | Contract tested | import key/version/checksum logic | Force-update migration rules between manifest versions |
 | WindPress runtime rollback | Local E2E | disk backup with SHA-256 plus real import rollback | Multi-version/host matrix and backup retention |
 | Automatic failed-import recovery | Contract tested + local E2E | optional transaction rollback reports original failure plus recovery outcome; all four import checkpoints restore theme, homepage, and compiled-cache state | Restrictive remote-host failure injection |
-| Automatic compile after source import | Local E2E + contract tested remote handshake | explicit `ready`, `ready_degraded`, `build_required`, and `build_failed`; persistent cache checksum verification; audit-bound remote MCP completion; passing Asteria import/build/rollback | Remote-host and Tailwind 3 qualification |
+| Automatic compile after source import | Local/remote E2E | explicit `ready`, `ready_degraded`, `build_required`, and `build_failed`; persistent cache checksum verification; audit-bound remote MCP completion; passing LocalWP transaction and Cloudways native-cache verification | Additional remote hosts and Tailwind 3 qualification |
 | Abandoned install retention | Contract tested | seven-day inactive handoff cleanup, active-theme protection, idempotent WindPress backup deletion | Long-running LocalWP and restrictive-host observation |
 
 ### Agent, Security, And Developer Operations
 
 | Capability | Current level | Evidence | Remaining work |
 |---|---|---|---|
-| Project-scoped client setup | Local/remote E2E + contract tested | generated Codex/OpenCode/Claude Code/Desktop/Cursor configurations and pairing flow | Fresh-install UX and real handoff testing across all five clients |
+| Project-scoped client setup | Local/remote E2E + contract tested | generated Codex/OpenCode/Claude Code/Desktop/Cursor configurations; structural merge, backup, mode `0600`, separate agent/WP roots, secure pairing, and final beta.5 write/rollback runs for Codex/OpenCode/Desktop/Cursor | Complete Claude Code CLI qualification and repeat across more machines |
 | Secure pairing without WordPress Application Password in config | Local/remote E2E | session manager, hashed tokens, revocation | Proxy/WAF/host matrix |
 | Site fingerprint and project identity | Local/remote E2E | handoff and session checks | Stronger warning when a project config targets a migrated domain |
 | Scoped read/preview/write/full access | Contract tested + field use | ability registry and session scopes | Per-operation approval policies for production |
@@ -112,13 +112,27 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
 | MCP schema/caching metadata | Contract tested | Node registry tests | Complete migration after the MCP 2026 release candidate stabilizes |
 | Versioned stack capability profile | Contract tested | `stack-capabilities.v1`, snapshot, admin hero, and agent handoff | Validate the profile against second-host and future-version fixtures |
 
+## Final Local Agent Acceptance Evidence
+
+The 2026-08-20 release-candidate run used plugin `0.2.0-beta.4` and exact MCP package `0.2.0-beta.5` on a LocalWP installation whose agent workspace root contained a nested `app/public` WordPress root.
+
+1. OpenCode 1.18.10, Cursor, Claude Desktop Free, and Codex each completed secure pairing or session reuse, `get_connection_handoff`, and `get_snapshot` against the correct site fingerprint.
+2. Every qualified client reported MCP beta.5 as both expected and detected.
+3. Each qualified client completed a preview-first temporary child-theme write and verified rollback; Codex specifically verified that restoring a tombstone backup deleted a newly created file.
+4. Structural config tests preserved sentinel settings, created private backups, used atomic mode-`0600` files, and kept static tokens, passwords, secrets, and Application Passwords out of project configuration.
+5. OpenCode, Codex, and Claude Desktop test sessions/configuration were revoked or restored after testing. Cursor alone was left selected and WordPress reported 3 successful checks, 0 skipped, in Ready state.
+6. Cursor required an individual MCP server **Reload** after the package update; reloading the editor window alone retained the old process. A later repeated prompt was blocked by the external free-plan quota, without invalidating the already-passing native-agent evidence or MCP configuration.
+
+Claude Code is excluded from the qualified-client claim for this beta. Its configuration artifacts are generated and contract tested, but a complete authenticated CLI handoff/write/rollback run was not available on the test account.
+
 ## Confirmed Gaps
 
 ### P0: Required Before A Production Claim
 
 1. **Multi-host Theme Library build gate qualification**
    - The deterministic LocalWP compile/import/visual-check/rollback run passes.
-   - Production evidence still requires remote-host `build_required` verification and a second supported WindPress host/version.
+   - Cloudways native WindPress generation and audit-bound verification pass without FTP or SSH.
+   - Production evidence still requires another host/filesystem policy and a second supported WindPress version.
 
 2. **Transaction recovery**
    - Optional automatic rollback is implemented and contract tested, with separate original-error and rollback outcomes.
@@ -126,7 +140,7 @@ The plugin is not yet “perfectly integrated” in the production sense. Its ma
    - Production evidence still requires the same matrix on a restrictive remote host.
 
 3. **Versioned capability detection**
-   - `stack-capabilities.v1` publishes tested ranges and returns `supported`, `degraded`, or `unsupported` with explicit missing APIs.
+   - `stack-capabilities.v1` profile `2026.08.3` publishes conservative tested ranges and returns `supported`, `degraded`, or `unsupported` with explicit missing APIs.
    - Production evidence still requires qualification against a second host and supported dependency matrix.
 
 4. **Broader Picowind qualification**

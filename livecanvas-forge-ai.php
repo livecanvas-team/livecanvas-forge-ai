@@ -3,9 +3,9 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.2.0-beta.3.12
+ * Version: 0.2.0-beta.4
  * Requires at least: 6.8
- * Tested up to: 7.0
+ * Tested up to: 7.1
  * Requires PHP: 8.0
  * Update URI: https://livecanvas.com/ai-bridge
  * Author: The LiveCanvas Team
@@ -15,8 +15,8 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.2.0-beta.3.12');
-define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.4');
+define('LCFA_VERSION', '0.2.0-beta.4');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.5');
 define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@' . LCFA_MCP_PACKAGE_VERSION);
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
@@ -77,6 +77,7 @@ require_once LCFA_DIR . 'includes/class-lcfa-theme-library-installer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-theme-library-importer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-theme-library-rollback.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-bundle-builder.php';
+require_once LCFA_DIR . 'includes/class-lcfa-connection-artifact-writer.php';
 require_once LCFA_DIR . 'includes/class-lcfa-connection-onboarding.php';
 require_once LCFA_DIR . 'includes/class-lcfa-direct-agent-onboarding.php';
 require_once LCFA_DIR . 'includes/class-lcfa-power-mode.php';

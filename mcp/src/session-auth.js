@@ -45,12 +45,18 @@ class SessionAuth {
     return this.startPairing()
   }
 
+  invalidateSession() {
+    this.config.sessionToken = ''
+    clearCache(this.cachePath)
+  }
+
   async startPairing() {
     const agentLabel = formatAgentLabel(this.config.agent)
     const response = await this.request('POST', 'mcp/pairing/start', {
       client: this.config.agent || 'codex',
       project_label: this.config.projectLabel || `${agentLabel} project`,
       site_fingerprint: this.config.siteFingerprint || '',
+      connection_mode: this.config.wpRoot ? 'local' : 'remote',
       scopes: normalizePairingScopes(this.config.pairingScopes)
     })
 
@@ -83,6 +89,11 @@ class SessionAuth {
     })
     const payload = await parseResponse(response)
 
+    if (payload.status === 'expired') {
+      clearCache(this.cachePath)
+      return this.startPairing()
+    }
+
     if (!response.ok || payload.ok === false) {
       clearCache(this.cachePath)
       return pairingError(payload)
@@ -103,11 +114,6 @@ class SessionAuth {
         token: payload.session_token,
         sessionId: payload.session_id || ''
       }
-    }
-
-    if (payload.status === 'expired') {
-      clearCache(this.cachePath)
-      return this.startPairing()
     }
 
     return pairingPending({

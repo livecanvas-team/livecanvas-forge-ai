@@ -361,15 +361,13 @@ class ThemeFilesystem {
       await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
     }
 
-    let backupFile = null
-
-    if (exists) {
-      backupFile = await this.createBackup({
-        root,
-        relativePath,
-        content: previousContent
-      })
-    }
+    const backupFile = await this.createBackup({
+      root,
+      relativePath,
+      content: previousContent,
+      originalExists: exists
+    })
+    const backupId = toPosix(path.relative(this.backupsDirectory, backupFile))
 
     await fsp.writeFile(absolutePath, content, 'utf8')
     const stats = await fsp.stat(absolutePath)
@@ -387,6 +385,7 @@ class ThemeFilesystem {
       created,
       changed,
       backup_file: backupFile,
+      backup_id: backupId,
       bytes_before: Buffer.byteLength(previousContent, 'utf8'),
       bytes_after: Buffer.byteLength(content, 'utf8'),
       modified_at: stats.mtime.toISOString()
@@ -490,13 +489,64 @@ class ThemeFilesystem {
       currentFile = null
     }
 
-    const writeResult = await this.writeFile({
-      root_scope: rootScope,
-      path: relativePath,
-      content: backup.content || '',
-      dry_run: dryRun,
-      create_directories: options.create_directories !== false
-    })
+    let writeResult
+
+    if (backup.original_exists === false) {
+      const roots = await this.getThemeRoots()
+      const root = this.resolveWriteTarget(rootScope, roots)
+      const writePolicy = this.getWriteRootPolicy(root, roots, options)
+      const absolutePath = this.resolveAbsolutePath(root.path, relativePath)
+      const exists = fs.existsSync(absolutePath)
+      const previousContent = exists ? await fsp.readFile(absolutePath, 'utf8') : ''
+
+      assertAllowedExtension(relativePath, WRITABLE_EXTENSIONS, 'restore')
+      assertWritablePath(relativePath)
+
+      if (!writePolicy.writable) {
+        throw new Error(writePolicy.message)
+      }
+
+      let safetyBackupFile = null
+      let safetyBackupId = null
+      if (!dryRun && exists) {
+        safetyBackupFile = await this.createBackup({
+          root,
+          relativePath,
+          content: previousContent,
+          originalExists: true
+        })
+        safetyBackupId = toPosix(path.relative(this.backupsDirectory, safetyBackupFile))
+        await fsp.unlink(absolutePath)
+      }
+
+      writeResult = {
+        ok: true,
+        dry_run: dryRun,
+        writable: true,
+        root_scope: rootScope,
+        root: root.key,
+        theme: root.label,
+        relative_path: relativePath,
+        absolute_path: absolutePath,
+        exists: dryRun ? exists : false,
+        created: false,
+        changed: exists,
+        deleted: exists,
+        restore_action: 'delete_created_file',
+        backup_file: safetyBackupFile,
+        backup_id: safetyBackupId,
+        bytes_before: Buffer.byteLength(previousContent, 'utf8'),
+        bytes_after: 0
+      }
+    } else {
+      writeResult = await this.writeFile({
+        root_scope: rootScope,
+        path: relativePath,
+        content: backup.content || '',
+        dry_run: dryRun,
+        create_directories: options.create_directories !== false
+      })
+    }
 
     return {
       ...writeResult,
@@ -507,7 +557,9 @@ class ThemeFilesystem {
         root: backup.root,
         theme: backup.theme,
         kind: backup.kind,
-        bytes: backup.bytes
+        bytes: backup.bytes,
+        original_exists: backup.original_exists,
+        restore_action: backup.restore_action
       },
       current_file: currentFile
         ? {
@@ -645,7 +697,7 @@ class ThemeFilesystem {
     return TEMPLATE_DIRECTORIES
   }
 
-  async createBackup({ root, relativePath, content }) {
+  async createBackup({ root, relativePath, content, originalExists = true }) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backupDirectory = path.join(this.backupsDirectory, stamp.slice(0, 10), root.label)
     const safeFilename = relativePath.replace(/[\\/]/g, '__')
@@ -658,6 +710,8 @@ class ThemeFilesystem {
       theme: root.label,
       relative_path: relativePath,
       kind: classifyFileKind(relativePath),
+      original_exists: Boolean(originalExists),
+      restore_action: originalExists ? 'restore_content' : 'delete_created_file',
       created_at: new Date().toISOString()
     }, null, 2), 'utf8')
 
@@ -722,6 +776,8 @@ class ThemeFilesystem {
       root: metadata.root || '',
       theme: metadata.theme || backupId.split('/')[1] || '',
       kind: metadata.kind || classifyFileKind(metadata.relative_path || this.inferBackupRelativePath(absolutePath) || '.txt'),
+      original_exists: metadata.original_exists !== false,
+      restore_action: metadata.original_exists === false ? 'delete_created_file' : 'restore_content',
       bytes: stats.size,
       created_at: createdAt,
       modified_at: stats.mtime.toISOString(),

@@ -34,7 +34,7 @@ lcfa_repair_assert_contains("Other coding agents", $admin, 'non-Codex agents sho
 lcfa_repair_assert_contains("sync_local_workspace_root(true)", $admin, 'Codex repair should force-sync WordPress workspace root');
 lcfa_repair_assert_contains("Restart Codex or reload the MCP server", $admin, 'Codex repair should tell the user to restart Codex after config changes');
 lcfa_repair_assert_contains("connection_current_step'] = 'smoke_test'", $admin, 'Codex connect should move to smoke_test instead of ready');
-lcfa_repair_assert_contains("@livecanvas/ai-bridge-mcp@0.2.0-beta.4", $admin, 'remote Codex should use the secure AI Bridge MCP package');
+lcfa_repair_assert_contains("@livecanvas/ai-bridge-mcp@0.2.0-beta.5", $admin, 'remote Codex should use the secure AI Bridge MCP package');
 lcfa_repair_assert_contains("admin_post_lcfa_mcp_pairing_approve", $admin, 'admin should allow approving secure Codex pairing requests');
 lcfa_repair_assert_contains("lcfa-secure-codex-pairing-sessions", $admin, 'secure Codex pairing panel should expose a stable approval anchor');
 lcfa_repair_assert_contains("WP_API_PASSWORD", $admin, 'admin should keep the legacy Application Password adapter only in advanced fallback');
