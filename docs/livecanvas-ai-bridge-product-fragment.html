@@ -53,6 +53,7 @@
     }
 
     @media (min-width: 981px) {
+        body:has(#lcab-product) #lc-header,
         body:has(#lcab-product) #wrapper-navbar,
         body:has(#lcab-product):not(:has(#wrapper-navbar)) header#masthead,
         body:has(#lcab-product):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
@@ -65,12 +66,14 @@
             box-shadow: none !important;
         }
 
+        body.admin-bar:has(#lcab-product) #lc-header,
         body.admin-bar:has(#lcab-product) #wrapper-navbar,
         body.admin-bar:has(#lcab-product):not(:has(#wrapper-navbar)) header#masthead,
         body.admin-bar:has(#lcab-product):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
             top: 32px !important;
         }
 
+        body:has(#lcab-product) #lc-header .navbar,
         body:has(#lcab-product) #wrapper-navbar .navbar,
         body:has(#lcab-product) header#masthead .navbar,
         body:has(#lcab-product) header.site-header .navbar {
@@ -79,6 +82,8 @@
             box-shadow: none !important;
         }
 
+        body:has(#lcab-product) #lc-header .nav-link,
+        body:has(#lcab-product) #lc-header .navbar-brand,
         body:has(#lcab-product) #wrapper-navbar .nav-link,
         body:has(#lcab-product) #wrapper-navbar .navbar-brand,
         body:has(#lcab-product) header#masthead .nav-link,
