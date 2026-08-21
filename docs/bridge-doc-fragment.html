@@ -73,6 +73,49 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         text-wrap: pretty;
     }
 
+    @media (min-width: 981px) {
+        body:has(#lcab-doc) #lc-header,
+        body:has(#lcab-doc) #wrapper-navbar,
+        body:has(#lcab-doc):not(:has(#wrapper-navbar)) header#masthead,
+        body:has(#lcab-doc):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
+            position: absolute !important;
+            inset: 0 0 auto !important;
+            z-index: 1100 !important;
+            width: 100% !important;
+            border-bottom: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        body.admin-bar:has(#lcab-doc) #lc-header,
+        body.admin-bar:has(#lcab-doc) #wrapper-navbar,
+        body.admin-bar:has(#lcab-doc):not(:has(#wrapper-navbar)) header#masthead,
+        body.admin-bar:has(#lcab-doc):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
+            top: 32px !important;
+        }
+
+        body:has(#lcab-doc) #lc-header #header_2024,
+        body:has(#lcab-doc) #lc-header .navbar,
+        body:has(#lcab-doc) #wrapper-navbar .navbar,
+        body:has(#lcab-doc) header#masthead .navbar,
+        body:has(#lcab-doc) header.site-header .navbar {
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        body:has(#lcab-doc) #lc-header .nav-link,
+        body:has(#lcab-doc) #lc-header .navbar-brand,
+        body:has(#lcab-doc) #wrapper-navbar .nav-link,
+        body:has(#lcab-doc) #wrapper-navbar .navbar-brand,
+        body:has(#lcab-doc) header#masthead .nav-link,
+        body:has(#lcab-doc) header#masthead .navbar-brand,
+        body:has(#lcab-doc) header.site-header .nav-link,
+        body:has(#lcab-doc) header.site-header .navbar-brand {
+            color: #fff !important;
+        }
+    }
+
     .lcabd-skip {
         position: fixed;
         top: 0;
