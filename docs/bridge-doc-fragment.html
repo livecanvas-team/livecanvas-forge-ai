@@ -1,0 +1,1034 @@
+<!--
+THESIS: A five-part control-room manual gets a developer from download to a verified first task; it refuses the usual wall of MCP configuration.
+OWN-WORLD: Near-black and plum surfaces, cyan navigation, green verified states, one-pixel rules, square code panels, and real coding-agent marks.
+STORY: Download the beta, confirm one project, install one generated server, verify the handoff, then work through preview and rollback.
+FIRST VIEWPORT: A compact documentation title and release action sit beside a persistent left sidebar; the first required action is visible without scrolling.
+FORM: User-pinned left-sidebar technical manual in Read mode; the established LiveCanvas AI Bridge visual system remains unchanged.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+-->
+<style>
+    #lcab-doc {
+        --lcabd-bg: #11121a;
+        --lcabd-surface: #191b27;
+        --lcabd-surface-raised: #222533;
+        --lcabd-line: #3b3f55;
+        --lcabd-line-strong: #5a607a;
+        --lcabd-text: #f7f8fc;
+        --lcabd-muted: #bec2d4;
+        --lcabd-quiet: #969cb4;
+        --lcabd-cyan: #2cc5d8;
+        --lcabd-cyan-soft: #173c45;
+        --lcabd-green: #43d98a;
+        --lcabd-green-soft: #17392b;
+        --lcabd-amber: #f2c45b;
+        --lcabd-amber-soft: #3d331e;
+        --lcabd-pink: #ec3e8d;
+        min-height: 100vh;
+        background: var(--lcabd-bg);
+        color: var(--lcabd-text);
+        font-family: var(--bs-body-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+        font-size: 16px;
+        line-height: 1.6;
+    }
+
+    #lcab-doc *,
+    #lcab-doc *::before,
+    #lcab-doc *::after {
+        box-sizing: border-box;
+        letter-spacing: 0;
+    }
+
+    #lcab-doc ::selection {
+        background: var(--lcabd-cyan);
+        color: #071519;
+    }
+
+    #lcab-doc a {
+        color: var(--lcabd-cyan);
+        text-underline-offset: 0.22em;
+    }
+
+    #lcab-doc a:focus-visible,
+    #lcab-doc button:focus-visible,
+    #lcab-doc summary:focus-visible {
+        outline: 3px solid #8cebf3;
+        outline-offset: 3px;
+    }
+
+    #lcab-doc h1,
+    #lcab-doc h2,
+    #lcab-doc h3,
+    #lcab-doc p {
+        letter-spacing: 0;
+    }
+
+    #lcab-doc h1,
+    #lcab-doc h2,
+    #lcab-doc h3 {
+        text-wrap: balance;
+    }
+
+    #lcab-doc p,
+    #lcab-doc li {
+        text-wrap: pretty;
+    }
+
+    .lcabd-skip {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 2000;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        background: var(--lcabd-text);
+        color: var(--lcabd-bg) !important;
+    }
+
+    .lcabd-skip:focus-visible {
+        top: 0.75rem;
+        left: 0.75rem;
+        width: auto;
+        height: auto;
+        padding: 0.6rem 0.85rem;
+        clip-path: none;
+    }
+
+    .lcabd-shell {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 860px);
+        gap: clamp(2.5rem, 6vw, 6.5rem);
+        width: min(calc(100% - 3rem), 1240px);
+        margin-inline: auto;
+        padding-block: clamp(3rem, 7vw, 6rem);
+    }
+
+    .lcabd-sidebar {
+        position: sticky;
+        top: 2rem;
+        align-self: start;
+        padding-right: 1.5rem;
+        border-right: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px solid var(--lcabd-line);
+        color: var(--lcabd-text) !important;
+        text-decoration: none;
+    }
+
+    .lcabd-brand img {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 8px;
+    }
+
+    .lcabd-brand strong,
+    .lcabd-brand span {
+        display: block;
+    }
+
+    .lcabd-brand span {
+        color: var(--lcabd-muted);
+        font-size: 0.78rem;
+    }
+
+    .lcabd-nav {
+        display: grid;
+        gap: 0.25rem;
+        margin-top: 1.25rem;
+    }
+
+    #lcab-doc .lcabd-nav a {
+        display: flex;
+        min-height: 2.75rem;
+        align-items: center;
+        padding: 0.55rem 0.7rem;
+        border-radius: 8px;
+        color: var(--lcabd-muted);
+        font-size: 0.92rem;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    #lcab-doc .lcabd-nav a:hover,
+    #lcab-doc .lcabd-nav a[aria-current="location"] {
+        background: var(--lcabd-cyan-soft);
+        color: #d9fbff;
+    }
+
+    .lcabd-sidebar__release {
+        margin-top: 1.4rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--lcabd-line);
+        color: var(--lcabd-muted);
+        font-size: 0.8rem;
+    }
+
+    .lcabd-sidebar__release strong {
+        display: block;
+        color: var(--lcabd-text);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .lcabd-main {
+        min-width: 0;
+    }
+
+    .lcabd-intro {
+        padding-bottom: clamp(3rem, 7vw, 5rem);
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-intro h1 {
+        max-width: 12ch;
+        margin: 0;
+        font-size: clamp(3rem, 7vw, 5.5rem);
+        font-weight: 760;
+        line-height: 0.96;
+    }
+
+    .lcabd-intro__lead {
+        max-width: 65ch;
+        margin: 1.35rem 0 0;
+        color: var(--lcabd-muted);
+        font-size: clamp(1.05rem, 2vw, 1.25rem);
+    }
+
+    .lcabd-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.7rem;
+    }
+
+    #lcab-doc .lcabd-button {
+        display: inline-flex;
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        padding: 0.65rem 1rem;
+        border: 1px solid var(--lcabd-line-strong);
+        border-radius: 8px;
+        background: var(--lcabd-surface);
+        color: var(--lcabd-text);
+        font-weight: 750;
+        text-decoration: none;
+        cursor: pointer;
+        transition: border-color 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out;
+    }
+
+    #lcab-doc .lcabd-button:hover {
+        border-color: var(--lcabd-cyan);
+        color: #d9fbff;
+    }
+
+    #lcab-doc .lcabd-button--primary {
+        border-color: var(--lcabd-cyan);
+        background: var(--lcabd-cyan);
+        color: #071519;
+    }
+
+    #lcab-doc .lcabd-button--primary:hover {
+        border-color: #7be8f2;
+        background: #7be8f2;
+        color: #071519;
+    }
+
+    .lcabd-release-line {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-block: 1rem;
+        border-top: 1px solid var(--lcabd-line);
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-release-line span,
+    .lcabd-release-line strong {
+        display: block;
+    }
+
+    .lcabd-release-line span {
+        color: var(--lcabd-quiet);
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+
+    .lcabd-release-line strong {
+        margin-top: 0.15rem;
+        font-size: 0.94rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .lcabd-section {
+        padding-block: clamp(3.5rem, 7vw, 6rem);
+        border-bottom: 1px solid var(--lcabd-line);
+        scroll-margin-top: 2rem;
+    }
+
+    .lcabd-section h2 {
+        max-width: 18ch;
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 3.3rem);
+        line-height: 1.04;
+    }
+
+    .lcabd-section > p {
+        max-width: 70ch;
+        margin: 1rem 0 0;
+        color: var(--lcabd-muted);
+    }
+
+    .lcabd-next-action {
+        display: flex;
+        gap: 0.85rem;
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border: 1px solid #2a7886;
+        border-radius: 8px;
+        background: var(--lcabd-cyan-soft);
+        color: #d8fbff;
+    }
+
+    .lcabd-next-action svg {
+        width: 1.4rem;
+        height: 1.4rem;
+        flex: 0 0 auto;
+        margin-top: 0.08rem;
+    }
+
+    .lcabd-next-action strong,
+    .lcabd-next-action span {
+        display: block;
+    }
+
+    .lcabd-next-action span {
+        margin-top: 0.12rem;
+        color: #b9e9ee;
+        font-size: 0.91rem;
+    }
+
+    .lcabd-steps {
+        margin: 2rem 0 0;
+        padding: 0;
+        border-top: 1px solid var(--lcabd-line);
+        list-style: none;
+        counter-reset: lcabd-step;
+    }
+
+    .lcabd-steps li {
+        display: grid;
+        grid-template-columns: 2.5rem minmax(0, 1fr);
+        gap: 1rem;
+        padding-block: 1.2rem;
+        border-bottom: 1px solid var(--lcabd-line);
+        counter-increment: lcabd-step;
+    }
+
+    .lcabd-steps li::before {
+        content: counter(lcabd-step, decimal-leading-zero);
+        color: var(--lcabd-cyan);
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+    }
+
+    .lcabd-steps strong {
+        display: block;
+        font-size: 1.02rem;
+    }
+
+    .lcabd-steps p {
+        max-width: 68ch;
+        margin: 0.3rem 0 0;
+        color: var(--lcabd-muted);
+        font-size: 0.94rem;
+    }
+
+    .lcabd-shot {
+        margin: 2rem 0 0;
+    }
+
+    .lcabd-shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--lcabd-line-strong);
+        border-radius: 12px;
+        background: var(--lcabd-surface);
+    }
+
+    .lcabd-shot figcaption {
+        margin-top: 0.7rem;
+        color: var(--lcabd-quiet);
+        font-size: 0.82rem;
+    }
+
+    .lcabd-mode-table {
+        margin-top: 2rem;
+        border-top: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-mode-row {
+        display: grid;
+        grid-template-columns: minmax(130px, 0.35fr) minmax(0, 1fr);
+        gap: 1.25rem;
+        padding-block: 1rem;
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-mode-row strong {
+        color: var(--lcabd-text);
+    }
+
+    .lcabd-mode-row p {
+        margin: 0;
+        color: var(--lcabd-muted);
+    }
+
+    .lcabd-agent-tabs {
+        display: flex;
+        gap: 0.45rem;
+        margin-top: 2.25rem;
+        padding-bottom: 0.7rem;
+        overflow-x: auto;
+        scrollbar-color: var(--lcabd-line-strong) transparent;
+    }
+
+    .lcabd-agent-tab {
+        display: inline-flex;
+        min-height: 3rem;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--lcabd-line);
+        border-radius: 8px;
+        background: var(--lcabd-surface);
+        color: var(--lcabd-muted);
+        font: inherit;
+        font-size: 0.86rem;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .lcabd-agent-tab[aria-selected="true"] {
+        border-color: var(--lcabd-cyan);
+        background: var(--lcabd-cyan-soft);
+        color: #d9fbff;
+    }
+
+    .lcabd-agent-tab img {
+        width: 1.45rem;
+        height: 1.45rem;
+        object-fit: contain;
+    }
+
+    .lcabd-agent-panel {
+        margin-top: 0.65rem;
+        padding: clamp(1.25rem, 3vw, 2rem);
+        border: 1px solid var(--lcabd-line);
+        border-radius: 12px;
+        background: var(--lcabd-surface);
+    }
+
+    .lcabd-agent-panel:not([hidden]) {
+        animation: lcabd-panel-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes lcabd-panel-in {
+        from { opacity: 0.72; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .lcabd-agent-panel h3 {
+        margin: 0;
+        font-size: 1.3rem;
+    }
+
+    .lcabd-agent-panel > p {
+        max-width: 68ch;
+        margin: 0.5rem 0 0;
+        color: var(--lcabd-muted);
+    }
+
+    .lcabd-agent-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1.25rem;
+        padding-block: 1rem;
+        border-top: 1px solid var(--lcabd-line);
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-agent-meta span,
+    .lcabd-agent-meta strong {
+        display: block;
+    }
+
+    .lcabd-agent-meta span {
+        color: var(--lcabd-quiet);
+        font-size: 0.76rem;
+    }
+
+    .lcabd-agent-meta strong {
+        margin-top: 0.15rem;
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
+    }
+
+    .lcabd-agent-panel ol {
+        margin: 1.25rem 0 0;
+        padding-left: 1.25rem;
+        color: var(--lcabd-muted);
+    }
+
+    .lcabd-agent-panel li + li {
+        margin-top: 0.55rem;
+    }
+
+    .lcabd-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.38rem;
+        margin-left: 0.45rem;
+        padding: 0.18rem 0.5rem;
+        border: 1px solid #2b8058;
+        border-radius: 999px;
+        background: var(--lcabd-green-soft);
+        color: #bff2d5;
+        font-size: 0.72rem;
+        font-weight: 750;
+        vertical-align: middle;
+    }
+
+    .lcabd-status--preview {
+        border-color: #6c5927;
+        background: var(--lcabd-amber-soft);
+        color: #f8dfa5;
+    }
+
+    .lcabd-code-note {
+        margin-top: 2rem;
+        color: var(--lcabd-muted);
+        font-size: 0.9rem;
+    }
+
+    .lcabd-code {
+        position: relative;
+        margin-top: 0.75rem;
+        overflow: hidden;
+        border: 1px solid var(--lcabd-line);
+        border-radius: 12px;
+        background: #0d0e15;
+    }
+
+    .lcabd-code__bar {
+        display: flex;
+        min-height: 2.75rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.55rem 0.75rem;
+        border-bottom: 1px solid var(--lcabd-line);
+        color: var(--lcabd-quiet);
+        font-size: 0.76rem;
+        font-weight: 750;
+    }
+
+    .lcabd-copy {
+        min-height: 2rem;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--lcabd-line-strong);
+        border-radius: 6px;
+        background: var(--lcabd-surface-raised);
+        color: var(--lcabd-text);
+        font: inherit;
+        font-size: 0.76rem;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .lcabd-copy:hover {
+        border-color: var(--lcabd-cyan);
+    }
+
+    .lcabd-code pre {
+        max-height: 30rem;
+        margin: 0;
+        padding: 1rem;
+        overflow: auto;
+        color: #dfe1f2;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.82rem;
+        line-height: 1.65;
+        tab-size: 2;
+        white-space: pre;
+        scrollbar-color: var(--lcabd-line-strong) #0d0e15;
+    }
+
+    .lcabd-safe-loop {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 2rem;
+        border-top: 1px solid var(--lcabd-line);
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-safe-loop div {
+        min-width: 0;
+        padding: 1rem;
+        border-right: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-safe-loop div:last-child {
+        border-right: 0;
+    }
+
+    .lcabd-safe-loop strong,
+    .lcabd-safe-loop span {
+        display: block;
+    }
+
+    .lcabd-safe-loop span {
+        color: var(--lcabd-quiet);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 750;
+    }
+
+    .lcabd-safe-loop strong {
+        margin-top: 0.2rem;
+    }
+
+    .lcabd-prompts {
+        display: grid;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .lcabd-prompt {
+        border-top: 1px solid var(--lcabd-line);
+        padding-top: 1rem;
+    }
+
+    .lcabd-prompt__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .lcabd-prompt h3 {
+        margin: 0;
+        font-size: 1.05rem;
+    }
+
+    .lcabd-prompt p {
+        max-width: 70ch;
+        margin: 0.65rem 0 0;
+        color: var(--lcabd-muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.84rem;
+        line-height: 1.65;
+    }
+
+    .lcabd-warning {
+        margin-top: 2rem;
+        padding: 1rem;
+        border: 1px solid #6c5927;
+        border-radius: 8px;
+        background: var(--lcabd-amber-soft);
+        color: #f8dfa5;
+    }
+
+    .lcabd-troubleshooting {
+        margin-top: 2rem;
+        border-top: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-troubleshooting details {
+        border-bottom: 1px solid var(--lcabd-line);
+    }
+
+    .lcabd-troubleshooting summary {
+        padding: 1rem 0;
+        color: var(--lcabd-text);
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .lcabd-troubleshooting p {
+        max-width: 70ch;
+        margin: 0;
+        padding: 0 0 1rem;
+        color: var(--lcabd-muted);
+    }
+
+    .lcabd-footer {
+        padding-top: 2rem;
+        color: var(--lcabd-quiet);
+        font-size: 0.82rem;
+    }
+
+    @media (max-width: 960px) {
+        .lcabd-shell {
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        .lcabd-sidebar {
+            position: static;
+            z-index: 5;
+            padding-right: 0;
+            border-right: 0;
+        }
+
+        .lcabd-brand {
+            max-width: 320px;
+        }
+
+        .lcabd-nav {
+            display: flex;
+            padding-bottom: 0.5rem;
+            overflow-x: auto;
+            scrollbar-color: var(--lcabd-line-strong) transparent;
+        }
+
+        #lcab-doc .lcabd-nav a {
+            flex: 0 0 auto;
+        }
+
+        .lcabd-sidebar__release {
+            display: none;
+        }
+    }
+
+    @media (max-width: 680px) {
+        .lcabd-shell {
+            width: min(calc(100% - 1.25rem), 1240px);
+            padding-block: 1.5rem 3rem;
+        }
+
+        .lcabd-intro h1 {
+            font-size: clamp(2.6rem, 13vw, 4rem);
+        }
+
+        .lcabd-actions {
+            flex-direction: column;
+        }
+
+        #lcab-doc .lcabd-button {
+            width: 100%;
+        }
+
+        .lcabd-release-line,
+        .lcabd-agent-meta,
+        .lcabd-safe-loop {
+            grid-template-columns: 1fr;
+        }
+
+        .lcabd-release-line > div + div,
+        .lcabd-agent-meta > div + div {
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--lcabd-line);
+        }
+
+        .lcabd-mode-row {
+            grid-template-columns: 1fr;
+            gap: 0.35rem;
+        }
+
+        .lcabd-safe-loop div {
+            border-right: 0;
+            border-bottom: 1px solid var(--lcabd-line);
+        }
+
+        .lcabd-safe-loop div:last-child {
+            border-bottom: 0;
+        }
+
+        .lcabd-prompt__head {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        #lcab-doc *,
+        #lcab-doc *::before,
+        #lcab-doc *::after {
+            scroll-behavior: auto !important;
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+</style>
+
+<div id="lcab-doc">
+    <a class="lcabd-skip" href="#lcabd-main">Skip to documentation</a>
+
+    <div class="lcabd-shell">
+        <aside class="lcabd-sidebar" aria-label="Bridge documentation">
+            <a class="lcabd-brand" href="/bridge/">
+                <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png" alt="">
+                <span><strong>LiveCanvas AI Bridge</strong><span>Installation and usage</span></span>
+            </a>
+            <nav class="lcabd-nav" aria-label="On this page">
+                <a href="#start" aria-current="location">Start here</a>
+                <a href="#install">Install</a>
+                <a href="#connect">Connect an agent</a>
+                <a href="#verify">Verify and use</a>
+                <a href="#prompts">Prompts and recovery</a>
+            </nav>
+            <div class="lcabd-sidebar__release"><span>Documentation for</span><strong>0.2.0-beta.4</strong></div>
+        </aside>
+
+        <main class="lcabd-main" id="lcabd-main">
+            <header class="lcabd-intro" id="start">
+                <h1>Connect your first coding agent.</h1>
+                <p class="lcabd-intro__lead">Install AI Bridge, bind one coding-agent project to one WordPress site, and finish with a verified read-only snapshot. Allow about 10 minutes for the first connection.</p>
+                <div class="lcabd-actions">
+                    <a class="lcabd-button lcabd-button--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">Download 0.2.0-beta.4</a>
+                    <a class="lcabd-button" href="/bridge/">See what Bridge can do</a>
+                </div>
+                <div class="lcabd-release-line" aria-label="Release requirements">
+                    <div><span>WordPress</span><strong>6.8–7.1</strong></div>
+                    <div><span>PHP</span><strong>8.0+</strong></div>
+                    <div><span>MCP package</span><strong>0.2.0-beta.5</strong></div>
+                </div>
+                <div class="lcabd-next-action">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    <div><strong>Next action: download the release ZIP.</strong><span>Do not install the repository source or an older artifact when testing this beta.</span></div>
+                </div>
+            </header>
+
+            <section class="lcabd-section" id="install" aria-labelledby="install-title">
+                <h2 id="install-title">Install the plugin in four steps.</h2>
+                <p>LiveCanvas must already be active. Picostrap and Picowind/WindPress are detected automatically when present.</p>
+                <ol class="lcabd-steps">
+                    <li><div><strong>Download the release ZIP.</strong><p>Open the GitHub release above and download <code>livecanvas-forge-ai.zip</code>.</p></div></li>
+                    <li><div><strong>Upload it in WordPress.</strong><p>Open <b>Plugins → Add New Plugin → Upload Plugin</b>, select the ZIP, then choose <b>Install Now</b>.</p></div></li>
+                    <li><div><strong>Activate AI Bridge.</strong><p>After activation, open <b>LiveCanvas → AI Bridge</b>.</p></div></li>
+                    <li><div><strong>Confirm the project.</strong><p>Check the detected theme and framework. Choose <b>Configure and build this site</b> only when the agent should be allowed to write; leave it off for inspection.</p></div></li>
+                </ol>
+                <figure class="lcabd-shot">
+                    <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/docs/screenshots/onboarding-step-3-project-ready.jpg" width="1024" height="768" alt="AI Bridge project setup ready screen showing the detected framework, local site and coding agent">
+                    <figcaption>WordPress confirms the site context before the connection wizard opens.</figcaption>
+                </figure>
+            </section>
+
+            <section class="lcabd-section" id="connect" aria-labelledby="connect-title">
+                <h2 id="connect-title">Connect one project to one site.</h2>
+                <p>Open the folder you actually use in the coding agent. That folder can contain WordPress, or WordPress can live deeper inside it at a path such as <code>app/public</code>.</p>
+
+                <div class="lcabd-mode-table" aria-label="Connection modes">
+                    <div class="lcabd-mode-row"><strong>Direct Mode</strong><p>Recommended for normal WordPress work. Public HTTPS Codex projects can use OAuth; other environments use secure site-bound pairing.</p></div>
+                    <div class="lcabd-mode-row"><strong>Local runtime</strong><p>Use when the agent must read theme files, compile Picostrap or WindPress assets, discover local media, or run local visual checks.</p></div>
+                </div>
+
+                <div class="lcabd-agent-tabs" role="tablist" aria-label="Coding-agent setup">
+                    <button class="lcabd-agent-tab" id="tab-codex" type="button" role="tab" aria-selected="false" aria-controls="panel-codex" tabindex="-1" data-lcabd-agent="codex"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/codex-color.svg" alt="">Codex</button>
+                    <button class="lcabd-agent-tab" id="tab-cursor" type="button" role="tab" aria-selected="true" aria-controls="panel-cursor" data-lcabd-agent="cursor"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/cursor.svg" alt="">Cursor</button>
+                    <button class="lcabd-agent-tab" id="tab-opencode" type="button" role="tab" aria-selected="false" aria-controls="panel-opencode" tabindex="-1" data-lcabd-agent="opencode"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/opencode.svg" alt="">OpenCode</button>
+                    <button class="lcabd-agent-tab" id="tab-claude-desktop" type="button" role="tab" aria-selected="false" aria-controls="panel-claude-desktop" tabindex="-1" data-lcabd-agent="claude-desktop"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-color.svg" alt="">Claude Desktop</button>
+                    <button class="lcabd-agent-tab" id="tab-claude-code" type="button" role="tab" aria-selected="false" aria-controls="panel-claude-code" tabindex="-1" data-lcabd-agent="claude-code"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-code.svg" alt="">Claude Code</button>
+                </div>
+
+                <div class="lcabd-agent-panel" id="panel-codex" role="tabpanel" aria-labelledby="tab-codex" data-lcabd-panel="codex" hidden>
+                    <h3>Codex <span class="lcabd-status">Qualified</span></h3>
+                    <p>Use the setup prompt generated by WordPress. Keep the MCP server project-scoped.</p>
+                    <div class="lcabd-agent-meta"><div><span>Project file</span><strong>.codex/config.toml</strong></div><div><span>First verification</span><strong>get_connection_handoff</strong></div></div>
+                    <ol><li>Copy <b>Prompt for Codex</b> from the active AI Bridge step.</li><li>Paste it into the Codex project for this site and allow the project config merge.</li><li>Trust the project when prompted, then reopen Codex so it loads the MCP server.</li><li>Run the generated test prompt and approve the matching WordPress authorization.</li></ol>
+                </div>
+
+                <div class="lcabd-agent-panel" id="panel-cursor" role="tabpanel" aria-labelledby="tab-cursor" data-lcabd-panel="cursor">
+                    <h3>Cursor <span class="lcabd-status">Qualified</span></h3>
+                    <p>AI Bridge writes or merges one server into the current Cursor workspace. Existing MCP servers remain intact.</p>
+                    <div class="lcabd-agent-meta"><div><span>Project file</span><strong>.cursor/mcp.json</strong></div><div><span>Reload action</span><strong>Customize → MCPs → Reload</strong></div></div>
+                    <ol><li>Open the correct project folder in Cursor.</li><li>Generate the Cursor setup in WordPress and install it directly when the folder is writable.</li><li>Open <b>Customize → MCPs</b>, enable <b>livecanvas-forge</b>, then choose <b>Reload</b>.</li><li>Ask Cursor to call <code>get_connection_handoff</code>.</li></ol>
+                </div>
+
+                <div class="lcabd-agent-panel" id="panel-opencode" role="tabpanel" aria-labelledby="tab-opencode" data-lcabd-panel="opencode" hidden>
+                    <h3>OpenCode <span class="lcabd-status">Qualified</span></h3>
+                    <p>Use the generated project configuration and keep it outside the public WordPress web root whenever the workspace contains a nested WordPress install.</p>
+                    <div class="lcabd-agent-meta"><div><span>Project file</span><strong>opencode.json</strong></div><div><span>Diagnostic</span><strong>opencode mcp list</strong></div></div>
+                    <ol><li>Open the project root in OpenCode.</li><li>Run the setup command copied from WordPress, or download and merge <code>opencode.json</code>.</li><li>Confirm that <code>opencode mcp list</code> shows one <b>livecanvas-forge</b> server.</li><li>Call <code>get_connection_handoff</code> and approve the matching pairing in WordPress.</li></ol>
+                </div>
+
+                <div class="lcabd-agent-panel" id="panel-claude-desktop" role="tabpanel" aria-labelledby="tab-claude-desktop" data-lcabd-panel="claude-desktop" hidden>
+                    <h3>Claude Desktop <span class="lcabd-status">Qualified · Free</span></h3>
+                    <p>The Free desktop client passed handoff, snapshot, preview, write and rollback testing. Merge the generated server without replacing unrelated preferences.</p>
+                    <div class="lcabd-agent-meta"><div><span>macOS config</span><strong>~/Library/Application Support/Claude/claude_desktop_config.json</strong></div><div><span>Restart</span><strong>Quit and reopen Claude Desktop</strong></div></div>
+                    <ol><li>Choose <b>Claude → Desktop App</b> in AI Bridge.</li><li>Use direct install when offered, or merge only <code>mcpServers.livecanvas-forge</code>.</li><li>Quit Claude Desktop completely, then reopen it.</li><li>Call <code>get_connection_handoff</code> and approve the matching pairing.</li></ol>
+                </div>
+
+                <div class="lcabd-agent-panel" id="panel-claude-code" role="tabpanel" aria-labelledby="tab-claude-code" data-lcabd-panel="claude-code" hidden>
+                    <h3>Claude Code <span class="lcabd-status lcabd-status--preview">Setup preview</span></h3>
+                    <p>AI Bridge generates the project-scoped command. This beta has not yet completed a full authenticated Claude Code qualification run.</p>
+                    <div class="lcabd-agent-meta"><div><span>Install command</span><strong>claude mcp add --scope project …</strong></div><div><span>Current evidence</span><strong>Configuration and preview only</strong></div></div>
+                    <ol><li>Choose <b>Claude → Command Line Interface</b> in AI Bridge.</li><li>Open a terminal in the correct project and run the exact generated command.</li><li>Confirm that <code>claude mcp list</code> shows <b>livecanvas-forge</b>.</li><li>Do not treat this client as fully qualified until an authenticated handoff and rollback test pass.</li></ol>
+                </div>
+
+                <p class="lcabd-code-note"><strong>Configuration anatomy:</strong> AI Bridge generates this structure for local Cursor projects. The paths below are illustrative. Use the generated file for your site instead of copying this example.</p>
+                <div class="lcabd-code">
+                    <div class="lcabd-code__bar"><span>Example · no static secret</span><button class="lcabd-copy" type="button" data-lcabd-copy="config-example">Copy example</button></div>
+                    <pre id="config-example"><code>{
+  "mcpServers": {
+    "livecanvas-forge": {
+      "command": "node",
+      "args": [
+        "/project/app/public/wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js",
+        "--transport=stdio"
+      ],
+      "env": {
+        "LCFA_AGENT": "cursor",
+        "LCFA_AGENT_WORKSPACE_ROOT": "/project",
+        "LCFA_WP_ROOT": "/project/app/public"
+      }
+    }
+  }
+}</code></pre>
+                </div>
+            </section>
+
+            <section class="lcabd-section" id="verify" aria-labelledby="verify-title">
+                <h2 id="verify-title">Ready means the connection was proven.</h2>
+                <p>Writing a config file is not enough. AI Bridge waits for the agent handoff and a passing WordPress smoke test.</p>
+                <ol class="lcabd-steps">
+                    <li><div><strong>Ask the agent for the handoff.</strong><p>Call <code>get_connection_handoff</code>. Stop if the reported site URL or fingerprint is wrong.</p></div></li>
+                    <li><div><strong>Approve the matching request.</strong><p>Return to WordPress only when AI Bridge shows a matching client and project label.</p></div></li>
+                    <li><div><strong>Run the smoke test.</strong><p>AI Bridge checks REST reachability, the local MCP runtime when applicable, and the detected MCP package version.</p></div></li>
+                    <li><div><strong>Continue only at Ready.</strong><p>The Connections screen must show the correct agent, connection mode and verified package.</p></div></li>
+                </ol>
+                <figure class="lcabd-shot">
+                    <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/docs/screenshots/bridge-doc-cursor-ready.jpg" width="1638" height="967" alt="AI Bridge connection checks showing successful REST, MCP runtime and Cursor handoff results">
+                    <figcaption>A real local Cursor qualification run: three successful checks and the expected MCP package.</figcaption>
+                </figure>
+
+                <div class="lcabd-safe-loop" aria-label="Safe working loop">
+                    <div><span>01</span><strong>Inspect</strong></div>
+                    <div><span>02</span><strong>Preview</strong></div>
+                    <div><span>03</span><strong>Apply</strong></div>
+                    <div><span>04</span><strong>Roll back</strong></div>
+                </div>
+                <div class="lcabd-warning"><strong>Before the first write:</strong> verify the site URL and fingerprint, review the preview, keep the audit ID, and confirm that the requested write scope is enabled.</div>
+            </section>
+
+            <section class="lcabd-section" id="prompts" aria-labelledby="prompts-title">
+                <h2 id="prompts-title">Start with a prompt that has a stopping point.</h2>
+                <p>These prompts tell the agent what to inspect, what it may change, and when it must wait for you.</p>
+
+                <div class="lcabd-prompts">
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>1. Verify the connection</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-verify">Copy prompt</button></div>
+                        <p id="prompt-verify">Call get_connection_handoff, then get_snapshot. Report the site URL, fingerprint, active theme, framework, connection mode, scopes and MCP package version. Do not modify anything. Stop if the site identity or package version does not match the current project.</p>
+                    </article>
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>2. Build a matching Contact page</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-contact">Copy prompt</button></div>
+                        <p id="prompt-contact">Inspect the homepage, global header, footer and design-system context. Create a Contact page that matches the existing visual language and remains editable in LiveCanvas. Include contact details, a concise form area and a clear next action. Preview the complete page first. Do not apply until I approve the preview.</p>
+                    </article>
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>3. Install a starter theme safely</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-theme">Copy prompt</button></div>
+                        <p id="prompt-theme">Inspect the current theme and Theme Library compatibility. Preview the selected starter theme installation and starter-data import. Confirm the framework, child-theme name, homepage, header, footer and WindPress or Sass build requirements. Stop before apply and show the rollback plan.</p>
+                    </article>
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>4. Make a reversible update</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-update">Copy prompt</button></div>
+                        <p id="prompt-update">Inspect the target page and identify the smallest safe change. Create a preview and summarize the exact objects or files that would change. Apply only after I approve. Return the audit ID, changed targets and rollback command with the final result.</p>
+                    </article>
+                </div>
+
+                <div class="lcabd-troubleshooting">
+                    <details><summary>The agent cannot see livecanvas-forge</summary><p>Open the same project where AI Bridge installed the config. Trust that folder, enable the MCP server, and reload the MCP process. In Cursor, use <b>Customize → MCPs → livecanvas-forge → Reload</b>.</p></details>
+                    <details><summary>The handoff reports the wrong site</summary><p>Stop without writing. Revoke the stale session in WordPress, remove only that site’s <b>livecanvas-forge</b> config entry, then generate a new setup from the correct site.</p></details>
+                    <details><summary>Reads work but writes are missing</summary><p>Return to Setup, choose <b>Configure and build this site</b>, save, regenerate the agent setup, revoke the old session and pair again. The old read-only session cannot inherit new write scopes.</p></details>
+                    <details><summary>The MCP package version does not match</summary><p>Update the plugin, reload or restart the coding agent’s MCP server, call <code>get_connection_handoff</code> again, then rerun the WordPress smoke test.</p></details>
+                </div>
+            </section>
+
+            <footer class="lcabd-footer">LiveCanvas AI Bridge 0.2.0-beta.4 is beta software for supervised local and staging work. Use previews, audit IDs and rollback for every write workflow.</footer>
+        </main>
+    </div>
+</div>
+
+<script>
+    (() => {
+        const root = document.getElementById('lcab-doc');
+        if (!root) return;
+
+        const tabs = [...root.querySelectorAll('[data-lcabd-agent]')];
+        const panels = [...root.querySelectorAll('[data-lcabd-panel]')];
+
+        const activateAgent = (name, moveFocus = false) => {
+            tabs.forEach((tab) => {
+                const active = tab.dataset.lcabdAgent === name;
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+                tab.tabIndex = active ? 0 : -1;
+                if (active && moveFocus) tab.focus();
+            });
+            panels.forEach((panel) => {
+                panel.hidden = panel.dataset.lcabdPanel !== name;
+            });
+        };
+
+        tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => activateAgent(tab.dataset.lcabdAgent));
+            tab.addEventListener('keydown', (event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                let next = index;
+                if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+                if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+                if (event.key === 'Home') next = 0;
+                if (event.key === 'End') next = tabs.length - 1;
+                activateAgent(tabs[next].dataset.lcabdAgent, true);
+            });
+        });
+
+        root.querySelectorAll('[data-lcabd-copy]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const target = document.getElementById(button.dataset.lcabdCopy);
+                if (!target) return;
+                const value = target.innerText || target.textContent || '';
+                try {
+                    await navigator.clipboard.writeText(value.trim());
+                    button.textContent = 'Copied';
+                } catch (error) {
+                    const selection = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(target);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    button.textContent = 'Selected';
+                }
+                window.setTimeout(() => { button.textContent = button.closest('.lcabd-prompt') ? 'Copy prompt' : 'Copy example'; }, 1400);
+            });
+        });
+
+        const navLinks = [...root.querySelectorAll('.lcabd-nav a')];
+        const sections = navLinks.map((link) => root.querySelector(link.getAttribute('href'))).filter(Boolean);
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+                if (!visible) return;
+                navLinks.forEach((link) => {
+                    if (link.getAttribute('href') === `#${visible.target.id}`) {
+                        link.setAttribute('aria-current', 'location');
+                    } else {
+                        link.removeAttribute('aria-current');
+                    }
+                });
+            }, { rootMargin: '-18% 0px -68% 0px', threshold: [0, 0.15, 0.5] });
+            sections.forEach((section) => observer.observe(section));
+        }
+    })();
+</script>

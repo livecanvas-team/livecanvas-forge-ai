@@ -8,12 +8,16 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 Status: `0.2.0-beta.4` staging beta
 
+**Download:** [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4)
+
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
 See the current [development status and release gates](./docs/plugin-development-status.md) and the stack-by-stack [integration completeness audit](./docs/integration-completeness-audit.md) for verified capabilities, evidence levels, and remaining work.
 
 Public beta material:
 
+- [Product page](https://livecanvas.com/bridge/)
+- [Installation and usage documentation](https://livecanvas.com/bridge-doc/)
 - [LiveCanvas AI Bridge beta presentation](./docs/livecanvas-ai-bridge-beta.html)
 - [Practical tutorial: from a reference URL to an editable LiveCanvas website](./docs/practical-beta-use-cases-tutorial.md)
 
@@ -124,43 +128,12 @@ Recommended:
 
 ## Installation
 
-From `wp-content/plugins`:
+1. Download `livecanvas-forge-ai.zip` from the [0.2.0-beta.4 release](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4).
+2. Open `WordPress Admin > Plugins > Add New Plugin > Upload Plugin` and upload the ZIP.
+3. Activate `LiveCanvas AI Bridge`.
+4. Open `LiveCanvas > AI Bridge` and complete Setup.
 
-```bash
-git clone https://github.com/livecanvas-team/livecanvas-forge-ai.git
-```
-
-Then activate:
-
-```text
-WordPress Admin > Plugins > LiveCanvas AI Bridge > Activate
-```
-
-You can also upload a ZIP from:
-
-```text
-WordPress Admin > Plugins > Add New > Upload Plugin
-```
-
-The current build artifact is committed at:
-
-```text
-dist/livecanvas-forge-ai.zip
-```
-
-The plugin folder should be named:
-
-```text
-livecanvas-forge-ai
-```
-
-After activation, open:
-
-```text
-WordPress Admin > AI Bridge
-```
-
-If LiveCanvas is active, AI Bridge also appears inside the LiveCanvas admin area.
+Use the [Bridge documentation](https://livecanvas.com/bridge-doc/) for the project-scoped Codex, Cursor, OpenCode, Claude Desktop, and Claude Code connection flows.
 
 ## Updates
 
@@ -219,7 +192,7 @@ You are connected when `Connections` shows `Ready`. Use preview or `dry_run: tru
 
 The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.5`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing. In Cursor, use **Customize → MCPs → livecanvas-forge → Reload**; **Reload Window** can leave the previous MCP process running.
 
-The [four-step visual guide](./docs/coding-agent-setup.html) covers Codex, OpenCode, Claude Code, Claude Desktop, Cursor, and generic MCP clients. Technical reference: [`mcp/README.md`](./mcp/README.md).
+The [Bridge documentation](https://livecanvas.com/bridge-doc/) covers installation, project-scoped Codex, OpenCode, Claude Code, Claude Desktop and Cursor setup, verified handoff, safe prompts, and rollback. The repository also includes the compact [four-step visual guide](./docs/coding-agent-setup.html). Technical reference: [`mcp/README.md`](./mcp/README.md).
 
 ## Theme Library
 

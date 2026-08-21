@@ -52,27 +52,50 @@
         text-wrap: pretty;
     }
 
+    @media (min-width: 981px) {
+        body:has(#lcab-product) #wrapper-navbar,
+        body:has(#lcab-product):not(:has(#wrapper-navbar)) header#masthead,
+        body:has(#lcab-product):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
+            position: absolute !important;
+            inset: 0 0 auto !important;
+            z-index: 1100 !important;
+            width: 100% !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16) !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        body.admin-bar:has(#lcab-product) #wrapper-navbar,
+        body.admin-bar:has(#lcab-product):not(:has(#wrapper-navbar)) header#masthead,
+        body.admin-bar:has(#lcab-product):not(:has(#wrapper-navbar)):not(:has(header#masthead)) header.site-header {
+            top: 32px !important;
+        }
+
+        body:has(#lcab-product) #wrapper-navbar .navbar,
+        body:has(#lcab-product) header#masthead .navbar,
+        body:has(#lcab-product) header.site-header .navbar {
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        body:has(#lcab-product) #wrapper-navbar .nav-link,
+        body:has(#lcab-product) #wrapper-navbar .navbar-brand,
+        body:has(#lcab-product) header#masthead .nav-link,
+        body:has(#lcab-product) header#masthead .navbar-brand,
+        body:has(#lcab-product) header.site-header .nav-link,
+        body:has(#lcab-product) header.site-header .navbar-brand {
+            color: #fff !important;
+        }
+
+        #lcab-product .lcab-hero {
+            padding-top: 5rem;
+        }
+    }
+
     .lcab-container {
         width: min(calc(100% - 3rem), 1180px);
         margin-inline: auto;
-    }
-
-    .lcab-kicker {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.65rem;
-        margin: 0 0 1.25rem;
-        color: #f6c2da;
-        font-size: 0.9rem;
-        font-weight: 750;
-    }
-
-    .lcab-kicker::before {
-        width: 0.55rem;
-        height: 0.55rem;
-        border-radius: 50%;
-        background: var(--lcab-pink);
-        content: "";
     }
 
     .lcab-hero {
@@ -263,15 +286,14 @@
     }
 
     .lcab-agent-list {
-        display: flex;
+        display: grid;
         flex: 1;
-        justify-content: flex-end;
-        gap: clamp(1.3rem, 4vw, 3.5rem);
+        grid-template-columns: repeat(5, minmax(92px, 1fr));
+        gap: clamp(1rem, 2.5vw, 2.2rem);
     }
 
     .lcab-agent {
         display: flex;
-        min-width: 96px;
         align-items: center;
         gap: 0.7rem;
         color: #fff;
@@ -282,8 +304,21 @@
     .lcab-agent img {
         width: 2rem;
         height: 2rem;
-        filter: invert(1);
         object-fit: contain;
+    }
+
+    .lcab-agent > span,
+    .lcab-agent strong,
+    .lcab-agent small {
+        display: block;
+    }
+
+    .lcab-agent small {
+        margin-top: 0.1rem;
+        color: var(--lcab-muted);
+        font-size: 0.72rem;
+        font-weight: 600;
+        white-space: nowrap;
     }
 
     .lcab-section {
@@ -948,6 +983,73 @@
         background: #ded8e1;
     }
 
+    .lcab-onboarding {
+        display: grid;
+        grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+        gap: clamp(2.5rem, 7vw, 7rem);
+        align-items: start;
+    }
+
+    .lcab-onboarding h2 {
+        max-width: 11ch;
+        margin: 0;
+        font-size: clamp(2.8rem, 5vw, 5rem);
+        line-height: 0.98;
+    }
+
+    .lcab-onboarding__intro > p {
+        max-width: 540px;
+        margin: 1.35rem 0 0;
+        color: var(--lcab-muted);
+        font-size: 1.05rem;
+    }
+
+    #lcab-product .lcab-onboarding__link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin-top: 1.6rem;
+        color: #b8f5fb;
+        font-weight: 750;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.28em;
+    }
+
+    .lcab-onboarding__link svg {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .lcab-onboarding__steps {
+        border-top: 1px solid var(--lcab-line);
+    }
+
+    .lcab-onboarding__step {
+        display: grid;
+        grid-template-columns: 2.4rem minmax(0, 1fr);
+        gap: 1rem;
+        padding-block: 1.25rem;
+        border-bottom: 1px solid var(--lcab-line);
+    }
+
+    .lcab-onboarding__step > span {
+        color: var(--lcab-cyan);
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+    }
+
+    .lcab-onboarding__step strong {
+        display: block;
+        font-size: 1.05rem;
+    }
+
+    .lcab-onboarding__step p {
+        max-width: 68ch;
+        margin: 0.32rem 0 0;
+        color: var(--lcab-muted);
+        font-size: 0.94rem;
+    }
+
     .lcab-safety {
         display: grid;
         grid-template-columns: 0.9fr 1.1fr;
@@ -1101,11 +1203,12 @@
 
         .lcab-agent-list {
             width: 100%;
-            justify-content: space-between;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .lcab-demo,
         .lcab-story,
+        .lcab-onboarding,
         .lcab-safety,
         .lcab-beta {
             grid-template-columns: 1fr;
@@ -1172,8 +1275,7 @@
         }
 
         .lcab-agent-list {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 1.2rem;
         }
 
@@ -1305,9 +1407,8 @@
         <img class="lcab-hero__poster lcab-mask-2" src="https://livecanvas.com/wp-content/uploads/2026/08/bridge-mobius-hero-v2-poster.jpg" alt="Layered cyan and magenta Mobius form arranged on the right side of the hero">
         <div class="lcab-container">
             <div class="lcab-hero__content">
-                <p class="lcab-kicker">Coding agents for LiveCanvas</p>
                 <h1 id="lcab-title">LiveCanvas AI Bridge</h1>
-                <p class="lcab-hero__lead">Connect Codex, Claude, Cursor or OpenCode to the real structure of your WordPress site. Your agent reasons; AI Bridge reads, previews, applies and rolls back.</p>
+                <p class="lcab-hero__lead">Connect Codex, Cursor, OpenCode, Claude Desktop or Claude Code to the real structure of your WordPress site. Your agent reasons; AI Bridge reads, previews, applies and rolls back.</p>
                 <div class="lcab-hero__meta">
                     <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Site identity verified</span>
                     <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>Preview-first writes</span>
@@ -1318,9 +1419,9 @@
                         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                         Get the public beta
                     </a>
-                    <a class="lcab-btn lcab-btn--secondary" href="#lcab-agent-demo">
-                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7V5Z"/></svg>
-                        Watch the workflow
+                    <a class="lcab-btn lcab-btn--secondary" href="/bridge-doc/">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h6"/></svg>
+                        Read the setup guide
                     </a>
                 </div>
             </div>
@@ -1331,13 +1432,33 @@
         <div class="lcab-container lcab-agents__inner">
             <div class="lcab-agents__intro">
                 <strong id="lcab-agent-heading">Use the coding agent you already trust.</strong>
-                <span>One LiveCanvas-aware bridge. Multiple professional agent workflows.</span>
+                <span>Four real-agent workflows qualified in this beta, plus Claude Code setup preview.</span>
             </div>
             <div class="lcab-agent-list" aria-label="Supported coding agents">
-                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt=""><span>Codex</span></div>
-                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/anthropic.svg" alt=""><span>Claude</span></div>
-                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/cursor.svg" alt=""><span>Cursor</span></div>
-                <div class="lcab-agent"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/opencode.svg" alt=""><span>OpenCode</span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/codex-color.svg" alt=""><span><strong>Codex</strong><small>Qualified</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/cursor.svg" alt=""><span><strong>Cursor</strong><small>Qualified</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/opencode.svg" alt=""><span><strong>OpenCode</strong><small>Qualified</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-color.svg" alt=""><span><strong>Claude Desktop</strong><small>Qualified · Free</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-code.svg" alt=""><span><strong>Claude Code</strong><small>Setup preview</small></span></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lcab-section lcab-section--plum" aria-labelledby="lcab-onboarding-title">
+        <div class="lcab-container lcab-onboarding">
+            <div class="lcab-onboarding__intro">
+                <h2 id="lcab-onboarding-title">From install to Ready, without configuration debt.</h2>
+                <p>The onboarding now separates the folder opened in your coding agent from the WordPress root, preserves unrelated MCP servers and keeps credentials out of project files.</p>
+                <a class="lcab-onboarding__link" href="/bridge-doc/">
+                    Follow the complete installation guide
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                </a>
+            </div>
+            <div class="lcab-onboarding__steps" aria-label="Connection workflow">
+                <div class="lcab-onboarding__step"><span>01</span><div><strong>Confirm the project.</strong><p>AI Bridge detects LiveCanvas, the active child theme and framework. Choose Inspect only or Configure and build this site.</p></div></div>
+                <div class="lcab-onboarding__step"><span>02</span><div><strong>Install one project-scoped server.</strong><p>The wizard safely merges only <code>livecanvas-forge</code>, creates a backup and uses private file permissions where the platform supports them.</p></div></div>
+                <div class="lcab-onboarding__step"><span>03</span><div><strong>Pair without storing a static secret.</strong><p>Public HTTPS Codex projects can use OAuth. Local, private and other agent workflows use a site-bound approval instead of a token committed to the project.</p></div></div>
+                <div class="lcab-onboarding__step"><span>04</span><div><strong>Prove the connection.</strong><p>Ready appears only after the agent completes <code>get_connection_handoff</code> and WordPress passes the smoke test.</p></div></div>
             </div>
         </div>
     </section>
@@ -1470,7 +1591,6 @@
     <section class="lcab-section">
         <div class="lcab-container lcab-safety">
             <div>
-                <p class="lcab-kicker">A controlled development loop</p>
                 <h2>Power without losing the recovery path.</h2>
                 <p>The site never becomes an anonymous remote target. Every session carries identity, scope and a deliberate route from inspection to rollback.</p>
             </div>
@@ -1487,13 +1607,13 @@
     <section class="lcab-section lcab-section--plum">
         <div class="lcab-container lcab-beta">
             <div>
-                <p class="lcab-kicker">Public beta</p>
-                <h2>Ready for supervised local and staging work.</h2>
+                <h2>Public beta for supervised local and staging work.</h2>
             </div>
             <div class="lcab-beta__details">
                 <div class="lcab-beta__row"><span>Current release</span><strong>0.2.0-beta.4</strong></div>
-                <div class="lcab-beta__row"><span>WordPress</span><strong>6.8 and 7.0 paths</strong></div>
-                <div class="lcab-beta__row"><span>Coding agents</span><strong>Codex, Claude, Cursor, OpenCode</strong></div>
+                <div class="lcab-beta__row"><span>WordPress</span><strong>6.8 through 7.1</strong></div>
+                <div class="lcab-beta__row"><span>Qualified agents</span><strong>Codex, Cursor, OpenCode, Claude Desktop</strong></div>
+                <div class="lcab-beta__row"><span>Connection gate</span><strong>Verified handoff + smoke test</strong></div>
                 <div class="lcab-beta__row"><span>Native stacks</span><strong>Picostrap and Picowind</strong></div>
                 <div class="lcab-beta__row"><span>Default guardrail</span><strong>Preview before apply</strong></div>
                 <div class="lcab-beta__row"><span>License</span><strong>GPL-2.0-or-later</strong></div>
@@ -1510,9 +1630,9 @@
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                     Download the public beta
                 </a>
-                <a class="lcab-btn lcab-btn--secondary" href="https://github.com/livecanvas-team/livecanvas-forge-ai">
-                    View the source on GitHub
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                <a class="lcab-btn lcab-btn--secondary" href="/bridge-doc/">
+                    Open the documentation
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h6"/></svg>
                 </a>
             </div>
         </div>
