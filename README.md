@@ -6,9 +6,9 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Current working build: plugin `0.2.0-beta.6`, runtime `0.2.0-beta.7`. [Local test ZIP](./dist/livecanvas-forge-ai.zip). This is a supervised test build, not a published release or automatic update. Read the [mandatory write workflow](./docs/verified-site-write-workflow.md) and [compatibility notes](./docs/release-notes-0.2.0-beta.6.md) before updating. Client/OS qualification remains incomplete.
+Current pre-release: [LiveCanvas AI Bridge 0.2.0-beta.6](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.6), with bundled MCP runtime `0.2.0-beta.7`. [Download the WordPress plugin ZIP](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.2.0-beta.6/livecanvas-forge-ai.zip). Use this beta for supervised staging tests. Read the [mandatory write workflow](./docs/verified-site-write-workflow.md) and [compatibility notes](./docs/release-notes-0.2.0-beta.6.md) before updating. Client/OS qualification remains incomplete.
 
-Previous published beta: [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4). Its setup screens differ from the working copy described below.
+Previous published beta: [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4). Its setup screens differ from beta.6.
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
