@@ -82,7 +82,7 @@ lcfa_remote_bootstrap_assert(strpos($encoded, 'must-not-leak') === false, 'remot
 lcfa_remote_bootstrap_assert(strpos($encoded, 'LCFA_MCP_TOKEN=') === false, 'remote admin bootstrap must not generate a legacy token environment variable');
 lcfa_remote_bootstrap_assert(strpos($encoded, 'node legacy-bridge.js') === false, 'remote admin bootstrap must not reuse the local bridge command');
 
-foreach (['codex', 'opencode', 'claude', 'cursor'] as $client) {
+foreach (array_keys(LCFA_Agent_Registry::all(true)) as $client) {
     $configuration = (array) ($payload['clients'][$client] ?? []);
     $environment = (array) ($configuration['env'] ?? []);
 
@@ -109,5 +109,14 @@ $local_environment = (array) ($local_opencode['env'] ?? []);
 lcfa_remote_bootstrap_assert(($local_opencode['command'] ?? '') === 'node local-bridge.js --transport=stdio', 'explicit local mode should use the local MCP command even when snapshot detection says remote');
 lcfa_remote_bootstrap_assert(in_array('LCFA_WP_ROOT=' . untrailingslashit(ABSPATH), $local_environment, true), 'explicit local mode should include the WordPress root for local file access');
 lcfa_remote_bootstrap_assert(!in_array('LCFA_MCP_TOKEN=must-not-leak', $local_environment, true), 'explicit local mode should still use secure pairing without a static token');
+
+$generated_local = $method->invoke($admin, ['connection_mode' => 'local', 'mcp_server_command' => '', 'transport' => 'rest'], ['site_mode' => 'local']);
+foreach (array_keys(LCFA_Agent_Registry::all(true)) as $client) {
+    $configuration = $generated_local['clients'][$client] ?? [];
+    lcfa_remote_bootstrap_assert(in_array('LCFA_AGENT=' . $client, $configuration['env'] ?? [], true), $client . ' must retain its own identity in local bootstrap');
+    if ($client !== 'codex') {
+        lcfa_remote_bootstrap_assert(strpos($configuration['command'] ?? '', '--agent=' . $client) !== false, $client . ' must not launch with another client flag');
+    }
+}
 
 echo "PASS\n";

@@ -5,6 +5,10 @@ defined('ABSPATH') || exit;
 final class LCFA_Power_Mode {
     public function get_state(array $connections, array $snapshot = []): array {
         $setting = sanitize_key((string) ($connections['power_mode'] ?? 'auto'));
+        $session_full_access = class_exists('LCFA_MCP_Session_Manager', false)
+            && method_exists('LCFA_MCP_Session_Manager', 'has_full_access_context')
+            && LCFA_MCP_Session_Manager::has_full_access_context();
+        if ($session_full_access) $setting = 'enabled';
         if (!in_array($setting, ['auto', 'enabled', 'disabled'], true)) {
             $setting = 'auto';
         }
@@ -34,6 +38,7 @@ final class LCFA_Power_Mode {
         if ($setting === 'enabled' && !$auto_enabled) {
             $reason = __('Power Mode was explicitly enabled by an administrator. Keep this off on production unless backups and review workflows are in place.', 'livecanvas-forge-ai');
         }
+        if ($session_full_access) $reason = __('Full Access was explicitly approved for this agent session. Existing connections keep their own permissions.', 'livecanvas-forge-ai');
 
         return [
             'setting'          => $setting,

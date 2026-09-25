@@ -24,6 +24,10 @@ final class WP_REST_Request {
         return $this->params;
     }
 
+    public function get_header(string $name): string {
+        return '';
+    }
+
     public function get_json_params(): array {
         return $this->params;
     }

@@ -2,7 +2,11 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+require_once __DIR__ . '/class-lcfa-connection-attempt.php';
+
 final class LCFA_MCP_Session_Manager {
+    private static array $current_session = [];
     private const SESSIONS_OPTION_KEY = 'lcfa_mcp_sessions';
     private const PAIRINGS_OPTION_KEY = 'lcfa_mcp_pairings';
     private const PAIRING_INDEX_OPTION_KEY = 'lcfa_mcp_pairing_index';
@@ -56,6 +60,14 @@ final class LCFA_MCP_Session_Manager {
             'consumed_at'        => '',
         ];
 
+        $attempt_id = (string) ($payload['connection_attempt'] ?? '');
+        if ($attempt_id !== '') {
+            if (!LCFA_Connection_Attempt::bind_pairing($attempt_id, $record)) {
+                return new WP_Error('lcfa_connection_attempt_mismatch', __('This connection request expired, was already used, or belongs to another client. Start a new connection in WordPress.', 'livecanvas-forge-ai'), ['status' => 409]);
+            }
+            $record['connection_attempt'] = $attempt_id;
+        }
+
         self::save_pairing_record($pairing_id, $record);
         self::index_pairing($pairing_id);
 
@@ -64,7 +76,7 @@ final class LCFA_MCP_Session_Manager {
             'pairing_id'       => $pairing_id,
             'device_secret'    => $device_secret,
             'user_code'        => $user_code,
-            'verification_url' => self::get_verification_url(),
+            'verification_url' => self::get_verification_url($attempt_id),
             'expires_at'       => $record['expires_at'],
             'client'           => $client,
             'connection_mode'  => $connection_mode,
@@ -167,6 +179,18 @@ final class LCFA_MCP_Session_Manager {
             ];
         }
 
+        if (($record['status'] ?? '') !== 'pending') {
+            return ['ok' => false, 'message' => __('This pairing request has already been processed.', 'livecanvas-forge-ai')];
+        }
+        $attempt_id = (string) ($record['connection_attempt'] ?? '');
+        $owner_id = function_exists('get_current_user_id') ? get_current_user_id() : 0;
+        if ($attempt_id !== '' && !LCFA_Connection_Attempt::can_approve($attempt_id, $pairing_id, $owner_id)) {
+            return ['ok' => false, 'message' => __('Sign in as the administrator who started this connection, or start a new connection.', 'livecanvas-forge-ai')];
+        }
+        if ($attempt_id !== '' && !self::owner_can_authorize_full_access($owner_id)) {
+            return ['ok' => false, 'message' => __('Your WordPress role cannot grant Full Access. Use manual setup with limited scopes, or ask a site administrator to connect.', 'livecanvas-forge-ai')];
+        }
+
         $session_token = 'lcfa_sess_' . self::random_url_token(40);
         $session_id = 'sess_' . strtolower(self::random_url_token(12));
         $now = time();
@@ -189,6 +213,14 @@ final class LCFA_MCP_Session_Manager {
             'revoked_at'       => '',
             'token_hash'       => self::hash_token($session_token),
         ];
+        if ($attempt_id !== '') {
+            $session['connection_attempt'] = $attempt_id;
+            $session['owner_user_id'] = $owner_id;
+            $session['access_profile'] = 'full';
+            if (!LCFA_Connection_Attempt::approved($attempt_id, $pairing_id, $owner_id, $session_id)) {
+                return ['ok' => false, 'message' => __('This connection request expired. Start again.', 'livecanvas-forge-ai')];
+            }
+        }
 
         $sessions = self::get_sessions();
         $sessions[$session_id] = $session;
@@ -330,6 +362,7 @@ final class LCFA_MCP_Session_Manager {
     }
 
     public static function get_session_from_request(?WP_REST_Request $request, string $required_scope = 'read') {
+        self::$current_session = [];
         if (!$request instanceof WP_REST_Request) {
             return false;
         }
@@ -374,6 +407,7 @@ final class LCFA_MCP_Session_Manager {
     }
 
     public static function validate_session_token(string $token, string $required_scope = 'read') {
+        self::$current_session = [];
         $token_hash = self::hash_token($token);
         $sessions = self::get_sessions();
         foreach ($sessions as $session_id => $session) {
@@ -382,6 +416,13 @@ final class LCFA_MCP_Session_Manager {
             }
             if (trim((string) ($session['revoked_at'] ?? '')) !== '' || self::session_is_expired($session)) {
                 return false;
+            }
+            if (!empty($session['owner_user_id'])) {
+                $capabilities = ['read' => 'edit_pages', 'preview' => 'edit_pages', 'write' => 'edit_pages', 'media' => 'upload_files', 'theme_files' => 'edit_theme_options', 'debug' => 'manage_options', 'cache' => 'manage_options', 'seo' => 'edit_pages'];
+                if (!function_exists('user_can') || !user_can((int) $session['owner_user_id'], $capabilities[$required_scope] ?? 'manage_options')) return false;
+                if (($session['access_profile'] ?? '') === 'full') {
+                    if (!self::owner_can_authorize_full_access((int) $session['owner_user_id'])) return false;
+                }
             }
             $session_fingerprint = sanitize_text_field((string) ($session['site_fingerprint'] ?? ''));
             $site_fingerprint = self::get_site_fingerprint();
@@ -401,11 +442,26 @@ final class LCFA_MCP_Session_Manager {
             $sessions[$session_id]['last_seen_at'] = gmdate('c');
             update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
             unset($sessions[$session_id]['token_hash']);
-
+            self::$current_session = $sessions[$session_id];
             return $sessions[$session_id];
         }
 
         return false;
+    }
+
+    public static function owner_can_authorize_full_access(int $user_id): bool {
+        if ($user_id < 1 || !function_exists('user_can')) return false;
+        foreach (['edit_pages', 'upload_files', 'edit_theme_options', 'manage_options'] as $capability) {
+            if (!user_can($user_id, $capability)) return false;
+        }
+        return true;
+    }
+
+    public static function has_full_access_context(): bool {
+        return (self::$current_session['access_profile'] ?? '') === 'full'
+            && !empty(self::$current_session['owner_user_id'])
+            && !self::session_is_expired(self::$current_session)
+            && array_diff(LCFA_Agent_Registry::full_access_scopes(), (array) (self::$current_session['scopes'] ?? [])) === [];
     }
 
     public static function has_active_session(): bool {
@@ -551,9 +607,9 @@ final class LCFA_MCP_Session_Manager {
         return true;
     }
 
-    private static function get_verification_url(): string {
+    private static function get_verification_url(string $attempt_id = ''): string {
         return function_exists('admin_url')
-            ? admin_url('admin.php?page=lcfa-dashboard&tab=connections#' . self::PAIRING_ADMIN_ANCHOR)
+            ? admin_url('admin.php?page=lcfa-dashboard&tab=connections' . ($attempt_id !== '' ? '&connection_attempt=' . rawurlencode($attempt_id) . '#lcfa-connect' : '&connection_ui=manual#' . self::PAIRING_ADMIN_ANCHOR))
             : '';
     }
 
@@ -564,7 +620,7 @@ final class LCFA_MCP_Session_Manager {
 
     private static function sanitize_client(string $client): string {
         $client = sanitize_key($client);
-        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $client : 'codex';
+        return LCFA_Agent_Registry::normalize($client);
     }
 
     private static function sanitize_connection_mode(string $mode): string {
@@ -572,17 +628,7 @@ final class LCFA_MCP_Session_Manager {
     }
 
     private static function get_client_label(string $client): string {
-        $labels = [
-            'codex'    => 'Codex',
-            'opencode' => 'OpenCode',
-            'claude'   => 'Claude',
-            'cursor'   => 'Cursor',
-            'generic'  => __('coding agent', 'livecanvas-forge-ai'),
-        ];
-
-        $client = self::sanitize_client($client);
-
-        return (string) ($labels[$client] ?? $labels['generic']);
+        return LCFA_Agent_Registry::label($client);
     }
 
     private static function sanitize_scopes(array $scopes): array {

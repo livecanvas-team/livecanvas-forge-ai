@@ -148,6 +148,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     }
 
     .lcabd-sidebar {
+        min-width: 0;
         position: sticky;
         top: 2rem;
         align-self: start;
@@ -221,6 +222,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
     .lcabd-main {
         min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .lcabd-intro {
@@ -724,7 +726,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
     @media (max-width: 960px) {
         .lcabd-shell {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr);
             gap: 2rem;
         }
 
@@ -828,46 +830,71 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             </a>
             <nav class="lcabd-nav" aria-label="On this page">
                 <a href="#start" aria-current="location">Start here</a>
-                <a href="#install">Install</a>
-                <a href="#connect">Connect an agent</a>
-                <a href="#verify">Verify and use</a>
+                <a href="#beta5-preview">Beta.5 setup</a>
+                <a href="#install">Beta.4 install</a>
+                <a href="#connect">Beta.4 agents</a>
+                <a href="#verify">Beta.4 checks</a>
                 <a href="#prompts">Prompts and recovery</a>
             </nav>
-            <div class="lcabd-sidebar__release"><span>Documentation for</span><strong>0.2.0-beta.4</strong></div>
+            <div class="lcabd-sidebar__release"><span>Current test build</span><strong>0.2.0-beta.5</strong></div>
         </aside>
 
         <main class="lcabd-main" id="lcabd-main">
             <header class="lcabd-intro" id="start">
                 <h1>Connect your first coding agent.</h1>
-                <p class="lcabd-intro__lead">Install AI Bridge, bind one coding-agent project to one WordPress site, and finish with a verified read-only snapshot. Allow about 10 minutes for the first connection.</p>
+                <p class="lcabd-intro__lead">Install AI Bridge, connect your coding agent, then verify a read-only snapshot before the first write. Follow the section for your installed plugin version.</p>
                 <div class="lcabd-actions">
-                    <a class="lcabd-button lcabd-button--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">Download 0.2.0-beta.4</a>
+                    <a class="lcabd-button lcabd-button--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/raw/refs/heads/codex/unified-connection-beta5/dist/livecanvas-forge-ai.zip">Download beta.5 test ZIP</a>
                     <a class="lcabd-button" href="/bridge/">See what Bridge can do</a>
                 </div>
                 <div class="lcabd-release-line" aria-label="Release requirements">
-                    <div><span>WordPress</span><strong>6.8–7.1</strong></div>
+                    <div><span>WordPress</span><strong>6.8 to 7.1</strong></div>
                     <div><span>PHP</span><strong>8.0+</strong></div>
-                    <div><span>MCP package</span><strong>0.2.0-beta.5</strong></div>
+                    <div><span>MCP runtime</span><strong>0.2.0-beta.6</strong></div>
                 </div>
                 <div class="lcabd-next-action">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                    <div><strong>Next action: download the release ZIP.</strong><span>Do not install the repository source or an older artifact when testing this beta.</span></div>
+                    <div><strong>Next action: download the beta.5 test ZIP.</strong><span>Use a backed-up local or staging site. This manual test build is not a tagged release or an automatic update.</span></div>
                 </div>
             </header>
 
-            <section class="lcabd-section" id="install" aria-labelledby="install-title">
-                <h2 id="install-title">Install the plugin in four steps.</h2>
-                <p>LiveCanvas must already be active. Picostrap and Picowind/WindPress are detected automatically when present.</p>
+            <section class="lcabd-section" id="beta5-preview" aria-labelledby="beta5-title">
+                <p class="lcabd-eyebrow">Plugin 0.2.0-beta.5 test build</p>
+                <h2 id="beta5-title">One setup flow for five agents.</h2>
+                <p>The download above installs plugin <code>0.2.0-beta.5</code> with MCP runtime <code>0.2.0-beta.6</code>. Upload <code>livecanvas-forge-ai.zip</code> through <b>Plugins → Add New Plugin → Upload Plugin</b>, then activate AI Bridge. If it is already installed, WordPress offers an upgrade. This branch build is still under test; the beta.4 instructions below are only for the earlier tagged release.</p>
+                <p>Before you start, activate LiveCanvas and AI Bridge in WordPress. Install Node.js 18.17 or later on the computer running your agent, with npm available in its terminal. Sign in to the agent and check that your account can send requests. For project-based agents, open the folder you want to connect before copying the instructions.</p>
                 <ol class="lcabd-steps">
-                    <li><div><strong>Download the release ZIP.</strong><p>Open the GitHub release above and download <code>livecanvas-forge-ai.zip</code>.</p></div></li>
+                    <li><div><strong>Choose your agent in WordPress.</strong><p>Open <b>LiveCanvas → AI Bridge → Connect</b>. Check the site address, choose your agent, then select <b>Copy setup instructions</b>. You do not need to choose a transport, edit JSON or select individual scopes in this flow.</p></div></li>
+                    <li><div><strong>Run the generated setup.</strong><p>In Codex, Cursor, OpenCode or Claude Code, paste the instructions into the chat for that project. Let the agent run the command. For Claude Desktop, paste the generated command into Terminal or PowerShell on the computer where the app is installed. Leave the command running while it waits for WordPress.</p></div></li>
+                    <li><div><strong>Approve the matching connection.</strong><p>Return to the WordPress link shown by the installer. Check the site, agent and verification code, then select <b>Authorize Full Access</b>. This grants the new connection permission to change content, media and theme files, and use build, debug, cache and SEO operations where supported. Existing connections keep their permissions. Use a test site and keep backups.</p></div></li>
+                    <li><div><strong>Reload the agent and check the connection.</strong><p>Follow the reload note for your app below. Ask the agent to call <code>get_connection_handoff</code>, then <code>get_snapshot</code>. Return to WordPress and wait for <b>Connected</b>. A copied prompt, a saved config file or an approved code alone does not prove the agent can read the site.</p></div></li>
+                </ol>
+                <div class="lcabd-mode-table" aria-label="App-specific reload steps">
+                    <div class="lcabd-mode-row"><strong>Codex</strong><p>Open and trust the same project folder, then reopen its session so Codex loads <code>.codex/config.toml</code>. Codex CLI completed authenticated reads and draft creation. This does not qualify the Codex desktop app, whose test is pending.</p></div>
+                    <div class="lcabd-mode-row"><strong>Cursor</strong><p>Open the same workspace. Find the generated <code>livecanvas-…</code> entry in the MCP settings, enable it if prompted and reload it. The beta.5 installer and WordPress approval were checked; the latest end-to-end page test is still pending.</p></div>
+                    <div class="lcabd-mode-row"><strong>OpenCode</strong><p>Restart OpenCode if the new tools do not appear, then reopen the same project and session. The app may restore a different project after a restart. Check the project before asking it to use the new server.</p></div>
+                    <div class="lcabd-mode-row"><strong>Claude Desktop</strong><p>Quit the app completely and reopen it after the terminal command finishes. Use the normal Chat screen. Approve the requested tool call when Claude asks; you do not need to install Claude Code for this route.</p></div>
+                    <div class="lcabd-mode-row"><strong>Claude Code</strong><p>Start Claude Code in the same project after setup, sign in if needed and approve its project MCP configuration. For a named demonstration session, run <code>claude --name "Hello Alfred"</code>. The latest authenticated page test for this client is still pending.</p></div>
+                </div>
+                <p>Codex CLI, OpenCode Desktop and Claude Desktop created English About us drafts in the macOS test run. Cursor reached its usage limit; Claude Code still needs sign-in and an authenticated test. The test checked an upgrade from beta.4, not a clean database installation. Windows/Linux and rollback were not tested in this run. Read the <a href="https://github.com/livecanvas-team/livecanvas-forge-ai/blob/codex/unified-connection-beta5/docs/release-notes-0.2.0-beta.5.md">beta.5 test notes</a> before use.</p>
+                <p>The installer creates a site-specific server name such as <code>livecanvas-…</code>, merges the relevant configuration and backs up an existing file before changing it. Keep your agent's own approval controls enabled. A local <code>.local</code> site needs an agent running on a computer that can reach it; a cloud agent cannot reach it just because setup instructions were copied.</p>
+                <div class="lcabd-warning"><strong>Known beta.5 limitation:</strong> early beta.5 MCP responses can still include the old wizard's <code>not_connected</code> or <code>smoke_test</code> status after an authenticated read. The attempt-specific Connect screen is separate. If these disagree, stop before writes and report both results. Do not approve a different site or repeatedly create new connections to clear the warning.</div>
+                <div class="lcabd-troubleshooting">
+                    <details><summary>The Copy button selects text instead</summary><p>On local HTTP sites, automatic clipboard access may be unavailable. Copy the selected instructions with Command+C on macOS or Ctrl+C on Windows/Linux, then paste them into your agent. Keep the site's generated command intact.</p></details>
+                    <details><summary>The approval request expired</summary><p>Select <b>Start a new connection</b> in WordPress, copy the new instructions and run them in the same project. An expired verification code cannot be reused. The installer normally resumes by itself after you approve the current code.</p></details>
+                    <details><summary>The agent has no tools after approval</summary><p>Confirm that the terminal command finished, then reload the app's MCP connection or restart the app. Reopen the same project folder. Check your agent's sign-in and usage limits before changing the Forge configuration.</p></details>
+                </div>
+            </section>
+
+            <section class="lcabd-section" id="install" aria-labelledby="install-title">
+                <h2 id="install-title">Earlier version: install beta.4.</h2>
+                <p>The sections below describe plugin beta.4 and MCP package beta.5. LiveCanvas must already be active. Picostrap and Picowind/WindPress are detected automatically when present.</p>
+                <ol class="lcabd-steps">
+                    <li><div><strong>Download the release ZIP.</strong><p>Open the <a href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">beta.4 GitHub release</a> and download <code>livecanvas-forge-ai.zip</code>. Do not use the beta.5 test download for these older instructions.</p></div></li>
                     <li><div><strong>Upload it in WordPress.</strong><p>Open <b>Plugins → Add New Plugin → Upload Plugin</b>, select the ZIP, then choose <b>Install Now</b>.</p></div></li>
                     <li><div><strong>Activate AI Bridge.</strong><p>After activation, open <b>LiveCanvas → AI Bridge</b>.</p></div></li>
                     <li><div><strong>Confirm the project.</strong><p>Check the detected theme and framework. Choose <b>Configure and build this site</b> only when the agent should be allowed to write; leave it off for inspection.</p></div></li>
                 </ol>
-                <figure class="lcabd-shot">
-                    <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/docs/screenshots/onboarding-step-3-project-ready.jpg" width="1024" height="768" alt="AI Bridge project setup ready screen showing the detected framework, local site and coding agent">
-                    <figcaption>WordPress confirms the site context before the connection wizard opens.</figcaption>
-                </figure>
             </section>
 
             <section class="lcabd-section" id="connect" aria-labelledby="connect-title">
@@ -953,10 +980,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     <li><div><strong>Run the smoke test.</strong><p>AI Bridge checks REST reachability, the local MCP runtime when applicable, and the detected MCP package version.</p></div></li>
                     <li><div><strong>Continue only at Ready.</strong><p>The Connections screen must show the correct agent, connection mode and verified package.</p></div></li>
                 </ol>
-                <figure class="lcabd-shot">
-                    <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/docs/screenshots/bridge-doc-cursor-ready.jpg" width="1638" height="967" alt="AI Bridge connection checks showing successful REST, MCP runtime and Cursor handoff results">
-                    <figcaption>A real local Cursor qualification run: three successful checks and the expected MCP package.</figcaption>
-                </figure>
 
                 <div class="lcabd-safe-loop" aria-label="Safe working loop">
                     <div><span>01</span><strong>Inspect</strong></div>
@@ -977,8 +1000,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                         <p id="prompt-verify">Call get_connection_handoff, then get_snapshot. Report the site URL, fingerprint, active theme, framework, connection mode, scopes and MCP package version. Do not modify anything. Stop if the site identity or package version does not match the current project.</p>
                     </article>
                     <article class="lcabd-prompt">
-                        <div class="lcabd-prompt__head"><h3>2. Build a matching Contact page</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-contact">Copy prompt</button></div>
-                        <p id="prompt-contact">Inspect the homepage, global header, footer and design-system context. Create a Contact page that matches the existing visual language and remains editable in LiveCanvas. Include contact details, a concise form area and a clear next action. Preview the complete page first. Do not apply until I approve the preview.</p>
+                        <div class="lcabd-prompt__head"><h3>2. Create an About us draft</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-about">Copy prompt</button></div>
+                        <p id="prompt-about">Verify the connected site first. Inspect the homepage, header, footer and design-system context. Prepare a new About us page with English copy and clearly labelled fictional demo content. Match the existing theme and keep the page editable in LiveCanvas. Do not change existing pages, menus, theme files or settings. Validate the markup, then run a dry-run preview and show me the result. Wait for my approval before applying. Save only as a draft, never publish. Return the page ID, authenticated preview link and audit ID.</p>
                     </article>
                     <article class="lcabd-prompt">
                         <div class="lcabd-prompt__head"><h3>3. Install a starter theme safely</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-theme">Copy prompt</button></div>
@@ -998,7 +1021,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 </div>
             </section>
 
-            <footer class="lcabd-footer">LiveCanvas AI Bridge 0.2.0-beta.4 is beta software for supervised local and staging work. Use previews, audit IDs and rollback for every write workflow.</footer>
+            <footer class="lcabd-footer">LiveCanvas AI Bridge beta.5 is a test build for supervised local and staging work. Earlier beta.4 instructions are retained above. Use previews, audit IDs and rollback for every write workflow.</footer>
         </main>
     </div>
 </div>

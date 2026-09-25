@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 if (!class_exists('LCFA_Theme_Files_Bridge', false)) {
     require_once __DIR__ . '/class-lcfa-theme-files-bridge.php';
 }
@@ -2441,13 +2443,7 @@ final class LCFA_Ability_Registry {
 
     private function build_agent_handoff_connection_handoff(array $summary): array {
         $connections = LCFA_Settings::get_public_connections();
-        $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
-        if ($client === 'claude-code') {
-            $client = 'claude';
-        }
-        if (!in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)) {
-            $client = '';
-        }
+        $client = LCFA_Agent_Registry::normalize((string) ($connections['preferred_client'] ?? ''), '');
 
         $mode = sanitize_key((string) ($connections['connection_mode'] ?? ''));
         if (!in_array($mode, ['local', 'remote'], true)) {

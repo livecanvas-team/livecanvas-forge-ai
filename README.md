@@ -6,9 +6,9 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Status: `0.2.0-beta.4` staging beta
+Current test build: plugin `0.2.0-beta.5`, runtime `0.2.0-beta.6`. [Download the test ZIP](https://github.com/livecanvas-team/livecanvas-forge-ai/raw/refs/heads/codex/unified-connection-beta5/dist/livecanvas-forge-ai.zip). This is a branch build for supervised local and staging work, not a tagged release or an automatic update. Qualification remains incomplete.
 
-**Download:** [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4)
+Previous published beta: [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4). Its setup screens differ from the working copy described below.
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -71,7 +71,13 @@ Usable today:
 - install validated Picowind or Picostrap child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
 - finish pending remote Picowind builds with an audit-bound, checksum-verified MCP build tool
 
-Client qualification for this beta: OpenCode, Cursor, Claude Desktop Free, and Codex have passed real local handoff, snapshot, preview, write, and rollback tests with MCP `0.2.0-beta.5`. Claude Code setup generation is available, but its CLI path is preview/configuration-only until a full authenticated run is qualified.
+Previous beta qualification: OpenCode, Cursor, Claude Desktop Free, and Codex passed real local handoff, snapshot, preview, write, and rollback tests with MCP `0.2.0-beta.5`. Claude Code setup generation is available, but its CLI path is preview/configuration-only until a full authenticated run is qualified.
+
+The beta.5 test build (runtime `0.2.0-beta.6`) introduces one connection screen for these five clients. Activation opens Connect before project setup. Copy the generated instructions into the coding agent; for Claude Desktop, run the generated command in Terminal or PowerShell. Approve the matching code in WordPress to grant Full Access to that new session. The installer waits for approval, preserves other MCP servers and creates a backup when changing an existing configuration. The client then calls `get_connection_handoff`; the page verifies that exact installation attempt automatically.
+
+The test ZIP includes the installer archive, so these instructions do not require an unpublished npm package. Manual setup and session management remain available under Instructions and troubleshooting. Existing sessions keep their scopes and site policies. The new Full Access profile is request-scoped, and owner capability removal invalidates access. Additional clients are explicitly marked configuration preview.
+
+In the beta.5 macOS test run, Codex CLI, OpenCode Desktop and Claude Desktop completed authenticated reads and created separate About us drafts. Cursor's usage limit and Claude Code's missing sign-in blocked their page tests. Codex Desktop, clean database installation and Windows/Linux remain untested. A known mismatch can leave legacy handoff fields reporting `not_connected` / `smoke_test` while Connect reports Connected. Stop before writes if statuses disagree. See the [test report](./docs/client-validation-2026-09-25.md) and [beta.5 notes](./docs/release-notes-0.2.0-beta.5.md) for evidence and open gates; earlier beta results do not qualify this build.
 
 Still in progress:
 
@@ -123,15 +129,15 @@ Recommended:
 - PHP 8.0 or newer
 - the official WordPress MCP Adapter for the recommended remote Direct OAuth path
 - a public HTTPS WordPress URL for Direct OAuth
-- Node.js only for secure pairing fallback, local filesystem/build tools, visual checks, or other advanced local integrations
+- Node.js 18.17 or newer and npm on the agent host for the new connection installer and its bridge; the separate Direct OAuth path does not use this runtime
 - Picostrap, Picowind/WindPress, or another active WordPress theme
 
 ## Installation
 
-1. Download `livecanvas-forge-ai.zip` from the [0.2.0-beta.4 release](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4).
+1. Download the beta.5 test ZIP linked above, or run `bash scripts/build-dist.sh` and use `dist/livecanvas-forge-ai.zip`. The tagged beta.4 release still uses its previous setup flow.
 2. Open `WordPress Admin > Plugins > Add New Plugin > Upload Plugin` and upload the ZIP.
 3. Activate `LiveCanvas AI Bridge`.
-4. Open `LiveCanvas > AI Bridge` and complete Setup.
+4. Activation opens `LiveCanvas > AI Bridge > Connect`. Choose a coding agent. Project setup can be completed when the work requires it.
 
 Use the [Bridge documentation](https://livecanvas.com/bridge-doc/) for the project-scoped Codex, Cursor, OpenCode, Claude Desktop, and Claude Code connection flows.
 
@@ -183,16 +189,18 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 ## Quick Start
 
-1. Install and activate LiveCanvas AI Bridge, complete `Setup`, then open `LiveCanvas > AI Bridge > Connections`.
-2. Keep `Direct Mode` selected, click `Connect Codex securely`, and copy `Prompt for Codex`.
-3. Open the Codex project that belongs to this WordPress site, trust the project, paste the setup prompt, then restart Codex. The first MCP start can take up to 60 seconds.
-4. Paste the generated test prompt. Complete the WordPress authorization or approve the matching pairing code, verify the site URL and fingerprint, then run the WordPress smoke test.
+1. Open `LiveCanvas > AI Bridge > Connect`, select the coding agent and choose `Copy setup instructions`.
+2. Paste the instructions into that agent's intended project. For Claude Desktop, run the generated command in Terminal or PowerShell on the computer running the app. The installer preserves other servers and backs up changed configuration files.
+3. Compare the site and verification code, then choose `Authorize Full Access` in WordPress. The installer resumes after approval. Existing sessions retain their permissions.
+4. Reload the Forge MCP connection if required. The agent calls `get_connection_handoff`; WordPress checks that specific client, site and attempt automatically.
 
-You are connected when `Connections` shows `Ready`. Use preview or `dry_run: true` before the first write.
+The Connect screen confirms the connection only after the agent successfully reads the expected WordPress site. A copied command, configuration file or approved request alone is not a verified connection. Use preview or `dry_run: true` before the first write.
 
-The beta setup pins `@livecanvas/ai-bridge-mcp@0.2.0-beta.5`. Handoff and smoke tests compare the expected and detected package versions; after a plugin/MCP beta update, reload the MCP server before testing. In Cursor, use **Customize → MCPs → livecanvas-forge → Reload**; **Reload Window** can leave the previous MCP process running.
+This build pins runtime `0.2.0-beta.6` and ships its installer archive in the plugin ZIP. Use the generated site-specific command; a beta.6 npm publication is not assumed. After an update, reload the site-specific server in the agent's MCP settings. In Cursor, reloading the window can leave the previous MCP process running. Claude Desktop needs a complete app restart.
 
-The [Bridge documentation](https://livecanvas.com/bridge-doc/) covers installation, project-scoped Codex, OpenCode, Claude Code, Claude Desktop and Cursor setup, verified handoff, safe prompts, and rollback. The repository also includes the compact [four-step visual guide](./docs/coding-agent-setup.html). Technical reference: [`mcp/README.md`](./mcp/README.md).
+For copying problems, expired requests, limited-scope access or existing session management, open `Instructions and troubleshooting`. A local HTTP browser can require manual copying. Public sites require HTTPS; cloud agents cannot reach a `.local` site on your computer. Additional clients marked configuration preview have not completed real-app qualification.
+
+The bundled [connection guide](./docs/coding-agent-setup.html) describes this build. The [public Bridge documentation](https://livecanvas.com/bridge-doc/) may still describe the published beta. Technical reference: [`mcp/README.md`](./mcp/README.md). See the [beta.5 release notes](./docs/release-notes-0.2.0-beta.5.md) for qualification limits.
 
 ## Theme Library
 

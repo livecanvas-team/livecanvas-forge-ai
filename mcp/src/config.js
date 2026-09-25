@@ -6,6 +6,7 @@ const DEFAULTS = {
   siteFingerprint: '',
   token: '',
   sessionToken: '',
+  connectionAttempt: '',
   httpBasicUsername: '',
   httpBasicPassword: '',
   pairingScopes: 'read,preview,write',
@@ -32,6 +33,7 @@ function loadConfig(argv = []) {
     siteFingerprint: process.env.LCFA_SITE_FINGERPRINT || DEFAULTS.siteFingerprint,
     token: process.env.LCFA_MCP_TOKEN || DEFAULTS.token,
     sessionToken: process.env.LCFA_MCP_SESSION || process.env.LCFA_MCP_SESSION_TOKEN || DEFAULTS.sessionToken,
+    connectionAttempt: process.env.LCFA_CONNECTION_ATTEMPT || DEFAULTS.connectionAttempt,
     httpBasicUsername: process.env.LCFA_HTTP_BASIC_USERNAME || DEFAULTS.httpBasicUsername,
     httpBasicPassword: process.env.LCFA_HTTP_BASIC_PASSWORD || DEFAULTS.httpBasicPassword,
     pairingScopes: process.env.LCFA_PAIRING_SCOPES || DEFAULTS.pairingScopes,
@@ -122,6 +124,9 @@ function loadConfig(argv = []) {
         break
       case 'output':
         config.output = value || config.output
+        break
+      case 'connection-attempt':
+        config.connectionAttempt = value || ''
         break
       case 'allow-parent-theme-writes':
         config.allowParentThemeWrites = true

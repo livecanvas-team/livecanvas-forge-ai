@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 if (!class_exists('LCFA_Page_Runtime')) {
     require_once __DIR__ . '/class-lcfa-page-runtime.php';
 }
@@ -3706,19 +3708,11 @@ HTML,
 
         $default_client = $origin === 'mcp_agent' ? 'codex' : 'forge';
         $client = sanitize_key((string) ($payload['_lcfa_agent'] ?? $payload['agent'] ?? $default_client));
-        $allowed_clients = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
-        if (!in_array($client, $allowed_clients, true)) {
-            $client = $default_client;
-        }
+        $client = LCFA_Agent_Registry::provenance_client($client);
 
         $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
-        $allowed_processors = [
+        $allowed_processors = array_merge(LCFA_Agent_Registry::mcp_processors(), [
             'forge_local_rules',
-            'codex_mcp',
-            'opencode_mcp',
-            'claude_mcp',
-            'cursor_mcp',
-            'generic_mcp',
             'remote_companion',
             'wp_ability_preview',
             'wp_ability_apply',
@@ -3730,7 +3724,7 @@ HTML,
             'wp_ability_apply_dynamic_template',
             'wp_ability_apply_design_system',
             'wp_ability_restore_audit_rollback',
-        ];
+        ]);
         if (!in_array($processed_by, $allowed_processors, true)) {
             $processed_by = $default_processed_by;
         }
@@ -4839,6 +4833,13 @@ HTML;
 
     private function evaluate_policy(string $action, bool $dry_run): array {
         $settings = LCFA_Settings::get();
+        if (class_exists('LCFA_MCP_Session_Manager', false)
+            && method_exists('LCFA_MCP_Session_Manager', 'has_full_access_context')
+            && LCFA_MCP_Session_Manager::has_full_access_context()) {
+            // Request-scoped consent; never persist an upgrade to older connections.
+            $settings['permission_profile'] = 'advanced_templates';
+            $settings['allow_file_fallback'] = true;
+        }
         $profile  = in_array($settings['permission_profile'] ?? '', ['read_only', 'draft_preview', 'confirmed_apply', 'advanced_templates'], true)
             ? (string) $settings['permission_profile']
             : 'advanced_templates';

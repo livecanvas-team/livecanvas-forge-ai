@@ -815,9 +815,9 @@ $artifact_install_state_method = lcfa_test_reflection_method('LCFA_Admin', 'appl
 lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => true,
 ]), 'completed setup should default the dashboard to Connections');
-lcfa_assert_same('setup', $default_tab_method->invoke($admin_instance, [
+lcfa_assert_same('connections', $default_tab_method->invoke($admin_instance, [
     'completed' => false,
-]), 'incomplete setup should still default the dashboard to Setup');
+]), 'a new installation should open Connections before project configuration');
 lcfa_assert_same('connections', $post_setup_redirect_method->invoke($admin_instance), 'setup completion should redirect to Connections');
 
 $ready_install_state = $artifact_install_state_method->invoke($admin_instance, [

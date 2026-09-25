@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 final class LCFA_Connection_Tester {
     private LCFA_Environment $environment;
     private LCFA_Local_MCP_Bridge $local_mcp_bridge;
@@ -61,9 +63,7 @@ final class LCFA_Connection_Tester {
 
     private function test_verified_session_handoff(array $connections, string $mode): array {
         $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
-        if ($client === 'claude-code') {
-            $client = 'claude';
-        }
+        $client = LCFA_Agent_Registry::normalize($client, '');
 
         if (!class_exists('LCFA_MCP_Session_Manager', false) || !method_exists('LCFA_MCP_Session_Manager', 'get_latest_verified_session')) {
             return [
@@ -306,7 +306,7 @@ final class LCFA_Connection_Tester {
             return $this->test_codex_registration($connections);
         }
 
-        if ($preferred_client !== 'claude' || $claude_target !== 'desktop_app') {
+        if ($preferred_client !== 'claude-desktop' && ($preferred_client !== 'claude' || $claude_target !== 'desktop_app')) {
             return null;
         }
 

@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 final class LCFA_Settings {
     public const OPTION_KEY = 'lcfa_settings';
     public const BRIEF_OPTION_KEY = 'lcfa_project_brief';
@@ -663,14 +665,13 @@ final class LCFA_Settings {
             return 'generic';
         }
 
-        if ($client === 'claude-code') {
-            return 'claude';
-        }
-
-        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $client : '';
+        return LCFA_Agent_Registry::normalize($client, '');
     }
 
     private static function normalize_claude_connection_target(string $target, string $preferred_client, string $raw_client): string {
+        if ($raw_client === 'claude-desktop') {
+            return 'desktop_app';
+        }
         if ($raw_client === 'claude-code') {
             return 'cli';
         }
@@ -1728,7 +1729,7 @@ final class LCFA_Settings {
     private static function normalize_agent_client(string $agent): string {
         $agent = sanitize_key($agent);
 
-        return in_array($agent, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true) ? $agent : 'codex';
+        return LCFA_Agent_Registry::normalize($agent);
     }
 
     private static function agent_ability_contract_for(string $action): array {

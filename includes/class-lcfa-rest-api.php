@@ -2,6 +2,9 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+require_once __DIR__ . '/class-lcfa-connection-attempt.php';
+
 if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) {
     require_once LCFA_DIR . 'includes/class-lcfa-thread-message-actions.php';
 }
@@ -100,6 +103,16 @@ final class LCFA_Rest_Api {
     }
 
     public function register_routes(): void {
+        register_rest_route('lcfa/v1', '/connections/attempts', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'create_connection_attempt'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
+        register_rest_route('lcfa/v1', '/connections/attempts/(?P<id>[a-f0-9]{32})', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_connection_attempt'],
+            'permission_callback' => [$this, 'can_manage'],
+        ]);
         register_rest_route('lcfa/v1', '/snapshot', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_snapshot'],
@@ -513,7 +526,7 @@ final class LCFA_Rest_Api {
         ]);
 
         register_rest_route('lcfa/v1', '/mcp/pairing/status', [
-            'methods'             => WP_REST_Server::READABLE,
+            'methods'             => [WP_REST_Server::READABLE, WP_REST_Server::CREATABLE],
             'callback'            => [$this, 'get_mcp_pairing_status'],
             'permission_callback' => '__return_true',
         ]);
@@ -1028,6 +1041,12 @@ final class LCFA_Rest_Api {
             $encoded = '';
         }
 
+        $attempt_id = (string) $request->get_header('x-lcfa-connection-attempt');
+        if ($attempt_id !== '' && $handoff !== [] && $encoded !== '' && class_exists('LCFA_Connection_Attempt', false)) {
+            $session = LCFA_MCP_Session_Manager::get_session_from_request($request, 'read');
+            if (is_array($session)) LCFA_Connection_Attempt::verify($attempt_id, $session, (string) $request->get_header('x-lcfa-mcp-package-version'));
+        }
+
         return new WP_REST_Response([
             'studio' => [
                 'schema_version' => 'studio.connection-handoff.v1',
@@ -1050,6 +1069,23 @@ final class LCFA_Rest_Api {
 
     public function get_studio_ability_diagnostics_route(): WP_REST_Response {
         return new WP_REST_Response($this->get_studio_ability_diagnostics());
+    }
+
+    public function create_connection_attempt(WP_REST_Request $request) {
+        if (!LCFA_MCP_Session_Manager::owner_can_authorize_full_access(get_current_user_id())) return new WP_Error('lcfa_full_access_unavailable', __('Your WordPress role cannot grant Full Access. Use manual setup with limited scopes, or ask a site administrator to connect.', 'livecanvas-forge-ai'), ['status' => 403]);
+        $client = LCFA_Agent_Registry::normalize((string) $request->get_param('client'), '');
+        if ($client === '' || $client === 'claude') return new WP_Error('lcfa_invalid_client', __('Choose a coding agent.', 'livecanvas-forge-ai'), ['status' => 400]);
+        $attempt = LCFA_Connection_Attempt::create($client, get_current_user_id());
+        $instructions = LCFA_Connection_Screen::instructions($attempt);
+        if ($instructions === []) return new WP_Error('lcfa_installer_missing', __('The installer package is missing. Install the complete plugin release or use manual setup.', 'livecanvas-forge-ai'), ['status' => 503]);
+        update_user_meta(get_current_user_id(), 'lcfa_connection_attempt', $attempt['id']);
+        unset($attempt['owner']);
+        return new WP_REST_Response(array_merge($attempt, $instructions), 201);
+    }
+
+    public function get_connection_attempt(WP_REST_Request $request) {
+        $attempt = LCFA_Connection_Attempt::public_status((string) $request->get_param('id'), get_current_user_id());
+        return $attempt !== [] ? new WP_REST_Response(array_merge($attempt, LCFA_Connection_Screen::instructions($attempt))) : new WP_Error('lcfa_attempt_not_found', __('This connection request expired or was not found.', 'livecanvas-forge-ai'), ['status' => 404]);
     }
 
     public function get_studio_runs_route(WP_REST_Request $request): WP_REST_Response {
@@ -1942,13 +1978,10 @@ final class LCFA_Rest_Api {
             ? sanitize_key((string) ($connections['preferred_client'] ?? 'codex'))
             : 'forge';
         $client = sanitize_key((string) ($payload['_lcfa_agent'] ?? $payload['agent'] ?? $default_client));
-        $allowed_clients = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
-        if (!in_array($client, $allowed_clients, true)) {
-            $client = $default_client !== '' ? $default_client : 'forge';
-        }
+        $client = LCFA_Agent_Registry::provenance_client($client);
 
         $processed_by = sanitize_key((string) ($payload['_lcfa_processed_by'] ?? $payload['processed_by'] ?? $default_processed_by));
-        $allowed_processors = ['forge_local_rules', 'agent_queue', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+        $allowed_processors = array_merge(['forge_local_rules', 'agent_queue', 'remote_companion'], LCFA_Agent_Registry::mcp_processors());
         if (!in_array($processed_by, $allowed_processors, true)) {
             $processed_by = $default_processed_by;
         }
@@ -3093,13 +3126,7 @@ final class LCFA_Rest_Api {
     }
 
     private function build_studio_connection_handoff(array $connections, array $summary, array $adapter, array $session = [], ?WP_REST_Request $request = null): array {
-        $client = sanitize_key((string) ($connections['preferred_client'] ?? ''));
-        if ($client === 'claude-code') {
-            $client = 'claude';
-        }
-        if (!in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)) {
-            $client = '';
-        }
+        $client = LCFA_Agent_Registry::normalize((string) ($session['client'] ?? ($connections['preferred_client'] ?? '')), '');
 
         $mode = sanitize_key((string) ($connections['connection_mode'] ?? ''));
         if (!in_array($mode, ['local', 'remote'], true)) {

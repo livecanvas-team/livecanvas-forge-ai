@@ -8,6 +8,14 @@ STAGE_DIR="${DIST_DIR}/.stage"
 PACKAGE_DIR="${STAGE_DIR}/livecanvas-forge-ai"
 ZIP_PATH="${DIST_DIR}/livecanvas-forge-ai.zip"
 
+# The wizard uses the archive shipped on this site, so setup does not depend on
+# an unpublished npm version. npm pack includes only the package files allowlist.
+mkdir -p "${ROOT_DIR}/assets/runtime"
+(
+  cd "${ROOT_DIR}/mcp"
+  npm pack --ignore-scripts --cache "${DIST_DIR}/.npm-cache" --pack-destination "${ROOT_DIR}/assets/runtime"
+)
+
 rm -rf "${STAGE_DIR}"
 mkdir -p "${PACKAGE_DIR}"
 
@@ -40,6 +48,7 @@ cp "${ROOT_DIR}/examples/theme-library/catalog.json" "${PACKAGE_DIR}/examples/th
 
 mkdir -p "${PACKAGE_DIR}/docs"
 cp "${ROOT_DIR}/docs/coding-agent-setup.html" "${PACKAGE_DIR}/docs/coding-agent-setup.html"
+cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.5.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.5.md"
 
 find "${PACKAGE_DIR}" \
   \( -name '.DS_Store' -o -name '*.log' \) \
@@ -56,6 +65,8 @@ rm -rf \
 # pure-JavaScript Dart Sass runtime and its required dependencies; browser and
 # development dependencies remain excluded from the WordPress package.
 SASS_RUNTIME_PACKAGES=(
+  jsonc-parser
+  smol-toml
   sass
   chokidar
   readdirp

@@ -1421,9 +1421,9 @@
                     <span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Audited rollback</span>
                 </div>
                 <div class="lcab-actions">
-                    <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">
+                    <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/raw/refs/heads/codex/unified-connection-beta5/dist/livecanvas-forge-ai.zip">
                         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-                        Get the public beta
+                        Get the beta.5 test ZIP
                     </a>
                     <a class="lcab-btn lcab-btn--secondary" href="/bridge-doc/">
                         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h6"/></svg>
@@ -1438,14 +1438,14 @@
         <div class="lcab-container lcab-agents__inner">
             <div class="lcab-agents__intro">
                 <strong id="lcab-agent-heading">Use the coding agent you already trust.</strong>
-                <span>Four real-agent workflows qualified in this beta, plus Claude Code setup preview.</span>
+                <span>One setup flow for five agents. Draft creation checked in three clients on macOS; full qualification is still in progress.</span>
             </div>
             <div class="lcab-agent-list" aria-label="Supported coding agents">
-                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/codex-color.svg" alt=""><span><strong>Codex</strong><small>Qualified</small></span></div>
-                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/cursor.svg" alt=""><span><strong>Cursor</strong><small>Qualified</small></span></div>
-                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/opencode.svg" alt=""><span><strong>OpenCode</strong><small>Qualified</small></span></div>
-                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-color.svg" alt=""><span><strong>Claude Desktop</strong><small>Qualified · Free</small></span></div>
-                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-code.svg" alt=""><span><strong>Claude Code</strong><small>Setup preview</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/codex-color.svg" alt=""><span><strong>Codex</strong><small>CLI draft tested</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/cursor.svg" alt=""><span><strong>Cursor</strong><small>Page test pending</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/opencode.svg" alt=""><span><strong>OpenCode</strong><small>Desktop draft tested</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-color.svg" alt=""><span><strong>Claude Desktop</strong><small>Draft tested</small></span></div>
+                <div class="lcab-agent"><img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/agent-icons/claude-code.svg" alt=""><span><strong>Claude Code</strong><small>Page test pending</small></span></div>
             </div>
         </div>
     </section>
@@ -1453,18 +1453,18 @@
     <section class="lcab-section lcab-section--plum" aria-labelledby="lcab-onboarding-title">
         <div class="lcab-container lcab-onboarding">
             <div class="lcab-onboarding__intro">
-                <h2 id="lcab-onboarding-title">From install to Ready, without configuration debt.</h2>
-                <p>The onboarding now separates the folder opened in your coding agent from the WordPress root, preserves unrelated MCP servers and keeps credentials out of project files.</p>
+                <h2 id="lcab-onboarding-title">Choose your agent. Copy one setup prompt.</h2>
+                <p>Beta.5 opens Connect before project setup. The same flow handles five agents, with no transport selector or manual JSON editing. The installer preserves other MCP servers and backs up changed configuration files.</p>
                 <a class="lcab-onboarding__link" href="/bridge-doc/">
                     Follow the complete installation guide
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
                 </a>
             </div>
             <div class="lcab-onboarding__steps" aria-label="Connection workflow">
-                <div class="lcab-onboarding__step"><span>01</span><div><strong>Confirm the project.</strong><p>AI Bridge detects LiveCanvas, the active child theme and framework. Choose Inspect only or Configure and build this site.</p></div></div>
-                <div class="lcab-onboarding__step"><span>02</span><div><strong>Install one project-scoped server.</strong><p>The wizard safely merges only <code>livecanvas-forge</code>, creates a backup and uses private file permissions where the platform supports them.</p></div></div>
-                <div class="lcab-onboarding__step"><span>03</span><div><strong>Pair without storing a static secret.</strong><p>Public HTTPS Codex projects can use OAuth. Local, private and other agent workflows use a site-bound approval instead of a token committed to the project.</p></div></div>
-                <div class="lcab-onboarding__step"><span>04</span><div><strong>Prove the connection.</strong><p>Ready appears only after the agent completes <code>get_connection_handoff</code> and WordPress passes the smoke test.</p></div></div>
+                <div class="lcab-onboarding__step"><span>01</span><div><strong>Choose your agent.</strong><p>In WordPress, open LiveCanvas → AI Bridge → Connect. Check the site address, choose your agent and copy its setup instructions.</p></div></div>
+                <div class="lcab-onboarding__step"><span>02</span><div><strong>Run the generated setup.</strong><p>Paste the instructions into your agent's project chat. For Claude Desktop, run the generated command in Terminal or PowerShell. Node.js 18.17+ and npm are required.</p></div></div>
+                <div class="lcab-onboarding__step"><span>03</span><div><strong>Approve Full Access in WordPress.</strong><p>Compare the site, agent and verification code before approval. The new session can change content, media and theme files, and use build, debug, cache and SEO operations where supported. Existing sessions keep their permissions.</p></div></div>
+                <div class="lcab-onboarding__step"><span>04</span><div><strong>Reload and verify.</strong><p>Reload the agent's MCP connection, then request <code>get_connection_handoff</code> and <code>get_snapshot</code>. WordPress shows Connected after the matching handoff. Approval alone is not a verified connection.</p></div></div>
             </div>
         </div>
     </section>
@@ -1613,16 +1613,20 @@
     <section class="lcab-section lcab-section--plum">
         <div class="lcab-container lcab-beta">
             <div>
-                <h2>Public beta for supervised local and staging work.</h2>
+                <h2>Beta.5 test build for local and staging work.</h2>
             </div>
             <div class="lcab-beta__details">
-                <div class="lcab-beta__row"><span>Current release</span><strong>0.2.0-beta.4</strong></div>
+                <div class="lcab-beta__row"><span>Current test build</span><strong>0.2.0-beta.5 · runtime beta.6</strong></div>
                 <div class="lcab-beta__row"><span>WordPress</span><strong>6.8 through 7.1</strong></div>
-                <div class="lcab-beta__row"><span>Qualified agents</span><strong>Codex, Cursor, OpenCode, Claude Desktop</strong></div>
-                <div class="lcab-beta__row"><span>Connection gate</span><strong>Verified handoff + smoke test</strong></div>
+                <div class="lcab-beta__row"><span>Draft creation tested</span><strong>Codex CLI, OpenCode Desktop, Claude Desktop</strong></div>
+                <div class="lcab-beta__row"><span>Connection gate</span><strong>Approved session + matching authenticated handoff</strong></div>
                 <div class="lcab-beta__row"><span>Native stacks</span><strong>Picostrap and Picowind</strong></div>
                 <div class="lcab-beta__row"><span>Default guardrail</span><strong>Preview before apply</strong></div>
                 <div class="lcab-beta__row"><span>License</span><strong>GPL-2.0-or-later</strong></div>
+                <div class="lcab-beta__row"><span>Delivery</span><strong>Manual test ZIP; not an automatic update</strong></div>
+                <div class="lcab-beta__row"><span>Pending tests</span><strong>Cursor, Claude Code, Codex Desktop, Windows/Linux and clean installation</strong></div>
+                <div class="lcab-beta__row"><span>Known issue</span><strong>Legacy handoff status can disagree with Connect. Stop before writes if it does.</strong></div>
+                <div class="lcab-beta__row"><span>Previous release</span><strong><a href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">Beta.4 release</a> · <a href="https://github.com/livecanvas-team/livecanvas-forge-ai/blob/codex/unified-connection-beta5/docs/release-notes-0.2.0-beta.5.md">Beta.5 test notes</a></strong></div>
             </div>
         </div>
     </section>
@@ -1630,11 +1634,11 @@
     <section class="lcab-final">
         <div class="lcab-container lcab-final__content">
             <h2>Bring your coding agent into LiveCanvas.</h2>
-            <p>Install the beta, connect one project to one site and start with a read-only audit. Move to preview and apply when the target and scope are verified.</p>
+            <p>Install the test ZIP on a backed-up local or staging site and start with a read-only audit. Review each change before applying it. This build is not qualified for production.</p>
             <div class="lcab-actions">
-                <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4">
+                <a class="lcab-btn lcab-btn--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/raw/refs/heads/codex/unified-connection-beta5/dist/livecanvas-forge-ai.zip">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-                    Download the public beta
+                    Download the beta.5 test ZIP
                 </a>
                 <a class="lcab-btn lcab-btn--secondary" href="/bridge-doc/">
                     Open the documentation

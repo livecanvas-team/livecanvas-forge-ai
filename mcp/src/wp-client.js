@@ -191,9 +191,7 @@ class WPClient {
 
   withProvenance(payload = {}, processedBy = 'codex_mcp') {
     const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
-    const agent = ['codex', 'opencode', 'claude', 'cursor', 'generic'].includes(configuredAgent)
-      ? configuredAgent
-      : 'generic'
+    const agent = require('./agent-registry').normalizeAgent(configuredAgent)
     const configuredTransport = this.config && this.config.transport ? String(this.config.transport) : 'stdio'
     const transport = configuredTransport === 'bridge' ? 'mcp_bridge' : 'mcp_stdio'
 
@@ -213,9 +211,7 @@ class WPClient {
 
   async runCommand(payload) {
     const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
-    const agent = ['codex', 'opencode', 'claude', 'cursor', 'generic'].includes(configuredAgent)
-      ? configuredAgent
-      : 'generic'
+    const agent = require('./agent-registry').normalizeAgent(configuredAgent)
     const processedBy = agent === 'generic' ? 'generic_mcp' : `${agent}_mcp`
 
     return this.request('POST', 'command', { body: this.withProvenance(payload, processedBy) })
@@ -473,6 +469,9 @@ class WPClient {
     if (this.config.siteFingerprint) {
       headers['X-LCFA-Site-Fingerprint'] = String(this.config.siteFingerprint)
     }
+    if (this.config.connectionAttempt) {
+      headers['X-LCFA-Connection-Attempt'] = String(this.config.connectionAttempt)
+    }
 
     if (options.query && typeof options.query === 'object') {
       Object.entries(options.query).forEach(([key, value]) => {
@@ -486,7 +485,9 @@ class WPClient {
 
     const requestOptions = {
       method,
-      headers
+      headers,
+      // Custom session headers must never be forwarded to a redirect destination.
+      redirect: 'error'
     }
 
     if (options.body !== undefined) {

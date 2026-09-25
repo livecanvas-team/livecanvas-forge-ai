@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 final class LCFA_Context_Builder {
     private LCFA_Environment $environment;
     private LCFA_Inventory $inventory;
@@ -458,33 +460,15 @@ final class LCFA_Context_Builder {
             'transport'      => $connections['transport'],
             'filesystem_mode'=> $filesystem_mode,
         ];
-        $this->bootstrap_payload_cache = [
-            'common' => $common,
-            'clients'=> [
-                'codex' => [
-                    'label'   => 'Codex',
-                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
-                    'env'     => $secure_environment('codex'),
-                ],
-                'opencode' => [
-                    'label'   => 'OpenCode',
-                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
-                    'env'     => $secure_environment('opencode'),
-                ],
-                'claude' => [
-                    'label'   => 'Claude',
-                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
-                    'env'     => $secure_environment('claude'),
-                ],
-                'cursor' => [
-                    'label'   => 'Cursor',
-                    'command' => $is_secure_remote ? $remote_mcp_command : ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
-                    'env'     => $secure_environment('cursor'),
-                ],
-            ],
-        ];
-
-        $this->bootstrap_payload_cache['clients']['claude-code'] = $this->bootstrap_payload_cache['clients']['claude'];
+        $this->bootstrap_payload_cache = ['common' => $common, 'clients' => []];
+        foreach (LCFA_Agent_Registry::all(true) as $client => $agent) {
+            $default_command = $local_mcp_command . ' --transport=stdio' . ($client === 'codex' ? '' : ' --agent=' . $client);
+            $this->bootstrap_payload_cache['clients'][$client] = [
+                'label' => $agent['label'],
+                'command' => $is_secure_remote ? $remote_mcp_command : (string) (($connections['mcp_server_command'] ?? '') ?: $default_command),
+                'env' => $secure_environment($client),
+            ];
+        }
 
         return $this->bootstrap_payload_cache;
     }

@@ -1,0 +1,20 @@
+{
+  "codex": {"label":"Codex","format":"toml","projectFile":".codex/config.toml","shell":true,"http":true,"qualification":"local-tested","skillDir":".agents/skills"},
+  "opencode": {"label":"OpenCode","format":"opencode","projectFile":"opencode.json","shell":true,"http":true,"qualification":"local-tested","skillDir":".agents/skills"},
+  "cursor": {"label":"Cursor","format":"mcpServers","projectFile":".cursor/mcp.json","shell":true,"http":true,"qualification":"local-tested","skillDir":".cursor/skills"},
+  "claude-code": {"label":"Claude Code","format":"mcpServers","projectFile":".mcp.json","shell":true,"http":true,"qualification":"configuration","skillDir":".claude/skills"},
+  "claude-desktop": {"label":"Claude Desktop","format":"mcpServers","projectFile":"","shell":false,"http":false,"qualification":"local-tested","globalTarget":"claude-desktop"},
+  "vscode": {"label":"VS Code / Copilot","format":"servers","projectFile":".vscode/mcp.json","shell":true,"http":true,"qualification":"configuration","skillDir":".agents/skills"},
+  "github-copilot": {"label":"GitHub Copilot CLI","format":"copilot","projectFile":".mcp.json","shell":true,"http":true,"qualification":"configuration","skillDir":".agents/skills"},
+  "gemini-cli": {"label":"Gemini CLI","format":"gemini","projectFile":".gemini/settings.json","shell":true,"http":true,"qualification":"configuration","skillDir":".gemini/skills"},
+  "antigravity": {"label":"Antigravity","format":"serverUrl","projectFile":".agents/mcp_config.json","shell":true,"http":true,"qualification":"configuration","skillDir":".agents/skills"},
+  "antigravity-cli": {"label":"Antigravity CLI","format":"serverUrl","projectFile":".agents/mcp_config.json","shell":true,"http":true,"qualification":"configuration","skillDir":".agents/skills"},
+  "windsurf": {"label":"Windsurf / Cascade (legacy)","format":"serverUrl","projectFile":"","shell":true,"http":true,"qualification":"configuration","globalTarget":"windsurf","skillDir":".windsurf/skills"},
+  "cline": {"label":"Cline CLI","format":"cline","projectFile":"","shell":true,"http":true,"qualification":"configuration","globalTarget":"cline","skillDir":".agents/skills"},
+  "roo-code": {"label":"Roo Code","format":"mcpServers","projectFile":".roo/mcp.json","shell":true,"http":false,"qualification":"configuration","skillDir":".roo/skills"},
+  "kilo-code": {"label":"Kilo Code","format":"opencode","projectFile":".kilo/kilo.jsonc","shell":true,"http":true,"qualification":"configuration","skillDir":".kilo/skills"},
+  "amazon-q": {"label":"Amazon Q (legacy MCP config)","format":"mcpServers","projectFile":".amazonq/mcp.json","shell":true,"http":false,"qualification":"configuration","skillDir":".agents/skills"},
+  "zed": {"label":"Zed","format":"context_servers","projectFile":"","shell":true,"http":true,"qualification":"configuration","globalTarget":"zed","skillDir":".agents/skills"},
+  "generic": {"label":"Other MCP client","format":"mcpServers","projectFile":".mcp.json","shell":true,"http":false,"qualification":"configuration","skillDir":".agents/skills"},
+  "claude": {"label":"Claude","format":"mcpServers","projectFile":".mcp.json","shell":true,"http":true,"qualification":"configuration","hidden":true,"skillDir":".claude/skills"}
+}

@@ -10,7 +10,8 @@ class SessionAuth {
     this.cachePath = resolveCachePath(config)
   }
 
-  async resolve() {
+  async resolve({ signal } = {}) {
+    signal?.throwIfAborted()
     if (this.config.token) {
       return {
         ok: true,
@@ -39,10 +40,10 @@ class SessionAuth {
     }
 
     if (cached && cached.pairing_id && cached.device_secret && !isExpired(cached.pairing_expires_at)) {
-      return this.checkPairing(cached)
+      return this.checkPairing(cached, { signal })
     }
 
-    return this.startPairing()
+    return this.startPairing({ signal })
   }
 
   invalidateSession() {
@@ -50,15 +51,16 @@ class SessionAuth {
     clearCache(this.cachePath)
   }
 
-  async startPairing() {
+  async startPairing({ signal } = {}) {
     const agentLabel = formatAgentLabel(this.config.agent)
     const response = await this.request('POST', 'mcp/pairing/start', {
       client: this.config.agent || 'codex',
       project_label: this.config.projectLabel || `${agentLabel} project`,
       site_fingerprint: this.config.siteFingerprint || '',
       connection_mode: this.config.wpRoot ? 'local' : 'remote',
-      scopes: normalizePairingScopes(this.config.pairingScopes)
-    })
+      scopes: normalizePairingScopes(this.config.pairingScopes),
+      ...(this.config.connectionAttempt ? { connection_attempt: this.config.connectionAttempt } : {})
+    }, { signal })
 
     if (!response.ok) {
       return pairingError(response)
@@ -76,27 +78,39 @@ class SessionAuth {
     return pairingPending(cache, this.config.agent)
   }
 
-  async checkPairing(cached) {
+  async checkPairing(cached, { signal } = {}) {
     const url = new URL('mcp/pairing/status', this.config.restBase)
-    url.searchParams.set('pairing_id', cached.pairing_id)
-    url.searchParams.set('device_secret', cached.device_secret)
-
-    const response = await fetch(url, {
-      method: 'GET',
+    const options = {
+      method: this.config.connectionAttempt ? 'POST' : 'GET',
+      redirect: 'error',
       headers: applyHttpBasicAuth({
         Accept: 'application/json'
-      }, this.config)
-    })
+      }, this.config),
+      signal: requestSignal(signal)
+    }
+    if (this.config.connectionAttempt) {
+      options.headers['Content-Type'] = 'application/json'
+      options.body = JSON.stringify({ pairing_id: cached.pairing_id, device_secret: cached.device_secret })
+    } else {
+      // Older servers accept GET only. New attempts never put the device secret in a URL.
+      url.searchParams.set('pairing_id', cached.pairing_id)
+      url.searchParams.set('device_secret', cached.device_secret)
+    }
+    const response = await fetch(url, options)
     const payload = await parseResponse(response)
 
     if (payload.status === 'expired') {
       clearCache(this.cachePath)
-      return this.startPairing()
+      if (this.config.connectionAttempt) return pairingError({ message: 'This connection request expired. Start a new connection in WordPress.' })
+      return this.startPairing({ signal })
     }
 
     if (!response.ok || payload.ok === false) {
       clearCache(this.cachePath)
       return pairingError(payload)
+    }
+    if (this.config.connectionAttempt && payload.status === 'consumed') {
+      return pairingError({ message: 'The one-time session token was already retrieved. If the client did not save it, start a new connection in WordPress.' })
     }
 
     if (payload.status === 'approved' && payload.session_token) {
@@ -124,13 +138,15 @@ class SessionAuth {
     }, this.config.agent)
   }
 
-  async request(method, route, body = null) {
+  async request(method, route, body = null, { signal } = {}) {
     const url = new URL(route, this.config.restBase)
     const options = {
       method,
+      redirect: 'error',
       headers: applyHttpBasicAuth({
         Accept: 'application/json'
-      }, this.config)
+      }, this.config),
+      signal: requestSignal(signal)
     }
 
     if (body !== null) {
@@ -146,6 +162,43 @@ class SessionAuth {
       ok: response.ok && payload.ok !== false
     }
   }
+
+  async waitForAuthorization({ timeoutMs = 600000, intervalMs = 2000, onPending = () => {}, signal } = {}) {
+    const duration = Number.isFinite(timeoutMs) ? Math.min(Math.max(timeoutMs, 1), 600000) : 600000
+    const deadline = Date.now() + duration
+    const controller = new AbortController()
+    const cancel = () => controller.abort()
+    const timeout = setTimeout(cancel, duration)
+    if (signal?.aborted) cancel()
+    else signal?.addEventListener('abort', cancel, { once: true })
+    let lastPairing = ''
+    try {
+    while (Date.now() < deadline && !controller.signal.aborted) {
+      const result = await this.resolve({ signal: controller.signal })
+      if (result.ok || result.status !== 'pairing_pending') return result
+      if (lastPairing !== result.pairing_id) { onPending(result); lastPairing = result.pairing_id }
+      const expires = Date.parse(result.expires_at)
+      if (Number.isFinite(expires) && expires <= Date.now()) break
+      await new Promise(resolve => {
+        const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve() }
+        const timer = setTimeout(done, Math.min(Math.max(intervalMs, 1), Math.max(1, deadline - Date.now())))
+        controller.signal.addEventListener('abort', done, { once: true })
+        if (controller.signal.aborted) done()
+      })
+    }
+    } catch (error) {
+      if (!controller.signal.aborted) throw error
+    } finally {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', cancel)
+    }
+    return { ok: false, status: signal?.aborted ? 'cancelled' : 'authorization_timeout', message: 'Authorization is unfinished. Resume setup while this request is valid, or start a new connection in WordPress.' }
+  }
+}
+
+function requestSignal(signal) {
+  const timeout = AbortSignal.timeout(20000)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
 }
 
 async function parseResponse(response) {
@@ -195,7 +248,7 @@ function resolveCachePath(config) {
   const agentKey = agent === 'codex' ? '' : `|${agent}`
   const key = crypto
     .createHash('sha256')
-    .update(`${config.restBase}|${config.siteFingerprint || ''}|${config.projectLabel || ''}${agentKey}`)
+    .update(`${config.restBase}|${config.siteFingerprint || ''}|${config.projectLabel || ''}${agentKey}${config.connectionAttempt ? `|attempt:${config.connectionAttempt}` : ''}`)
     .digest('hex')
     .slice(0, 24)
 
@@ -203,15 +256,7 @@ function resolveCachePath(config) {
 }
 
 function formatAgentLabel(agent) {
-  const labels = {
-    codex: 'Codex',
-    opencode: 'OpenCode',
-    claude: 'Claude',
-    cursor: 'Cursor',
-    generic: 'coding agent'
-  }
-
-  return labels[String(agent || 'codex').trim().toLowerCase()] || 'coding agent'
+  return require('./agent-registry').getAgent(agent || 'codex').label
 }
 
 function readCache(filePath) {

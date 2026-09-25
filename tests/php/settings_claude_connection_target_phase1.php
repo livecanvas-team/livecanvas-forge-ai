@@ -148,7 +148,7 @@ $sanitized_legacy = LCFA_Settings::sanitize_connections([
     'claude_connection_target' => 'desktop_app',
 ]);
 
-lcfa_assert_same('claude', $sanitized_legacy['preferred_client'] ?? '', 'legacy claude-code should normalize to claude');
+lcfa_assert_same('claude-code', $sanitized_legacy['preferred_client'] ?? '', 'Claude Code should retain its canonical identity');
 lcfa_assert_same('cli', $sanitized_legacy['claude_connection_target'] ?? '', 'legacy claude-code should force the cli target');
 
 $sanitized_desktop = LCFA_Settings::sanitize_connections([
@@ -236,7 +236,7 @@ $GLOBALS['lcfa_options'][LCFA_Settings::CONNECTIONS_OPTION_KEY] = array_merge(
 
 $normalized = LCFA_Settings::get_connections();
 
-lcfa_assert_same('claude', $normalized['preferred_client'] ?? '', 'get_connections should normalize legacy claude-code values on read');
+lcfa_assert_same('claude-code', $normalized['preferred_client'] ?? '', 'get_connections should preserve the Claude Code identity on read');
 lcfa_assert_same('cli', $normalized['claude_connection_target'] ?? '', 'get_connections should infer the cli target for legacy claude-code values');
 lcfa_assert_same(true, $normalized['mcp_write_abilities_enabled'] ?? null, 'get_connections should keep default write abilities enabled');
 lcfa_assert_same(LCFA_Settings::get_default_mcp_write_abilities(), $normalized['mcp_public_write_abilities'] ?? [], 'get_connections should keep the default write allowlist');

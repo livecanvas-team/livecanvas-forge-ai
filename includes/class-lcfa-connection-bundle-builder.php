@@ -2,9 +2,13 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 final class LCFA_Connection_Bundle_Builder {
     public function build(array $payload): array {
-        $client         = $this->normalize_client((string) ($payload['client'] ?? 'codex'));
+        $identity       = $this->normalize_client((string) ($payload['client'] ?? 'codex'));
+        // Legacy rendering helpers share a schema; the authenticated identity stays distinct.
+        $client         = in_array($identity, ['claude-code', 'claude-desktop'], true) ? 'claude' : $identity;
         $mode           = $this->normalize_mode((string) ($payload['mode'] ?? 'local'));
         $common         = is_array($payload['common'] ?? null) ? $payload['common'] : [];
         $wordpress_root = $this->normalize_wordpress_root((string) ($payload['wordpress_root'] ?? ''), $common, $mode);
@@ -14,7 +18,7 @@ final class LCFA_Connection_Bundle_Builder {
         $command_input  = trim((string) ($payload['client_payload']['command'] ?? ''));
         $command        = $this->normalize_command($this->tokenize_command($command_input), $wordpress_root, $mode);
         $command_string = $this->join_shell_tokens($command);
-        $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $wordpress_root, $workspace_root, $mode, $client, $common);
+        $environment    = $this->normalize_environment((array) ($payload['client_payload']['env'] ?? []), $wordpress_root, $workspace_root, $mode, $identity, $common);
         $claude_connection_target = $this->normalize_claude_target($payload, $client);
         $claude_desktop_config_path = $this->normalize_claude_desktop_config_path((string) ($payload['claude_desktop_config_path'] ?? ''));
         $server_name = $this->resolve_server_name($client, $mode, $common, $command, $mcp_url);
@@ -29,7 +33,7 @@ final class LCFA_Connection_Bundle_Builder {
         $install_files = $this->build_install_files($client, $mode, $claude_connection_target, $claude_desktop_config_path, $workspace_files);
 
         return [
-            'client'              => $client,
+            'client'              => $identity,
             'claude_connection_target' => $claude_connection_target,
             'mode'                => $mode,
             'server_name'         => $server_name,
@@ -68,13 +72,7 @@ final class LCFA_Connection_Bundle_Builder {
     private function normalize_client(string $client): string {
         $client = sanitize_key($client);
 
-        if ($client === 'claude-code') {
-            return 'claude';
-        }
-
-        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)
-            ? $client
-            : 'codex';
+        return LCFA_Agent_Registry::normalize($client);
     }
 
     private function normalize_claude_target(array $payload, string $client): string {
@@ -85,6 +83,9 @@ final class LCFA_Connection_Bundle_Builder {
         $raw_client = sanitize_key((string) ($payload['client'] ?? ''));
         if ($raw_client === 'claude-code') {
             return 'cli';
+        }
+        if ($raw_client === 'claude-desktop') {
+            return 'desktop_app';
         }
 
         $target = sanitize_key((string) ($payload['claude_connection_target'] ?? ''));

@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/class-lcfa-agent-registry.php';
+
 if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) {
     require_once LCFA_DIR . 'includes/class-lcfa-thread-message-actions.php';
 }
@@ -444,6 +446,23 @@ final class LCFA_Admin {
             true
         );
 
+        wp_enqueue_script('lcfa-connect', LCFA_URL . 'assets/connect.js', ['lcfa-admin-script'], LCFA_VERSION, true);
+        wp_enqueue_style('lcfa-connect', LCFA_URL . 'assets/connect.css', ['lcfa-admin-v2'], LCFA_VERSION);
+        wp_localize_script('lcfa-connect', 'lcfaConnect', [
+            'project' => __('Open your project in the selected agent and paste the setup instructions.', 'livecanvas-forge-ai'),
+            'desktop' => __('Run the setup command in Terminal or PowerShell on the computer where Claude Desktop is installed. Then restart the app.', 'livecanvas-forge-ai'),
+            'failed' => __('The connection request failed. Retry or open manual setup.', 'livecanvas-forge-ai'),
+            'waiting_for_client' => __('Waiting for the agent to run the setup instructions.', 'livecanvas-forge-ai'),
+            'authorization_required' => __('Check that this code matches the installer, then authorize Full Access for this connection.', 'livecanvas-forge-ai'),
+            'verifying' => __('Access approved. Reload the agent’s MCP connection and ask it to call get_connection_handoff.', 'livecanvas-forge-ai'),
+            'ready' => __('Connected. The selected agent successfully read this WordPress site.', 'livecanvas-forge-ai'),
+            'expired' => __('This connection request expired. Start a new connection.', 'livecanvas-forge-ai'),
+            'reconnect_required' => __('This session expired or was revoked. Start a new connection.', 'livecanvas-forge-ai'),
+            'copied' => __('Copied. Paste the instructions into your agent, or the command into Terminal for Claude Desktop.', 'livecanvas-forge-ai'),
+            'copyManually' => __('Automatic copy is unavailable. Copy the selected instructions below.', 'livecanvas-forge-ai'),
+            'code' => __('Verification code', 'livecanvas-forge-ai'),
+        ]);
+
         wp_localize_script('lcfa-admin-script', 'lcfaAdmin', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'restUrl' => rest_url('lcfa/v1/'),
@@ -491,7 +510,7 @@ final class LCFA_Admin {
             return;
         }
 
-        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup'));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=connections'));
         exit;
     }
 
@@ -1916,15 +1935,7 @@ final class LCFA_Admin {
     }
 
     private function get_connection_client_label(string $client_key): string {
-        $labels = [
-            'codex'    => 'Codex',
-            'opencode' => 'OpenCode',
-            'claude'   => 'Claude',
-            'cursor'   => 'Cursor',
-            'generic'  => __('Coding agent', 'livecanvas-forge-ai'),
-        ];
-
-        return (string) ($labels[$client_key] ?? $labels['generic']);
+        return LCFA_Agent_Registry::label($client_key);
     }
 
     private function get_remote_mcp_adapter_url(string $remote_site_url, array $remote_status): string {
@@ -1938,17 +1949,7 @@ final class LCFA_Admin {
     private function normalize_connection_client(string $client): string {
         $client = $this->sanitize_key_compat($client);
 
-        if ($client === 'other') {
-            return 'generic';
-        }
-
-        if ($client === 'claude-code') {
-            return 'claude';
-        }
-
-        return in_array($client, ['codex', 'opencode', 'claude', 'cursor', 'generic'], true)
-            ? $client
-            : 'codex';
+        return LCFA_Agent_Registry::normalize($client, $client === '' ? 'codex' : 'generic');
     }
 
     private function normalize_connection_mode(string $mode): string {
@@ -2048,33 +2049,15 @@ final class LCFA_Admin {
             'transport'      => (string) ($connections['transport'] ?? 'rest'),
             'filesystem_mode'=> $filesystem_mode,
         ];
-        $bootstrap = [
-            'common' => $common,
-            'clients' => [
-                'codex' => [
-                    'label'   => 'Codex',
-                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio')),
-                    'env'     => $secure_environment('codex'),
-                ],
-                'opencode' => [
-                    'label'   => 'OpenCode',
-                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=opencode')),
-                    'env'     => $secure_environment('opencode'),
-                ],
-                'claude' => [
-                    'label'   => 'Claude',
-                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=claude')),
-                    'env'     => $secure_environment('claude'),
-                ],
-                'cursor' => [
-                    'label'   => 'Cursor',
-                    'command' => $is_secure_remote ? $remote_mcp_command : (string) ($connections['mcp_server_command'] ?: ($local_mcp_command . ' --transport=stdio --agent=cursor')),
-                    'env'     => $secure_environment('cursor'),
-                ],
-            ],
-        ];
-
-        $bootstrap['clients']['claude-code'] = $bootstrap['clients']['claude'];
+        $bootstrap = ['common' => $common, 'clients' => []];
+        foreach (LCFA_Agent_Registry::all(true) as $client => $agent) {
+            $default_command = $local_mcp_command . ' --transport=stdio' . ($client === 'codex' ? '' : ' --agent=' . $client);
+            $bootstrap['clients'][$client] = [
+                'label' => $agent['label'],
+                'command' => $is_secure_remote ? $remote_mcp_command : (string) (($connections['mcp_server_command'] ?? '') ?: $default_command),
+                'env' => $secure_environment($client),
+            ];
+        }
 
         return $bootstrap;
     }
@@ -2586,8 +2569,7 @@ final class LCFA_Admin {
 
         $allowed_origins = ['frontend_bridge', 'admin_command_deck', 'mcp_agent', 'remote_companion', 'api'];
         $allowed_transports = ['browser_rest', 'mcp_stdio', 'mcp_bridge', 'remote_rest', 'api'];
-        $allowed_agents = ['forge', 'codex', 'opencode', 'claude', 'cursor', 'generic'];
-        $allowed_processors = ['forge_local_rules', 'codex_mcp', 'opencode_mcp', 'claude_mcp', 'cursor_mcp', 'generic_mcp', 'remote_companion'];
+        $allowed_processors = array_merge(['forge_local_rules', 'remote_companion'], LCFA_Agent_Registry::mcp_processors());
 
         if (!in_array($origin, $allowed_origins, true)) {
             $origin = $default_origin;
@@ -2597,9 +2579,7 @@ final class LCFA_Admin {
             $transport = $origin === 'mcp_agent' ? 'mcp_stdio' : 'browser_rest';
         }
 
-        if (!in_array($agent, $allowed_agents, true)) {
-            $agent = $origin === 'mcp_agent' ? 'codex' : 'forge';
-        }
+        $agent = LCFA_Agent_Registry::provenance_client($agent);
 
         if (!in_array($processed_by, $allowed_processors, true)) {
             $processed_by = $default_processed_by;
@@ -2667,7 +2647,7 @@ final class LCFA_Admin {
     }
 
     private function get_default_dashboard_tab(array $settings): string {
-        return !empty($settings['completed']) ? 'connections' : 'setup';
+        return 'connections';
     }
 
     private function get_post_setup_redirect_tab(): string {
@@ -2805,9 +2785,9 @@ final class LCFA_Admin {
         $this->render_notice($notice);
         $this->render_internal_tabs($tab, $settings);
         $this->render_ai_bridge_update_notice($snapshot);
-        $this->render_windpress_framework_advisory($snapshot);
+        if (!$this->is_unified_connection_screen($tab)) $this->render_windpress_framework_advisory($snapshot);
 
-        if (!$settings['completed'] && $tab !== 'setup') {
+        if (!$settings['completed'] && !in_array($tab, ['setup', 'connections'], true)) {
             echo '<div class="notice notice-warning"><p>';
             echo esc_html__('Bridge Setup is not complete yet. Finish the setup flow before using the operational dashboard.', 'livecanvas-forge-ai');
             echo ' <a href="' . esc_url(admin_url('admin.php?page=lcfa-dashboard&tab=setup')) . '">' . esc_html__('Open Bridge Setup', 'livecanvas-forge-ai') . '</a>';
@@ -4043,6 +4023,10 @@ final class LCFA_Admin {
     }
 
     private function render_connections_tab(array $settings, array $snapshot): void {
+        if (class_exists('LCFA_Connection_Screen', false) && ($_GET['connection_ui'] ?? '') !== 'manual') {
+            LCFA_Connection_Screen::render(LCFA_Settings::get_connections());
+            return;
+        }
         $connections      = LCFA_Settings::get_connections();
         $stored_preferred_client = trim((string) ($connections['preferred_client'] ?? ''));
         $preferred_client = $this->normalize_connection_client($stored_preferred_client !== '' ? $stored_preferred_client : 'codex');
@@ -8272,6 +8256,8 @@ final class LCFA_Admin {
 
     private function render_page_header(string $tab, array $snapshot, array $settings): void {
         $hero = $this->admin_hero_presenter->build($tab, $snapshot, $settings);
+        $unified = $this->is_unified_connection_screen($tab);
+        if ($unified) $hero['subtitle'] = __('Choose your agent and approve the connection. Forge checks it automatically.', 'livecanvas-forge-ai');
 
         echo '<header class="lcfa-hero">';
         echo '<div class="lcfa-hero-main">';
@@ -8283,6 +8269,10 @@ final class LCFA_Admin {
         echo '<h1>' . esc_html((string) ($hero['title'] ?? '')) . '</h1>';
         echo '<p class="lcfa-lead">' . esc_html((string) ($hero['subtitle'] ?? '')) . '</p>';
         echo '</div>';
+        if ($unified) {
+            echo '</div></header>';
+            return;
+        }
         echo '<div class="lcfa-hero-meta">';
         echo '<div class="lcfa-hero-stack">';
         foreach ((array) ($hero['marks'] ?? []) as $mark) {
@@ -8319,6 +8309,10 @@ final class LCFA_Admin {
         echo '</details>';
         echo '</div>';
         echo '</header>';
+    }
+
+    private function is_unified_connection_screen(string $tab): bool {
+        return $tab === 'connections' && class_exists('LCFA_Connection_Screen', false) && (string) ($_GET['connection_ui'] ?? '') !== 'manual';
     }
 
     private function render_admin_hero_mark(array $mark): void {

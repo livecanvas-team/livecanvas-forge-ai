@@ -117,4 +117,10 @@ lcfa_assert_not_contains('LCFA_MCP_TOKEN=', $internal_bootstrap, 'remote admin b
 lcfa_assert_same(true, strpos($internal_bootstrap, '@livecanvas/ai-bridge-mcp@0.2.0-beta.5') !== false, 'remote admin bootstrap should use the pinned secure MCP package');
 lcfa_assert_same(true, strpos($internal_bootstrap, 'LCFA_PAIRING_SCOPES=read,preview') !== false, 'remote admin bootstrap should request read and preview scopes by default');
 
+foreach (LCFA_Agent_Registry::all(true) as $client => $agent) {
+    $configuration = $builder->get_bootstrap_payload()['clients'][$client] ?? [];
+    lcfa_assert_same($agent['label'], $configuration['label'] ?? '', $client . ' must use the shared client catalog');
+    lcfa_assert_same(true, in_array('LCFA_AGENT=' . $client, $configuration['env'] ?? [], true), $client . ' must retain its own bootstrap identity');
+}
+
 echo "PASS\n";
