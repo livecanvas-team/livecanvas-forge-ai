@@ -297,7 +297,7 @@ class ThemeFilesystem {
   }
 
   async writeFile(options = {}) {
-    const roots = await this.getThemeRoots()
+    const roots = await this.verifyWrite(options)
     const rootScope = options.root_scope || 'stylesheet'
     const relativePath = sanitizeRelativePath(options.path)
     const content = typeof options.content === 'string' ? options.content : String(options.content || '')
@@ -324,6 +324,7 @@ class ThemeFilesystem {
         ok: true,
         dry_run: true,
         writable: false,
+        verification_states: { saved: false, compiled: 'not_checked', visually_verified: 'not_checked', published: 'not_applicable' },
         blocked: true,
         status: 'parent_theme_read_only',
         message: writePolicy.message,
@@ -345,6 +346,7 @@ class ThemeFilesystem {
         ok: true,
         dry_run: true,
         root_scope: rootScope,
+        verification_states: { saved: false, compiled: 'not_checked', visually_verified: 'not_checked', published: 'not_applicable' },
         root: root.key,
         theme: root.label,
         relative_path: relativePath,
@@ -376,6 +378,7 @@ class ThemeFilesystem {
       ok: true,
       dry_run: false,
       writable: true,
+      verification_states: { saved: true, compiled: 'not_checked', visually_verified: 'not_checked', published: 'not_applicable' },
       root_scope: rootScope,
       root: root.key,
       theme: root.label,
@@ -400,6 +403,25 @@ class ThemeFilesystem {
       ...options,
       path: relativePath
     })
+  }
+
+  async verifyWrite(options) {
+    const response = await this.client.validateWriteContext({ ...options, action: 'write_theme_file' })
+    const check = response.result || response
+    if (!check.ok) throw new Error(`${check.code || 'context_rejected'}: ${check.message || 'Read get_write_context first.'}`)
+    const canonical = check.context.roots
+    const configuredRoot = fs.realpathSync(this.resolveWordPressRoot('local-theme-access'))
+    if (configuredRoot !== canonical.wordpress) throw new Error('Canonical WordPress root differs from this local MCP configuration.')
+    const theme = check.context.theme || {}
+    const roots = { ok: true, wp_root: canonical.wordpress, stylesheet_root: canonical.stylesheet, template_root: canonical.template,
+      stylesheet: theme.stylesheet || path.basename(canonical.stylesheet), template: theme.template || path.basename(canonical.template),
+      is_child_theme: canonical.stylesheet !== canonical.template,
+      roots: Object.entries(canonical).filter(([key]) => ['stylesheet', 'template'].includes(key)).map(([key, root]) => ({ key, path: root, label: theme[key] || path.basename(root) })) }
+    this.cachedRoots = null
+    const absolute = this.resolveAbsolutePath(canonical.stylesheet, sanitizeRelativePath(options.path))
+    const hash = fs.existsSync(absolute) ? require('node:crypto').createHash('sha256').update(await fsp.readFile(absolute)).digest('hex') : ''
+    if (hash !== check.context.target.file_sha256) throw new Error('stale_context: Theme file changed during preflight.')
+    return roots
   }
 
   async listBackups(options = {}) {
@@ -492,7 +514,7 @@ class ThemeFilesystem {
     let writeResult
 
     if (backup.original_exists === false) {
-      const roots = await this.getThemeRoots()
+      const roots = await this.verifyWrite({ ...options, path: relativePath, root_scope: rootScope, content: '' })
       const root = this.resolveWriteTarget(rootScope, roots)
       const writePolicy = this.getWriteRootPolicy(root, roots, options)
       const absolutePath = this.resolveAbsolutePath(root.path, relativePath)
@@ -540,6 +562,7 @@ class ThemeFilesystem {
       }
     } else {
       writeResult = await this.writeFile({
+        ...options,
         root_scope: rootScope,
         path: relativePath,
         content: backup.content || '',

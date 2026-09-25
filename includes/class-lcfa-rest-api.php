@@ -103,6 +103,16 @@ final class LCFA_Rest_Api {
     }
 
     public function register_routes(): void {
+        register_rest_route('lcfa/v1', '/write-context', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => static function ($request) { return new WP_REST_Response(LCFA_Write_Contract::prepare($request->get_params())); },
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+        register_rest_route('lcfa/v1', '/write-context/validate', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => static function ($request) { $payload = $request->get_json_params(); return new WP_REST_Response(LCFA_Write_Contract::validate((array) $payload, (string) ($payload['action'] ?? 'validate'))); },
+            'permission_callback' => function ($request) { return !empty($request['path']) ? $this->can_theme_files($request) : $this->can_write($request); },
+        ]);
         register_rest_route('lcfa/v1', '/connections/attempts', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_connection_attempt'],
@@ -2386,7 +2396,7 @@ final class LCFA_Rest_Api {
         $css       = (string) ($payload['css'] ?? '');
         $sourcemap = (string) ($payload['sourcemap'] ?? '');
         $full_build= absint($payload['full_build'] ?? 0);
-        $result    = $this->windpress_bridge->save_cache_css($css, $sourcemap, $full_build ?: null);
+        $result    = $this->windpress_bridge->save_cache_css($css, $sourcemap, $full_build ?: null, (array) $payload);
 
         return new WP_REST_Response([
             'result' => $result,
@@ -2468,6 +2478,8 @@ final class LCFA_Rest_Api {
 
         try {
             $result = $this->theme_files_bridge->write_file([
+                'write_context' => $payload['write_context'] ?? null,
+                'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'content'            => wp_unslash((string) ($payload['content'] ?? '')),
@@ -2512,6 +2524,8 @@ final class LCFA_Rest_Api {
 
         try {
             $result = $this->theme_files_bridge->write_template_file([
+                'write_context' => $payload['write_context'] ?? null,
+                'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                 'content'            => wp_unslash((string) ($payload['content'] ?? '')),
@@ -2539,6 +2553,8 @@ final class LCFA_Rest_Api {
 
         try {
             $result = $this->theme_files_bridge->restore_backup([
+                'write_context' => $payload['write_context'] ?? null,
+                'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                 'backup_id'          => sanitize_text_field((string) ($payload['backup_id'] ?? $payload['id'] ?? '')),
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? '')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
@@ -3178,6 +3194,9 @@ final class LCFA_Rest_Api {
                 : ($is_remote_adapter ? 'wordpress_application_password_legacy' : ($mode === 'local' ? 'legacy_mcp_token' : 'unknown')));
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
+            'Before mutations call get_write_context (remote ability: livecanvas-forge-ai/get-write-context) for the exact ID, URL or child-theme path. Follow the returned renderer, framework, roots and scope; pass write_context unchanged and refresh after each write.',
+            'Picowind uses Tailwind/WindPress; use DaisyUI/Typography only with current compiled evidence. Picostrap uses Bootstrap/Sass. Keep layout CSS and scripts out of editorial content; use managed assets or child-theme files.',
+            'Report saved, compiled, visually_verified and published separately, including unavailable desktop/mobile checks. Compare a reference layout before restoration. These safeguards do not govern arbitrary shell or SQL operations outside Bridge tools.',
             sprintf(
                 /* translators: %s: MCP tool or WordPress Ability name. */
                 __('First call %s with {"limit":5}.', 'livecanvas-forge-ai'),

@@ -497,8 +497,8 @@ async function run() {
   assert.ok(runLcCommand.inputSchema.properties.specialty, 'run_lc_command should expose specialty for WooCommerce and global template targets')
   assert.match(
     runLcCommand.description,
-    /DaisyUI-first/i,
-    'run_lc_command should explain the DaisyUI-first Picowind policy'
+    /DaisyUI\/Typography only with compile evidence/i,
+    'run_lc_command should require compiled framework plugin evidence'
   )
   assert.match(
     runLcCommand.description,

@@ -46,6 +46,7 @@ final class LCFA_Content_Patch_Service {
             'message' => __('Content patch preview prepared.', 'livecanvas-forge-ai'),
         ];
         $result['framework_validation'] = $this->validate_framework((string) $patch['patched_html'], $payload);
+        if (class_exists('LCFA_Write_Contract') && empty($result['framework_validation']['ok'])) return $result['framework_validation'];
 
         $validation_data = is_array($result['framework_validation']['data'] ?? null) ? $result['framework_validation']['data'] : [];
         if (!$dry_run && array_key_exists('valid', $validation_data) && empty($validation_data['valid'])) {
@@ -57,6 +58,8 @@ final class LCFA_Content_Patch_Service {
         }
 
         $command_payload = [
+            'write_context' => $payload['write_context'] ?? null,
+            'acknowledge_shared' => !empty($payload['acknowledge_shared']),
             'action' => (string) $target['command_action'],
             'target_id' => (int) $target['target_id'],
             'variant' => (string) ($target['variant'] ?? '1'),
@@ -89,6 +92,9 @@ final class LCFA_Content_Patch_Service {
 
     private function validate_framework(string $html, array $payload): array {
         $validation_payload = [
+            'write_context' => $payload['write_context'] ?? null,
+            'target_id' => (int) ($payload['target_id'] ?? $payload['post_id'] ?? 0),
+            'acknowledge_shared' => !empty($payload['acknowledge_shared']),
             'action' => 'validate_markup_for_framework',
             'content' => $html,
             'dry_run' => true,
@@ -127,7 +133,7 @@ final class LCFA_Content_Patch_Service {
                 'target_title' => (string) ($content['post']['title'] ?? ''),
                 'variant' => $variant,
                 'content' => (string) ($content['content'] ?? ''),
-                'command_action' => $target_type === 'header' ? 'update_header' : 'update_footer',
+                'command_action' => class_exists('LCFA_Write_Contract') ? 'update_partial' : ($target_type === 'header' ? 'update_header' : 'update_footer'),
             ];
         }
 

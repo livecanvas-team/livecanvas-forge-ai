@@ -1,6 +1,24 @@
 function createToolRegistry(client, themeFiles, windpressCompiler, picostrapCompiler = null, visualCheck = null, assetDiscovery = null, registryOptions = {}) {
   const tools = [
     {
+      name: 'get_write_context',
+      description: 'MANDATORY before mutations. Inspect exact target identity, actual renderer, canonical parent/child roots, framework and compiled plugin capabilities. Pass returned write_context unchanged; refresh after every write. Shared targets require acknowledge_shared=true.',
+      inputSchema: { type: 'object', properties: {
+        target_id: { type: 'integer' }, target_url: { type: 'string' },
+        target_type: { type: 'string', enum: ['content', 'page', 'partial', 'dynamic_template', 'theme_file', 'site', 'new_page'] }, path: { type: 'string' }
+      } },
+      invoke: async (args = {}) => client.getWriteContext(args)
+    },
+    {
+      name: 'update_discussion_settings',
+      description: 'Change comment_status/ping_status for one inspected post, preserving editorial content even under WordPress sanitization. Requires current write_context.',
+      inputSchema: { type: 'object', required: ['target_id', 'write_context'], properties: {
+        target_id: { type: 'integer' }, comment_status: { type: 'string', enum: ['open', 'closed'] },
+        ping_status: { type: 'string', enum: ['open', 'closed'] }, dry_run: { type: 'boolean' }
+      } },
+      invoke: async (args = {}) => client.runCommand({ ...args, action: 'update_discussion_settings' })
+    },
+    {
       name: 'get_snapshot',
       description: 'Read the current WordPress + LiveCanvas runtime snapshot.',
       inputSchema: {
@@ -32,7 +50,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'get_theme_context',
-      description: 'Read the stack, theme, output rules, and ACF-aware theme context. On Picowind sites, the policy is DaisyUI-first, Tailwind-compatible, and JavaScript is allowed when necessary.',
+      description: 'Read the stack, theme, output rules, and ACF-aware theme context. Before writing also call get_write_context. Use Picowind Tailwind/WindPress or Picostrap Bootstrap/Sass; DaisyUI and Typography require compile evidence.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -548,7 +566,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     },
     {
       name: 'run_lc_command',
-      description: 'Execute a LiveCanvas AI Bridge command through the plugin contract, including site_prepare, global_shell_apply, site_foundation_run, page_upsert, update_partial for generic lc_partial posts, and dynamic template writes. The MCP bridge auto-detects the active framework when it is omitted; new LiveCanvas pages use the Empty Page template automatically, and Picowind page markup must stay Tailwind or DaisyUI-compatible instead of Bootstrap-based. Picowind policy is DaisyUI-first, and JavaScript is allowed when necessary for the interaction. For page_upsert and update_partial flows, prefer the structured fast-path with body_html/body_html_lines, page_css/page_css_lines, page_js/page_js_lines, no_theme_edits:true, and seo metadata instead of theme edits or one large content blob. Rollback restores use audit_id, not backup_id. Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
+      description: 'Execute a LiveCanvas command using verified target context. Framework and shared-scope requirements are added to this tool description below.',
       inputSchema: {
         type: 'object',
         required: ['action'],
@@ -831,7 +849,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           }
         }
       },
-      invoke: async (argumentsMap = {}) => client.saveWindPressVolumeEntries(argumentsMap.entries || [])
+      invoke: async (argumentsMap = {}) => client.saveWindPressVolumeEntries(argumentsMap.entries || [], argumentsMap)
     },
     {
       name: 'store_windpress_theme_json',
@@ -852,7 +870,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           }
         }
       },
-      invoke: async (argumentsMap = {}) => client.saveWindPressThemeJson(argumentsMap.theme_json)
+      invoke: async (argumentsMap = {}) => client.saveWindPressThemeJson(argumentsMap.theme_json, argumentsMap)
     },
     {
       name: 'store_windpress_cache_css',
@@ -869,7 +887,8 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
       invoke: async (argumentsMap = {}) => client.saveWindPressCache(
         argumentsMap.css || '',
         argumentsMap.sourcemap || '',
-        argumentsMap.full_build ?? null
+        argumentsMap.full_build ?? null,
+        argumentsMap
       )
     },
     {
@@ -891,7 +910,7 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
           relative_path: { type: 'string' }
         }
       },
-      invoke: async (argumentsMap = {}) => client.resetWindPressVolumeEntry(argumentsMap.relative_path || '')
+      invoke: async (argumentsMap = {}) => client.resetWindPressVolumeEntry(argumentsMap.relative_path || '', argumentsMap)
     },
     {
       name: 'build_windpress_cache',
@@ -1001,7 +1020,8 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
         const storedResponse = await client.saveWindPressCache(
           compiledCss,
           build.css && build.css.sourcemap ? build.css.sourcemap : '',
-          Date.now()
+          Date.now(),
+          { ...argumentsMap, source_revision: build.source_revision, plugins: build.plugins }
         )
         const stored = storedResponse.result || storedResponse
         const verification = stored && stored.verification ? stored.verification : null
@@ -1213,6 +1233,20 @@ function createToolRegistry(client, themeFiles, windpressCompiler, picostrapComp
     }
   ]
 
+  for (const tool of tools) {
+    if (!isReadMostlyTool(tool.name) || /preview.*write|content_patch_preview|run_lc_command|validate_markup_for_framework/.test(tool.name)) {
+      const fields = { write_context: { type: 'object', additionalProperties: true }, acknowledge_shared: { type: 'boolean' } }
+      Object.assign(tool.inputSchema.properties, fields)
+      if (tool.inputSchema.properties.payload) Object.assign(tool.inputSchema.properties.payload.properties, fields)
+      tool.description += ' Requires fresh get_write_context for the exact target. Report saved, compiled, visually_verified and published separately. No shell/SQL enforcement.'
+    }
+    if (tool.name === 'run_lc_command') tool.description = 'Execute a target-scoped LiveCanvas mutation with mandatory write_context. Inspect renderer and shared impact first. Picowind: Tailwind/WindPress; DaisyUI/Typography only with compile evidence. Picostrap: Bootstrap/Sass. Use body_html fragments and managed page_css/page_js only for LiveCanvas content, never layout CSS in editorial articles. JavaScript is allowed when necessary through managed assets. Never wrap generated LiveCanvas page content in <main>, <html>, <head> or <body>. Refresh context after each write. Use update_partial for generic lc_partial posts and header/footer partials, with an explicit shared ID. Multi-target site_foundation_run is blocked; use granular target writes.'
+    if (['run_lc_command', 'store_windpress_cache_css'].includes(tool.name)) tool.inputSchema.properties.source_revision = { type: 'string' }
+    if (tool.name === 'validate_markup_for_framework') {
+      tool.inputSchema.properties.target_id = { type: 'integer' }
+      tool.description = 'Validate a fragment against the server-verified framework and compiled plugin capabilities. Requires the same target_id and current write_context as the planned mutation. Never wrap generated LiveCanvas page content in <main>, <html>, <head> or <body>. Use managed page_js, not footer_script.'
+    }
+  }
   const advertisedTools = filterAdvertisedTools(tools, registryOptions)
   const toolMap = new Map(tools.map((tool) => [tool.name, tool]))
 
@@ -1260,6 +1294,8 @@ function filterAdvertisedTools(tools, options = {}) {
   }
 
   const visible = new Set([
+    'get_write_context',
+    'update_discussion_settings',
     'get_snapshot',
     'get_inventory',
     'get_context',

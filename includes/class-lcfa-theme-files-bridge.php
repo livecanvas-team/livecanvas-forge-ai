@@ -211,6 +211,10 @@ final class LCFA_Theme_Files_Bridge {
     }
 
     public function write_file(array $options = []): array {
+        if (class_exists('LCFA_Write_Contract')) {
+            $check = LCFA_Write_Contract::validate($options, 'write_theme_file');
+            if (empty($check['ok'])) throw new RuntimeException($check['code'] . ': ' . $check['message']);
+        }
         $roots            = $this->get_theme_roots();
         $root_scope       = $options['root_scope'] ?? 'stylesheet';
         $relative_path    = $this->sanitize_relative_path((string) ($options['path'] ?? ''));
@@ -239,6 +243,7 @@ final class LCFA_Theme_Files_Bridge {
                 'ok'            => true,
                 'dry_run'       => true,
                 'writable'      => false,
+                'verification_states' => ['saved' => false, 'compiled' => 'not_checked', 'visually_verified' => 'not_checked', 'published' => 'not_applicable'],
                 'blocked'       => true,
                 'status'        => 'parent_theme_read_only',
                 'message'       => (string) $write_policy['message'],
@@ -259,6 +264,7 @@ final class LCFA_Theme_Files_Bridge {
             return [
                 'ok'           => true,
                 'dry_run'      => true,
+                'verification_states' => ['saved' => false, 'compiled' => 'not_checked', 'visually_verified' => 'not_checked', 'published' => 'not_applicable'],
                 'root_scope'   => $root_scope,
                 'root'         => $root['key'],
                 'theme'        => $root['label'],
@@ -292,6 +298,7 @@ final class LCFA_Theme_Files_Bridge {
             'ok'           => true,
             'dry_run'      => false,
             'writable'     => true,
+            'verification_states' => ['saved' => true, 'compiled' => 'not_checked', 'visually_verified' => 'not_checked', 'published' => 'not_applicable'],
             'root_scope'   => $root_scope,
             'root'         => $root['key'],
             'theme'        => $root['label'],
@@ -420,6 +427,8 @@ final class LCFA_Theme_Files_Bridge {
         }
 
         $write_result = $this->write_file([
+            'write_context' => $options['write_context'] ?? null,
+            'acknowledge_shared' => !empty($options['acknowledge_shared']),
             'root_scope'         => $root_scope,
             'path'               => $relative_path,
             'content'            => (string) ($backup['content'] ?? ''),
@@ -453,6 +462,10 @@ final class LCFA_Theme_Files_Bridge {
     }
 
     public function rollback_write(array $options = []): array {
+        if (class_exists('LCFA_Write_Contract')) {
+            $check = LCFA_Write_Contract::validate($options, 'write_theme_file');
+            if (empty($check['ok'])) throw new RuntimeException($check['message']);
+        }
         $roots          = $this->get_theme_roots();
         $root_scope     = sanitize_key((string) ($options['root_scope'] ?? 'stylesheet'));
         $relative_path  = $this->sanitize_relative_path((string) ($options['path'] ?? $options['relative_path'] ?? ''));

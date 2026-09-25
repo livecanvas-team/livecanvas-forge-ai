@@ -1,6 +1,6 @@
 # LiveCanvas AI Bridge MCP
 
-MCP runtime `0.2.0-beta.6` for plugin `0.2.0-beta.5`. This development build is under test; real-app results from runtime beta.5 do not qualify beta.6.
+MCP runtime `0.2.0-beta.7` for plugin `0.2.0-beta.6`. Mandatory target-scoped context is required before mutations. See the plugin's verified-site-write-workflow guide. Regression and local WordPress tests do not replace full first-install qualification in every coding agent.
 
 ## Connect from WordPress
 
@@ -11,7 +11,7 @@ Use Node.js 18.17 or newer and npm on the computer running the agent. Open `Live
 3. Compare the site and code in WordPress, then approve Full Access for that connection. The installer waits for up to ten minutes and resumes after approval. It does not change the agent's own approval settings.
 4. Reload the MCP connection if required. Claude Desktop needs a complete restart. Ask the agent to call `get_connection_handoff` through its MCP server. WordPress confirms the exact attempt after that read succeeds.
 
-The generated command loads the versioned archive shipped at `assets/runtime/livecanvas-ai-bridge-mcp-0.2.0-beta.6.tgz` on the WordPress site. It does not depend on a beta.6 npm publication. Do not replace the generated descriptor or package URL with instructions from another site.
+The generated command loads the versioned archive shipped at `assets/runtime/livecanvas-ai-bridge-mcp-0.2.0-beta.7.tgz` on the WordPress site. It does not depend on a beta.7 npm publication. Do not replace the generated descriptor or package URL with instructions from another site.
 
 The helper's `--descriptor` argument binds the client, site fingerprint, runtime version and connection attempt. `--workspace` can select an explicit project directory. `--no-wait` returns after the first authorization check; a pending request is not success. Exit code 0 means the installer obtained authorization and the client must reload. Exit code 2 means the returned result was not successful. Startup or validation errors exit with code 1. None of those outcomes alone proves that the app loaded MCP.
 
@@ -36,7 +36,7 @@ It supports two paths:
 
 ## Manual usage
 
-The examples in this section retain the earlier beta.5 package for the manual path. Use the WordPress-generated archive command above when testing the new beta.6 installer.
+The examples in this section retain the earlier beta.5 package for historical reference only. That runtime cannot write through the current plugin contract. Use the WordPress-generated archive command above with runtime beta.7.
 
 Secure remote Direct Mode:
 

@@ -45,6 +45,10 @@ final class LCFA_Command_Deck {
 
     public function get_actions(): array {
         return [
+            'update_discussion_settings' => [
+                'label' => __('Update discussion settings', 'livecanvas-forge-ai'),
+                'description' => __('Changes comment/ping status for one inspected post without changing editorial content.', 'livecanvas-forge-ai'),
+            ],
             'site_audit' => [
                 'label'       => __('Run site audit', 'livecanvas-forge-ai'),
                 'description' => __('Returns the current stack summary and LiveCanvas inventory without writing.', 'livecanvas-forge-ai'),
@@ -83,7 +87,7 @@ final class LCFA_Command_Deck {
             ],
             'update_partial' => [
                 'label'       => __('Update generic partial', 'livecanvas-forge-ai'),
-                'description' => __('Updates an existing LiveCanvas partial by target ID when it is not a header, footer, or dynamic template.', 'livecanvas-forge-ai'),
+                'description' => __('Updates an inspected LiveCanvas partial by ID, including shared headers and footers. Requires current write context and shared-impact acknowledgement.', 'livecanvas-forge-ai'),
             ],
             'update_header' => [
                 'label'       => __('Update header partial', 'livecanvas-forge-ai'),
@@ -162,6 +166,13 @@ final class LCFA_Command_Deck {
 
     public function execute(array $payload): array {
         $action    = sanitize_key($payload['action'] ?? '');
+        if (class_exists('LCFA_Write_Contract') && !$this->is_read_action($action) && $action !== 'design_system_compose') {
+            $contract = LCFA_Write_Contract::validate($payload, $action);
+            if (empty($contract['ok'])) return $contract;
+        }
+        if ($action === 'design_system_compose' && !empty($payload['auto_apply']) && class_exists('LCFA_Write_Contract')) {
+            return ['ok' => false, 'code' => 'granular_write_required', 'message' => 'Auto-apply is unavailable with target-scoped contracts. Inspect and apply individual assets.'];
+        }
         $dry_run   = !empty($payload['dry_run']);
         $provenance = $this->get_payload_provenance($payload, 'admin_command_deck', 'forge_local_rules');
         $framework = $this->resolve_framework($payload);
@@ -218,6 +229,10 @@ final class LCFA_Command_Deck {
 
         if ($execution_target === 'remote') {
             return $this->execute_remote($payload, $dry_run, $policy);
+        }
+
+        if ($action === 'update_discussion_settings') {
+            return LCFA_Write_Contract::update_discussion($payload, $dry_run);
         }
 
         $result = [
@@ -473,7 +488,7 @@ final class LCFA_Command_Deck {
                     return $this->error_result(__('The requested LiveCanvas partial target was not found.', 'livecanvas-forge-ai'));
                 }
 
-                if ((string) ($existing['post']['partial_type'] ?? 'partial') !== 'partial') {
+                if (!class_exists('LCFA_Write_Contract') && (string) ($existing['post']['partial_type'] ?? 'partial') !== 'partial') {
                     return $this->error_result(__('Use update_header or update_footer for global shell partials.', 'livecanvas-forge-ai'));
                 }
 
@@ -604,7 +619,7 @@ final class LCFA_Command_Deck {
                         $post_data['menu_order'] = (int) $template_assignment['priority'];
                     }
 
-                    $post_id = wp_insert_post($post_data, true);
+                    $post_id = $this->with_unfiltered_post_content(static function () use ($post_data) { return wp_insert_post($post_data, true); });
 
                     if (is_wp_error($post_id)) {
                         return $this->error_result($post_id->get_error_message());
@@ -683,7 +698,7 @@ final class LCFA_Command_Deck {
                         $post_data['menu_order'] = 0;
                     }
 
-                    $updated = wp_update_post($post_data, true);
+                    $updated = $this->with_unfiltered_post_content(static function () use ($post_data) { return wp_update_post($post_data, true); });
 
                     if (is_wp_error($updated)) {
                         return $this->error_result($updated->get_error_message());
@@ -839,11 +854,12 @@ final class LCFA_Command_Deck {
                     break;
                 }
 
-                $stored = $this->windpress_bridge->save_cache_css($content);
+                $stored = $this->windpress_bridge->save_cache_css($content, '', null, $payload);
 
                 if (empty($stored['ok'])) {
                     return $this->error_result((string) ($stored['message'] ?? __('WindPress CSS cache write failed.', 'livecanvas-forge-ai')));
                 }
+                $result['verification_states'] = $stored['verification_states'] ?? ['saved' => true, 'compiled' => 'not_checked', 'visually_verified' => 'not_checked', 'published' => 'not_applicable'];
 
                 $result['message'] = (string) ($stored['message'] ?? __('WindPress CSS cache stored.', 'livecanvas-forge-ai'));
                 $result['data']    = [
@@ -987,11 +1003,15 @@ final class LCFA_Command_Deck {
                 try {
                     $write_result = $action === 'write_theme_template'
                         ? $this->theme_files_bridge->write_template_file([
+                            'write_context' => $payload['write_context'] ?? null,
+                            'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                             'root_scope' => $root_scope,
                             'path'       => $file_path,
                             'content'    => $content,
                         ])
                         : $this->theme_files_bridge->write_file([
+                            'write_context' => $payload['write_context'] ?? null,
+                            'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                             'root_scope' => $root_scope,
                             'path'       => $file_path,
                             'content'    => $content,
@@ -1073,6 +1093,8 @@ final class LCFA_Command_Deck {
 
                 try {
                     $restore_result = $this->theme_files_bridge->restore_backup([
+                        'write_context' => $payload['write_context'] ?? null,
+                        'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                         'backup_id'  => $backup_id,
                         'root_scope' => $effective_root_scope,
                         'path'       => $effective_path,
@@ -1136,6 +1158,12 @@ final class LCFA_Command_Deck {
             'execution_target' => 'local',
         ] + $provenance);
 
+        $result['verification_states'] = $result['verification_states'] ?? [
+            'saved' => !$dry_run && !empty($result['ok']) && !$this->is_read_action($action),
+            'compiled' => 'not_checked',
+            'visually_verified' => 'not_checked',
+            'published' => !empty($result['target_id']) && function_exists('get_post_status') ? get_post_status((int) $result['target_id']) === 'publish' : 'not_checked',
+        ];
         return $result;
     }
 
@@ -3341,6 +3369,7 @@ HTML,
 
     private function requires_livecanvas(string $action): bool {
         return !in_array($action, [
+            'update_discussion_settings',
             'site_prepare',
             'validate_markup_for_framework',
             'design_system_compose',
@@ -4619,6 +4648,7 @@ HTML;
     }
 
     private function resolve_framework(array $payload): string {
+        if (class_exists('LCFA_Write_Contract')) return $this->environment->detect_framework_family();
         $explicit = sanitize_key((string) ($payload['framework'] ?? ''));
 
         if (in_array($explicit, ['picostrap', 'picowind', 'fallback_theme', 'custom', 'unknown'], true)) {

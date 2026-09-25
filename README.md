@@ -6,7 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Current test build: plugin `0.2.0-beta.5`, runtime `0.2.0-beta.6`. [Download the test ZIP](https://github.com/livecanvas-team/livecanvas-forge-ai/raw/refs/heads/codex/unified-connection-beta5/dist/livecanvas-forge-ai.zip). This is a branch build for supervised local and staging work, not a tagged release or an automatic update. Qualification remains incomplete.
+Current working build: plugin `0.2.0-beta.6`, runtime `0.2.0-beta.7`. [Local test ZIP](./dist/livecanvas-forge-ai.zip). This is a supervised test build, not a published release or automatic update. Read the [mandatory write workflow](./docs/verified-site-write-workflow.md) and [compatibility notes](./docs/release-notes-0.2.0-beta.6.md) before updating. Client/OS qualification remains incomplete.
 
 Previous published beta: [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4). Its setup screens differ from the working copy described below.
 
@@ -196,7 +196,7 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 The Connect screen confirms the connection only after the agent successfully reads the expected WordPress site. A copied command, configuration file or approved request alone is not a verified connection. Use preview or `dry_run: true` before the first write.
 
-This build pins runtime `0.2.0-beta.6` and ships its installer archive in the plugin ZIP. Use the generated site-specific command; a beta.6 npm publication is not assumed. After an update, reload the site-specific server in the agent's MCP settings. In Cursor, reloading the window can leave the previous MCP process running. Claude Desktop needs a complete app restart.
+This build pins runtime `0.2.0-beta.7` and ships its installer archive in the plugin ZIP. Use the generated site-specific command; a beta.7 npm publication is not assumed. After an update, reload the site-specific server in the agent's MCP settings. In Cursor, reloading the window can leave the previous MCP process running. Claude Desktop needs a complete app restart. Older runtimes cannot obtain the mandatory write context and their mutations will be rejected.
 
 For copying problems, expired requests, limited-scope access or existing session management, open `Instructions and troubleshooting`. A local HTTP browser can require manual copying. Public sites require HTTPS; cloud agents cannot reach a `.local` site on your computer. Additional clients marked configuration preview have not completed real-app qualification.
 

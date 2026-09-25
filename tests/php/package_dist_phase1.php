@@ -59,11 +59,15 @@ package_assert_true(in_array('livecanvas-forge-ai/examples/theme-library/catalog
 package_assert_true(!in_array('livecanvas-forge-ai/examples/theme-library/themes/asteria-search/asteria-search.zip', $entries, true), 'distribution zip should not bundle remote Theme Library packages');
 package_assert_true(!in_array('livecanvas-forge-ai/examples/theme-library/themes/wordpress-theme-test-onepage/screenshots/cover.png', $entries, true), 'distribution zip should not bundle remote Theme Library screenshots');
 package_assert_true(strpos($plugin_bootstrap, 'Update URI: https://livecanvas.com/ai-bridge') !== false, 'distribution zip should preserve the LiveCanvas Update URI header');
-package_assert_true(strpos($plugin_bootstrap, 'Version: 0.2.0-beta.5') !== false, 'distribution zip should include the new beta plugin version');
+package_assert_true(strpos($plugin_bootstrap, 'Version: 0.2.0-beta.6') !== false, 'distribution zip should include the verified-context beta plugin version');
 package_assert_true(strpos($plugin_bootstrap, 'Requires at least: 6.8') !== false, 'distribution zip should declare WordPress 6.8 as the supported minimum');
 package_assert_true(strpos($plugin_bootstrap, 'Tested up to: 7.1') !== false, 'distribution zip should declare WordPress 7.1 compatibility');
-package_assert_true(strpos($plugin_bootstrap, "define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.6')") !== false, 'distribution zip should pin the matching beta MCP package');
-package_assert_true(in_array('livecanvas-forge-ai/assets/runtime/livecanvas-ai-bridge-mcp-0.2.0-beta.6.tgz', $entries, true), 'distribution must contain the actual installer archive used by generated prompts');
+package_assert_true(strpos($plugin_bootstrap, "define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.7')") !== false, 'distribution zip should pin the matching beta MCP package');
+package_assert_true(in_array('livecanvas-forge-ai/assets/runtime/livecanvas-ai-bridge-mcp-0.2.0-beta.7.tgz', $entries, true), 'distribution must contain the actual installer archive used by generated prompts');
+package_assert_true(in_array('livecanvas-forge-ai/includes/class-lcfa-write-contract.php', $entries, true), 'distribution must include mandatory context validation');
+package_assert_true(in_array('livecanvas-forge-ai/includes/class-lcfa-render-target.php', $entries, true), 'distribution must include actual template resolution');
+package_assert_true(in_array('livecanvas-forge-ai/docs/verified-site-write-workflow.md', $entries, true), 'distribution must include the usage guide');
+package_assert_true(in_array('livecanvas-forge-ai/docs/release-notes-0.2.0-beta.6.md', $entries, true), 'distribution must include current compatibility notes');
 package_assert_true(in_array('livecanvas-forge-ai/mcp/bin/livecanvas-forge-connect.js', $entries, true), 'distribution must contain the setup helper');
 package_assert_true(!in_array('livecanvas-forge-ai.php', $entries, true), 'distribution zip should not leak the plugin bootstrap at the archive root');
 package_assert_true(!in_array('.git/', $entries, true), 'distribution zip should not include git metadata');

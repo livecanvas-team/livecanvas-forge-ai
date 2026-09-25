@@ -1,0 +1,11 @@
+# 0.2.0-beta.6: verified site writes
+
+Plugin beta.6 requires the bundled MCP runtime beta.7. This is a supervised test build, not a published release. Restart or reconnect local MCP clients after updating both components.
+
+The new `get_write_context` tool supplies signed, expiring context for a specific target. Writes validate site identity, canonical roots, theme/framework, source revision and shared impact. Public rendering probes observe LiveCanvas Dynamic Templates and actual Timber template paths. Framework checks now apply across page, partial, Dynamic Template and theme-file tools, including remote abilities.
+
+WindPress supports the installed `assets/dist` manifests, validates source revisions and required plugin output, and atomically replaces accepted CSS while preserving the previous cache on failure. DaisyUI and Typography require compiled evidence. Discussion-setting changes preserve existing editorial content under real WordPress KSES. Results distinguish saving, compilation, visual inspection and publication.
+
+Compatibility changes: legacy unscoped writes are rejected. Composite foundation/design-system/library operations and unverified native-pattern/translation copy paths require granular target writes. Parent-theme writes and inline layout CSS/scripts in content are blocked. These restrictions do not apply to arbitrary shell or direct database writes, which are outside Bridge's control.
+
+See [the usage guide and test evidence](verified-site-write-workflow.md). The complete automated regression suite passed. Real WordPress checks covered REST and Abilities rejection, valid draft creation/update, stale context, Dynamic Template and child Twig resolution, KSES content preservation, WindPress cache preservation/compilation and Picostrap Sass compilation. Desktop/mobile inspection covered the existing test-site article. Full first-install qualification across all five client applications and operating systems has not been repeated for this build.

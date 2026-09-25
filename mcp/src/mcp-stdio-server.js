@@ -55,6 +55,7 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
 
     writeResponse(message.id, {
       protocolVersion: negotiatedProtocolVersion,
+      instructions: 'Before any site mutation call get_write_context for the exact content ID, URL or child-theme path. Inspect the actual renderer, framework, roots and shared impact. Pass write_context unchanged and refresh after each mutation. Picowind uses Tailwind/WindPress; DaisyUI and Typography require compile evidence. Picostrap uses Bootstrap/Sass. Keep layout CSS/scripts out of editorial content. Report saved, compiled, visually verified and published separately. Compare a reference layout before restoring it. Bridge cannot enforce these rules for arbitrary shell or database operations.',
       capabilities: {
         tools: {}
       },

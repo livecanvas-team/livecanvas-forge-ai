@@ -13,6 +13,8 @@ class PicostrapCompiler {
   async buildBundle(options = {}) {
     const compiled = await this.compileBundle(options)
     const storedResponse = await this.client.storePicostrapBundle(compiled.css, {
+      write_context: options.write_context,
+      acknowledge_shared: options.acknowledge_shared,
       sourceFingerprint: compiled.source_fingerprint
     })
     const stored = unwrapResultEnvelope(storedResponse)
@@ -24,6 +26,7 @@ class PicostrapCompiler {
     return {
       ok: true,
       action: 'picostrap_compile_bundle',
+      verification_states: { saved: true, compiled: true, visually_verified: 'not_checked', published: 'not_applicable' },
       mode: 'apply',
       target_stack: 'picostrap',
       source_of_truth: 'picostrap_customizer_theme_mods',
@@ -68,6 +71,7 @@ class PicostrapCompiler {
     return {
       ok: true,
       action: 'picostrap_compile_preview',
+      verification_states: { saved: false, compiled: true, visually_verified: 'not_checked', published: 'not_applicable' },
       mode: 'preview',
       target_stack: 'picostrap',
       source_of_truth: 'picostrap_customizer_theme_mods',

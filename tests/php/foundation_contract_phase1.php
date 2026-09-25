@@ -1846,11 +1846,11 @@ lcfa_assert_same('brand-logo', (string) ($advisory_task_payload['task_id'] ?? ''
 lcfa_assert_true(!empty($advisory_task_payload['result']['data']['advisory']), 'execute_genesis_task should expose advisory metadata for payload-less Genesis tasks');
 lcfa_assert_same('applied', (string) ($advisory_task_payload['execution_plan']['progress']['tasks']['brand-logo']['status'] ?? ''), 'execute_genesis_task should mark advisory tasks as applied once acknowledged');
 lcfa_assert_contains('logo', strtolower((string) ($advisory_task_payload['message'] ?? '')), 'execute_genesis_task should surface the advisory task guidance message');
-lcfa_assert_true(($picowind_rules['allow_page_level_inline_script'] ?? null) === true, 'Picowind output rules should allow small page-level scripts when needed');
+lcfa_assert_true(($picowind_rules['allow_page_level_inline_script'] ?? null) === false, 'Scripts must use managed fields or theme assets');
 lcfa_assert_same('footer', $picowind_rules['page_level_script_placement'] ?? '', 'Picowind page-level scripts should be placed at the end of the page');
-lcfa_assert_true(($picowind_rules['prefer_daisyui_components'] ?? null) === true, 'Picowind output rules should prefer DaisyUI components first');
+lcfa_assert_true(($picowind_rules['prefer_daisyui_components'] ?? null) === false, 'DaisyUI must require successful compile evidence');
 lcfa_assert_true(($picowind_rules['allow_external_libraries'] ?? null) === true, 'Picowind output rules should allow external libraries when necessary');
-lcfa_assert_contains('JavaScript is allowed when it is necessary for the interaction', implode("\n", (array) ($picowind_rules['notes'] ?? [])), 'Picowind notes should explain that JavaScript is allowed when needed');
+lcfa_assert_contains('Use JavaScript only for required interactions', implode("\n", (array) ($picowind_rules['notes'] ?? [])), 'Picowind notes should explain managed JavaScript');
 
 $picowind_validation_ok = $command_deck->execute([
     'action'              => 'validate_markup_for_framework',

@@ -49,6 +49,8 @@ cp "${ROOT_DIR}/examples/theme-library/catalog.json" "${PACKAGE_DIR}/examples/th
 mkdir -p "${PACKAGE_DIR}/docs"
 cp "${ROOT_DIR}/docs/coding-agent-setup.html" "${PACKAGE_DIR}/docs/coding-agent-setup.html"
 cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.5.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.5.md"
+cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.6.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.6.md"
+cp "${ROOT_DIR}/docs/verified-site-write-workflow.md" "${PACKAGE_DIR}/docs/verified-site-write-workflow.md"
 
 find "${PACKAGE_DIR}" \
   \( -name '.DS_Store' -o -name '*.log' \) \

@@ -12,6 +12,12 @@ class WindPressCompiler {
   }
 
   async buildCache(options = {}) {
+    const restoreDiagnostics = redirectCompilerDiagnostics()
+    try { return await this.buildCacheInternal(options) }
+    finally { restoreDiagnostics() }
+  }
+
+  async buildCacheInternal(options = {}) {
     const statusResponse = await this.client.getWindPressStatus()
     const status = statusResponse.windpress || statusResponse.result || statusResponse
 
@@ -24,6 +30,7 @@ class WindPressCompiler {
       limit: 2000
     })
     const volumePayload = volumeResponse.volume || volumeResponse.result || volumeResponse
+    if (volumePayload.truncated) throw new Error('WindPress volume was truncated. Refusing a partial build; previous cache is unchanged.')
     const volume = buildVolumeMap(volumePayload.entries || [])
 
     if (!volume['/main.css']) {
@@ -31,6 +38,7 @@ class WindPressCompiler {
     }
 
     const providerIds = normalizeProviderIds(options.provider_ids, status.providers || [])
+    if (options.store !== false && normalizeProviderIds(null, status.providers || []).some(id => !providerIds.includes(id))) throw new Error('A stored build must scan every enabled provider. Use store=false for a partial preview.')
     const providerResults = []
 
     for (const providerId of providerIds) {
@@ -44,11 +52,18 @@ class WindPressCompiler {
       if (!scanResult || scanResult.ok === false) {
         throw new Error(scanResult && scanResult.message ? scanResult.message : `Failed to scan WindPress provider "${providerId}".`)
       }
+      if (scanResult.truncated || (scanResult.metadata && scanResult.metadata.truncated)) throw new Error(`WindPress provider ${providerId} was truncated. Previous cache is unchanged.`)
 
       providerResults.push(scanResult)
     }
 
     const candidateSources = providerResults.flatMap((providerResult) => normalizeProviderContents(providerResult.contents || []))
+    const declaredSources = activeVolumeSources(volume).join('\n')
+    const requiredPlugins = {
+      daisyui: /(?:@plugin\s+["']|require\(["'])daisyui(?:["'/])/.test(declaredSources),
+      typography: /(?:@plugin\s+["']|require\(["'])@tailwindcss\/typography(?:["'/])/.test(declaredSources)
+    }
+    candidateSources.push([requiredPlugins.daisyui ? 'btn btn-primary' : '', requiredPlugins.typography ? 'prose' : ''].join(' '))
     const tailwindVersion = Number(status.tailwind_version || 4) === 3 ? 3 : 4
     const sourceMapEnabled = options.source_map !== undefined ? Boolean(options.source_map) : Boolean(status.source_map)
     const compiler = await this.loadCompiler(tailwindVersion)
@@ -109,15 +124,32 @@ class WindPressCompiler {
 
     const store = options.store !== false
     let stored = null
+    const compiledCss = sourceMap ? normalCss : minifiedCss
+    if (!compiledCss.trim() || /@(?:tailwind|plugin|source)\b|@import\s+["']tailwindcss/.test(compiledCss)) throw new Error('Compiler did not produce usable CSS. Previous cache is unchanged.')
+    const plugins = { daisyui: requiredPlugins.daisyui && /\.btn(?=[\s{,:.[])/.test(compiledCss), typography: requiredPlugins.typography && /\.prose(?=[\s{,:.[])/.test(compiledCss) }
+    for (const [plugin, required] of Object.entries(requiredPlugins)) {
+      if (required && !plugins[plugin]) throw new Error(`Required ${plugin} did not compile. It has not been disabled; previous cache is unchanged.`)
+    }
+    const currentResponse = await this.client.getWindPressStatus()
+    const current = currentResponse.windpress || currentResponse.result || currentResponse
+    if (!status.source_revision || current.source_revision !== status.source_revision) throw new Error('stale_sources: Sources changed during compilation. Previous cache is unchanged.')
 
     if (store) {
       const fullBuildStamp = options.kind === 'full' || !options.kind ? Date.now() : null
       const cssToStore = sourceMap ? normalCss : minifiedCss
-      stored = await this.client.saveWindPressCache(cssToStore, sourceMap || '', fullBuildStamp)
+      stored = await this.client.saveWindPressCache(cssToStore, sourceMap || '', fullBuildStamp, {
+        write_context: options.write_context, acknowledge_shared: options.acknowledge_shared,
+        source_revision: status.source_revision, plugins
+      })
+      const saved = stored.result || stored
+      if (!saved.ok) throw new Error(saved.message || 'WindPress cache was not saved.')
     }
 
     return {
       ok: true,
+      source_revision: status.source_revision,
+      plugins,
+      verification_states: { saved: store, compiled: true, visually_verified: 'not_checked', published: 'not_applicable' },
       tailwind_version: tailwindVersion,
       provider_ids: providerIds,
       provider_count: providerIds.length,
@@ -142,7 +174,7 @@ class WindPressCompiler {
     const pluginPattern = /(@plugin\s+)(["'])([^"']+)\2/g
     const replacements = new Map()
 
-    for (const content of Object.values(prepared)) {
+    for (const content of activeVolumeSources(prepared)) {
       if (typeof content !== 'string') {
         continue
       }
@@ -314,21 +346,18 @@ class WindPressCompiler {
 
   resolveCompilerAssetPath(tailwindVersion) {
     const buildRoot = this.resolveWindPressBuildRoot()
-    const manifestPath = path.join(buildRoot, 'manifest.json')
-    const sourceKey = tailwindVersion === 3
-      ? 'assets/packages/core/tailwindcss-v3/index.ts'
-      : 'assets/packages/core/tailwindcss/index.ts'
-
-    const manifestAsset = this.resolveCompilerAssetFromManifest(manifestPath, sourceKey)
-
-    if (manifestAsset) {
-      return manifestAsset
+    const packagePath = tailwindVersion === 3 ? 'packages/core/tailwindcss-v3/index.ts' : 'packages/core/tailwindcss/index.ts'
+    for (const manifest of ['manifest.json', '.vite/manifest.json']) {
+      for (const prefix of ['resources/', 'assets/']) {
+        const manifestAsset = this.resolveCompilerAssetFromManifest(path.join(buildRoot, manifest), prefix + packagePath, buildRoot)
+        if (manifestAsset) return manifestAsset
+      }
     }
 
     return this.resolveCompilerAssetFromDirectory(path.join(buildRoot, 'assets'), tailwindVersion)
   }
 
-  resolveCompilerAssetFromManifest(manifestPath, sourceKey) {
+  resolveCompilerAssetFromManifest(manifestPath, sourceKey, buildRoot = path.dirname(manifestPath)) {
     if (!fs.existsSync(manifestPath)) {
       return ''
     }
@@ -339,9 +368,9 @@ class WindPressCompiler {
       const file = entry && typeof entry.file === 'string' ? entry.file : ''
 
       if (file) {
-        const assetPath = path.join(path.dirname(manifestPath), file)
+        const assetPath = path.resolve(buildRoot, file)
 
-        if (fs.existsSync(assetPath)) {
+        if (fs.existsSync(assetPath) && fs.realpathSync(assetPath).startsWith(fs.realpathSync(buildRoot) + path.sep)) {
           return assetPath
         }
       }
@@ -434,13 +463,11 @@ class WindPressCompiler {
 
   resolveWindPressBuildRoot() {
     const wpRoot = this.resolveWordPressRoot()
-    const buildRoot = path.join(wpRoot, 'wp-content', 'plugins', 'windpress', 'build')
-
-    if (!fs.existsSync(buildRoot)) {
-      throw new Error(`WindPress build directory not found: ${buildRoot}`)
+    for (const layout of ['assets/dist', 'build']) {
+      const buildRoot = path.join(wpRoot, 'wp-content', 'plugins', 'windpress', layout)
+      if (fs.existsSync(path.join(buildRoot, 'assets'))) return buildRoot
     }
-
-    return buildRoot
+    throw new Error('WindPress compiler assets not found in assets/dist or build.')
   }
 
   resolveWordPressRoot() {
@@ -467,6 +494,21 @@ class WindPressCompiler {
 
 function isExternalPluginSpecifier(specifier) {
   return specifier !== '' && !specifier.startsWith('.') && !specifier.startsWith('/')
+}
+
+// Framework plugins may log banners through console.log. Stdout belongs to MCP
+// JSON-RPC; keep diagnostics on stderr, including concurrent builds.
+let diagnosticUsers = 0
+let originalConsole = null
+function redirectCompilerDiagnostics() {
+  if (diagnosticUsers++ === 0) {
+    originalConsole = { log: console.log, info: console.info, debug: console.debug }
+    const stderr = (...args) => process.stderr.write(require('node:util').format(...args) + '\n')
+    console.log = stderr; console.info = stderr; console.debug = stderr
+  }
+  return () => {
+    if (--diagnosticUsers === 0) { Object.assign(console, originalConsole); originalConsole = null }
+  }
 }
 
 function resolveEsmPluginUrl(specifier) {
@@ -513,6 +555,23 @@ function normalizeProviderIds(input, providers) {
     .filter((provider) => provider && provider.enabled !== false)
     .map((provider) => String(provider.id || '').trim())
     .filter(Boolean)
+}
+
+function activeVolumeSources(volume) {
+  const visited = new Set()
+  const contents = []
+  function visit(file) {
+    if (visited.has(file) || typeof volume[file] !== 'string') return
+    visited.add(file)
+    const source = volume[file].replace(/\/\*[\s\S]*?\*\//g, '')
+    contents.push(source)
+    for (const match of source.matchAll(/@(?:import|reference)\s+["']([^"']+)["']/g)) {
+      if (match[1].startsWith('.')) visit(path.posix.resolve(path.posix.dirname(file), match[1]))
+    }
+  }
+  visit('/main.css')
+  visit('/tailwind.config.js')
+  return contents
 }
 
 function buildVolumeMap(entries) {

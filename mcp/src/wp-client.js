@@ -21,6 +21,14 @@ class WPClient {
     return this.request('GET', 'context', { query: params })
   }
 
+  async getWriteContext(params = {}) {
+    return this.request('GET', 'write-context', { query: params })
+  }
+
+  async validateWriteContext(payload = {}) {
+    return this.request('POST', 'write-context/validate', { body: payload })
+  }
+
   async getThemeContext(params = {}) {
     return this.request('GET', 'theme-context', { query: params })
   }
@@ -282,6 +290,8 @@ class WPClient {
     return this.request('POST', 'picostrap/bundle', {
       body: {
         css,
+        write_context: metadata.write_context,
+        acknowledge_shared: metadata.acknowledge_shared,
         source_fingerprint: metadata.sourceFingerprint || metadata.source_fingerprint || ''
       }
     })
@@ -304,6 +314,8 @@ class WPClient {
     return this.request('POST', 'picostrap/bundle', {
       body: {
         css: payload.compiled_css || payload.css || '',
+        write_context: payload.write_context,
+        acknowledge_shared: payload.acknowledge_shared,
         source_fingerprint: payload.source_fingerprint || ''
       }
     })
@@ -404,21 +416,21 @@ class WPClient {
     }
   }
 
-  async saveWindPressVolumeEntries(entries = []) {
+  async saveWindPressVolumeEntries(entries = [], context = {}) {
     return this.request('POST', 'windpress/volume', {
-      body: { entries }
+      body: { ...context, entries }
     })
   }
 
-  async saveWindPressThemeJson(themeJson) {
+  async saveWindPressThemeJson(themeJson, context = {}) {
     return this.request('POST', 'windpress/theme-json', {
-      body: { theme_json: themeJson }
+      body: { ...context, theme_json: themeJson }
     })
   }
 
-  async saveWindPressCache(css, sourcemap = '', fullBuild = null) {
+  async saveWindPressCache(css, sourcemap = '', fullBuild = null, context = {}) {
     return this.request('POST', 'windpress/cache', {
-      body: { css, sourcemap, full_build: fullBuild }
+      body: { ...context, css, sourcemap, full_build: fullBuild }
     })
   }
 
@@ -428,9 +440,10 @@ class WPClient {
     })
   }
 
-  async resetWindPressVolumeEntry(relativePath) {
+  async resetWindPressVolumeEntry(relativePath, context = {}) {
     return this.request('POST', 'windpress/volume/reset', {
       body: {
+        ...context,
         relative_path: relativePath
       }
     })

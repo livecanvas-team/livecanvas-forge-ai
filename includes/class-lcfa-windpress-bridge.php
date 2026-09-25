@@ -31,6 +31,7 @@ final class LCFA_WindPress_Bridge {
 
         return array_merge($status, [
             'available'        => true,
+            'source_revision'  => class_exists('LCFA_Write_Contract') ? LCFA_Write_Contract::source_revision() : '',
             'version'          => $config['version'] ?? (defined('WIND_PRESS::VERSION') ? constant('WIND_PRESS::VERSION') : ''),
             'tailwind_version' => $config['tailwind_version'] ?? $this->get_tailwind_version(),
             'performance_mode' => $this->get_performance_mode(),
@@ -53,7 +54,7 @@ final class LCFA_WindPress_Bridge {
         $include_content = !empty($args['include_content']);
         $handler         = sanitize_key((string) ($args['handler'] ?? ''));
         $extension       = strtolower((string) ($args['extension'] ?? ''));
-        $limit           = max(1, min(500, absint($args['limit'] ?? 100)));
+        $limit           = max(1, min(2000, absint($args['limit'] ?? 100)));
 
         $entries = \WindPress\WindPress\Core\Volume::get_entries();
         $items   = [];
@@ -101,6 +102,7 @@ final class LCFA_WindPress_Bridge {
             'extension'       => $extension,
             'limit'           => $limit,
             'entries'         => $items,
+            'truncated'       => count($entries) > $limit,
         ];
     }
 
@@ -292,7 +294,7 @@ final class LCFA_WindPress_Bridge {
         ];
     }
 
-    public function save_cache_css(string $css, string $sourcemap = '', ?int $full_build = null): array {
+    public function save_cache_css(string $css, string $sourcemap = '', ?int $full_build = null, array $context = []): array {
         if (!$this->is_available()) {
             return [
                 'ok'      => false,
@@ -307,11 +309,63 @@ final class LCFA_WindPress_Bridge {
             ];
         }
 
-        \WindPress\WindPress\Core\Cache::save_cache($css);
-
-        if ($sourcemap !== '') {
-            \WindPress\WindPress\Core\Cache::save_sourcemap($sourcemap);
+        if (class_exists('LCFA_Write_Contract')) {
+            $check = LCFA_Write_Contract::validate($context, 'save_windpress_cache');
+            if (empty($check['ok'])) return $check;
+            if (empty($context['source_revision']) || !hash_equals(LCFA_Write_Contract::source_revision(), (string) $context['source_revision'])) return ['ok' => false, 'code' => 'stale_sources', 'message' => 'Source revision changed. Previous CSS cache is unchanged.'];
         }
+        if (preg_match('~@(?:tailwind|plugin|source)\b|@import\s+["\']tailwindcss~', $css) || strpos($css, '{') === false) return ['ok' => false, 'message' => 'Expected compiled CSS, not source directives. Previous cache is unchanged.'];
+        $volume = $this->get_volume_entries(['include_content' => true, 'limit' => 2000]);
+        if (!empty($volume['truncated'])) return ['ok' => false, 'message' => 'Volume is truncated. Previous cache is unchanged.'];
+        $files = [];
+        foreach ($volume['entries'] ?? [] as $entry) $files[ltrim($entry['relative_path'], '/')] = $entry['content'] ?? '';
+        $visited = []; $sources = [];
+        $visit = static function ($file) use (&$visit, &$visited, &$sources, $files) {
+            if (isset($visited[$file]) || !isset($files[$file])) return;
+            $visited[$file] = true;
+            $source = preg_replace('~/\*.*?\*/~s', '', $files[$file]);
+            $sources[] = $source;
+            preg_match_all('~@(?:import|reference)\s+["\'](\.[^"\']+)["\']~', $source, $matches);
+            foreach ($matches[1] as $import) {
+                $parts = [];
+                foreach (explode('/', dirname($file) . '/' . $import) as $part) {
+                    if ($part === '..') array_pop($parts); elseif ($part !== '.' && $part !== '') $parts[] = $part;
+                }
+                $visit(implode('/', $parts));
+            }
+        };
+        $visit('main.css'); $visit('tailwind.config.js');
+        $declared = implode("\n", $sources);
+        $plugins = [];
+        foreach (['daisyui' => 'btn', 'typography' => 'prose'] as $plugin => $probe) {
+            $specifier = $plugin === 'typography' ? '@tailwindcss/typography' : 'daisyui';
+            $required = (bool) preg_match('~(?:@plugin\s+["\']|require\(["\'])' . preg_quote($specifier, '~') . '(?:["\'/])~', $declared);
+            $plugins[$plugin] = $required && (bool) preg_match('/\.' . $probe . '(?=[\s{,:.\[])/', $css);
+            if ($required && !$plugins[$plugin]) return ['ok' => false, 'message' => 'Required ' . $plugin . ' CSS is missing. The plugin was not disabled; previous cache is unchanged.'];
+        }
+        $path = (string) ($this->get_cache_summary()['css']['path'] ?? '');
+        if (!$path || (!is_dir(dirname($path)) && !wp_mkdir_p(dirname($path)))) return ['ok' => false, 'message' => 'Cache directory is unavailable.'];
+        $temporary = tempnam(dirname($path), '.lcfa-compile-');
+        if (!$temporary) return ['ok' => false, 'message' => 'Cannot stage compiled CSS. Previous cache is unchanged.'];
+        try {
+            if (file_put_contents($temporary, $css) !== strlen($css) || hash_file('sha256', $temporary) !== hash('sha256', $css)) throw new RuntimeException('CSS staging verification failed.');
+            chmod($temporary, is_file($path) ? (fileperms($path) & 0777) : 0644);
+            if (class_exists('LCFA_Write_Contract') && !hash_equals(LCFA_Write_Contract::source_revision(), (string) $context['source_revision'])) throw new RuntimeException('Sources changed while staging CSS.');
+            if (!rename($temporary, $path)) throw new RuntimeException('Atomic CSS replacement failed.');
+        } catch (Throwable $error) {
+            return ['ok' => false, 'message' => $error->getMessage() . ' Previous cache is unchanged.'];
+        } finally {
+            if (is_file($temporary)) unlink($temporary);
+        }
+
+        // Source maps are optional diagnostics, not part of the valid CSS commit.
+        $map_warning = '';
+        try {
+            do_action('a!windpress/core/cache:save_cache.after', $css);
+            if (class_exists('WindPress\\WindPress\\Utils\\Cache')) \WindPress\WindPress\Utils\Cache::flush_cache_plugin();
+        } catch (Throwable $error) { $map_warning = 'CSS saved; a cache invalidation hook failed.'; }
+        if ($sourcemap !== '') try { \WindPress\WindPress\Core\Cache::save_sourcemap($sourcemap); } catch (Throwable $error) { $map_warning = 'CSS saved; source map unavailable.'; }
+        if (class_exists('LCFA_Write_Contract')) update_option('lcfa_windpress_compile_evidence', ['source_revision' => $context['source_revision'], 'cache_path' => $path, 'css_sha256' => hash('sha256', $css), 'plugins' => $plugins], false);
 
         if ($full_build !== null && $full_build > 0) {
             wp_cache_set('last_full_build', $full_build, 'windpress');
@@ -320,6 +374,8 @@ final class LCFA_WindPress_Bridge {
         return [
             'ok'           => true,
             'message'      => __('WindPress CSS cache stored.', 'livecanvas-forge-ai'),
+            'warning'      => $map_warning,
+            'verification_states' => ['saved' => true, 'compiled' => true, 'visually_verified' => 'not_checked', 'published' => 'not_applicable'],
             'cache'        => $this->get_cache_summary(),
             'verification' => $this->get_compiled_cache_state(),
         ];

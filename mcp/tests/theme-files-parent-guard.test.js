@@ -4,8 +4,14 @@ const os = require('node:os')
 const path = require('node:path')
 const { ThemeFilesystem } = require('../src/theme-files')
 
-function createClient(stylesheet, template) {
+function createClient(stylesheet, template, wpRoot) {
   return {
+    async validateWriteContext(options) {
+      if (stylesheet === template || options.root_scope === 'template') return { ok: false, code: 'parent_theme_read_only', message: 'Parent theme is read-only. Use a child theme.' }
+      const root = path.join(wpRoot, 'wp-content/themes', stylesheet)
+      const file = path.join(root, options.path)
+      return { ok: true, context: { roots: { wordpress: fs.realpathSync(wpRoot), stylesheet: fs.realpathSync(root), template: fs.realpathSync(path.join(wpRoot, 'wp-content/themes', template)) }, target: { file_sha256: fs.existsSync(file) ? require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') : '' } } }
+    },
     async getSnapshot() {
       return {
         snapshot: {
@@ -37,19 +43,15 @@ async function run() {
     fs.writeFileSync(path.join(parentRoot, 'style.css'), '/* parent */')
 
     const parentFilesystem = new ThemeFilesystem({
-      client: createClient('parent-theme', 'parent-theme'),
+      client: createClient('parent-theme', 'parent-theme', wpRoot),
       config: { wpRoot, allowParentThemeWrites: false, backupsDirectory: path.join(wpRoot, '.lcfa-backups') }
     })
-    const parentPreview = await parentFilesystem.writeFile({
+    await assert.rejects(() => parentFilesystem.writeFile({
       root_scope: 'stylesheet',
       path: 'style.css',
       content: '/* changed */',
       dry_run: true
-    })
-
-    assert.equal(parentPreview.ok, true, 'parent preview should return a guided result')
-    assert.equal(parentPreview.writable, false, 'parent theme should be read-only by default')
-    assert.equal(parentPreview.status, 'parent_theme_read_only')
+    }), /parent theme/i)
     await assert.rejects(
       () => parentFilesystem.writeFile({ root_scope: 'stylesheet', path: 'style.css', content: '/* changed */' }),
       /parent theme/i
@@ -59,7 +61,7 @@ async function run() {
     fs.mkdirSync(childRoot, { recursive: true })
     fs.writeFileSync(path.join(childRoot, 'style.css'), '/* child */')
     const childFilesystem = new ThemeFilesystem({
-      client: createClient('child-theme', 'parent-theme'),
+      client: createClient('child-theme', 'parent-theme', wpRoot),
       config: { wpRoot, allowParentThemeWrites: false, backupsDirectory: path.join(wpRoot, '.lcfa-backups') }
     })
     const childWrite = await childFilesystem.writeFile({
@@ -72,24 +74,22 @@ async function run() {
     assert.equal(childWrite.writable, true)
     assert.equal(fs.readFileSync(path.join(childRoot, 'style.css'), 'utf8'), '/* child changed */')
 
-    const templatePreview = await childFilesystem.writeFile({
+    await assert.rejects(() => childFilesystem.writeFile({
       root_scope: 'template',
       path: 'style.css',
       content: '/* parent from child */',
       dry_run: true
-    })
-    assert.equal(templatePreview.writable, false, 'template scope should stay read-only when it resolves to the parent')
+    }), /parent theme/i)
 
     const trustedFilesystem = new ThemeFilesystem({
-      client: createClient('parent-theme', 'parent-theme'),
+      client: createClient('parent-theme', 'parent-theme', wpRoot),
       config: { wpRoot, allowParentThemeWrites: true, backupsDirectory: path.join(wpRoot, '.lcfa-backups') }
     })
-    const trustedWrite = await trustedFilesystem.writeFile({
+    await assert.rejects(() => trustedFilesystem.writeFile({
       root_scope: 'stylesheet',
       path: 'style.css',
       content: '/* explicit opt-in */'
-    })
-    assert.equal(trustedWrite.writable, true, 'explicit local opt-in should allow parent writes')
+    }), /parent theme/i, 'Optional caller flags cannot bypass verified child-theme restrictions')
   } finally {
     fs.rmSync(wpRoot, { recursive: true, force: true })
   }

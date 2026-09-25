@@ -144,6 +144,20 @@ final class LCFA_Ability_Registry {
                 $readonly_annotations,
                 true
             ),
+            'livecanvas-forge-ai/get-write-context' => $this->ability(
+                'Get verified write context',
+                'Mandatory before mutations. Resolve the target renderer, framework, canonical roots and source revision. Pass write_context unchanged to the write; refresh after every mutation.',
+                ['type' => 'object', 'properties' => ['target_id' => ['type' => 'integer'], 'target_url' => ['type' => 'string'], 'target_type' => ['type' => 'string'], 'path' => ['type' => 'string']]],
+                static function ($input) { return LCFA_Write_Contract::prepare((array) $input); },
+                [$this, 'can_read'], $readonly_annotations, true
+            ),
+            'livecanvas-forge-ai/update-discussion-settings' => $this->ability(
+                'Update discussion settings without changing content',
+                'Requires current target write_context. Changes only comment/ping settings, preserving existing editorial bytes under the actual execution identity.',
+                ['type' => 'object', 'properties' => ['target_id' => ['type' => 'integer'], 'comment_status' => ['type' => 'string', 'enum' => ['open', 'closed']], 'ping_status' => ['type' => 'string', 'enum' => ['open', 'closed']], 'dry_run' => ['type' => 'boolean']]],
+                function ($input) { return $this->command_deck->execute(array_merge((array) $input, ['action' => 'update_discussion_settings'])); },
+                [$this, 'can_write'], $write_annotations, $this->write_ability_is_mcp_public('livecanvas-forge-ai/apply-page-upsert')
+            ),
             'livecanvas-forge-ai/get-inventory' => $this->ability(
                 __('Get AI Bridge inventory', 'livecanvas-forge-ai'),
                 __('Returns the LiveCanvas-aware inventory of pages, partials, templates, blocks, and sections without writing.', 'livecanvas-forge-ai'),
@@ -605,7 +619,7 @@ final class LCFA_Ability_Registry {
         ];
 
         return [
-            'connection_handoff' => $this->build_agent_handoff_connection_handoff($summary),
+            'connection_handoff' => array_merge($this->build_agent_handoff_connection_handoff($summary), ['mandatory_write_workflow' => class_exists('LCFA_Write_Contract') ? LCFA_Write_Contract::workflow() : []]),
         ];
     }
 
@@ -1395,6 +1409,8 @@ final class LCFA_Ability_Registry {
             $payload = $this->normalize_input($input);
             return [
                 'theme_file_restore' => $this->theme_files_bridge->restore_backup([
+                    'write_context' => $payload['write_context'] ?? null,
+                    'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                     'backup_id'          => sanitize_text_field((string) ($payload['backup_id'] ?? $payload['id'] ?? '')),
                     'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? '')),
                     'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
@@ -1558,6 +1574,21 @@ final class LCFA_Ability_Registry {
     }
 
     private function ability(string $label, string $description, array $input_schema, callable $execute_callback, callable $permission_callback, array $annotations, bool $mcp_public, bool $show_in_rest = true): array {
+        $operation = is_array($execute_callback) ? (string) $execute_callback[1] : '';
+        if (empty($annotations['readonly']) || $operation === 'validate_markup_for_framework' || (class_exists('LCFA_Write_Contract') && LCFA_Write_Contract::guards_operation($operation))) {
+            $fields = ['write_context' => ['type' => 'object', 'additionalProperties' => true], 'acknowledge_shared' => ['type' => 'boolean']];
+            $input_schema['properties'] = array_merge($input_schema['properties'] ?? [], $fields);
+            if (isset($input_schema['properties']['payload'])) $input_schema['properties']['payload']['properties'] = array_merge($input_schema['properties']['payload']['properties'] ?? [], $fields);
+            $description .= ' Requires get-write-context for the exact target; refresh after mutation. Bridge cannot govern shell or direct SQL writes.';
+            $callback = $execute_callback;
+            $execute_callback = static function ($input) use ($callback, $operation) {
+                if (class_exists('LCFA_Write_Contract')) {
+                    $check = LCFA_Write_Contract::validate((array) $input, $operation);
+                    if (empty($check['ok'])) return $check;
+                }
+                return $callback($input);
+            };
+        }
         return [
             'label'               => $label,
             'description'         => $description,
@@ -1614,6 +1645,8 @@ final class LCFA_Ability_Registry {
 
             return [
                 $dry_run ? 'theme_file_preview_write' : 'theme_file_write' => $this->theme_files_bridge->write_file([
+                    'write_context' => $payload['write_context'] ?? null,
+                    'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                     'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                     'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
                     'content'            => is_string($payload['content'] ?? null) ? (string) $payload['content'] : '',
@@ -2481,6 +2514,8 @@ final class LCFA_Ability_Registry {
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
+            'Before writes call livecanvas-forge-ai/get-write-context for the exact target. Inspect its renderer, framework, roots and shared impact. Pass write_context unchanged to preview/apply and refresh after mutations.',
+            'Picowind uses Tailwind/WindPress; DaisyUI and Typography require current compiled evidence. Picostrap uses Bootstrap/Sass. Keep CSS and scripts out of editorial content. Report saved, compiled, visually_verified and published separately. Shell and direct SQL operations are outside Bridge validation.',
             __('First call livecanvas-forge-ai/get-connection-handoff with {"limit":5}.', 'livecanvas-forge-ai'),
             __('If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.', 'livecanvas-forge-ai'),
             __('Read the returned connection status, transport, first-prompt guardrails, and recommended sequence.', 'livecanvas-forge-ai'),

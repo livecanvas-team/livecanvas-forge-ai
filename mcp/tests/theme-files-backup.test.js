@@ -18,6 +18,10 @@ async function run() {
 
   const themeFiles = new ThemeFilesystem({
     client: {
+      async validateWriteContext(options) {
+        const file = path.join(childRoot, options.path)
+        return { ok: true, context: { roots: { wordpress: fs.realpathSync(wpRoot), stylesheet: fs.realpathSync(childRoot), template: fs.realpathSync(parentRoot) }, target: { file_sha256: fs.existsSync(file) ? require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') : '' } } }
+      },
       async getSnapshot() {
         return {
           snapshot: {
