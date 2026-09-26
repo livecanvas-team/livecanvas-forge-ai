@@ -1,0 +1,11 @@
+{
+  "schema_version": "livecanvas-workflows.v1",
+  "version": "1.4.1",
+  "workflows": [
+    { "id": "page", "title": "Create or edit a page", "description": "Build a LiveCanvas page or change a scoped section using the verified theme and asset pipeline." },
+    { "id": "shared-component", "title": "Edit a shared component", "description": "Inspect and change LiveCanvas partials, headers, footers, blocks and sections with explicit shared impact." },
+    { "id": "dynamic-template", "title": "Build a single or archive template", "description": "Resolve the effective LiveCanvas Dynamic Template or child-theme fallback before changing a single or archive layout." },
+    { "id": "assets", "title": "Manage assets and compile styles", "description": "Use WordPress media and the actual Tailwind/WindPress, Bootstrap/Sass or theme-native build pipeline." },
+    { "id": "verify-restore", "title": "Verify or restore a change", "description": "Check saved, compiled, rendered and published states separately; compare a reference and detect conflicts before restoration." }
+  ]
+}

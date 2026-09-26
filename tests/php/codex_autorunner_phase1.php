@@ -137,16 +137,18 @@ lcfa_assert_contains((string) $request['id'], $plan['prompt'], 'Codex autorunner
 lcfa_assert_contains('complete_frontend_prompt_request', $plan['prompt'], 'Codex autorunner prompt should tell Codex to complete the request');
 lcfa_assert_contains('fail_frontend_prompt_request', $plan['prompt'], 'Codex autorunner prompt should tell Codex how to fail safely');
 lcfa_assert_contains('mcp__livecanvas_forge__get_frontend_prompt_request', $plan['prompt'], 'Codex autorunner prompt should name the LiveCanvas MCP claim tool explicitly');
-lcfa_assert_contains('Do not call list_mcp_resources', $plan['prompt'], 'Codex autorunner prompt should prevent resource discovery detours');
+lcfa_assert_contains('read_workflow', $plan['prompt'], 'Frontend instructions must load the relevant workflow');
+lcfa_assert_contains('get_write_context', $plan['prompt'], 'Frontend instructions must inspect verified context');
 lcfa_assert_contains('Never wrap generated LiveCanvas page content in <main>', $plan['prompt'], 'Codex autorunner prompt should enforce the LiveCanvas no-main-wrapper rule');
 lcfa_assert_contains('Speed profile: fast.', $plan['prompt'], 'Codex autorunner prompt should include the selected frontend speed profile');
 lcfa_assert_contains('--skip-git-repo-check', $plan['command'], 'Codex autorunner should work from a WordPress root that may not be a git repository');
 lcfa_assert_contains("--model 'gpt-5.3-codex-spark'", $plan['command'], 'Codex autorunner should pass the selected frontend model to codex exec');
 lcfa_assert_contains("'model_reasoning_effort=\"medium\"'", $plan['command'], 'Codex autorunner should pass the selected frontend intelligence to codex exec');
-lcfa_assert_contains('--dangerously-bypass-approvals-and-sandbox', $plan['command'], 'Codex autorunner should run non-interactively without cancelling MCP tool calls');
-lcfa_assert_contains('--ignore-rules', $plan['command'], 'Codex autorunner should avoid unrelated project rules during frontend queue work');
-lcfa_assert_contains('dangerously-bypass-approvals-and-sandbox', $plan['command'], 'Codex autorunner should allow the local MCP bridge to reach WordPress over HTTP');
-lcfa_assert_contains('shell_environment_policy.inherit=all', $plan['command'], 'Codex autorunner should preserve environment for MCP subprocesses');
+lcfa_assert_true(strpos($plan['command'], '--dangerously') === false, 'Bridge must not bypass the coding agent sandbox');
+lcfa_assert_true(strpos($plan['command'], '--ignore-rules') === false, 'Bridge must not disable project instructions');
+lcfa_assert_true(strpos($plan['command'], '--full-auto') === false, 'Bridge must not change client approvals');
+lcfa_assert_contains("--sandbox 'read-only'", $plan['command'], 'Legacy diagnostic launch plans must default to read-only');
+lcfa_assert_contains('shell_environment_policy.inherit=core', $plan['command'], 'Bridge should not inherit all server secrets');
 lcfa_assert_contains('PATH=', $plan['command'], 'Codex autorunner should provide a deterministic PATH for node and local tools');
 lcfa_assert_contains("'--cd' '/tmp/lcfa workspace'", $plan['command'], 'Codex autorunner should quote the workspace path safely');
 lcfa_assert_contains('< ' . escapeshellarg($plan['prompt_file']), $plan['command'], 'Codex autorunner should feed the prompt through stdin');
@@ -155,6 +157,14 @@ $sandbox_request = $request;
 $sandbox_request['codex_options']['sandbox'] = 'workspace-write';
 $sandbox_plan = LCFA_Codex_Autorunner::build_launch_plan($sandbox_request, '/Applications/Codex.app/Contents/Resources/codex', '/tmp/lcfa workspace', $run_dir);
 lcfa_assert_contains("--sandbox 'workspace-write'", $sandbox_plan['command'], 'Codex autorunner should pass the selected frontend sandbox mode when it is restricted');
+
+$unsafe_request = $request;
+$unsafe_request['codex_options']['sandbox'] = 'danger-full-access';
+$safe_plan = LCFA_Codex_Autorunner::build_launch_plan($unsafe_request, '/unused/codex', '/tmp/lcfa workspace', $run_dir);
+lcfa_assert_contains("--sandbox 'read-only'", $safe_plan['command'], 'Browser input cannot request unrestricted computer access');
+$runner = LCFA_Codex_Autorunner::maybe_spawn($request);
+lcfa_assert_same('desktop_transport_required', $runner['reason'], 'PHP must not silently launch an independent CLI conversation');
+lcfa_assert_true(!isset($runner['pid'], $runner['command']), 'Unavailable desktop transport must create no process');
 
 $stale_request = $request;
 $stale_request['runner'] = [

@@ -15,6 +15,7 @@
   var codexSandboxSelect=shell.querySelector("[data-lcfa-editor-codex-sandbox]");
   var promptInput=shell.querySelector("[data-lcfa-editor-prompt]");
   var analyzeButton=shell.querySelector("[data-lcfa-editor-analyze]");
+  var stopButton=shell.querySelector("[data-lcfa-editor-stop]");
   var createThreadButton=shell.querySelector("[data-lcfa-editor-thread-create]");
   var duplicateThreadButton=shell.querySelector("[data-lcfa-editor-thread-duplicate]");
   var renameThreadButton=shell.querySelector("[data-lcfa-editor-thread-rename]");
@@ -32,6 +33,9 @@
   var resultSummary=shell.querySelector("[data-lcfa-editor-result-summary]");
   var resultMeta=shell.querySelector("[data-lcfa-editor-result-meta]");
   var statusNode=shell.querySelector("[data-lcfa-editor-status]");
+  var reviewSavedLink=shell.querySelector("[data-lcfa-editor-review-saved]");
+  var editorNotice=shell.querySelector("[data-lcfa-editor-notice]");
+  var editorNoticeText=shell.querySelector("[data-lcfa-editor-notice-text]");
   var threadLog=shell.querySelector("[data-lcfa-editor-thread-log]");
   var threadEmpty=shell.querySelector("[data-lcfa-editor-thread-empty]");
   var reasonsWrap=shell.querySelector("[data-lcfa-editor-result-reasons-wrap]");
@@ -59,6 +63,24 @@
   var selectedSectionAnchor=null;
   var analyzeBusy=false;
   var actionBusyMode="";
+  var frontendJobs={};
+  var pendingFrontendDeliveries={};
+  var pendingJobsChecked=!config.agentPendingEndpoint;
+  var editorBuffer=typeof window.LCFACreateEditorBuffer==="function"?window.LCFACreateEditorBuffer(window,document,config,shell):null;
+  // Baselines contain private, unsaved editor bytes. They stay in this browser
+  // instance and must never be serialized into a request or conversation.
+  var editorBaselines=new WeakMap();
+  var selectedFrontendJob=function(){
+    var ids=Object.keys(frontendJobs);
+    for(var i=0;i<ids.length;i++){if(frontendJobs[ids[i]].threadId===selectedThreadId){return frontendJobs[ids[i]];}}
+    return null;
+  };
+  var syncStopButton=function(){
+    if(!stopButton){return;}
+    var job=selectedFrontendJob();
+    stopButton.hidden=!job||!config.agentStopEndpoint;
+    stopButton.disabled=!!(job&&(job.stopPending||job.stopRequested));
+  };
 
   var getAgentConfig=function(){
     return config.agent&&typeof config.agent==="object"?config.agent:{};
@@ -265,7 +287,7 @@
   };
 
   var getStorageKey=function(){
-    return "lcfa-editor-thread:"+(config.postId||"global");
+    return "lcfa-editor-thread:"+String(config.threadOwner||0)+":"+(config.postId||"global");
   };
 
   var getPersistedThreadId=function(){
@@ -327,6 +349,8 @@
       else if(state==="suggested"){label=(config.labels&&config.labels.suggestedState)||"Suggestion ready. Review it or run it inline.";}
       else if(state==="previewed"){label=(config.labels&&config.labels.previewedState)||"Preview ready. Review the support details below.";}
       else if(state==="applied"){label=(config.labels&&config.labels.appliedState)||"Inline action completed.";}
+      else if(state==="saved"){label=(config.labels&&config.labels.savedState)||"Saved on server.";}
+      else if(state==="completed"){label=(config.labels&&config.labels.completedState)||"Request finished. Review the result.";}
       else if(state==="failed"){label=(config.labels&&config.labels.failedState)||"The current request failed. Review the support details below.";}
       else{label=(config.labels&&config.labels.idleState)||"Ready for a new request.";}
     }
@@ -348,7 +372,7 @@
     if(role==="tool_result"){
       if(Object.prototype.hasOwnProperty.call(meta,"ok")&&!meta.ok){return "failed";}
       if((meta.mode||"")==="preview"||(meta.mode||"")==="dry_run"){return "previewed";}
-      return "applied";
+      return "completed";
     }
     return "idle";
   };
@@ -423,7 +447,7 @@
     var hasPrompt=!!(promptInput&&promptInput.value&&promptInput.value.trim()!=="");
     var hasActionBusy=actionBusyMode==="preview"||actionBusyMode==="apply";
 
-    if(analyzeButton){analyzeButton.disabled=analyzeBusy||hasActionBusy||!hasPrompt;}
+    if(analyzeButton){analyzeButton.disabled=analyzeBusy||hasActionBusy||!hasPrompt||!pendingJobsChecked;}
   };
 
   var setSuggestionState=function(payload,isBusy,mode){
@@ -728,7 +752,7 @@
     setConversationState(isError?"failed":(payload&&payload.suggested_payload&&payload.suggested_payload.action?"suggested":"idle"));
   };
 
-  var renderExecutionResult=function(result,isError){
+  var renderExecutionResult=function(result,isError,reported){
     if(!resultBox||!resultSummary||!resultMeta){return;}
     resultBox.classList.add("is-visible");
     resultBox.classList.toggle("is-error",Boolean(isError));
@@ -751,6 +775,14 @@
       chip.textContent=entry.label+": "+entry.value;
       resultMeta.appendChild(chip);
     });
+    var verification=result&&result.verification_states||{};
+    ["saved","compiled","visually_verified","published"].forEach(function(key){
+      var value=verification[key];
+      var text=value===true?"Yes":(value===false?"No":(value==="not_applicable"?"Not applicable":"Not checked"));
+      var names={saved:"Saved",compiled:"Compiled",visually_verified:"Visually checked",published:"Published"};
+      var chip=document.createElement("span");chip.className="lcfa-editor-bridge__chip";
+      chip.textContent=(reported?"Agent reports ":"")+names[key]+": "+text;resultMeta.appendChild(chip);
+    });
     renderList(reasonsList,reasonsWrap,[]);
     renderList(warningsList,warningsWrap,result&&Array.isArray(result.warnings)?result.warnings:[]);
     renderWorkflow([]);
@@ -760,32 +792,57 @@
     renderMarkupPane(proposedNode,proposedWrap,result&&result.proposed_html?result.proposed_html:"",false);
   };
 
-  var getLiveCanvasRefreshUrl=function(){
-    var baseUrl=typeof window.lc_editor_url_to_load==="string"?window.lc_editor_url_to_load:"";
-    baseUrl=String(baseUrl||"");
-    if(baseUrl===""){return "";}
-    return baseUrl+(baseUrl.indexOf("?")===-1?"?":"&")+"lcfa_refresh="+String(Date.now());
+  var blockForEditor=function(state){
+    var label=state==="dirty"?"Save your editor changes before sending.":(state==="editing"?"Finish editing and close the code panel before sending.":(state==="saving"?"Wait for the page save, then send again.":"Editor state could not be verified. Wait for it to load, then retry."));
+    setConversationState("editor_attention",label);
+    return false;
+  };
+
+  var captureEditor=function(payload,baseline){
+    var current=editorBuffer?editorBuffer.read():{state:"unknown"};
+    if(current.state!=="clean"){return blockForEditor(current.state);}
+    if(baseline&&!editorBuffer.unchanged(baseline)){return blockForEditor("dirty");}
+    editorBaselines.set(payload,baseline||current);
+    return true;
+  };
+
+  var resultState=function(result,payload){
+    if(result&&result.ok===false){return "failed";}
+    if((payload&&payload.dry_run)||["preview","dry_run"].indexOf(result&&result.mode)!==-1){return "previewed";}
+    return result&&result.verification_states&&result.verification_states.saved===true?"saved":"completed";
   };
 
   var shouldRefreshLiveCanvas=function(result,payload){
     if(!payload||typeof payload!=="object"||payload.dry_run){return false;}
     if(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok){return false;}
-    var mode=String(result&&result.mode?result.mode:"apply");
-    if(mode!==""&&mode!=="apply"){return false;}
+    var mode=String(result&&result.mode||"");
+    if(mode!=="apply"||!result.verification_states||result.verification_states.saved!==true){return false;}
     var action=String((result&&result.action)||(payload&&payload.action)||"");
     if(action===""||action==="site_audit"){return false;}
-    if(typeof window.loadURLintoEditor!=="function"){return false;}
-    return getLiveCanvasRefreshUrl()!=="";
+    var target=Number(result&&result.target_id||0);
+    return target>0&&(target===Number(config.postId)||target===Number(config.targetId));
   };
 
-  var refreshLiveCanvas=function(result,payload){
+  var showEditorNotice=function(message){
+    if(editorNotice){editorNotice.hidden=!message;}
+    if(editorNoticeText){editorNoticeText.textContent=message||"";}
+    if(reviewSavedLink){reviewSavedLink.hidden=!message;}
+  };
+
+  var refreshLiveCanvas=function(result,payload,request){
     if(!shouldRefreshLiveCanvas(result,payload)){return false;}
-    try{
-      window.loadURLintoEditor(getLiveCanvasRefreshUrl());
-      return true;
-    }catch(error){
+    if(request&&(!Array.isArray(request.server_saved_targets)||request.server_saved_targets.indexOf(Number(result.target_id))===-1)){
+      showEditorNotice("Editor not reloaded: the agent's save is unverified. Review the saved page.");
       return false;
     }
+    var baseline=editorBaselines.get(payload);
+    var task=editorBuffer?editorBuffer.refresh(baseline):Promise.resolve({refreshed:false,reason:"adapter_unavailable"});
+    task.then(function(outcome){
+      if(!outcome.refreshed){
+        showEditorNotice(outcome.reason==="refresh_failed"?"Editor refresh failed. Review the saved page.":"Editor kept. Review the saved page before saving local changes.");
+      }else{showEditorNotice("");}
+    });
+    return true;
   };
 
   var buildPreviewPayload=function(payload){
@@ -849,7 +906,7 @@
         refreshLiveCanvas(execution.result||{},payload);
       }
       setSuggestionState(suggestionSource||payload,false,"");
-      setConversationState(execution.status==="failed"?"failed":(payload&&payload.dry_run?"previewed":"applied"));
+      setConversationState(execution.status==="failed"?"failed":resultState(execution.result,payload));
       return execution;
     });
   };
@@ -878,12 +935,13 @@
       renderExecutionResult(data&&data.result?data.result:{message:(config.labels&&config.labels.applyFailed)||"The inline execution failed."},false);
       refreshLiveCanvas(data&&data.result?data.result:{},payload);
       setSuggestionState(suggestionSource||payload,false,"");
-      setConversationState(payload.dry_run?"previewed":"applied");
+      setConversationState(resultState(data&&data.result,payload));
     });
   };
 
-  var runInlinePayload=function(payload){
+  var runInlinePayload=function(payload,baseline){
     if(!payload||typeof payload!=="object"||!payload.action){return;}
+    if(!payload.dry_run&&!captureEditor(payload,baseline)){return;}
     var busyMode=payload.dry_run?"preview":"apply";
     setSuggestionState(suggestionPayload||payload,true,busyMode);
     setConversationState("queueing");
@@ -974,26 +1032,42 @@
   };
 
   var renderAgentRequestThread=function(data,request){
+    if(request&&request.thread_id&&request.thread_id!==selectedThreadId){if(data&&data.thread){cacheThread(data.thread);}return;}
     if(data&&data.thread){cacheThread(data.thread);renderThread(data.thread);return;}
     if(request&&request.thread){cacheThread(request.thread);renderThread(request.thread);}
   };
 
   var finalizeAgentRequest=function(request,payload,data){
     var status=String(request&&request.status||"");
-    if(status!=="completed"&&status!=="failed"){return false;}
-    renderAgentRequestThread(data,request);
+    if(["completed","failed","needs_attention","cancelled","stopped"].indexOf(status)===-1){return false;}
+    if(request&&request.id){if(status!=="needs_attention"){delete frontendJobs[request.id];}syncStopButton();}
     var result=getAgentRequestResult(request);
-    var failed=status==="failed"||(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok);
-    renderExecutionResult(result,failed);
-    if(!failed){refreshLiveCanvas(result,payload);}
+    var failed=status==="failed"||status==="needs_attention"||(result&&Object.prototype.hasOwnProperty.call(result,"ok")&&!result.ok);
+    // The editor belongs to this page, not to the selected conversation.
+    if(status==="completed"&&!failed){refreshLiveCanvas(result,payload,request);}
+    if(request&&request.thread_id&&request.thread_id!==selectedThreadId){if(data&&data.thread){cacheThread(data.thread);}return true;}
+    if(status==="cancelled"||status==="stopped"){
+      renderAgentRequestThread(data,request);
+      setSuggestionState(null,false,"");
+      setConversationState(status,status==="cancelled"?((config.labels&&config.labels.requestCancelledState)||"Cancelled before the worker started."):((config.labels&&config.labels.bridgeStoppedState)||"Bridge worker stopped. Check the agent for any external activity."));
+      return true;
+    }
+    renderAgentRequestThread(data,request);
+    renderExecutionResult(result,failed,true);
     setSuggestionState(null,false,"");
-    setConversationState(failed?"failed":"applied");
+    setConversationState(failed?"failed":(["preview","dry_run"].indexOf(result.mode)!==-1?"previewed":"completed"));
     return true;
   };
 
   var scheduleAgentBackgroundPoll=function(requestId,payload){
     setTimeout(function(){
-      pollAgentRequest(requestId,payload,0,true).catch(function(){});
+      if(!frontendJobs[requestId]){return;}
+      pollAgentRequest(requestId,payload,0,true).catch(function(){
+        var job=frontendJobs[requestId];
+        if(!job){return;}
+        if(job.threadId===selectedThreadId){setConversationState("failed","Connection interrupted. Checking again; Stop is not confirmed.");}
+        scheduleAgentBackgroundPoll(requestId,payload);
+      });
     },getAgentBackgroundPollDelay());
   };
 
@@ -1007,16 +1081,24 @@
       return parseRestJson(response,(config.labels&&config.labels.applyFailed)||"The inline execution failed.");
     }).then(function(data){
       var request=data&&data.request&&typeof data.request==="object"?data.request:{};
+      var job=frontendJobs[requestId];
+      if(!job){return request;}
+      var isSelected=!request.thread_id||request.thread_id===selectedThreadId;
+      if(job&&request.status==="stop_requested"){job.stopRequested=true;syncStopButton();}
+      if(finalizeAgentRequest(request,payload,data)){return request;}
+      if(isSelected&&(request.status==="stop_requested"||(job&&job.stopRequested))){
+        setConversationState("stop_requested",(config.labels&&config.labels.stopRequestedState)||"Stop requested. Waiting for the Bridge worker.");
+      }else if(isSelected){
       if(request&&request.status==="running"){
         renderAgentRequestThread(data,request);
         setConversationState("running",(config.labels&&config.labels.agentRunningState)||("The coding agent is processing this request..."));
       }else{
         setConversationState("queueing",(config.labels&&config.labels.agentQueuedState)||("Waiting for "+getAgentLabel()+"..."));
       }
-      if(finalizeAgentRequest(request,payload,data)){return request;}
+      }
       var maxAttempts=isBackground?0:getAgentPollMaxAttempts();
       if(nextAttempt>=maxAttempts){
-        setConversationState("queueing",(config.labels&&config.labels.agentTimeoutState)||"Request queued. Keep the coding agent open, then this panel will update.");
+        if(isSelected&&!(job&&job.stopRequested)){setConversationState("queueing",(config.labels&&config.labels.agentTimeoutState)||"Request queued. Keep the coding agent open, then this panel will update.");}
         scheduleAgentBackgroundPoll(requestId,payload);
         return request;
       }
@@ -1027,6 +1109,16 @@
   };
 
   var enqueueAgentRequest=function(requestPayload){
+    var deliveryThread=requestPayload.thread_id||selectedThreadId;
+    var deliveryPayload=Object.assign({},requestPayload);delete deliveryPayload.idempotency_key;
+    var deliveryFingerprint=JSON.stringify(deliveryPayload);
+    var pendingDelivery=pendingFrontendDeliveries[deliveryThread];
+    if(pendingDelivery&&pendingDelivery.fingerprint!==deliveryFingerprint){
+      setBusy(false);setConversationState("failed","The previous delivery is unconfirmed. Retry the original prompt before sending a different request.");return;
+    }
+    if(pendingDelivery){requestPayload.idempotency_key=pendingDelivery.key;}
+    if(!requestPayload.idempotency_key){requestPayload.idempotency_key="prompt-"+(window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));}
+    pendingFrontendDeliveries[deliveryThread]={fingerprint:deliveryFingerprint,key:requestPayload.idempotency_key};
     setConversationState("queueing",(config.labels&&config.labels.agentQueuedState)||("Waiting for "+getAgentLabel()+"..."));
     fetch(config.agentRequestEndpoint,{
       method:"POST",
@@ -1037,16 +1129,57 @@
       return parseRestJson(response,(config.labels&&config.labels.analysisFailed)||"The request analysis failed.");
     }).then(function(data){
       var request=data&&data.request&&typeof data.request==="object"?data.request:{};
+      if(request.id){delete pendingFrontendDeliveries[deliveryThread];}
       renderAgentRequestThread(data,request);
       if(finalizeAgentRequest(request,requestPayload,data)){return request;}
       if(!request.id){throw {message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed.",data:data};}
+      frontendJobs[request.id]={id:request.id,threadId:request.thread_id||requestPayload.thread_id||selectedThreadId,payload:requestPayload};
+      syncStopButton();
       return pollAgentRequest(request.id,requestPayload,0);
     }).catch(function(error){
+      if(error&&error.data&&(error.data.delivery_state==="not_queued"||["rest_forbidden","rest_cookie_invalid_nonce"].indexOf(error.data.code)!==-1)){delete pendingFrontendDeliveries[deliveryThread];}
+      var jobs=Object.keys(frontendJobs).filter(function(id){return frontendJobs[id].payload===requestPayload;});
+      if(jobs.length){scheduleAgentBackgroundPoll(jobs[0],requestPayload);}
+      if(requestPayload.thread_id&&requestPayload.thread_id!==selectedThreadId){return;}
       setSuggestionState(null,false,"");
       if(error&&error.data&&error.data.thread){cacheThread(error.data.thread);renderThread(error.data.thread);}
       renderExecutionResult(error&&error.data&&error.data.result?error.data.result:{ok:false,message:error&&error.message?error.message:((config.labels&&config.labels.analysisFailed)||"The request analysis failed.")},true);
       setConversationState("failed");
     }).finally(function(){setBusy(false);});
+  };
+
+  if(stopButton){stopButton.addEventListener("click",function(){
+    var job=selectedFrontendJob();
+    if(!job||job.stopPending||job.stopRequested||!config.agentStopEndpoint){return;}
+    job.stopPending=true;syncStopButton();
+    fetch(config.agentStopEndpoint,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-WP-Nonce":config.restNonce||""},body:JSON.stringify({request_id:job.id})})
+    .then(function(response){return parseRestJson(response,"Stop could not be confirmed.");})
+    .then(function(data){
+      var request=data&&data.request||{};
+      if(finalizeAgentRequest(request,job.payload,data)){return;}
+      if(request.status!=="stop_requested"){throw new Error("Stop could not be confirmed.");}
+      job.stopRequested=true;
+      if(job.threadId===selectedThreadId){setConversationState("stop_requested",(config.labels&&config.labels.stopRequestedState)||"Stop requested. Waiting for the Bridge worker.");}
+    }).catch(function(){
+      if(job.threadId===selectedThreadId){setConversationState("failed",(config.labels&&config.labels.stopFailedState)||"Stop could not be confirmed. Check the connection and try Stop again.");}
+    }).finally(function(){job.stopPending=false;syncStopButton();});
+  });}
+
+  var resumeFrontendJobs=function(){
+    if(!config.agentPendingEndpoint){return;}
+    fetch(config.agentPendingEndpoint,{method:"GET",credentials:"same-origin",headers:{"X-WP-Nonce":config.restNonce||""}})
+    .then(function(response){return parseRestJson(response,"Pending requests could not be checked.");})
+    .then(function(data){
+      (Array.isArray(data&&data.requests)?data.requests:[]).forEach(function(request){
+        if(Number(request.context_post_id||request.post_id||request.target_id||0)!==Number(config.postId||0)||!request.id||frontendJobs[request.id]){return;}
+        var payload={thread_id:request.thread_id,target_id:request.target_id};
+        frontendJobs[request.id]={id:request.id,threadId:request.thread_id,payload:payload,stopRequested:!!request.stop_requested_at};
+        if(request.status!=="needs_attention"){scheduleAgentBackgroundPoll(request.id,payload);}
+        else if(request.thread_id===selectedThreadId){setConversationState("failed",request.error||"Worker status needs review.");}
+      });
+      syncStopButton();
+      pendingJobsChecked=true;syncComposerButtons();
+    }).catch(function(){setConversationState("failed","Pending requests could not be checked. Reopen the panel to retry.");});
   };
 
   var getAbilityContractForAction=function(action){
@@ -1074,7 +1207,7 @@
   };
 
   var analyzeRequest=function(){
-    if(!promptInput){return;}
+    if(!promptInput||analyzeBusy||!pendingJobsChecked){return;}
     var prompt=promptInput.value.trim();
     if(prompt===""){
       renderSuggestion({message:(config.labels&&config.labels.requestRequired)||"Write a request first so AI Bridge can suggest an action."},true);
@@ -1102,6 +1235,7 @@
       requestPayload.codex_options=codexRuntimeOptions;
     }
     requestPayload=withFrontendProvenance(requestPayload);
+    if(!captureEditor(requestPayload)){setBusy(false);return;}
     if(attachmentState&&attachmentState.data_url){
       requestPayload.attachments=[attachmentState];
     }
@@ -1129,7 +1263,7 @@
       if(data&&data.suggestion&&data.suggestion.suggested_payload&&data.suggestion.suggested_payload.action){
         setSuggestionState(data.suggestion.suggested_payload,false,"");
         updateDeckLink(data.suggestion.suggested_payload);
-        runInlinePayload(buildApplyPayload(data.suggestion.suggested_payload));
+        runInlinePayload(buildApplyPayload(data.suggestion.suggested_payload),editorBaselines.get(requestPayload));
         return;
       }
       renderSuggestion(data&&data.suggestion?data.suggestion:{message:(config.labels&&config.labels.analysisFailed)||"The request analysis failed."},false);
@@ -1175,8 +1309,9 @@
       resetSupportDetails();
       setSuggestionState(null,false,"");
       hydrateSelectedThread();
+      syncStopButton();
       updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
-    }).catch(function(){setConversationState("failed");});
+    }).catch(function(error){if(payload.thread_id===selectedThreadId){setConversationState("failed",error&&error.message?error.message:"Conversation change failed. Try again.");}});
   };
 
   var previewSuggestion=function(){
@@ -1191,7 +1326,7 @@
     runInlinePayload(payload);
   };
 
-  if(openBtn){openBtn.addEventListener("click",function(){setOpen(true);});}
+  if(openBtn){openBtn.addEventListener("click",function(){setOpen(true);resumeFrontendJobs();});}
   if(closeBtn){closeBtn.addEventListener("click",function(){setOpen(false);});}
   if(analyzeButton){analyzeButton.addEventListener("click",analyzeRequest);}
   if(createThreadButton){createThreadButton.addEventListener("click",function(){manageThread("create");});}
@@ -1243,6 +1378,7 @@
       resetSupportDetails();
       setSuggestionState(null,false,"");
       hydrateSelectedThread();
+      syncStopButton();
       updateDeckLink({action:config.defaultAction||"site_audit",execution_target:targetSelect&&targetSelect.value?targetSelect.value:"local",target_id:config.targetId||0,variant:config.variant||"1"});
     });
   }
@@ -1271,6 +1407,7 @@
   if(config.threads&&typeof config.threads==="object"){hydrateSelectedThread();}
   else{setConversationState(statusNode?statusNode.getAttribute("data-state")||"idle":"idle",statusNode?statusNode.textContent||"":"");}
   waitForLauncherReady();
+  resumeFrontendJobs();
 
   document.addEventListener("keydown",function(event){if(event.key==="Escape"){setOpen(false);}});
   document.addEventListener("click",function(event){

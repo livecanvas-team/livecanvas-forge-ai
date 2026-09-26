@@ -109,13 +109,16 @@ final class LCFA_Admin {
         add_action('admin_post_lcfa_resolve_framework_change_connection', [$this, 'handle_framework_change_connection_post']);
         add_action('admin_post_lcfa_deactivate_redundant_windpress', [$this, 'handle_deactivate_redundant_windpress_post']);
         add_action('admin_post_lcfa_project_brief', [$this, 'handle_project_brief_post']);
+        add_action('admin_post_lcfa_site_knowledge', [$this, 'handle_site_knowledge_post']);
         add_action('admin_post_lcfa_generate_plan', [$this, 'handle_generate_plan_post']);
         add_action('admin_post_lcfa_genesis_execute', [$this, 'handle_genesis_execute_post']);
         add_action('admin_post_lcfa_theme_library', [$this, 'handle_theme_library_post']);
         add_action('admin_post_lcfa_create_thread', [$this, 'handle_create_thread_post']);
         add_action('admin_post_lcfa_command', [$this, 'handle_command_post']);
-        add_action('lc_editor_header', [$this, 'render_editor_bridge_styles']);
-        add_action('lc_editor_before_body_closing', [$this, 'render_editor_bridge']);
+        // The in-editor agent launcher is intentionally not registered. Its
+        // delivery transport is still under qualification, so WordPress must
+        // not present a control that can appear to start a coding agent.
+        // Agents connect through AI Bridge > Connect and use MCP instead.
     }
 
     public function suppress_external_admin_notices($screen = null): void {
@@ -446,22 +449,9 @@ final class LCFA_Admin {
             true
         );
 
-        wp_enqueue_script('lcfa-connect', LCFA_URL . 'assets/connect.js', ['lcfa-admin-script'], LCFA_VERSION, true);
-        wp_enqueue_style('lcfa-connect', LCFA_URL . 'assets/connect.css', ['lcfa-admin-v2'], LCFA_VERSION);
-        wp_localize_script('lcfa-connect', 'lcfaConnect', [
-            'project' => __('Open your project in the selected agent and paste the setup instructions.', 'livecanvas-forge-ai'),
-            'desktop' => __('Run the setup command in Terminal or PowerShell on the computer where Claude Desktop is installed. Then restart the app.', 'livecanvas-forge-ai'),
-            'failed' => __('The connection request failed. Retry or open manual setup.', 'livecanvas-forge-ai'),
-            'waiting_for_client' => __('Waiting for the agent to run the setup instructions.', 'livecanvas-forge-ai'),
-            'authorization_required' => __('Check that this code matches the installer, then authorize Full Access for this connection.', 'livecanvas-forge-ai'),
-            'verifying' => __('Access approved. Reload the agent’s MCP connection and ask it to call get_connection_handoff.', 'livecanvas-forge-ai'),
-            'ready' => __('Connected. The selected agent successfully read this WordPress site.', 'livecanvas-forge-ai'),
-            'expired' => __('This connection request expired. Start a new connection.', 'livecanvas-forge-ai'),
-            'reconnect_required' => __('This session expired or was revoked. Start a new connection.', 'livecanvas-forge-ai'),
-            'copied' => __('Copied. Paste the instructions into your agent, or the command into Terminal for Claude Desktop.', 'livecanvas-forge-ai'),
-            'copyManually' => __('Automatic copy is unavailable. Copy the selected instructions below.', 'livecanvas-forge-ai'),
-            'code' => __('Verification code', 'livecanvas-forge-ai'),
-        ]);
+        wp_enqueue_script('lcfa-connect', LCFA_URL . 'assets/connect.js', ['lcfa-admin-script'], LCFA_VERSION . '.' . filemtime(LCFA_DIR . 'assets/connect.js'), true);
+        wp_enqueue_style('lcfa-connect', LCFA_URL . 'assets/connect.css', ['lcfa-admin-v2'], LCFA_VERSION . '.' . filemtime(LCFA_DIR . 'assets/connect.css'));
+        wp_localize_script('lcfa-connect', 'lcfaConnect', LCFA_Connection_Screen::labels());
 
         wp_localize_script('lcfa-admin-script', 'lcfaAdmin', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -566,6 +556,11 @@ final class LCFA_Admin {
     }
 
     public function render_editor_bridge_styles(): void {
+        // Kept as a no-op for integrations that called the old hook directly.
+        // Do not load the in-editor launcher until its delivery transport has
+        // completed end-to-end qualification.
+        return;
+
         if (!current_user_can('manage_options')) {
             return;
         }
@@ -573,16 +568,22 @@ final class LCFA_Admin {
         $asset_root    = defined('LCFA_DIR') ? LCFA_DIR : dirname(__DIR__) . '/';
         $asset_version = rawurlencode((string) LCFA_VERSION . '-' . (string) max(
             file_exists($asset_root . 'assets/editor-chat.css') ? (int) filemtime($asset_root . 'assets/editor-chat.css') : 0,
-            file_exists($asset_root . 'assets/editor-chat.js') ? (int) filemtime($asset_root . 'assets/editor-chat.js') : 0
+            file_exists($asset_root . 'assets/editor-chat.js') ? (int) filemtime($asset_root . 'assets/editor-chat.js') : 0,
+            file_exists($asset_root . 'assets/editor-buffer.js') ? (int) filemtime($asset_root . 'assets/editor-buffer.js') : 0
         ));
         $css_url       = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.css');
         $js_url        = add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-chat.js');
 
         echo '<link rel="stylesheet" id="lcfa-editor-chat-css" href="' . esc_url($css_url) . '">';
+        echo '<script id="lcfa-editor-buffer-js" src="' . esc_url(add_query_arg(['ver' => $asset_version], LCFA_URL . 'assets/editor-buffer.js')) . '" defer></script>';
         echo '<script id="lcfa-editor-chat-js" src="' . esc_url($js_url) . '" defer></script>';
     }
 
     public function render_editor_bridge(): void {
+        // Kept as a no-op for integrations that called the old hook directly.
+        // The UI must not enqueue or launch an unqualified agent session.
+        return;
+
         if (!current_user_can('manage_options')) {
             return;
         }
@@ -598,6 +599,7 @@ final class LCFA_Admin {
         $actions = $this->get_editor_bridge_actions($post, $context);
         $thread_summaries = array_slice(LCFA_Settings::get_thread_summaries(), 0, 8);
         $current_thread_id = LCFA_Settings::normalize_thread_id((string) ($_GET['thread_id'] ?? 'default'));
+        if (!LCFA_Settings::get_thread($current_thread_id)) $current_thread_id = 'default';
         $thread_payloads = [];
         $current_thread_messages = [];
 
@@ -670,6 +672,8 @@ final class LCFA_Admin {
             'restEndpoint' => rest_url('lcfa/v1/chat/send'),
             'threadEndpoint' => rest_url('lcfa/v1/chat/thread'),
             'agentRequestEndpoint' => rest_url('lcfa/v1/agent/request'),
+            'agentStopEndpoint' => rest_url('lcfa/v1/agent/request/cancel'),
+            'agentPendingEndpoint' => rest_url('lcfa/v1/agent/request/pending'),
             'commandEndpoint' => rest_url('lcfa/v1/command'),
             'commandExecutionEndpoint' => rest_url('lcfa/v1/command/execution'),
             'restNonce'    => wp_create_nonce('wp_rest'),
@@ -694,6 +698,7 @@ final class LCFA_Admin {
             'variant'      => (string) ($context['variant'] ?? '1'),
             'defaultAction'=> $default_action,
             'threadId'     => $current_thread_id,
+            'threadOwner'  => get_current_user_id(),
             'threads'      => $thread_payloads,
             'threadSummaries' => array_values($thread_summaries),
             'labels'       => [
@@ -714,11 +719,17 @@ final class LCFA_Admin {
                 'suggestedState'  => __('Request prepared.', 'livecanvas-forge-ai'),
                 'previewedState'  => __('Preview ready. Review the support details below.', 'livecanvas-forge-ai'),
                 'appliedState'    => __('Change applied inline.', 'livecanvas-forge-ai'),
+                'savedState'      => __('Saved on server.', 'livecanvas-forge-ai'),
+                'completedState'  => __('Request finished. Review the result.', 'livecanvas-forge-ai'),
                 'failedState'     => __('The current request failed. Review the support details below.', 'livecanvas-forge-ai'),
                 'queuedState'     => __('Queued for inline execution.', 'livecanvas-forge-ai'),
                 'runningState'    => __('Running inline execution...', 'livecanvas-forge-ai'),
                 'agentQueuedState' => __('Waiting for the connected coding agent...', 'livecanvas-forge-ai'),
                 'agentRunningState' => __('The coding agent is processing this request...', 'livecanvas-forge-ai'),
+                'stopRequestedState' => __('Stop requested. Waiting for the Bridge worker.', 'livecanvas-forge-ai'),
+                'bridgeStoppedState' => __('Bridge worker stopped. Check the agent for any external activity.', 'livecanvas-forge-ai'),
+                'requestCancelledState' => __('Cancelled before the worker started.', 'livecanvas-forge-ai'),
+                'stopFailedState' => __('Stop could not be confirmed. Check the connection and try Stop again.', 'livecanvas-forge-ai'),
                 'agentTimeoutState' => __('Request queued. Keep the coding agent open, process the AI Bridge frontend queue, then this panel will update.', 'livecanvas-forge-ai'),
                 'creatingThread'  => __('Creating thread...', 'livecanvas-forge-ai'),
                 'duplicatingThread' => __('Duplicating thread...', 'livecanvas-forge-ai'),
@@ -851,14 +862,19 @@ final class LCFA_Admin {
         echo $this->get_icon_svg('stars');
         echo '<span data-lcfa-editor-button-label>' . esc_html__('Send', 'livecanvas-forge-ai') . '</span>';
         echo '</button>';
+        echo '<button type="button" class="lcfa-editor-bridge__button is-neutral is-step-primary" data-lcfa-editor-stop hidden>' . esc_html__('Stop', 'livecanvas-forge-ai') . '</button>';
         echo '</div>';
-        echo '<p class="lcfa-editor-bridge__action-note">' . esc_html($connection_state === 'connected' ? __('Send queues the prompt for the connected coding agent. The drawer waits for the MCP result, then refreshes the LiveCanvas editor.', 'livecanvas-forge-ai') : __('Send analyzes the request and executes the change immediately on this page.', 'livecanvas-forge-ai')) . '</p>';
+        echo '<p class="lcfa-editor-bridge__action-note">' . esc_html__('Save local edits before sending. Bridge keeps edits made while the agent works.', 'livecanvas-forge-ai') . '</p>';
         echo '</div>';
+        echo '</div>';
+        echo '<div class="lcfa-editor-bridge__editor-notice" data-lcfa-editor-notice hidden>';
+        echo '<p role="status" aria-live="polite" aria-atomic="true" data-lcfa-editor-notice-text></p>';
+        echo '<a class="lcfa-editor-bridge__button is-neutral" data-lcfa-editor-review-saved hidden target="_blank" rel="noopener noreferrer" href="' . esc_url(get_preview_post_link($post)) . '">' . esc_html__('Review saved page', 'livecanvas-forge-ai') . '</a>';
         echo '</div>';
         echo '<div class="lcfa-editor-bridge__section">';
         echo '<div class="lcfa-editor-bridge__label">' . esc_html__('Conversation', 'livecanvas-forge-ai') . '</div>';
         echo '<div class="lcfa-editor-bridge__thread-bar">';
-        echo '<span class="lcfa-editor-bridge__thread-status" data-lcfa-editor-status data-state="' . esc_attr($initial_conversation_state) . '">' . esc_html($initial_conversation_label) . '</span>';
+        echo '<span class="lcfa-editor-bridge__thread-status" role="status" aria-live="polite" aria-atomic="true" data-lcfa-editor-status data-state="' . esc_attr($initial_conversation_state) . '">' . esc_html($initial_conversation_label) . '</span>';
         echo '</div>';
         echo '<div class="lcfa-editor-thread-log" data-lcfa-editor-thread-log>';
         foreach ($current_thread_messages as $message) {
@@ -2194,6 +2210,29 @@ final class LCFA_Admin {
         );
 
         wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=setup&step=1'));
+        exit;
+    }
+
+    public function handle_site_knowledge_post(): void {
+        if (!current_user_can('manage_options')) wp_die(esc_html__('Insufficient permissions.', 'livecanvas-forge-ai'));
+        check_admin_referer('lcfa_site_knowledge');
+        if (!is_string($_POST['instructions'] ?? null)) wp_die(esc_html__('A plain-text instructions field is required.', 'livecanvas-forge-ai'), '', ['response' => 400]);
+        $draft = wp_unslash($_POST['instructions']);
+        try {
+            $saved = LCFA_Site_Knowledge::review($draft, is_string($_POST['knowledge_revision'] ?? null) ? $_POST['knowledge_revision'] : '', (string) ($_POST['_wpnonce'] ?? ''));
+        } catch (Throwable $error) {
+            $messages = [
+                'knowledge_revision_conflict' => __('Someone changed the shared instructions. Your draft is below. Review the current instructions in another tab before saving again.', 'livecanvas-forge-ai'),
+                'knowledge_text_invalid' => __('Use shorter plain text (at most 12 KB). Your draft is below.', 'livecanvas-forge-ai'),
+                'knowledge_save_unverified' => __('The save could not be confirmed. Check the current instructions before retrying. Your draft is below.', 'livecanvas-forge-ai'),
+                'knowledge_admin_review_required' => __('Save shared instructions directly in WordPress as an administrator.', 'livecanvas-forge-ai'),
+            ];
+            ob_start();
+            LCFA_Site_Knowledge::render_controls($draft, $messages[$error->getMessage()] ?? __('Instructions were not saved. Check site storage before retrying. Your draft is below.', 'livecanvas-forge-ai'));
+            wp_die(ob_get_clean(), esc_html__('Review shared instructions', 'livecanvas-forge-ai'), ['response' => 409]);
+        }
+        LCFA_Settings::set_notice($saved['site_knowledge']['state'] === 'not_shared' ? __('Site instructions are no longer shared.', 'livecanvas-forge-ai') : __('Site instructions shared. Agents must refresh their context before writing.', 'livecanvas-forge-ai'));
+        wp_safe_redirect(admin_url('admin.php?page=lcfa-dashboard&tab=genesis'));
         exit;
     }
 
@@ -3727,6 +3766,7 @@ final class LCFA_Admin {
         echo '<button class="button button-primary">' . esc_html__('Save Project Brief', 'livecanvas-forge-ai') . '</button>';
         echo '</div>';
         echo '</form>';
+        LCFA_Site_Knowledge::render_controls();
         echo '</section>';
 
         echo '<section class="lcfa-card">';
@@ -7980,7 +8020,9 @@ final class LCFA_Admin {
         $this->render_brand_tile(
             $snapshot['detected_framework'] === 'picowind' ? __('Picowind', 'livecanvas-forge-ai') : __('Bootstrap', 'livecanvas-forge-ai'),
             $snapshot['detected_framework'] === 'picowind' ? $this->get_icon_svg('wind') : $this->get_partner_logo('bootstrap'),
-            $snapshot['framework_slug'] ?: __('No editor config detected', 'livecanvas-forge-ai'),
+            !empty($snapshot['framework_slug'])
+                ? sprintf(__('Editor preset: %s', 'livecanvas-forge-ai'), $snapshot['framework_slug'])
+                : __('No editor preset detected', 'livecanvas-forge-ai'),
             'other'
         );
         $this->render_brand_tile(
@@ -7994,12 +8036,13 @@ final class LCFA_Admin {
         echo '<ul class="lcfa-facts">';
         $this->render_fact_row(__('Theme', 'livecanvas-forge-ai'), $snapshot['current_theme_name'], 'active');
         $this->render_fact_row(__('Detected framework', 'livecanvas-forge-ai'), $snapshot['detected_framework'], $snapshot['detected_framework'] !== 'unknown' ? 'active' : 'other');
-        $this->render_fact_row(__('Editor config', 'livecanvas-forge-ai'), $snapshot['framework_slug'] ?: 'n/a', $snapshot['framework_slug'] ? 'active' : 'other');
+        $this->render_fact_row(__('Editor preset', 'livecanvas-forge-ai'), $snapshot['framework_slug'] ?: 'n/a', 'other');
         $this->render_fact_row(__('Site profile', 'livecanvas-forge-ai'), $settings['site_mode'] ?: $snapshot['site_mode'], !empty($settings['site_mode']) ? 'active' : 'other');
         $this->render_fact_row(__('Tangible', 'livecanvas-forge-ai'), $snapshot['tangible_available'] ? __('Available', 'livecanvas-forge-ai') : __('Unavailable', 'livecanvas-forge-ai'), $snapshot['tangible_available'] ? 'active' : 'other');
         $this->render_fact_row(__('WooCommerce', 'livecanvas-forge-ai'), $snapshot['woocommerce_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'), $snapshot['woocommerce_active'] ? 'active' : 'other');
         $this->render_fact_row(__('ACF', 'livecanvas-forge-ai'), $snapshot['acf_active'] ? __('Detected', 'livecanvas-forge-ai') : __('Not detected', 'livecanvas-forge-ai'), $snapshot['acf_active'] ? 'active' : 'other');
         echo '</ul>';
+        echo '<p class="description">' . esc_html__('The editor preset controls suggestions. Agents verify compiled plugins separately before writing.', 'livecanvas-forge-ai') . '</p>';
         echo '</section>';
     }
 
@@ -8307,6 +8350,7 @@ final class LCFA_Admin {
         }
         echo '</div>';
         echo '</details>';
+        echo '</div>';
         echo '</div>';
         echo '</header>';
     }
@@ -10336,7 +10380,7 @@ final class LCFA_Admin {
                 return 'previewed';
             }
 
-            return 'applied';
+            return 'completed';
         }
 
         return 'idle';
@@ -10344,6 +10388,8 @@ final class LCFA_Admin {
 
     private function get_editor_conversation_state_label(string $state): string {
         switch ($state) {
+            case 'completed':
+                return __('Request finished. Review the result.', 'livecanvas-forge-ai');
             case 'thinking':
                 return __('Sending request...', 'livecanvas-forge-ai');
             case 'queueing':

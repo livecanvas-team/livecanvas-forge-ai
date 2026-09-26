@@ -18,6 +18,7 @@ final class LCFA_Environment {
         $current_theme = wp_get_theme();
         $parent_theme = $current_theme->parent();
         $framework = $this->detect_framework_family();
+        $editor_profile = $this->get_editor_profile();
         $livecanvas_plugin_file = $this->find_plugin_file_by_slug('livecanvas');
         $windpress_plugin_file = $this->find_plugin_file_by_slug('windpress');
         $windpress_installed = $windpress_plugin_file !== null;
@@ -53,7 +54,9 @@ final class LCFA_Environment {
             'framework_version'       => $parent_theme instanceof WP_Theme && in_array($framework, ['picostrap', 'picowind'], true)
                 ? (string) $parent_theme->get('Version')
                 : (string) $current_theme->get('Version'),
-            'framework_slug'          => $this->get_livecanvas_editor_config_slug(),
+            // Legacy key retained for consumers; this is an editor preset, not build evidence.
+            'framework_slug'          => $editor_profile['slug'],
+            'editor_profile'          => $editor_profile,
             'site_mode'               => $this->detect_site_mode(),
             'windpress_installed'     => $windpress_installed,
             'windpress_active'        => $windpress_active,
@@ -257,6 +260,16 @@ final class LCFA_Environment {
         }
 
         return '';
+    }
+
+    public function get_editor_profile(): array {
+        return [
+            'slug' => $this->get_livecanvas_editor_config_slug(),
+            'role' => 'editor_preset_only',
+            'is_compile_evidence' => false,
+            'capability_check' => 'get_write_context.context.pipeline',
+            'instructions' => 'The editor preset controls editing suggestions. Its name does not verify that framework plugins compile. Use DaisyUI or Typography classes only when the current write context reports the plugin as compiled.',
+        ];
     }
 
     public function detect_framework_family(): string {

@@ -1,573 +1,115 @@
-const crypto = require('node:crypto')
 const http = require('node:http')
-const { URL } = require('node:url')
+const { BridgeSecurity, fail } = require('./bridge-security')
+const VERSION = require('../package.json').version
+const MAX_BODY = 8 * 1024 * 1024
+// Explicit reviewed subset. New registry tools are private by default. Local
+// file discovery, compilers, worker claims and generic commands stay off HTTP.
+const BROWSER_TOOLS = new Set([
+  'list_workflows', 'read_workflow', 'get_write_context', 'get_context',
+  'get_theme_context', 'get_page_html', 'get_acf_fields', 'list_lc_blocks',
+  'list_changesets', 'undo_changeset', 'update_discussion_settings',
+  'content_patch_preview', 'content_patch_apply', 'theme_file_read',
+  'theme_file_preview_write', 'theme_file_write', 'validate_markup_for_framework'
+])
 
-async function startBridgeServer({ client, tools, themeFiles, windpressCompiler, config }) {
-  const preflight = await client.getMcpStatus()
-
-  if (config.verbose) {
-    process.stderr.write(`[livecanvas-forge-mcp] bridge preflight ok for ${preflight.mcp.endpoint}\n`)
-  }
-
-  const server = http.createServer(async (request, response) => {
+async function startBridgeServer({ client, tools, config }) {
+  const security = await BridgeSecurity.create(config, client)
+  client.config.transportBound = true
+  const visible = () => tools.list().filter(tool => BROWSER_TOOLS.has(tool.name))
+  let active = 0
+  const server = http.createServer({ maxHeaderSize: 8192 }, async (request, response) => {
+    response.setHeader('Cache-Control', 'no-store')
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    let counted = false
     try {
-      await handleHttpRequest(request, response, client, tools, themeFiles, windpressCompiler)
+      const port = server.address().port
+      security.checkAddress(request, port)
+      if (request.headers.origin) {
+        response.setHeader('Access-Control-Allow-Origin', security.origin)
+        response.setHeader('Vary', 'Origin')
+      }
+      if (request.method === 'OPTIONS') {
+        if (request.headers.origin !== security.origin ||
+            !['GET', 'POST'].includes(request.headers['access-control-request-method']) ||
+            String(request.headers['access-control-request-headers'] || '').toLowerCase().split(',').some(name => !['', 'authorization', 'content-type'].includes(name.trim()))) fail('bridge_preflight_rejected')
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST')
+        response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+        response.writeHead(204); response.end(); return
+      }
+      if (active >= 4) fail('bridge_busy', 429)
+      active++; counted = true
+      await security.authorize(request, port)
+      if (request.method === 'GET' && request.url === '/health') {
+        sendJson(response, 200, { ok: true, transport: 'authenticated_loopback', version: VERSION, desktop_conversation_verified: false }); return
+      }
+      if (request.method === 'GET' && request.url === '/tools') {
+        sendJson(response, 200, { ok: true, tools: visible() }); return
+      }
+      if (request.method === 'POST' && request.url === '/tools/call') {
+        const payload = await readJsonBody(request)
+        if (typeof payload.name !== 'string' || !visible().some(tool => tool.name === payload.name)) fail('bridge_tool_unavailable', 403)
+        if (payload.arguments !== undefined && (!payload.arguments || typeof payload.arguments !== 'object' || Array.isArray(payload.arguments))) fail('bridge_arguments_invalid', 400)
+        // Recheck after receiving the body, before a potentially mutating call.
+        await security.authorize(request, port)
+        const result = await tools.invoke(payload.name, payload.arguments || {})
+        sendJson(response, 200, { ok: true, result }); return
+      }
+      sendJson(response, 410, { ok: false, code: 'legacy_bridge_route_retired', message: 'Use the authenticated /tools and /tools/call endpoints.' })
     } catch (error) {
-      sendJson(response, 500, {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
+      // Do not keep unread or oversized request bodies alive after rejection.
+      response.setHeader('Connection', 'close')
+      response.once('finish', () => request.socket.destroy())
+      const status = Number.isInteger(error.status) ? error.status : 503
+      const code = /^bridge_|^(owned_session|required_|approved_|private_bridge|invalid_bridge|expired_bridge)/.test(error.code || '') ? error.code : 'bridge_operation_failed'
+      sendJson(response, status, { ok: false, code })
+    } finally { if (counted) active-- }
   })
-
+  // The former hand-written, unauthenticated WebSocket RPC is retired.
+  // Streaming requires a separately qualified owner-bound desktop transport.
   server.on('upgrade', (request, socket) => {
-    try {
-      handleUpgrade(request, socket, tools)
-    } catch (error) {
-      socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n')
-      socket.destroy()
-    }
+    socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
   })
-
+  server.maxConnections = 32
+  server.requestTimeout = 15000
+  server.headersTimeout = 10000
+  server.keepAliveTimeout = 1000
   await new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(config.port, config.host, () => resolve())
+    server.listen(config.port, '127.0.0.1', resolve)
   })
-
-  process.stderr.write(`[livecanvas-forge-mcp] bridge listening on http://${config.host}:${config.port}\n`)
-
+  process.stderr.write('[livecanvas-forge-mcp] authenticated loopback listener ready; desktop chat is not connected\n')
   return server
 }
 
-async function handleHttpRequest(request, response, client, tools, themeFiles, windpressCompiler) {
-  const url = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
-
-  if (request.method === 'GET' && url.pathname === '/health') {
-    const status = await client.getMcpStatus()
-    sendJson(response, 200, {
-      ok: true,
-      mode: 'bridge',
-      status: status.mcp
-    })
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/bootstrap') {
-    sendJson(response, 200, await client.getMcpBootstrap())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/tools') {
-    sendJson(response, 200, {
-      ok: true,
-      tools: tools.list()
-    })
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/snapshot') {
-    sendJson(response, 200, await client.getSnapshot())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/inventory') {
-    sendJson(response, 200, await client.getInventory())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/context') {
-    sendJson(response, 200, await client.getContext(queryToObject(url)))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme-context') {
-    sendJson(response, 200, await client.getThemeContext(queryToObject(url)))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/genesis/plan') {
-    sendJson(response, 200, await client.getGenesisPlan())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/genesis/execution-plan') {
-    sendJson(response, 200, await client.getGenesisExecutionPlan())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/page-html') {
-    sendJson(response, 200, await client.getPageHtml(url.searchParams.get('post_id')))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/acf-fields') {
-    sendJson(response, 200, await client.getAcfFields(url.searchParams.get('post_type') || 'page'))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/library/blocks') {
-    sendJson(response, 200, await client.getBlocksLibrary())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/windpress/status') {
-    sendJson(response, 200, await client.getWindPressStatus())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/windpress/volume') {
-    sendJson(response, 200, await client.getWindPressVolume({
-      include_content: url.searchParams.get('include_content') === '1' || url.searchParams.get('include_content') === 'true',
-      handler: url.searchParams.get('handler') || '',
-      extension: url.searchParams.get('extension') || '',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/windpress/volume/handlers') {
-    sendJson(response, 200, await client.getWindPressHandlers())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/windpress/providers') {
-    sendJson(response, 200, await client.getWindPressProviders())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/roots') {
-    sendJson(response, 200, await themeFiles.getThemeRoots())
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/files') {
-    sendJson(response, 200, await themeFiles.listFiles({
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      directory: url.searchParams.get('directory') || '',
-      extensions: collectQueryValues(url, 'extension'),
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/templates') {
-    sendJson(response, 200, await themeFiles.listTemplates({
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/templates/twig') {
-    sendJson(response, 200, await themeFiles.listTemplatesByExtension('twig', {
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/templates/latte') {
-    sendJson(response, 200, await themeFiles.listTemplatesByExtension('latte', {
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/templates/php') {
-    sendJson(response, 200, await themeFiles.listTemplatesByExtension('php', {
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/file') {
-    sendJson(response, 200, await themeFiles.readFile({
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      path: url.searchParams.get('path') || ''
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/template') {
-    sendJson(response, 200, await themeFiles.readTemplateFile({
-      root_scope: url.searchParams.get('root_scope') || 'active',
-      path: url.searchParams.get('path') || ''
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/backups') {
-    sendJson(response, 200, await themeFiles.listBackups({
-      path: url.searchParams.get('path') || '',
-      kind: url.searchParams.get('kind') || '',
-      limit: url.searchParams.get('limit')
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/theme/backup') {
-    sendJson(response, 200, await themeFiles.readBackup({
-      backup_id: url.searchParams.get('backup_id') || url.searchParams.get('id') || ''
-    }))
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/command/actions') {
-    sendJson(response, 200, await client.getCommandActions())
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/command/suggest') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.suggestCommand(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/genesis/plan/generate') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.generateGenesisPlan(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/genesis/execute-next') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.executeGenesisNext(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/genesis/execute-task') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.executeGenesisTask(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/command') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.runCommand(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/volume') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.saveWindPressVolumeEntries(payload.entries || []))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/providers/scan') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.scanWindPressProvider(
-      payload.provider_id || '',
-      payload.metadata || {},
-      payload.decode_contents !== false
-    ))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/providers/scan/full') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.scanWindPressProviderFull(
-      payload.provider_id || '',
-      {
-        metadata: payload.metadata || {},
-        decode_contents: payload.decode_contents !== false,
-        max_batches: payload.max_batches
-      }
-    ))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/theme-json') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.saveWindPressThemeJson(payload.theme_json ?? payload.data ?? ''))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/cache') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.saveWindPressCache(
-      payload.css || '',
-      payload.sourcemap || '',
-      payload.full_build ?? null
-    ))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/cache/flush') {
-    sendJson(response, 200, await client.flushWindPressCache())
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/volume/reset') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await client.resetWindPressVolumeEntry(payload.relative_path || ''))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/windpress/build') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await windpressCompiler.buildCache(payload || {}))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/theme/file') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await themeFiles.writeFile(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/theme/template') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await themeFiles.writeTemplateFile(payload))
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/theme/backup/restore') {
-    const payload = await readJsonBody(request)
-    sendJson(response, 200, await themeFiles.restoreBackup(payload))
-    return
-  }
-
-  sendJson(response, 404, {
-    ok: false,
-    error: 'Route not found'
-  })
-}
-
-function handleUpgrade(request, socket, tools) {
-  const key = request.headers['sec-websocket-key']
-
-  if (!key) {
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n')
-    socket.destroy()
-    return
-  }
-
-  const accept = crypto
-    .createHash('sha1')
-    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-    .digest('base64')
-
-  socket.write([
-    'HTTP/1.1 101 Switching Protocols',
-    'Upgrade: websocket',
-    'Connection: Upgrade',
-    `Sec-WebSocket-Accept: ${accept}`,
-    '\r\n'
-  ].join('\r\n'))
-
-  let buffer = Buffer.alloc(0)
-
-  socket.on('data', async (chunk) => {
-    buffer = Buffer.concat([buffer, chunk])
-    const parsed = extractFrames(buffer)
-    buffer = parsed.remaining
-
-    for (const frame of parsed.messages) {
-      try {
-        const payload = JSON.parse(frame)
-        const reply = await handleSocketMessage(payload, tools)
-        socket.write(encodeFrame(JSON.stringify(reply)))
-      } catch (error) {
-        socket.write(encodeFrame(JSON.stringify({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error)
-        })))
-      }
-    }
-  })
-
-  socket.on('error', () => {
-    socket.destroy()
-  })
-}
-
-async function handleSocketMessage(payload, tools) {
-  if (payload.action === 'tools/list') {
-    return {
-      id: payload.id || null,
-      ok: true,
-      result: tools.list()
-    }
-  }
-
-  if (payload.action === 'tools/call' && payload.name) {
-    return {
-      id: payload.id || null,
-      ok: true,
-      result: await tools.invoke(payload.name, payload.arguments || {})
-    }
-  }
-
-  if (payload.tool) {
-    return {
-      id: payload.id || null,
-      ok: true,
-      result: await tools.invoke(payload.tool, payload.arguments || payload.params || {})
-    }
-  }
-
-  if (payload.action && tools.has(payload.action)) {
-    return {
-      id: payload.id || null,
-      ok: true,
-      result: await tools.invoke(payload.action, payload.params || {})
-    }
-  }
-
-  throw new Error('Unsupported bridge action')
-}
-
-function extractFrames(buffer) {
-  const messages = []
-  let offset = 0
-
-  while (buffer.length - offset >= 2) {
-    const firstByte = buffer[offset]
-    const secondByte = buffer[offset + 1]
-    const opcode = firstByte & 0x0f
-    let payloadLength = secondByte & 0x7f
-    let headerLength = 2
-
-    if (opcode === 0x8) {
-      return { messages, remaining: Buffer.alloc(0) }
-    }
-
-    if (payloadLength === 126) {
-      if (buffer.length - offset < 4) {
-        break
-      }
-
-      payloadLength = buffer.readUInt16BE(offset + 2)
-      headerLength += 2
-    } else if (payloadLength === 127) {
-      if (buffer.length - offset < 10) {
-        break
-      }
-
-      payloadLength = Number(buffer.readBigUInt64BE(offset + 2))
-      headerLength += 8
-    }
-
-    const masked = (secondByte & 0x80) === 0x80
-    const maskLength = masked ? 4 : 0
-    const frameLength = headerLength + maskLength + payloadLength
-
-    if (buffer.length - offset < frameLength) {
-      break
-    }
-
-    let payload = buffer.slice(offset + headerLength + maskLength, offset + frameLength)
-
-    if (masked) {
-      const mask = buffer.slice(offset + headerLength, offset + headerLength + 4)
-      const unmasked = Buffer.alloc(payload.length)
-
-      for (let index = 0; index < payload.length; index += 1) {
-        unmasked[index] = payload[index] ^ mask[index % 4]
-      }
-
-      payload = unmasked
-    }
-
-    if (opcode === 0x1) {
-      messages.push(payload.toString('utf8'))
-    }
-
-    offset += frameLength
-  }
-
-  return {
-    messages,
-    remaining: buffer.slice(offset)
-  }
-}
-
-function encodeFrame(payload) {
-  const payloadBuffer = Buffer.from(payload, 'utf8')
-  const payloadLength = payloadBuffer.length
-
-  if (payloadLength < 126) {
-    return Buffer.concat([
-      Buffer.from([0x81, payloadLength]),
-      payloadBuffer
-    ])
-  }
-
-  if (payloadLength < 65536) {
-    const header = Buffer.alloc(4)
-    header[0] = 0x81
-    header[1] = 126
-    header.writeUInt16BE(payloadLength, 2)
-
-    return Buffer.concat([header, payloadBuffer])
-  }
-
-  const header = Buffer.alloc(10)
-  header[0] = 0x81
-  header[1] = 127
-  header.writeBigUInt64BE(BigInt(payloadLength), 2)
-
-  return Buffer.concat([header, payloadBuffer])
-}
-
-function queryToObject(url) {
-  const query = {}
-
-  for (const [key, value] of url.searchParams.entries()) {
-    query[key] = value
-  }
-
-  return query
-}
-
-function collectQueryValues(url, key) {
-  const values = url.searchParams.getAll(key)
-
-  if (values.length > 0) {
-    return values
-  }
-
-  const inline = url.searchParams.get(`${key}s`)
-
-  if (!inline) {
-    return []
-  }
-
-  return inline
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function sendJson(response, statusCode, payload) {
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8'
-  })
-  response.end(JSON.stringify(payload))
+function sendJson(response, status, data) {
+  if (response.destroyed || response.writableEnded) return
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
+  response.end(JSON.stringify(data))
 }
 
 function readJsonBody(request) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type'] || '') || request.headers['content-encoding']) fail('bridge_json_required', 415)
+  if (Number(request.headers['content-length']) > MAX_BODY) fail('bridge_body_too_large', 413)
   return new Promise((resolve, reject) => {
-    let body = ''
-
-    request.on('data', (chunk) => {
-      body += chunk.toString('utf8')
+    const chunks = []; let bytes = 0
+    const timer = setTimeout(() => reject(Object.assign(new Error('bridge_body_timeout'), { code: 'bridge_body_timeout', status: 408 })), 10000)
+    const cleanup = () => clearTimeout(timer)
+    request.once('end', cleanup); request.once('error', cleanup); request.once('aborted', cleanup); request.once('close', cleanup)
+    request.on('data', chunk => {
+      bytes += chunk.length
+      if (bytes > MAX_BODY) { cleanup(); reject(Object.assign(new Error('bridge_body_too_large'), { code: 'bridge_body_too_large', status: 413 })); request.pause(); return }
+      chunks.push(chunk)
     })
-
     request.on('end', () => {
       try {
-        resolve(body ? JSON.parse(body) : {})
-      } catch (error) {
-        reject(error)
-      }
+        const value = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        if (!value || typeof value !== 'object' || Array.isArray(value)) fail('bridge_json_invalid', 400)
+        resolve(value)
+      } catch (error) { reject(Object.assign(new Error('bridge_json_invalid'), { code: 'bridge_json_invalid', status: 400 })) }
     })
-
     request.on('error', reject)
+    request.on('aborted', () => reject(Object.assign(new Error('bridge_body_aborted'), { code: 'bridge_body_aborted', status: 400 })))
   })
 }
 
-module.exports = {
-  startBridgeServer
-}
+module.exports = { startBridgeServer }

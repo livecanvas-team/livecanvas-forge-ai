@@ -91,6 +91,7 @@ final class LCFA_Inventory {
             'sections'          => $sections,
             'framework'         => (string) ($snapshot['detected_framework'] ?? 'unknown'),
             'editor_config'     => (string) ($snapshot['framework_slug'] ?? ''),
+            'editor_profile'    => $snapshot['editor_profile'] ?? [],
             'site_mode'         => (string) ($snapshot['site_mode'] ?? 'unknown'),
         ];
 

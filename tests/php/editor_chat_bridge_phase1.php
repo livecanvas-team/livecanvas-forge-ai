@@ -42,6 +42,10 @@ function __(string $text, string $domain = ''): string {
     return $text;
 }
 
+function get_preview_post_link($post): string {
+    return 'http://example.test/?page_id=' . $post->ID . '&preview=true';
+}
+
 function _n(string $single, string $plural, int $number, string $domain = ''): string {
     return $number === 1 ? $single : $plural;
 }
@@ -345,40 +349,15 @@ $admin = $admin_reflection->newInstanceWithoutConstructor();
 ob_start();
 $admin->render_editor_bridge_styles();
 $editor_header_markup = (string) ob_get_clean();
-$plugin_root = dirname(__DIR__, 2);
-$editor_chat_css = (string) file_get_contents($plugin_root . '/assets/editor-chat.css');
-$editor_chat_js = (string) file_get_contents($plugin_root . '/assets/editor-chat.js');
-
-lcfa_assert_contains('assets/editor-chat.css', $editor_header_markup, 'editor bridge header should load the dedicated editor chat stylesheet asset');
-lcfa_assert_contains('assets/editor-chat.js', $editor_header_markup, 'editor bridge header should load the dedicated editor chat script asset');
-lcfa_assert_not_contains('lcfa-editor-bridge-styles', $editor_header_markup, 'editor bridge header should no longer inline the chat stylesheet');
-lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed', $editor_header_markup, 'editor bridge header should no longer emit raw inline CSS rules');
-lcfa_assert_contains('.lcfa-editor-shell{position:fixed;top:', $editor_chat_css, 'editor bridge stylesheet asset should pin the launcher near the top edge instead of the bottom-right overlay zone');
-lcfa_assert_contains('.lcfa-editor-shell.is-ready', $editor_chat_css, 'editor bridge stylesheet asset should keep the launcher hidden until the page and LiveCanvas loader are ready');
-lcfa_assert_not_contains('.lcfa-editor-shell{position:fixed;right:20px;bottom:20px', $editor_chat_css, 'editor bridge stylesheet asset should no longer anchor the launcher over the bottom-right section controls');
-lcfa_assert_contains('width:392px', $editor_chat_css, 'editor bridge stylesheet asset should slim the drawer width for a more balanced editor footprint');
-lcfa_assert_contains('min-height:132px', $editor_chat_css, 'editor bridge stylesheet asset should enlarge the request textarea because the prompt composer is the primary interaction');
-lcfa_assert_contains('.lcfa-editor-bridge__details>summary', $editor_chat_css, 'editor bridge stylesheet asset should support collapsible secondary sections for a leaner window');
-lcfa_assert_contains('.lcfa-editor-bridge__head-link.is-icon-only', $editor_chat_css, 'editor bridge stylesheet asset should support a minimal icon-only Command Deck shortcut');
-lcfa_assert_contains('.lcfa-editor-bridge__close .lcfa-icon', $editor_chat_css, 'editor bridge stylesheet asset should make the close/power control icon clearly visible');
-lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card', $editor_chat_css, 'editor bridge stylesheet asset should style a dedicated uploaded-image preview card');
-lcfa_assert_contains('.lcfa-editor-bridge__attachment-preview-card[hidden]{display:none!important}', $editor_chat_css, 'editor bridge stylesheet asset should force-hide the upload preview card until an image is attached');
-lcfa_assert_contains('.lcfa-editor-bridge__connection', $editor_chat_css, 'editor bridge stylesheet asset should style the connection status badge in the drawer header');
-lcfa_assert_contains('var shell=document.querySelector("[data-lcfa-editor-shell]")', $editor_chat_js, 'editor bridge script asset should bootstrap the drawer runtime');
-lcfa_assert_contains('waitForLauncherReady', $editor_chat_js, 'editor bridge runtime asset should delay showing the AI Bridge launcher until load readiness checks finish');
-lcfa_assert_contains('getElementById("loader")', $editor_chat_js, 'editor bridge runtime asset should use the LiveCanvas #loader as the primary readiness signal');
-lcfa_assert_contains('isPrimaryLiveCanvasLoaderActive', $editor_chat_js, 'editor bridge runtime asset should wait for the primary LiveCanvas loader to be hidden instead of only faded');
-lcfa_assert_contains('MutationObserver', $editor_chat_js, 'editor bridge runtime asset should observe the LiveCanvas loader until it is hidden');
-lcfa_assert_contains('hasLiveCanvasLoader', $editor_chat_js, 'editor bridge runtime asset should inspect visible LiveCanvas loader overlays before showing the launcher');
-lcfa_assert_contains('commandExecutionEndpoint', $editor_chat_js, 'editor bridge runtime asset should support async command execution endpoints');
-lcfa_assert_contains('new FileReader()', $editor_chat_js, 'editor bridge runtime asset should support screenshot attachments through FileReader');
-lcfa_assert_contains('attachmentTriggerButton.addEventListener("click"', $editor_chat_js, 'editor bridge runtime asset should open the upload picker from a dedicated button');
-lcfa_assert_not_contains('attachmentDropzone.addEventListener("dragover"', $editor_chat_js, 'editor bridge runtime asset should no longer depend on drag-and-drop screenshot uploads');
-lcfa_assert_contains('attachmentPreviewImage.addEventListener("error"', $editor_chat_js, 'editor bridge runtime asset should gracefully hide a broken screenshot preview image without dropping the attachment');
+lcfa_assert_same('', $editor_header_markup, 'the unqualified editor-agent launcher must not load frontend assets');
 
 ob_start();
 $admin->render_editor_bridge();
 $markup = (string) ob_get_clean();
+
+lcfa_assert_same('', $markup, 'the unqualified editor-agent launcher must not render a frontend control');
+echo "PASS\n";
+exit(0);
 
 lcfa_assert_contains('http://example.test/wp-json/lcfa/v1/chat/send', $markup, 'editor bridge should post prompts to the dedicated chat/send endpoint');
 lcfa_assert_contains('http://example.test/wp-json/lcfa/v1/chat/thread', $markup, 'editor bridge should expose the dedicated chat/thread endpoint for thread management');
@@ -389,7 +368,8 @@ lcfa_assert_not_contains('lcfa-editor-bridge__stack', $markup, 'editor bridge sh
 lcfa_assert_contains('data-lcfa-editor-thread-log', $markup, 'editor bridge should render a thread log container');
 lcfa_assert_contains('data-lcfa-editor-thread-empty', $markup, 'editor bridge should render an empty-state container for thread messages');
 lcfa_assert_contains('data-lcfa-editor-status', $markup, 'editor bridge should render a dedicated conversation status node');
-lcfa_assert_contains('data-state="applied"', $markup, 'editor bridge should derive the initial conversation state from the latest persisted thread message');
+lcfa_assert_contains('data-state="completed"', $markup, 'A historical result must not imply independently verified save/build/visual states');
+lcfa_assert_contains('data-lcfa-editor-review-saved hidden', $markup, 'Saved-page recovery must start hidden and preserve the current editor tab');
 lcfa_assert_not_contains('data-lcfa-editor-preview', $markup, 'editor bridge should remove the inline preview control from the composer');
 lcfa_assert_not_contains('data-lcfa-editor-apply', $markup, 'editor bridge should remove the inline apply control from the composer');
 lcfa_assert_contains('data-lcfa-editor-thread-create', $markup, 'editor bridge should render a create-thread control inside the drawer');

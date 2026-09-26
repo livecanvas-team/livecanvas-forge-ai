@@ -96,35 +96,17 @@ $GLOBALS['lcfa_test_template'] = 'parent-theme';
 wp_mkdir_p(get_stylesheet_directory());
 file_put_contents(get_stylesheet_directory() . '/style.css', '/* child */');
 
-$child_apply = $bridge->write_file([
-    'root_scope' => 'stylesheet',
-    'path' => 'style.css',
-    'content' => '/* child changed */',
-]);
-lcfa_theme_guard_assert(!empty($child_apply['ok']) && !empty($child_apply['writable']), 'The active child theme should remain writable.');
-lcfa_theme_guard_assert(file_get_contents(get_stylesheet_directory() . '/style.css') === '/* child changed */', 'The child-theme write should update the file.');
-lcfa_theme_guard_assert(!empty($child_apply['audit_id']), 'A child-theme write should return an audit ID.');
-lcfa_theme_guard_assert(!empty($child_apply['rollback_available']), 'A child-theme write should expose rollback.');
-lcfa_theme_guard_assert((LCFA_Settings::$records[$child_apply['audit_id']]['restore']['type'] ?? '') === 'theme_file_write', 'The write should store a theme-file rollback record.');
-
-$rollback_preview = $bridge->rollback_write(array_merge(
-    LCFA_Settings::$records[$child_apply['audit_id']]['restore'],
-    ['dry_run' => true]
-));
-lcfa_theme_guard_assert(($rollback_preview['operation'] ?? '') === 'restore_backup', 'An updated file should preview a backup restore.');
-
-$rollback_apply = $bridge->rollback_write(LCFA_Settings::$records[$child_apply['audit_id']]['restore']);
-lcfa_theme_guard_assert(!empty($rollback_apply['ok']), 'Theme-file rollback should succeed.');
-lcfa_theme_guard_assert(file_get_contents(get_stylesheet_directory() . '/style.css') === '/* child */', 'Theme-file rollback should restore the previous content.');
-
-$created_apply = $bridge->write_file([
-    'root_scope' => 'stylesheet',
-    'path' => 'assets/generated.css',
-    'content' => '/* generated */',
-]);
-lcfa_theme_guard_assert(file_exists(get_stylesheet_directory() . '/assets/generated.css'), 'A new child-theme file should be created.');
-$created_rollback = $bridge->rollback_write(LCFA_Settings::$records[$created_apply['audit_id']]['restore']);
-lcfa_theme_guard_assert(!empty($created_rollback['ok']) && !file_exists(get_stylesheet_directory() . '/assets/generated.css'), 'Rollback should delete a file created by AI Bridge.');
+$journal_required = false;
+try { $bridge->write_file(['path' => 'style.css', 'content' => '/* child changed */']); }
+catch (RuntimeException $error) { $journal_required = str_contains($error->getMessage(), 'journaling is unavailable'); }
+lcfa_theme_guard_assert($journal_required, 'A missing private journal must block even child-theme writes.');
+lcfa_theme_guard_assert(file_get_contents(get_stylesheet_directory() . '/style.css') === '/* child */', 'No direct-write fallback is permitted.');
+foreach (['restore_backup', 'rollback_write'] as $method) {
+    $blocked = false;
+    try { $bridge->$method(['path' => 'style.css', 'force' => true]); }
+    catch (RuntimeException $error) { $blocked = str_contains($error->getMessage(), 'legacy_backup_review_required'); }
+    lcfa_theme_guard_assert($blocked, 'Legacy rollback must require review, even with force.');
+}
 
 $template_preview = $bridge->write_file([
     'root_scope' => 'template',
@@ -135,11 +117,9 @@ $template_preview = $bridge->write_file([
 lcfa_theme_guard_assert(($template_preview['writable'] ?? true) === false, 'Explicit template-root writes should also be blocked.');
 
 $GLOBALS['lcfa_allow_parent_theme_writes'] = true;
-$parent_opt_in = $bridge->write_file([
-    'root_scope' => 'template',
-    'path' => 'style.css',
-    'content' => '/* explicit opt-in */',
-]);
-lcfa_theme_guard_assert(!empty($parent_opt_in['ok']) && !empty($parent_opt_in['writable']), 'The explicit parent-theme filter should allow trusted writes.');
+$parent_opt_in_failed = false;
+try { $bridge->write_file(['root_scope' => 'template', 'path' => 'style.css', 'content' => '/* explicit opt-in */']); }
+catch (RuntimeException $error) { $parent_opt_in_failed = true; }
+lcfa_theme_guard_assert($parent_opt_in_failed, 'A filter must not bypass missing journal enforcement.');
 
 echo "PASS\n";

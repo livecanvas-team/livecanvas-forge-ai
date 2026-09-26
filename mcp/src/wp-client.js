@@ -7,6 +7,8 @@ class WPClient {
     this.config = config
     this.restBase = config.restBase
     this.sessionAuth = new SessionAuth(config)
+    this.agentLeases = new Map()
+    this.activeFrontendTools = 0
   }
 
   async getSnapshot() {
@@ -23,6 +25,27 @@ class WPClient {
 
   async getWriteContext(params = {}) {
     return this.request('GET', 'write-context', { query: params })
+  }
+
+  async listWorkflows() {
+    return this.request('GET', 'workflows')
+  }
+
+  async getSiteKnowledge() {
+    return this.request('GET', 'site-knowledge')
+  }
+
+  async listChangesets(params = {}) {
+    return this.request('GET', 'changesets', { query: params })
+  }
+
+  async undoChangeset(payload = {}) {
+    return this.request('POST', 'changesets/undo', { body: payload })
+  }
+
+  async readWorkflow(id) {
+    if (typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error('Invalid workflow ID')
+    return this.request('GET', `workflows/${encodeURIComponent(id)}`)
   }
 
   async validateWriteContext(payload = {}) {
@@ -226,20 +249,97 @@ class WPClient {
   }
 
   async getNextAgentRequest(agent = null, requestId = '') {
+    if (this.agentLeases.size && (!requestId || [...this.agentLeases.entries()].some(([id, lease]) => !lease.stopAcknowledged || id === requestId))) throw new Error('Finish or stop the current frontend request before claiming another. After Stop, choose a different explicit request ID.')
     const configuredAgent = this.config && this.config.agent ? String(this.config.agent) : 'codex'
     const targetAgent = agent || configuredAgent
-    const query = {
+    const body = {
       agent: targetAgent
     }
 
     if (requestId) {
-      query.request_id = requestId
-      query.claim = '1'
+      body.request_id = requestId
     }
 
-    return this.request('GET', 'agent/request', {
-      query
-    })
+    const response = await this.request('POST', 'agent/request/claim', { body })
+    if (response?.request?.id && response.lease_token) {
+      for (const id of this.agentLeases.keys()) this.releaseAgentLease(id)
+      this.keepAgentLease(response.request.id, response.lease_token)
+    }
+    // The MCP process owns the lease capability; do not send it to model logs.
+    const { lease_token, ...publicResponse } = response
+    return publicResponse
+  }
+
+  keepAgentLease(requestId, token) {
+    this.releaseAgentLease(requestId)
+    const lease = { token, renewing: false, error: null }
+    lease.timer = setInterval(async () => {
+      if (lease.renewing) return
+      lease.renewing = true
+      try {
+        if (!lease.stopRequested) await this.checkAgentLease(requestId, lease)
+        await this.acknowledgeStoppedWorkers()
+      }
+      catch (error) {
+        // Stop already fences new work. A lost acknowledgement response may
+        // be retried idempotently without renewing or resuming that work.
+        if (!lease.stopRequested) { lease.error = error; clearInterval(lease.timer) }
+      }
+      finally { lease.renewing = false }
+    }, 30000)
+    lease.timer.unref?.()
+    this.agentLeases.set(requestId, lease)
+  }
+
+  releaseAgentLease(requestId) {
+    const lease = this.agentLeases.get(requestId)
+    if (lease) clearInterval(lease.timer)
+    this.agentLeases.delete(requestId)
+  }
+
+  agentLeaseToken(requestId) {
+    const lease = this.agentLeases.get(requestId)
+    if (!lease || lease.error) throw new Error('This MCP process has no current lease for the frontend request. Inspect its status before retrying; do not run it twice.')
+    return lease.token
+  }
+
+  async checkAgentLease(requestId, lease) {
+    const response = await this.request('POST', 'agent/request/renew', { body: { request_id: requestId, lease_token: lease.token } })
+    if (response?.request?.status === 'stop_requested') {
+      lease.stopRequested = true
+      lease.error = new Error('Stop requested. Do not execute more tools for this frontend request. External shell or agent activity is not stopped by Bridge.')
+    } else if (response?.request?.status !== 'running') throw new Error('The frontend request no longer has a running worker lease.')
+  }
+
+  async acknowledgeStoppedWorkers() {
+    if (this.activeFrontendTools > 0) return
+    for (const [id, lease] of this.agentLeases) {
+      if (!lease.stopRequested || lease.stopAcknowledged || lease.acknowledging) continue
+      lease.acknowledging = true
+      try {
+        const result = await this.request('POST', 'agent/request/acknowledge-stop', { body: { request_id: id, lease_token: lease.token } })
+        if (result?.request?.status !== 'stopped') throw new Error('Bridge stop acknowledgement was not saved.')
+        lease.stopAcknowledged = true
+        clearInterval(lease.timer)
+      } finally { lease.acknowledging = false }
+    }
+  }
+
+  async withFrontendWork(operation) {
+    this.activeFrontendTools++
+    try {
+      for (const [id, lease] of this.agentLeases) {
+        if (lease.error) throw lease.error
+        await this.checkAgentLease(id, lease)
+        if (lease.error) throw lease.error
+      }
+      return await operation()
+    } finally {
+      this.activeFrontendTools--
+      // Keep the original tool result/error. Failed acknowledgement remains
+      // stop_requested and can retry on heartbeat; never report a false stop.
+      try { await this.acknowledgeStoppedWorkers() } catch (error) { /* retry heartbeat */ }
+    }
   }
 
   async getAgentRequest(requestId) {
@@ -251,8 +351,10 @@ class WPClient {
   }
 
   async completeAgentRequest(requestId, result = {}, thread = null) {
+    if (this.activeFrontendTools) throw new Error('Wait for current Bridge tools before completing the frontend request.')
     const body = {
       request_id: requestId,
+      lease_token: this.agentLeaseToken(requestId),
       result
     }
 
@@ -260,12 +362,16 @@ class WPClient {
       body.thread = thread
     }
 
-    return this.request('POST', 'agent/request/complete', { body })
+    const response = await this.request('POST', 'agent/request/complete', { body })
+    this.releaseAgentLease(requestId)
+    return response
   }
 
   async failAgentRequest(requestId, message, thread = null) {
+    if (this.activeFrontendTools) throw new Error('Wait for current Bridge tools before failing the frontend request.')
     const body = {
       request_id: requestId,
+      lease_token: this.agentLeaseToken(requestId),
       message: String(message || 'Agent request failed.')
     }
 
@@ -273,7 +379,9 @@ class WPClient {
       body.thread = thread
     }
 
-    return this.request('POST', 'agent/request/fail', { body })
+    const response = await this.request('POST', 'agent/request/fail', { body })
+    this.releaseAgentLease(requestId)
+    return response
   }
 
   async getPicostrapCompileManifest() {
@@ -323,6 +431,11 @@ class WPClient {
 
   async getMcpStatus() {
     return this.request('GET', 'mcp/status')
+  }
+
+  async getTransportIdentity() {
+    // A revoked local listener must stop, not start a new pairing implicitly.
+    return this.request('GET', 'mcp/transport-identity', { authRefreshAttempted: true, requireExistingSession: true, signal: AbortSignal.timeout(10000) })
   }
 
   async getMcpBootstrap() {
@@ -462,6 +575,7 @@ class WPClient {
   }
 
   async request(method, path, options = {}) {
+    if ((options.requireExistingSession || this.config.transportBound) && (!this.config.sessionToken || this.config.token)) throw new Error('owned_session_required: Connect an identified Bridge session before starting the local listener.')
     const auth = await this.sessionAuth.resolve()
     if (!auth.ok) {
       return auth
@@ -486,6 +600,14 @@ class WPClient {
       headers['X-LCFA-Connection-Attempt'] = String(this.config.connectionAttempt)
     }
 
+    if (!path.startsWith('agent/request')) {
+      for (const [id, lease] of this.agentLeases) {
+        if (lease.error) throw lease.error
+        headers['X-LCFA-Request-ID'] = id
+        headers['X-LCFA-Worker-Lease'] = lease.token
+      }
+    }
+
     if (options.query && typeof options.query === 'object') {
       Object.entries(options.query).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') {
@@ -502,6 +624,7 @@ class WPClient {
       // Custom session headers must never be forwarded to a redirect destination.
       redirect: 'error'
     }
+    if (options.signal) requestOptions.signal = options.signal
 
     if (options.body !== undefined) {
       headers['Content-Type'] = 'application/json'
@@ -516,6 +639,7 @@ class WPClient {
       if (
         (response.status === 401 || response.status === 403) &&
         auth.type === 'ai_bridge_session' &&
+        !this.config.transportBound &&
         options.authRefreshAttempted !== true
       ) {
         this.sessionAuth.invalidateSession()

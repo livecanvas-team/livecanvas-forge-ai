@@ -4,6 +4,7 @@ defined('ABSPATH') || exit;
 
 require_once __DIR__ . '/class-lcfa-agent-registry.php';
 require_once __DIR__ . '/class-lcfa-connection-attempt.php';
+if (!class_exists('LCFA_Session_Store', false)) require_once __DIR__ . '/class-lcfa-session-store.php';
 
 final class LCFA_MCP_Session_Manager {
     private static array $current_session = [];
@@ -222,9 +223,11 @@ final class LCFA_MCP_Session_Manager {
             }
         }
 
-        $sessions = self::get_sessions();
-        $sessions[$session_id] = $session;
-        update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
+        LCFA_Session_Store::mutate(static function ($sessions) use ($session_id, $session) {
+            if (isset($sessions[$session_id])) throw new RuntimeException('session_id_conflict');
+            $sessions[$session_id] = $session;
+            return $sessions;
+        });
 
         $record['status'] = 'approved';
         $record['session_id'] = $session_id;
@@ -268,7 +271,7 @@ final class LCFA_MCP_Session_Manager {
     }
 
     public static function get_sessions(bool $include_expired = true): array {
-        $sessions = get_option(self::SESSIONS_OPTION_KEY, []);
+        $sessions = LCFA_Session_Store::read();
         if (!is_array($sessions)) {
             return [];
         }
@@ -295,7 +298,7 @@ final class LCFA_MCP_Session_Manager {
     public static function get_public_sessions(): array {
         $public = [];
         foreach (self::get_sessions() as $session) {
-            unset($session['token_hash']);
+            unset($session['token_hash'], $session['worker_request_id']);
             $session['expired'] = self::session_is_expired($session);
             $session['revoked'] = trim((string) ($session['revoked_at'] ?? '')) !== '';
             $public[] = $session;
@@ -319,8 +322,10 @@ final class LCFA_MCP_Session_Manager {
         }
 
         $client_label = self::get_client_label((string) ($sessions[$session_id]['client'] ?? 'codex'));
-        $sessions[$session_id]['revoked_at'] = gmdate('c');
-        update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
+        LCFA_Session_Store::mutate(static function ($current) use ($session_id) {
+            if (isset($current[$session_id])) $current[$session_id]['revoked_at'] = gmdate('c');
+            return $current;
+        });
         self::invalidate_ready_state(sprintf(
             __('The active %1$s session was revoked. Pair %1$s again before testing.', 'livecanvas-forge-ai'),
             $client_label
@@ -333,22 +338,17 @@ final class LCFA_MCP_Session_Manager {
     }
 
     public static function reset_access_state(): array {
-        $sessions = self::get_sessions();
         $revoked_sessions = 0;
         $revoked_at = gmdate('c');
-
-        foreach ($sessions as $session_id => $session) {
-            if (trim((string) ($session['revoked_at'] ?? '')) !== '' || self::session_is_expired($session)) {
-                continue;
+        LCFA_Session_Store::mutate(static function ($sessions) use ($revoked_at, &$revoked_sessions) {
+            $revoked_sessions = 0;
+            foreach ($sessions as $session_id => $session) {
+                if (!empty($session['revoked_at']) || self::session_is_expired($session)) continue;
+                $sessions[$session_id]['revoked_at'] = $revoked_at;
+                $revoked_sessions++;
             }
-
-            $sessions[$session_id]['revoked_at'] = $revoked_at;
-            $revoked_sessions++;
-        }
-
-        if ($sessions !== []) {
-            update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
-        }
+            return $sessions;
+        });
 
         $pairing_ids = self::get_pairing_index();
         foreach ($pairing_ids as $pairing_id) {
@@ -388,22 +388,35 @@ final class LCFA_MCP_Session_Manager {
 
         $package_version = sanitize_text_field((string) $request->get_header('x-lcfa-mcp-package-version'));
         if ($package_version !== '' && preg_match('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/', $package_version)) {
-            $sessions = self::get_sessions();
             $session_id = sanitize_key((string) ($session['session_id'] ?? ''));
-            if ($session_id !== '' && isset($sessions[$session_id])) {
-                $sessions[$session_id]['mcp_package_version'] = $package_version;
-                $sessions[$session_id]['mcp_package_seen_at'] = gmdate('c');
-                update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
-                $session['mcp_package_version'] = $package_version;
-                $session['mcp_package_seen_at'] = $sessions[$session_id]['mcp_package_seen_at'];
-            }
+            $session = self::touch_session($session_id, self::hash_token($token), ['mcp_package_version' => $package_version, 'mcp_package_seen_at' => gmdate('c')], $session);
+            if (!$session) { self::$current_session = []; return false; }
         }
 
         if (self::is_connection_handoff_request($request)) {
             self::mark_connection_handoff_from_session($session);
         }
 
+        if (!in_array($required_scope, ['read', 'preview'], true) && class_exists('LCFA_Private_Chat', false)) {
+            try {
+                if (!LCFA_Private_Chat::authorize_session_write($session, $request)) { self::$current_session = []; return false; }
+            } catch (Throwable $error) { self::$current_session = []; return false; }
+        }
+
         return $session;
+    }
+
+    public static function bind_worker_request(string $request_id): void {
+        $expected = self::$current_session;
+        $id = (string) ($expected['session_id'] ?? '');
+        if ($id === '') throw new RuntimeException('private_worker_unavailable: Reconnect the worker before claiming work.');
+        LCFA_Session_Store::mutate(static function ($sessions) use ($id, $expected, $request_id) {
+            $current = $sessions[$id] ?? [];
+            if (!$current || !self::authorization_matches($current, $expected) || !empty($current['revoked_at']) || self::session_is_expired($current)) throw new RuntimeException('private_worker_unavailable: The worker connection changed during the claim.');
+            $sessions[$id]['worker_request_id'] = $request_id;
+            return $sessions;
+        });
+        self::$current_session['worker_request_id'] = $request_id;
     }
 
     public static function validate_session_token(string $token, string $required_scope = 'read') {
@@ -439,14 +452,33 @@ final class LCFA_MCP_Session_Manager {
                 return false;
             }
 
-            $sessions[$session_id]['last_seen_at'] = gmdate('c');
-            update_option(self::SESSIONS_OPTION_KEY, $sessions, false);
-            unset($sessions[$session_id]['token_hash']);
-            self::$current_session = $sessions[$session_id];
-            return $sessions[$session_id];
+            $updated = self::touch_session($session_id, $token_hash, ['last_seen_at' => gmdate('c')], $session);
+            if (!$updated) return false;
+            self::$current_session = $updated;
+            return $updated;
         }
 
         return false;
+    }
+
+    private static function authorization_matches(array $current, array $expected): bool {
+        foreach (['session_id', 'owner_user_id', 'client', 'site_fingerprint', 'scopes', 'access_profile', 'expires_at'] as $key) {
+            if (($current[$key] ?? null) !== ($expected[$key] ?? null)) return false;
+        }
+        return true;
+    }
+
+    private static function touch_session(string $id, string $token_hash, array $fields, array $expected): array {
+        $updated = LCFA_Session_Store::mutate(static function ($sessions) use ($id, $token_hash, $fields, $expected) {
+            $session = $sessions[$id] ?? [];
+            if (!$session || !self::authorization_matches($session, $expected) || !empty($session['revoked_at']) || self::session_is_expired($session) || !hash_equals((string) ($session['token_hash'] ?? ''), $token_hash)) return $sessions;
+            $sessions[$id] = array_merge($session, $fields);
+            return $sessions;
+        });
+        $session = $updated[$id] ?? [];
+        if (!$session || !self::authorization_matches($session, $expected) || !empty($session['revoked_at']) || self::session_is_expired($session) || !hash_equals((string) ($session['token_hash'] ?? ''), $token_hash)) return [];
+        unset($session['token_hash']);
+        return $session;
     }
 
     public static function owner_can_authorize_full_access(int $user_id): bool {
@@ -458,10 +490,23 @@ final class LCFA_MCP_Session_Manager {
     }
 
     public static function has_full_access_context(): bool {
-        return (self::$current_session['access_profile'] ?? '') === 'full'
+        return self::current_owner_user_id() > 0 && (self::$current_session['access_profile'] ?? '') === 'full'
             && !empty(self::$current_session['owner_user_id'])
             && !self::session_is_expired(self::$current_session)
             && array_diff(LCFA_Agent_Registry::full_access_scopes(), (array) (self::$current_session['scopes'] ?? [])) === [];
+    }
+
+    public static function current_worker_request_id(): string {
+        if (!self::current_owner_user_id()) return '';
+        $session = LCFA_Session_Store::read()[(string) (self::$current_session['session_id'] ?? '')] ?? [];
+        return (string) ($session['worker_request_id'] ?? '');
+    }
+
+    public static function current_owner_user_id(): int {
+        $id = (string) (self::$current_session['session_id'] ?? '');
+        $session = $id !== '' ? (self::get_sessions()[$id] ?? []) : [];
+        if (!$session || !self::authorization_matches($session, self::$current_session) || !empty($session['revoked_at']) || self::session_is_expired($session)) return 0;
+        return (int) ($session['owner_user_id'] ?? 0);
     }
 
     public static function has_active_session(): bool {
@@ -472,6 +517,11 @@ final class LCFA_MCP_Session_Manager {
         }
 
         return false;
+    }
+
+    public static function current_worker_identity(): array {
+        if (!self::current_owner_user_id()) return [];
+        return ['session_id' => (string) self::$current_session['session_id'], 'client' => (string) self::$current_session['client']];
     }
 
     public static function get_latest_verified_session(string $client = '', string $connection_mode = ''): array {

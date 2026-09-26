@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T10:27:15.104Z",
+  "title": "Design System: Connection status prototype",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Page background",
+        "tonalRamp": [
+          "oklch(15.00% 0.0183 279.56)",
+          "oklch(26.43% 0.0183 279.56)",
+          "oklch(37.86% 0.0183 279.56)",
+          "oklch(49.29% 0.0183 279.56)",
+          "oklch(60.71% 0.0183 279.56)",
+          "oklch(72.14% 0.0183 279.56)",
+          "oklch(83.57% 0.0183 279.56)",
+          "oklch(95.00% 0.0183 279.56)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Connection surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.0253 277.44)",
+          "oklch(26.43% 0.0253 277.44)",
+          "oklch(37.86% 0.0253 277.44)",
+          "oklch(49.29% 0.0253 277.44)",
+          "oklch(60.71% 0.0253 277.44)",
+          "oklch(72.14% 0.0253 277.44)",
+          "oklch(83.57% 0.0253 277.44)",
+          "oklch(95.00% 0.0253 277.44)"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised hover",
+        "tonalRamp": [
+          "oklch(15.00% 0.0320 276.31)",
+          "oklch(26.43% 0.0320 276.31)",
+          "oklch(37.86% 0.0320 276.31)",
+          "oklch(49.29% 0.0320 276.31)",
+          "oklch(60.71% 0.0320 276.31)",
+          "oklch(72.14% 0.0320 276.31)",
+          "oklch(83.57% 0.0320 276.31)",
+          "oklch(95.00% 0.0320 276.31)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Section border",
+        "tonalRamp": [
+          "oklch(15.00% 0.0415 276.87)",
+          "oklch(26.43% 0.0415 276.87)",
+          "oklch(37.86% 0.0415 276.87)",
+          "oklch(49.29% 0.0415 276.87)",
+          "oklch(60.71% 0.0415 276.87)",
+          "oklch(72.14% 0.0415 276.87)",
+          "oklch(83.57% 0.0415 276.87)",
+          "oklch(95.00% 0.0415 276.87)"
+        ]
+      },
+      "strong-border": {
+        "role": "neutral",
+        "displayName": "Control border",
+        "tonalRamp": [
+          "oklch(15.00% 0.0438 276.46)",
+          "oklch(26.43% 0.0438 276.46)",
+          "oklch(37.86% 0.0438 276.46)",
+          "oklch(49.29% 0.0438 276.46)",
+          "oklch(60.71% 0.0438 276.46)",
+          "oklch(72.14% 0.0438 276.46)",
+          "oklch(83.57% 0.0438 276.46)",
+          "oklch(95.00% 0.0438 276.46)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Primary text",
+        "tonalRamp": [
+          "oklch(15.00% 0.0080 278.64)",
+          "oklch(26.43% 0.0080 278.64)",
+          "oklch(37.86% 0.0080 278.64)",
+          "oklch(49.29% 0.0080 278.64)",
+          "oklch(60.71% 0.0080 278.64)",
+          "oklch(72.14% 0.0080 278.64)",
+          "oklch(83.57% 0.0080 278.64)",
+          "oklch(95.00% 0.0080 278.64)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Supporting text",
+        "tonalRamp": [
+          "oklch(15.00% 0.0285 276.74)",
+          "oklch(26.43% 0.0285 276.74)",
+          "oklch(37.86% 0.0285 276.74)",
+          "oklch(49.29% 0.0285 276.74)",
+          "oklch(60.71% 0.0285 276.74)",
+          "oklch(72.14% 0.0285 276.74)",
+          "oklch(83.57% 0.0285 276.74)",
+          "oklch(95.00% 0.0285 276.74)"
+        ]
+      },
+      "quiet": {
+        "role": "neutral",
+        "displayName": "Evidence text",
+        "tonalRamp": [
+          "oklch(15.00% 0.0338 273.96)",
+          "oklch(26.43% 0.0338 273.96)",
+          "oklch(37.86% 0.0338 273.96)",
+          "oklch(49.29% 0.0338 273.96)",
+          "oklch(60.71% 0.0338 273.96)",
+          "oklch(72.14% 0.0338 273.96)",
+          "oklch(83.57% 0.0338 273.96)",
+          "oklch(95.00% 0.0338 273.96)"
+        ]
+      },
+      "cyan": {
+        "role": "primary",
+        "displayName": "Action cyan",
+        "tonalRamp": [
+          "oklch(15.00% 0.1219 207.89)",
+          "oklch(26.43% 0.1219 207.89)",
+          "oklch(37.86% 0.1219 207.89)",
+          "oklch(49.29% 0.1219 207.89)",
+          "oklch(60.71% 0.1219 207.89)",
+          "oklch(72.14% 0.1219 207.89)",
+          "oklch(83.57% 0.1219 207.89)",
+          "oklch(95.00% 0.1219 207.89)"
+        ]
+      },
+      "green": {
+        "role": "semantic",
+        "displayName": "Verified green",
+        "tonalRamp": [
+          "oklch(15.00% 0.1691 155.67)",
+          "oklch(26.43% 0.1691 155.67)",
+          "oklch(37.86% 0.1691 155.67)",
+          "oklch(49.29% 0.1691 155.67)",
+          "oklch(60.71% 0.1691 155.67)",
+          "oklch(72.14% 0.1691 155.67)",
+          "oklch(83.57% 0.1691 155.67)",
+          "oklch(95.00% 0.1691 155.67)"
+        ]
+      },
+      "amber": {
+        "role": "semantic",
+        "displayName": "Attention amber",
+        "tonalRamp": [
+          "oklch(15.00% 0.1328 85.44)",
+          "oklch(26.43% 0.1328 85.44)",
+          "oklch(37.86% 0.1328 85.44)",
+          "oklch(49.29% 0.1328 85.44)",
+          "oklch(60.71% 0.1328 85.44)",
+          "oklch(72.14% 0.1328 85.44)",
+          "oklch(83.57% 0.1328 85.44)",
+          "oklch(95.00% 0.1328 85.44)"
+        ]
+      },
+      "red": {
+        "role": "semantic",
+        "displayName": "Unavailable red",
+        "tonalRamp": [
+          "oklch(15.00% 0.1353 16.19)",
+          "oklch(26.43% 0.1353 16.19)",
+          "oklch(37.86% 0.1353 16.19)",
+          "oklch(49.29% 0.1353 16.19)",
+          "oklch(60.71% 0.1353 16.19)",
+          "oklch(72.14% 0.1353 16.19)",
+          "oklch(83.57% 0.1353 16.19)",
+          "oklch(95.00% 0.1353 16.19)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Product title",
+        "purpose": "1.25rem, 1.125rem on mobile."
+      },
+      "title": {
+        "displayName": "Status",
+        "purpose": "Compact 1rem named state."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "System type; prompt .9375rem."
+      },
+      "label": {
+        "displayName": "Labels",
+        "purpose": "Compact supporting text."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "background-color 180ms ease-out",
+        "purpose": "Reduced-motion aware button hover."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Prompt copy button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Cyan clipboard action beside the visible prompt.",
+      "html": "<button class=\"primary\">Copy prompt</button>",
+      "css": ".primary{min-height:44px;padding:10px 16px;border:1px solid transparent;border-radius:8px;background:#2cc5d8;color:#12131c;font:600 .875rem/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.primary:focus-visible{outline:2px solid #2cc5d8;outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Control Room Checklist",
+    "overview": "Prompt-first refinement of the inherited dark system-type interface. The user requested minimal visible text. Site and agent context, a named light and a visible prompt lead; diagnostics and demo controls are disclosed.",
+    "keyCharacteristics": [
+      "Short named connection status.",
+      "Visible startup prompt with clipboard action."
+    ],
+    "rules": [
+      {
+        "name": "Named state rule",
+        "body": "Pair the colored light with a short status title. Keep evidence in Details & help.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the inherited dark neutral, cyan and system-type identity.",
+      "Do pair every status color with a named state and readable evidence.",
+      "Do keep focus visible and maintain the observed mobile stacking behavior."
+    ],
+    "donts": [
+      "Don't use gradients, soft shadows or nested floating cards in this surface.",
+      "Don't promote preview controls or example evidence into production UI rules."
+    ]
+  }
+}

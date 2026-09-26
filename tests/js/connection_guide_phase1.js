@@ -44,9 +44,9 @@ for (const client of clients) {
     assert.ok(instructions.includes('Do not paste it into the normal Chat screen'))
   }
 }
-assert.ok(storageKeys.every(key => key.startsWith('lcfa-agent-guide:beta5:')))
+assert.ok(storageKeys.every(key => key.startsWith('lcfa-agent-guide:beta8:')))
 assert.ok(html.includes('This guide cannot inspect your connection.'))
-assert.ok(html.includes('configuration preview'))
+assert.ok(html.includes('do not reuse a setup for another app'))
 assert.ok(!html.includes('About 5 minutes'))
 assert.ok(!html.includes('<strong>Ready.</strong>'))
 console.log('PASS: guide uses the unified flow for five clients and cannot claim connection readiness')

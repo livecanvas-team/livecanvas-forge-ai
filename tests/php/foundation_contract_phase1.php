@@ -967,11 +967,18 @@ if (method_exists($rest_api, 'enqueue_agent_request')) {
     $queued_agent_request = is_array($agent_enqueue_payload['request'] ?? null) ? $agent_enqueue_payload['request'] : [];
     $agent_request_id = sanitize_key((string) ($queued_agent_request['id'] ?? ''));
 
-    lcfa_assert_same(202, $agent_enqueue_response->get_status(), 'enqueue_agent_request should queue verified agent prompts');
-    lcfa_assert_true($agent_request_id !== '', 'enqueue_agent_request should return a request id');
-    lcfa_assert_same('queued', (string) ($queued_agent_request['status'] ?? ''), 'enqueue_agent_request should start in queued status');
-    lcfa_assert_same('codex', (string) ($queued_agent_request['agent'] ?? ''), 'enqueue_agent_request should preserve the selected Codex agent');
-    lcfa_assert_same('agent_queue', (string) ($queued_agent_request['provenance']['processed_by'] ?? ''), 'enqueue_agent_request should mark browser submissions as agent_queue, not local AI Bridge');
+    lcfa_assert_same(409, $agent_enqueue_response->get_status(), 'MCP readiness alone must not enqueue an unserviceable desktop prompt');
+    lcfa_assert_same('desktop_transport_required', $agent_enqueue_payload['code'] ?? '', 'Desktop transport must be reported separately from MCP');
+    lcfa_assert_same('', $agent_request_id, 'Unavailable desktop transport must not create a new queued request');
+
+    // Retain compatibility coverage for already queued legacy requests. This is
+    // not a new browser submission or proof of a desktop conversation binding.
+    $legacy = LCFA_Settings::enqueue_agent_request([
+        'thread_id' => (string) $agent_thread['id'], 'agent' => 'codex',
+        'user_prompt' => 'Legacy fixture', 'post_id' => 42, 'target_id' => 42,
+        'action' => 'page_upsert', 'execution_target' => 'local',
+    ]);
+    $agent_request_id = (string) $legacy['id'];
 
     $agent_claim_response = $rest_api->get_agent_request_status(new WP_REST_Request([
         'agent' => 'codex',
@@ -979,9 +986,13 @@ if (method_exists($rest_api, 'enqueue_agent_request')) {
     $agent_claim_payload = $agent_claim_response->get_data();
     $running_agent_request = is_array($agent_claim_payload['request'] ?? null) ? $agent_claim_payload['request'] : [];
 
-    lcfa_assert_same(200, $agent_claim_response->get_status(), 'get_agent_request_status should let MCP agents claim queued prompts');
-    lcfa_assert_same($agent_request_id, (string) ($running_agent_request['id'] ?? ''), 'get_agent_request_status should claim the queued frontend request');
-    lcfa_assert_same('running', (string) ($running_agent_request['status'] ?? ''), 'get_agent_request_status should move the claimed request to running');
+    lcfa_assert_same(400, $agent_claim_response->get_status(), 'A GET without a request ID must not claim work');
+    lcfa_assert_same('queued', LCFA_Settings::get_agent_request($agent_request_id)['status'], 'Reading must not start execution');
+    $rejected_get_claim = $rest_api->get_agent_request_status(new WP_REST_Request(['request_id' => $agent_request_id, 'claim' => '1']));
+    lcfa_assert_same(405, $rejected_get_claim->get_status(), 'Claims require an explicit POST');
+    // This isolated unit fixture lacks WordPress database storage. Real owner,
+    // lease and POST-claim behavior is covered by private-chat.php integration.
+    $running_agent_request = LCFA_Settings::claim_agent_request($agent_request_id, 'codex');
 
     $agent_complete_response = $rest_api->complete_agent_request(new WP_REST_Request([
         'request_id' => $agent_request_id,

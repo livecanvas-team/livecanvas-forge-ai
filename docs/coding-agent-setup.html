@@ -473,7 +473,7 @@
                     <span>Connection guide</span>
                 </span>
             </a>
-            <span class="duration">Beta.5 setup guide</span>
+            <span class="duration">Beta.8 setup guide</span>
         </div>
     </header>
 
@@ -560,17 +560,16 @@
                 </div>
             </details>
             <details>
-                <summary>Other clients and advanced setup</summary>
+                <summary>Other clients</summary>
                 <div class="advanced__body">
-                    <p>Additional clients marked <b>configuration preview</b> have not completed the same app tests. The manual connection screen contains generic MCP configuration and the older Direct Mode or local-runtime paths. Use them only when the new installer does not cover your setup.</p>
-                    <p>This beta's updated runtime is still being tested in real apps. Previous beta results do not qualify this version on every client or operating system.</p>
+                    <p>Use the generated setup only with a supported local coding agent and the same project that contains your WordPress site. If your agent is not listed, do not reuse a setup for another app: wait for a supported connection flow.</p>
                 </div>
             </details>
         </section>
 
         <div class="warning">Before any write, verify that the site URL and fingerprint reported by the coding agent match the Connections screen.</div>
 
-        <footer>Guide for plugin 0.2.0-beta.5 and runtime 0.2.0-beta.6. This is staging beta software. Use preview and keep rollback IDs for supported write workflows.</footer>
+        <footer>Guide for plugin and runtime 0.2.0-beta.8. This is staging beta software. Connect the agent from AI Bridge → Connect. The LiveCanvas editor does not launch an agent in this release.</footer>
     </main>
 
     <script>
@@ -625,7 +624,7 @@
             const progressBar = document.getElementById('progress-bar');
             const readyMessage = document.getElementById('ready-message');
 
-            const stateKey = (agent) => `lcfa-agent-guide:beta5:${agent}`;
+            const stateKey = (agent) => `lcfa-agent-guide:beta8:${agent}`;
 
             const readProgress = (agent) => {
                 try {

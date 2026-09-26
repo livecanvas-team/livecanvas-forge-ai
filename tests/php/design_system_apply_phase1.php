@@ -246,7 +246,6 @@ require LCFA_DIR . 'includes/class-lcfa-settings.php';
 require LCFA_DIR . 'includes/class-lcfa-environment.php';
 require LCFA_DIR . 'includes/class-lcfa-inventory.php';
 require LCFA_DIR . 'includes/class-lcfa-windpress-bridge.php';
-require LCFA_DIR . 'includes/class-lcfa-theme-files-bridge.php';
 require LCFA_DIR . 'includes/class-lcfa-local-mcp-bridge.php';
 require LCFA_DIR . 'includes/class-lcfa-remote-client.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-build-gateway.php';
@@ -258,6 +257,32 @@ require LCFA_DIR . 'includes/class-lcfa-design-system-preview.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-picostrap-composer.php';
 require LCFA_DIR . 'includes/class-lcfa-design-system-compose.php';
 require LCFA_DIR . 'includes/class-lcfa-command-deck.php';
+
+// Test double for legacy token/bundle algorithms, which do not qualify the
+// production mutation boundary. Multi-resource asset journaling remains pending.
+// Real file context, encryption and Undo are covered by file-changesets.php.
+final class LCFA_Theme_Files_Bridge {
+    private array $backups = [];
+    public function __construct(LCFA_Environment $environment) {}
+    public function write_file(array $payload): array {
+        $absolute = get_stylesheet_directory() . '/' . $payload['path'];
+        $id = '';
+        if (empty($payload['dry_run'])) {
+            if (is_file($absolute)) {
+                $id = 'fixture-' . count($this->backups);
+                $this->backups[$id] = [$absolute, file_get_contents($absolute)];
+            }
+            wp_mkdir_p(dirname($absolute));
+            file_put_contents($absolute, $payload['content']);
+        }
+        return ['ok' => true, 'dry_run' => !empty($payload['dry_run']), 'relative_path' => $payload['path'], 'backup_id' => $id];
+    }
+    public function restore_backup(array $payload): array {
+        [$file, $content] = $this->backups[$payload['backup_id']];
+        if (empty($payload['dry_run'])) file_put_contents($file, $content);
+        return ['ok' => true];
+    }
+}
 
 final class Test_Design_System_Build_Gateway extends LCFA_Design_System_Build_Gateway {
     public array $last_build_arguments = [];

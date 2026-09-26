@@ -422,13 +422,17 @@ async function flush() {
     }
 
     if (url.startsWith(`${editorConfig.agentRequestEndpoint}?request_id=req_frontend_1`) && method === 'GET') {
+      if (agentBodies.length > 1) return buildResponse({ request: { id: 'req_frontend_1', status: 'needs_attention', error: 'The worker lease expired. Inspect the operation before retrying.' } });
       return buildResponse({
         request: {
           id: 'req_frontend_1',
           status: 'completed',
+          server_saved_targets: [5964],
           result: {
             ok: true,
             summary: 'Codex applied the page update.',
+            target_id: 5964,
+            verification_states: { saved: true, compiled: 'not_checked', visually_verified: 'not_checked', published: false },
             message: 'Codex applied the page update.',
             action: 'page_upsert',
             mode: 'apply',
@@ -474,6 +478,7 @@ async function flush() {
     FileReader: class MockFileReader {},
     window: {
       fetch,
+      LCFACreateEditorBuffer: () => ({ read: () => ({ state: 'clean' }), unchanged: () => true, refresh: async () => { liveCanvasRefreshCalls.push('guarded-refresh'); return { refreshed: true }; } }),
       location: { origin: 'http://example.test' },
       lc_editor_url_to_load: 'http://example.test/?page_id=5964&lc_page_editing_mode=1',
       loadURLintoEditor(url) {
@@ -540,6 +545,7 @@ async function flush() {
   assert.strictEqual(localChatBodies.length, 0, 'connected agent flow must not call the local chat/send fallback');
   assert.strictEqual(commandBodies.length, 0, 'connected agent flow must not run the local inline command directly');
   assert.strictEqual(agentBodies.length, 1, 'connected agent flow should enqueue one frontend prompt request');
+  assert.match(agentBodies[0].idempotency_key, /^prompt-[a-zA-Z0-9_-]+$/, 'frontend prompts need a stable delivery key');
   assert.strictEqual(agentBodies[0]._lcfa_agent, 'codex', 'connected agent flow should declare Codex as the target agent');
   assert.strictEqual(agentBodies[0]._lcfa_processed_by, 'agent_queue', 'connected agent flow should mark the prompt as queued for an MCP agent');
   assert.strictEqual(agentBodies[0].user_prompt, 'Add a new pricing section', 'connected agent flow should preserve the user prompt');
@@ -548,7 +554,7 @@ async function flush() {
     { model: 'gpt-5.5', speed: 'fast', reasoning_effort: 'xhigh', sandbox: 'workspace-write' },
     'connected Codex agent flow should send the visible profile model, intelligence, and sandbox options'
   );
-  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'applied', 'connected agent flow should finish in the applied state when Codex completes the request');
+  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'completed', 'An agent result must not claim independent save verification');
   assert.ok(shellNodes.diffNode.innerHTML.includes('Codex diff'), 'connected agent flow should render Codex support details');
   assert.strictEqual(shellNodes.proposedNode.textContent, '<section>Codex result</section>', 'connected agent flow should render the Codex result markup');
   assert.ok(shellNodes.resultMeta.children.some((chip) => chip.textContent === 'Agent: codex'), 'connected agent flow should expose Codex provenance in support details');
@@ -556,8 +562,18 @@ async function flush() {
   assert.ok(shellNodes.resultMeta.children.some((chip) => chip.textContent === 'Origin: mcp_agent'), 'connected agent flow should expose that Codex completed the request through the MCP agent');
   assert.ok(shellNodes.resultMeta.children.some((chip) => chip.textContent === 'Transport: mcp_stdio'), 'connected agent flow should expose the MCP stdio transport in support details');
   assert.strictEqual(liveCanvasRefreshCalls.length, 1, 'connected agent flow should refresh LiveCanvas after Codex returns an apply result');
-  assert.ok(liveCanvasRefreshCalls[0].includes('lcfa_refresh='), 'connected agent LiveCanvas refresh should be cache-busted');
+  assert.strictEqual(liveCanvasRefreshCalls[0], 'guarded-refresh', 'Agent refresh must delegate to the editor buffer guard');
+  assert.ok(shellNodes.resultMeta.children.some(chip => chip.textContent === 'Agent reports Saved: Yes'));
   assert.strictEqual(shellNodes.analyzeButton.children[shellNodes.analyzeButton.children.length - 1].textContent, 'Send', 'connected agent flow should restore the primary button label');
+
+  shellNodes.promptInput.value = 'Read the current page';
+  shellNodes.promptInput.listeners.input({ target: shellNodes.promptInput, preventDefault() {} });
+  shellNodes.analyzeButton.listeners.click({ target: shellNodes.analyzeButton, preventDefault() {} });
+  await flush();
+  assert.strictEqual(agentBodies.length, 2);
+  assert.notEqual(agentBodies[0].idempotency_key, agentBodies[1].idempotency_key, 'Distinct submissions must use different request keys');
+  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'failed', 'Expired worker must stop polling and require attention');
+  assert.strictEqual(liveCanvasRefreshCalls.length, 1, 'An expired worker must not refresh or overwrite the editor');
 
   console.log('PASS editor_chat_agent_queue_runtime_phase1');
 })().catch((error) => {

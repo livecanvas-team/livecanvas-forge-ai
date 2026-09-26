@@ -37,8 +37,16 @@ copy_into_package "${ROOT_DIR}/composer.json"
 copy_into_package "${ROOT_DIR}/composer.lock"
 copy_into_package "${ROOT_DIR}/assets"
 copy_into_package "${ROOT_DIR}/includes"
+copy_into_package "${ROOT_DIR}/workflows"
+copy_into_package "${ROOT_DIR}/skills"
 copy_into_package "${ROOT_DIR}/mcp"
 copy_into_package "${ROOT_DIR}/vendor"
+
+# Keep the distributed ZIP deterministic: the plugin needs exactly the runtime
+# matching its declared package version, never a collection of prior dev builds.
+RUNTIME_VERSION="$(node -p "require('${ROOT_DIR}/mcp/package.json').version")"
+find "${PACKAGE_DIR}/assets/runtime" -type f -name 'livecanvas-ai-bridge-mcp-*.tgz' \
+  ! -name "livecanvas-ai-bridge-mcp-${RUNTIME_VERSION}.tgz" -delete
 
 # Theme packages and screenshots are served from the remote catalog. Keep only
 # the bundled catalog as an offline fallback so the plugin ZIP stays below
@@ -48,9 +56,18 @@ cp "${ROOT_DIR}/examples/theme-library/catalog.json" "${PACKAGE_DIR}/examples/th
 
 mkdir -p "${PACKAGE_DIR}/docs"
 cp "${ROOT_DIR}/docs/coding-agent-setup.html" "${PACKAGE_DIR}/docs/coding-agent-setup.html"
-cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.5.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.5.md"
-cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.6.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.6.md"
+cp "${ROOT_DIR}/docs/release-notes-0.2.0-beta.8.md" "${PACKAGE_DIR}/docs/release-notes-0.2.0-beta.8.md"
 cp "${ROOT_DIR}/docs/verified-site-write-workflow.md" "${PACKAGE_DIR}/docs/verified-site-write-workflow.md"
+cp "${ROOT_DIR}/docs/content-changesets.md" "${PACKAGE_DIR}/docs/content-changesets.md"
+cp "${ROOT_DIR}/docs/private-conversations.md" "${PACKAGE_DIR}/docs/private-conversations.md"
+cp "${ROOT_DIR}/docs/file-changesets.md" "${PACKAGE_DIR}/docs/file-changesets.md"
+cp "${ROOT_DIR}/docs/picostrap-assets.md" "${PACKAGE_DIR}/docs/picostrap-assets.md"
+cp "${ROOT_DIR}/docs/windpress-assets.md" "${PACKAGE_DIR}/docs/windpress-assets.md"
+cp "${ROOT_DIR}/docs/local-transport.md" "${PACKAGE_DIR}/docs/local-transport.md"
+cp "${ROOT_DIR}/docs/site-knowledge.md" "${PACKAGE_DIR}/docs/site-knowledge.md"
+cp "${ROOT_DIR}/docs/desktop-delivery.md" "${PACKAGE_DIR}/docs/desktop-delivery.md"
+cp "${ROOT_DIR}/docs/codex-thread-protocol.md" "${PACKAGE_DIR}/docs/codex-thread-protocol.md"
+cp "${ROOT_DIR}/docs/codex-desktop-qualification.md" "${PACKAGE_DIR}/docs/codex-desktop-qualification.md"
 
 find "${PACKAGE_DIR}" \
   \( -name '.DS_Store' -o -name '*.log' \) \

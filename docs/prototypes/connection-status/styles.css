@@ -1,0 +1,85 @@
+:root {
+  color-scheme: dark;
+  --bg: #12131c; --surface: #1a1c29; --raised: #222536; --border: #3b3f57; --strong-border: #585d78;
+  --text: #f6f7fd; --muted: #b9bdd1; --quiet: #a3a9c0; --cyan: #2cc5d8; --green: #43d98a; --amber: #f2c45b; --red: #ff8f97;
+  --radius: 8px;
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--text);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, select, textarea, input { font: inherit; }
+button, select { min-height: 44px; }
+button { cursor: pointer; border: 1px solid transparent; border-radius: var(--radius); padding: 10px 16px; font-weight: 600; font-size: .875rem; transition: background-color 180ms ease-out; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+select { width: 100%; padding: 8px 32px 8px 12px; border: 1px solid var(--strong-border); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+textarea { display: block; resize: vertical; width: 100%; min-height: 148px; padding: 16px; border: 1px solid var(--strong-border); border-radius: var(--radius); color: var(--text); background: var(--bg); font-size: .9375rem; line-height: 1.65; caret-color: var(--cyan); scrollbar-color: var(--strong-border) var(--bg); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+::selection { background: var(--cyan); color: var(--bg); }
+[hidden] { display: none !important; }
+p { margin: 0; max-width: 70ch; }
+h1, h2 { margin: 0; line-height: 1.3; font-weight: 650; text-wrap: balance; }
+h1 { font-size: 1.25rem; }
+h2 { font-size: 1rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; top: -100px; left: 12px; background: var(--cyan); color: var(--bg); padding: 12px; }
+.skip-link:focus { top: 12px; }
+.workspace { max-width: 824px; margin: 0 auto; padding: 48px 32px; }
+.product-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.preview-label { color: var(--quiet); font-size: .8125rem; }
+.connection { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
+.context-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px); gap: 24px; padding: 24px 28px; }
+.site-context { display: flex; flex-direction: column; justify-content: center; }
+.field-label, .agent-field label { display: block; color: var(--muted); font-size: .8125rem; margin-bottom: 6px; }
+.site-context strong { font-size: 1rem; font-weight: 600; }
+.agent-select { position: relative; }
+.agent-select img { position: absolute; width: 24px; height: 24px; left: 12px; top: 50%; transform: translateY(-50%); object-fit: contain; pointer-events: none; }
+.agent-select select { padding-left: 48px; }
+.status-region { padding: 0 28px 24px; display: flex; align-items: center; gap: 10px; }
+.status-light { width: 10px; height: 10px; border-radius: 50%; background: var(--state-color, var(--red)); flex-shrink: 0; }
+.task { border-top: 1px solid var(--border); padding: 24px 28px; }
+.prompt-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.prompt-header label { flex: 1; font-size: .9375rem; font-weight: 600; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--cyan); color: var(--bg); }
+.primary:hover { background: #60d6e3; }
+.primary svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.secondary { border-color: var(--strong-border); background: transparent; color: var(--text); }
+.secondary:hover { background: var(--raised); }
+.destination, .copy-feedback { margin-top: 12px; font-size: .8125rem; color: var(--muted); }
+.copy-feedback { color: var(--amber); }
+.verification-code { display: block; margin: 12px 0; font: 600 1.75rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.confirmation { display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; font-size: .875rem; }
+.confirmation input { width: 20px; height: 20px; accent-color: var(--cyan); flex-shrink: 0; margin: 0; }
+.permission-notice { margin: 12px 0 24px; color: var(--muted); font-size: .875rem; }
+.permission-notice strong { color: var(--text); }
+.details { border-top: 1px solid var(--border); padding: 4px 28px; }
+summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: .8125rem; color: var(--muted); }
+summary:hover { color: var(--text); }
+.details-body { padding: 4px 0 16px; font-size: .875rem; }
+.details-body dl { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr); gap: 8px 16px; margin: 0 0 16px; }
+.details-body dt { color: var(--quiet); }
+.details-body dd { margin: 0; }
+.details-body p { margin-top: 12px; color: var(--muted); }
+.text-button { background: transparent; color: var(--cyan); padding: 10px 0; margin-top: 12px; text-decoration: underline; text-underline-offset: 4px; }
+.preview-controls { margin-top: 12px; }
+.preview-controls summary span { color: var(--quiet); }
+.preview-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; font-size: .8125rem; color: var(--muted); }
+.preview-tools select { width: auto; max-width: 100%; }
+.preview-tools p { flex-basis: 100%; }
+@media (max-width: 640px) {
+  .workspace { padding: 24px 16px; }
+  .product-header { margin-bottom: 16px; }
+  h1 { font-size: 1.125rem; }
+  .context-row { grid-template-columns: 1fr; gap: 16px; padding: 20px; }
+  .status-region { padding: 0 20px 20px; }
+  .task { padding: 20px; }
+  .prompt-header { gap: 8px; }
+  .prompt-header label { font-size: .875rem; }
+  .primary { padding: 10px 12px; }
+  textarea { padding: 12px; }
+  .details { padding: 4px 20px; }
+  .details-body dl { grid-template-columns: 1fr; gap: 4px; }
+  .details-body dd { margin-bottom: 8px; }
+  .preview-tools select { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }

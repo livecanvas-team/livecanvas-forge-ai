@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 function get_current_user_id(): int { return $GLOBALS['attempt_test_user'] ?? 7; }
 function user_can(int $user_id, string $capability): bool { return empty($GLOBALS['attempt_test_demoted']) && ($GLOBALS['attempt_missing_capability'] ?? '') !== $capability; }
+function get_user_meta($id, $key, $single = true) { return $GLOBALS['attempt_user_meta'][$id][$key] ?? ''; }
+function update_user_meta($id, $key, $value) { $GLOBALS['attempt_user_meta'][$id][$key] = $value; return true; }
 require __DIR__ . '/mcp_session_manager_phase1.php';
 
 function attempt_expect(bool $condition, string $message): void {
@@ -48,11 +50,48 @@ $second = LCFA_Connection_Attempt::create('claude-code', 7);
 attempt_expect(!LCFA_Connection_Attempt::verify($second['id'], $session, LCFA_MCP_PACKAGE_VERSION), 'Concurrent attempt must not complete.');
 attempt_expect(LCFA_Connection_Attempt::verify($attempt['id'], $session, LCFA_MCP_PACKAGE_VERSION), 'Authenticated matching proof should complete.');
 attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['state'] === 'ready', 'Ready should be visible to the owner.');
+$public = LCFA_Connection_Attempt::public_status($attempt['id'], 7);
+attempt_expect(!isset($public['session_id']) && !isset($public['owner']), 'Public status must not expose session identifiers or owner IDs.');
+$ready = LCFA_Connection_Attempt::get($attempt['id']);
+$ready['verified_at'] = '2000-01-01T00:00:00+00:00';
+set_transient('lcfa_connect_attempt_' . $attempt['id'], $ready);
+attempt_expect(LCFA_Connection_Attempt::verify($attempt['id'], $session, LCFA_MCP_PACKAGE_VERSION), 'A repeated authenticated handoff succeeds.');
+attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['verified_at'] !== $ready['verified_at'], 'Repeated proof refreshes the evidence timestamp.');
+$old_runtime = $ready;
+$old_runtime['package_version'] = '0.0.1';
+set_transient('lcfa_connect_attempt_' . $attempt['id'], $old_runtime);
+$public = LCFA_Connection_Attempt::public_status($attempt['id'], 7);
+attempt_expect($public['state'] === 'reconnect_required' && $public['reason'] === 'runtime_update_required', 'An update must have a specific runtime reason, not a revoked-session message.');
+attempt_expect($public['required_package_version'] === LCFA_MCP_PACKAGE_VERSION, 'The server reports its actual required runtime.');
+attempt_expect(!LCFA_Connection_Attempt::verify($attempt['id'], $session, '0.0.1'), 'An old client cannot restore green after the plugin runtime requirement changes.');
+set_transient('lcfa_connect_attempt_' . $attempt['id'], $ready);
+LCFA_Connection_Attempt::remember($ready, 7);
+$cursor = LCFA_Connection_Attempt::create('cursor', 7);
+LCFA_Connection_Attempt::remember($cursor, 7);
+$GLOBALS['attempt_test_demoted'] = true;
+attempt_expect(LCFA_Connection_Attempt::public_status($cursor['id'], 7)['reason'] === 'access_changed', 'Role loss must invalidate pending setup too.');
+$GLOBALS['attempt_test_demoted'] = false;
+$ids = LCFA_Connection_Attempt::recent_ids(7);
+attempt_expect($ids['claude-code'] === $attempt['id'] && $ids['cursor'] === $cursor['id'], 'Switching agents preserves separate resume pointers.');
+LCFA_Connection_Attempt::remember($cursor, 8);
+attempt_expect(LCFA_Connection_Attempt::recent_ids(8) === [], 'Resume pointers must remain owner-scoped.');
+$other_site = $cursor; $other_site['site_fingerprint'] = 'another-site';
+set_transient('lcfa_connect_attempt_' . $cursor['id'], $other_site);
+attempt_expect(LCFA_Connection_Attempt::public_status($cursor['id'], 7)['reason'] === 'site_changed', 'Site mismatch must be reported separately before pairing.');
+attempt_expect(!LCFA_Connection_Attempt::bind_pairing($cursor['id'], ['pairing_id' => 'stale', 'client' => 'cursor', 'site_fingerprint' => 'another-site', 'scopes' => $cursor['scopes']]), 'Old site instructions cannot open a pairing request.');
+$obsolete = $cursor; $obsolete['package_version'] = '0.0.1';
+set_transient('lcfa_connect_attempt_' . $cursor['id'], $obsolete);
+attempt_expect(!LCFA_Connection_Attempt::bind_pairing($cursor['id'], ['pairing_id' => 'stale', 'client' => 'cursor', 'site_fingerprint' => 'site-fp', 'scopes' => $cursor['scopes']]), 'Old runtime instructions cannot open a pairing request.');
+$obsolete['state'] = 'authorization_required'; $obsolete['pairing_id'] = 'stale';
+set_transient('lcfa_connect_attempt_' . $cursor['id'], $obsolete);
+attempt_expect(!LCFA_Connection_Attempt::can_approve($cursor['id'], 'stale', 7), 'An update between pairing and approval must invalidate old consent.');
 $GLOBALS['attempt_missing_capability'] = 'upload_files';
 attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['state'] === 'reconnect_required', 'A demoted owner must not keep a green connection status.');
+attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['reason'] === 'access_changed', 'Role changes are not runtime updates.');
 $GLOBALS['attempt_missing_capability'] = '';
 LCFA_MCP_Session_Manager::revoke_session($approved['session_id']);
 attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['state'] === 'reconnect_required', 'Revocation must invalidate the visible success.');
+attempt_expect(LCFA_Connection_Attempt::public_status($attempt['id'], 7)['reason'] === 'access_revoked', 'Revocation must have a distinct red-state reason.');
 $expired = LCFA_Connection_Attempt::get($second['id']);
 $expired['expires_at'] = time() - 1;
 set_transient('lcfa_connect_attempt_' . $second['id'], $expired);

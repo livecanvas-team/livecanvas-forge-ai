@@ -2,6 +2,7 @@ const PROTOCOL_VERSION = '2024-11-05'
 const SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-06-18', '2025-11-25']
 const fs = require('node:fs')
 const PACKAGE_VERSION = String(require('../package.json').version || 'unknown')
+const { workflowDiscovery } = require('./workflow-discovery')
 
 async function runStdioServer({ client, tools, config }) {
   process.stdin.resume()
@@ -55,9 +56,11 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
 
     writeResponse(message.id, {
       protocolVersion: negotiatedProtocolVersion,
-      instructions: 'Before any site mutation call get_write_context for the exact content ID, URL or child-theme path. Inspect the actual renderer, framework, roots and shared impact. Pass write_context unchanged and refresh after each mutation. Picowind uses Tailwind/WindPress; DaisyUI and Typography require compile evidence. Picostrap uses Bootstrap/Sass. Keep layout CSS/scripts out of editorial content. Report saved, compiled, visually verified and published separately. Compare a reference layout before restoring it. Bridge cannot enforce these rules for arbitrary shell or database operations.',
+      instructions: 'Call get_connection_handoff to verify the site. Discover workflow descriptions with list_workflows and read only the relevant body with read_workflow before generating changes; the same workflows are available as MCP resources and prompts. Before any site mutation call get_write_context for the exact content ID, URL or child-theme path. Inspect the actual renderer, framework, roots and shared impact. Pass write_context unchanged and refresh after each mutation. Picowind uses Tailwind/WindPress; DaisyUI and Typography require compile evidence. Picostrap uses Bootstrap/Sass. Keep layout CSS/scripts out of editorial content. Content and child-theme source writes return private changesets: use list_changesets and undo_changeset with fresh target_id or file path context. Local file writes use the authenticated WordPress coordinator; never bypass failure with shell writes. Compiler-cache and whole-site Undo remain unqualified. Report saved, compiled, visually verified and published separately. Compare a reference layout before restoring it. Bridge cannot enforce these rules for arbitrary shell or database operations.',
       capabilities: {
-        tools: {}
+        tools: {},
+        resources: {},
+        prompts: {}
       },
       serverInfo: {
         name: 'livecanvas-ai-bridge-mcp',
@@ -103,9 +106,16 @@ async function handleMessage(message, tools, debugLogPath = '', format = 'conten
           text: JSON.stringify(responseResult, null, 2)
         }
       ],
-      structuredContent: responseResult
+      structuredContent: responseResult,
+      isError: result?.ok === false || result?.result?.ok === false
     }, debugLogPath, format)
 
+    return
+  }
+
+  const discovery = await workflowDiscovery(method, message.params || {}, tools)
+  if (discovery !== null) {
+    writeResponse(message.id, discovery, debugLogPath, format)
     return
   }
 
@@ -154,6 +164,8 @@ function formatToolResultForMcp(toolName, result) {
     audit_id: source.audit_id || audit.id || '',
     rollback_available: Boolean(source.rollback_available ?? audit.rollback_available),
     rollback_reference: isPlainObject(audit.rollback_reference) ? audit.rollback_reference : {},
+    changeset: isPlainObject(source.changeset) ? source.changeset : {},
+    verification_states: isPlainObject(source.verification_states) ? source.verification_states : {},
     response_detail: 'compact',
     omitted_fields: ['existing_html', 'patched_html', 'diff_html']
   }

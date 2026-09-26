@@ -122,7 +122,7 @@ final class LCFA_Admin_Hero_Presenter {
         $detected_framework = (string) ($snapshot['detected_framework'] ?? 'unknown');
         if ($editor_value !== '' && $detected_framework !== 'unknown') {
             $chips[] = [
-                'label' => __('Editor', 'livecanvas-forge-ai'),
+                'label' => __('Editor preset', 'livecanvas-forge-ai'),
                 'value' => $editor_value,
                 'tone' => 'other',
             ];
@@ -132,7 +132,7 @@ final class LCFA_Admin_Hero_Presenter {
         $compatibility_status = strtolower(trim((string) ($compatibility['status'] ?? '')));
         if (in_array($compatibility_status, ['supported', 'degraded', 'unsupported'], true)) {
             $chips[] = [
-                'label' => __('Compatibility', 'livecanvas-forge-ai'),
+                'label' => __('API compatibility', 'livecanvas-forge-ai'),
                 'value' => ucfirst($compatibility_status),
                 'tone' => $compatibility_status === 'supported' ? 'active' : 'other',
             ];
@@ -143,6 +143,13 @@ final class LCFA_Admin_Hero_Presenter {
 
     private function build_details(array $snapshot, array $settings): array {
         $details = [];
+
+        if (!empty($snapshot['framework_slug'])) {
+            $details[] = [
+                'label' => __('Editor preset', 'livecanvas-forge-ai'),
+                'value' => __('Editing suggestions only. Agents must verify compiled plugins before using their classes.', 'livecanvas-forge-ai'),
+            ];
+        }
 
         $details[] = [
             'label' => __('Theme template', 'livecanvas-forge-ai'),

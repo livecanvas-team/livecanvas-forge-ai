@@ -37,9 +37,30 @@ final class LCFA_Connection_Attempt {
         return is_array($attempt) && (int) ($attempt['expires_at'] ?? 0) > time() ? $attempt : [];
     }
 
+    /** Per-user, per-client resume pointers; never use the global dashboard as proof. */
+    public static function recent_ids(int $user_id): array {
+        $stored = get_user_meta($user_id, 'lcfa_connection_attempts', true);
+        $ids = is_array($stored) ? $stored : [];
+        $legacy = self::get((string) get_user_meta($user_id, 'lcfa_connection_attempt', true));
+        if ($legacy && (int) $legacy['owner'] === $user_id) $ids[$legacy['client']] = $legacy['id'];
+        foreach ($ids as $client => $id) {
+            $attempt = is_string($id) ? self::get($id) : [];
+            if (!$attempt || (int) $attempt['owner'] !== $user_id || $attempt['client'] !== $client) unset($ids[$client]);
+        }
+        return $ids;
+    }
+
+    public static function remember(array $attempt, int $user_id): void {
+        if ((int) ($attempt['owner'] ?? 0) !== $user_id) return;
+        $ids = self::recent_ids($user_id);
+        $ids[$attempt['client']] = $attempt['id'];
+        update_user_meta($user_id, 'lcfa_connection_attempts', $ids);
+        update_user_meta($user_id, 'lcfa_connection_attempt', $attempt['id']);
+    }
+
     public static function bind_pairing(string $id, array $pairing): bool {
         $attempt = self::get($id);
-        if (!$attempt || $attempt['state'] !== 'waiting_for_client') return false;
+        if (!$attempt || $attempt['state'] !== 'waiting_for_client' || !self::is_current($attempt)) return false;
         if ($attempt['client'] !== ($pairing['client'] ?? '')
             || !hash_equals($attempt['site_fingerprint'], (string) ($pairing['site_fingerprint'] ?? ''))
             || array_diff($attempt['scopes'], (array) ($pairing['scopes'] ?? []))
@@ -53,6 +74,7 @@ final class LCFA_Connection_Attempt {
     public static function can_approve(string $id, string $pairing_id, int $user_id): bool {
         $attempt = self::get($id);
         return $attempt && $attempt['state'] === 'authorization_required'
+            && self::is_current($attempt)
             && $attempt['owner'] === $user_id && hash_equals($attempt['pairing_id'], $pairing_id);
     }
 
@@ -75,9 +97,14 @@ final class LCFA_Connection_Attempt {
             || !hash_equals($attempt['site_fingerprint'], LCFA_Settings::get_site_fingerprint())
             || $attempt['client'] !== ($session['client'] ?? '')
             || $attempt['package_version'] === '' || !hash_equals($attempt['package_version'], $package_version)
+            || (defined('LCFA_MCP_PACKAGE_VERSION') && $package_version !== LCFA_MCP_PACKAGE_VERSION)
             || !empty($session['revoked_at']) || strtotime((string) ($session['expires_at'] ?? '')) <= time()
             || array_diff($attempt['scopes'], (array) ($session['scopes'] ?? []))) return false;
-        if ($attempt['state'] === 'ready') return true;
+        if ($attempt['state'] === 'ready') {
+            $attempt['verified_at'] = gmdate('c');
+            self::save($attempt);
+            return true;
+        }
         $attempt['state'] = 'ready';
         $attempt['verified_at'] = gmdate('c');
         $attempt['expires_at'] = strtotime($session['expires_at']);
@@ -99,27 +126,44 @@ final class LCFA_Connection_Attempt {
     public static function public_status(string $id, int $user_id): array {
         $attempt = self::get($id);
         if (!$attempt || $attempt['owner'] !== $user_id) return [];
+        $reason = '';
         // A previously successful read must not hide a later revocation.
         if (in_array($attempt['state'], ['verifying', 'ready'], true)) {
             $sessions = LCFA_MCP_Session_Manager::get_sessions();
             $session = $sessions[$attempt['session_id']] ?? [];
-            if (!$session || !empty($session['revoked_at']) || strtotime((string) ($session['expires_at'] ?? '')) <= time()) $attempt['state'] = 'reconnect_required';
-            if ($session && !LCFA_MCP_Session_Manager::owner_can_authorize_full_access((int) ($session['owner_user_id'] ?? 0))) $attempt['state'] = 'reconnect_required';
-            if (!hash_equals($attempt['site_fingerprint'], LCFA_Settings::get_site_fingerprint())
-                || (defined('LCFA_MCP_PACKAGE_VERSION') && $attempt['package_version'] !== LCFA_MCP_PACKAGE_VERSION)) $attempt['state'] = 'reconnect_required';
+            if (!$session) $reason = 'session_missing';
+            elseif (!empty($session['revoked_at'])) $reason = 'access_revoked';
+            elseif (strtotime((string) ($session['expires_at'] ?? '')) <= time()) $reason = 'session_expired';
+            elseif (!LCFA_MCP_Session_Manager::owner_can_authorize_full_access((int) ($session['owner_user_id'] ?? 0))
+                || array_diff($attempt['scopes'], (array) ($session['scopes'] ?? []))) $reason = 'access_changed';
+            elseif (($session['client'] ?? '') !== $attempt['client']
+                || ($session['connection_attempt'] ?? '') !== $attempt['id']
+                || ($session['site_fingerprint'] ?? '') !== $attempt['site_fingerprint']) $reason = 'session_mismatch';
         }
-        unset($attempt['owner']);
+        if ($reason === '' && !LCFA_MCP_Session_Manager::owner_can_authorize_full_access($user_id)) $reason = 'access_changed';
+        if ($reason === '' && !hash_equals($attempt['site_fingerprint'], LCFA_Settings::get_site_fingerprint())) $reason = 'site_changed';
+        // Retain the existing exact-version contract. Do not guess compatibility from semver.
+        if ($reason === '' && defined('LCFA_MCP_PACKAGE_VERSION') && $attempt['package_version'] !== LCFA_MCP_PACKAGE_VERSION) $reason = 'runtime_update_required';
+        if ($reason !== '') $attempt['state'] = 'reconnect_required';
+        $attempt['reason'] = $reason;
+        $attempt['required_package_version'] = defined('LCFA_MCP_PACKAGE_VERSION') ? LCFA_MCP_PACKAGE_VERSION : '';
+        unset($attempt['owner'], $attempt['session_id']);
         if ($attempt['state'] === 'authorization_required') {
             $pending = array_values(array_filter(LCFA_MCP_Session_Manager::get_pending_pairings(), static function (array $pairing) use ($attempt): bool {
                 return ($pairing['pairing_id'] ?? '') === $attempt['pairing_id'];
             }));
             if ($pending) $attempt['user_code'] = $pending[0]['user_code'];
-            else $attempt['state'] = 'expired';
+            else { $attempt['state'] = 'expired'; $attempt['reason'] = 'setup_expired'; }
         }
         return $attempt;
     }
 
     private static function save(array $attempt): void {
         set_transient(self::PREFIX . $attempt['id'], $attempt, max(1, $attempt['expires_at'] - time()));
+    }
+
+    private static function is_current(array $attempt): bool {
+        return hash_equals($attempt['site_fingerprint'], LCFA_Settings::get_site_fingerprint())
+            && (!defined('LCFA_MCP_PACKAGE_VERSION') || $attempt['package_version'] === LCFA_MCP_PACKAGE_VERSION);
     }
 }

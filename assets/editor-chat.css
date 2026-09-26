@@ -61,9 +61,20 @@
 .lcfa-editor-bridge__button.is-neutral .lcfa-icon{color:#35d0f2}
 .lcfa-editor-bridge__button.is-upload{justify-content:flex-start}
 .lcfa-editor-bridge__button[disabled]{opacity:.45;pointer-events:none;cursor:not-allowed;filter:saturate(.7)}
+.lcfa-editor-bridge__button[data-lcfa-editor-stop]{min-height:44px;border-radius:8px;font-size:14px;color:#f2c45b;border-color:#585d78}
+.lcfa-editor-bridge__button[data-lcfa-editor-stop][hidden]{display:none}
+.lcfa-editor-bridge__button[data-lcfa-editor-stop]:focus-visible{outline:2px solid #2cc5d8;outline-offset:2px}
+.lcfa-editor-bridge__button[data-lcfa-editor-review-saved]{min-height:44px;border-radius:8px;font-size:14px}
+.lcfa-editor-bridge__button[data-lcfa-editor-review-saved][hidden]{display:none}
+.lcfa-editor-bridge__button[data-lcfa-editor-review-saved]:focus-visible{outline:2px solid #2cc5d8;outline-offset:2px}
+.lcfa-editor-bridge__thread-status[data-state="editor_attention"]{border-color:#585d78;background:#222536;color:#f2c45b;font-size:14px;border-radius:8px;white-space:normal}
+.lcfa-editor-bridge__thread-status[data-state="saved"]{border-color:#585d78;background:#222536;color:#43d98a}
 .lcfa-editor-bridge__action-note{margin:0;font-size:11px;line-height:1.55;color:rgba(245,247,255,.6)}
 .lcfa-editor-bridge__action-note.is-runtime-note{align-self:end}
-.lcfa-editor-bridge__thread-bar{display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px}
+.lcfa-editor-bridge__thread-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:flex-end;margin-bottom:8px}
+.lcfa-editor-bridge__editor-notice{margin:12px 0;padding:12px;border:1px solid #806832;border-radius:8px;background:#27251e;color:#f7df9d;font-size:14px;line-height:1.5}
+.lcfa-editor-bridge__editor-notice[hidden]{display:none}
+.lcfa-editor-bridge__editor-notice p{margin:0 0 10px}
 .lcfa-editor-bridge__thread-status{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-size:11px;font-weight:700;line-height:1.35;color:#f5f7ff}
 .lcfa-editor-bridge__thread-status[data-state="thinking"],.lcfa-editor-bridge__thread-status[data-state="running"]{border-color:rgba(53,208,242,.24);background:linear-gradient(90deg,rgba(53,208,242,.14),rgba(238,30,149,.08));color:#8ee8ff;box-shadow:0 0 22px rgba(53,208,242,.10)}
 .lcfa-editor-bridge__thread-status[data-state="queueing"]{border-color:rgba(83,176,255,.24);background:linear-gradient(90deg,rgba(83,176,255,.13),rgba(238,30,149,.07));color:#b8ddff;box-shadow:0 0 22px rgba(83,176,255,.09)}

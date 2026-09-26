@@ -177,16 +177,14 @@ function test_manifest_uses_active_stylesheet_target(): void {
     lcfa_assert_true(isset($manifest['synchronization']['status']), 'Manifest should report bundle synchronization');
 }
 
-function test_store_writes_bundle_and_bumps_version(): void {
+function test_store_fails_closed_without_the_context_coordinator(): void {
     $store = new LCFA_Picostrap_Bundle_Store(new LCFA_Environment());
     $before = (int) get_theme_mod('css_bundle_version_number', 0);
 
     $result = $store->store('body{color:#123456;}');
 
-    lcfa_assert_true(!empty($result['ok']), 'Bundle store should succeed');
-    lcfa_assert_true(is_file($result['bundle_path']), 'Stored bundle should exist');
-    lcfa_assert_true($result['bundle_version'] > $before, 'Bundle store should bump version');
-    lcfa_assert_same($result['bundle_version'], (int) get_theme_mod('css_bundle_version_number', 0), 'Theme mod version should match store result');
+    lcfa_assert_same('context_unavailable', $result['code'] ?? '', 'Missing real context validation must fail closed');
+    lcfa_assert_same($before, (int) get_theme_mod('css_bundle_version_number', 0), 'Rejected storage must not bump the version');
 }
 
 function test_compile_source_rejects_parent_escape(): void {
@@ -212,7 +210,7 @@ function test_compile_source_reads_parent_scss_file(): void {
     lcfa_assert_same('parent', $payload['origin'], 'Compile source should resolve to the parent theme when missing in child');
 }
 
-function test_store_bundle_endpoint_returns_bundle_metadata(): void {
+function test_store_bundle_endpoint_propagates_storage_failure(): void {
     $api = lcfa_make_picostrap_rest_api();
     $request = new WP_REST_Request();
     $request->set_param('css', 'body{background:#fff8ef;}');
@@ -220,12 +218,11 @@ function test_store_bundle_endpoint_returns_bundle_metadata(): void {
     $response = $api->store_picostrap_bundle($request);
     $payload = $response->get_data()['result'] ?? [];
 
-    lcfa_assert_same(200, $response->get_status(), 'Bundle endpoint should return success');
-    lcfa_assert_true(!empty($payload['ok']), 'Bundle endpoint should store CSS');
-    lcfa_assert_contains('css-output/bundle.css?ver=', $payload['bundle_url'] ?? '', 'Bundle endpoint should expose bundle URL');
+    lcfa_assert_same(400, $response->get_status(), 'Bundle endpoint must report the coordinator failure');
+    lcfa_assert_same('context_unavailable', $payload['code'] ?? '', 'Bundle endpoint must not hide missing safety dependencies');
 }
 
-function test_picostrap_apply_is_atomic_and_rollbackable(): void {
+function test_legacy_compound_apply_cannot_bypass_the_coordinator(): void {
     $service = lcfa_make_design_system_service_for_picostrap();
     $bundle_path = get_stylesheet_directory() . '/css-output/bundle.css';
     file_put_contents($bundle_path, 'body{color:#111;}');
@@ -259,17 +256,13 @@ function test_picostrap_apply_is_atomic_and_rollbackable(): void {
         'expected_state_fingerprint' => (string) ($preview['data']['current_state_fingerprint'] ?? ''),
     ], false);
 
-    lcfa_assert_true(!empty($apply['ok']), 'Compiled Picostrap transaction should apply');
-    lcfa_assert_same('#224466', get_theme_mod('SCSSvar_primary'), 'Atomic apply should update the Customizer variable');
-    lcfa_assert_same('body{color:#224466;}', (string) file_get_contents($bundle_path), 'Atomic apply should replace the bundle');
-    lcfa_assert_same('synchronized', $apply['data']['synchronization_after']['status'] ?? '', 'Atomic apply should report synchronized state');
-    lcfa_assert_true(!empty($apply['data']['picostrap_design_system_rollback']), 'Atomic apply should return a rollback snapshot');
-
-    $restore = $service->restore((array) $apply['data']['picostrap_design_system_rollback'], false);
-    lcfa_assert_true(!empty($restore['ok']), 'Picostrap design-system rollback should succeed');
-    lcfa_assert_same('#111111', get_theme_mod('SCSSvar_primary'), 'Rollback should restore the previous Customizer variable');
-    lcfa_assert_same('body{color:#111;}', (string) file_get_contents($bundle_path), 'Rollback should restore the previous bundle');
-    lcfa_assert_same(30, (int) get_theme_mod('css_bundle_version_number'), 'Rollback should restore the previous bundle version');
+    lcfa_assert_true(empty($apply['ok']), 'Legacy compound apply without current context must fail');
+    lcfa_assert_same('#111111', get_theme_mod('SCSSvar_primary'), 'Rejected legacy apply must preserve the Customizer variable');
+    lcfa_assert_same('body{color:#111;}', (string) file_get_contents($bundle_path), 'Rejected legacy apply must preserve CSS');
+    lcfa_assert_same(30, (int) get_theme_mod('css_bundle_version_number'), 'Rejected legacy apply must preserve the version');
+    $restore = (new LCFA_Picostrap_Bundle_Store(new LCFA_Environment()))->restore(['bundle_created' => true]);
+    lcfa_assert_same('legacy_restore_review_required', $restore['code'] ?? '', 'Caller-supplied rollback snapshots must not delete bundle files');
+    lcfa_assert_same('body{color:#111;}', (string) file_get_contents($bundle_path), 'Rejected restore must preserve CSS');
 }
 
 function test_picostrap_apply_rejects_stale_and_unsafe_payloads(): void {
@@ -300,11 +293,11 @@ function test_picostrap_apply_rejects_stale_and_unsafe_payloads(): void {
 
 function run_all_tests(): void {
     test_manifest_uses_active_stylesheet_target();
-    test_store_writes_bundle_and_bumps_version();
+    test_store_fails_closed_without_the_context_coordinator();
     test_compile_source_rejects_parent_escape();
     test_compile_source_reads_parent_scss_file();
-    test_store_bundle_endpoint_returns_bundle_metadata();
-    test_picostrap_apply_is_atomic_and_rollbackable();
+    test_store_bundle_endpoint_propagates_storage_failure();
+    test_legacy_compound_apply_cannot_bypass_the_coordinator();
     test_picostrap_apply_rejects_stale_and_unsafe_payloads();
     echo "PASS\n";
 }

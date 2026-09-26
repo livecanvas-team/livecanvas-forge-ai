@@ -91,7 +91,7 @@ final class LCFA_Thread_Message_Actions {}
 final class LCFA_Genesis_Executor {
     public function __construct(...$args) {}
 }
-final class LCFA_Codex_Autorunner {}
+require_once LCFA_DIR . 'includes/class-lcfa-codex-autorunner.php';
 final class LCFA_Picostrap_Compile_Service {
     public function __construct(...$args) {}
 }

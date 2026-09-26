@@ -3,7 +3,8 @@ const { createToolRegistry } = require('../src/tool-registry')
 
 function createNoopClient() {
   return new Proxy({}, {
-    get() {
+    get(target, property) {
+      if (property === 'withFrontendWork') return undefined
       return async () => ({ ok: true })
     }
   })
@@ -96,6 +97,10 @@ async function run() {
   )
 
   const tools = registry.list()
+  for (const name of ['get_snapshot', 'get_context', 'get_theme_context']) {
+    assert.match(tools.find(tool => tool.name === name).description, /editor preset is not compile evidence/, `${name} must not imply that an editor preset proves CSS compilation`)
+    assert.match(tools.find(tool => tool.name === name).description, /get_write_context/, `${name} must identify the authoritative capability check`)
+  }
   const standardAnnotationKeys = new Set([
     'title',
     'readOnlyHint',

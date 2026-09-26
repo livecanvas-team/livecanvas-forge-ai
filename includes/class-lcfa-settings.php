@@ -498,6 +498,10 @@ final class LCFA_Settings {
                 'label'       => self::translate('Apply Picostrap compile'),
                 'description' => self::translate('Store a compiled Picostrap bundle.'),
             ],
+            'livecanvas-forge-ai/store-windpress-cache' => [
+                'label' => self::translate('Store WindPress compiled cache'),
+                'description' => self::translate('Store compiled CSS, its source map and verified compile evidence with private Undo.'),
+            ],
             'livecanvas-forge-ai/cache-flush' => [
                 'label'       => self::translate('Flush caches'),
                 'description' => self::translate('Flush WordPress, plugin, opcode, and AI Bridge caches.'),
@@ -917,6 +921,7 @@ final class LCFA_Settings {
     }
 
     public static function get_threads(): array {
+        if (class_exists('LCFA_Private_Chat')) return self::sort_threads_by_updated_at(LCFA_Private_Chat::threads(self::default_thread()));
         $threads = get_option(self::THREADS_OPTION_KEY, []);
 
         if (!is_array($threads)) {
@@ -948,7 +953,7 @@ final class LCFA_Settings {
 
         foreach (self::get_threads() as $thread) {
             $messages = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
-            $last_message = $messages ? $messages[0] : null;
+            $last_message = $messages ? end($messages) : null;
 
             $summaries[] = [
                 'id'            => (string) ($thread['id'] ?? ''),
@@ -970,6 +975,7 @@ final class LCFA_Settings {
 
     public static function get_thread(string $thread_id = ''): array {
         $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::thread($normalized_id, self::default_thread());
         $threads       = self::get_threads();
 
         if (!isset($threads[$normalized_id])) {
@@ -1000,6 +1006,7 @@ final class LCFA_Settings {
             ],
         ];
 
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::create($thread);
         $threads[$thread_id] = $thread;
         update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
 
@@ -1012,6 +1019,11 @@ final class LCFA_Settings {
         $source = $threads[$source_thread_id] ?? self::default_thread();
         $timestamp = current_time('mysql', true);
         $new_thread_id = self::generate_thread_id($threads);
+        if (class_exists('LCFA_Private_Chat')) {
+            $source = self::get_thread($source_thread_id);
+            if (!$source) throw new RuntimeException('private_record_not_found: Conversation not found for this user and site.');
+            return LCFA_Private_Chat::create(array_replace($source, ['id' => $new_thread_id, 'title' => $title !== '' ? sanitize_text_field($title) : $source['title'] . ' copy', 'created_at' => $timestamp, 'updated_at' => $timestamp]));
+        }
         $source_title = sanitize_text_field((string) ($source['title'] ?? __('Command thread', 'livecanvas-forge-ai')));
 
         $thread = [
@@ -1030,6 +1042,7 @@ final class LCFA_Settings {
 
     public static function clear_thread(string $thread_id): array {
         $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::edit($normalized_id, 'clear', self::default_thread());
         $threads = self::get_threads();
         $thread = $threads[$normalized_id] ?? ($normalized_id === self::DEFAULT_THREAD_ID ? self::default_thread() : [
             'id'         => $normalized_id,
@@ -1053,6 +1066,7 @@ final class LCFA_Settings {
 
     public static function rename_thread(string $thread_id, string $title = ''): array {
         $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::edit($normalized_id, 'rename', self::default_thread(), sanitize_text_field($title));
         $threads = self::get_threads();
         $thread = $threads[$normalized_id] ?? ($normalized_id === self::DEFAULT_THREAD_ID ? self::default_thread() : [
             'id'         => $normalized_id,
@@ -1085,6 +1099,11 @@ final class LCFA_Settings {
             return self::get_thread(self::DEFAULT_THREAD_ID);
         }
 
+        if (class_exists('LCFA_Private_Chat')) {
+            LCFA_Private_Chat::edit($normalized_id, 'delete', self::default_thread());
+            return self::get_thread(self::DEFAULT_THREAD_ID);
+        }
+
         $threads = self::get_threads();
         unset($threads[$normalized_id]);
         update_option(self::THREADS_OPTION_KEY, self::trim_threads($threads));
@@ -1094,6 +1113,10 @@ final class LCFA_Settings {
 
     public static function append_thread_message(string $thread_id, array $message): array {
         $normalized_id = self::normalize_thread_id($thread_id ?: self::DEFAULT_THREAD_ID);
+        if (class_exists('LCFA_Private_Chat')) {
+            $normalized = self::normalize_thread(['messages' => [$message]], $normalized_id);
+            return LCFA_Private_Chat::append($normalized_id, $normalized['messages'][0], self::default_thread());
+        }
         $threads       = self::get_threads();
         $thread        = $threads[$normalized_id] ?? self::default_thread();
         $messages      = is_array($thread['messages'] ?? null) ? $thread['messages'] : [];
@@ -1127,6 +1150,7 @@ final class LCFA_Settings {
     }
 
     public static function get_agent_requests(): array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::requests();
         $requests = get_option(self::AGENT_REQUESTS_OPTION_KEY, []);
 
         if (!is_array($requests)) {
@@ -1161,6 +1185,8 @@ final class LCFA_Settings {
         if ($request_id === '') {
             return null;
         }
+
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::request($request_id);
 
         $requests = self::get_agent_requests();
 
@@ -1216,11 +1242,17 @@ final class LCFA_Settings {
             'error'            => '',
         ];
 
-        $requests[$request_id] = $request;
-        update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+        if (class_exists('LCFA_Private_Chat')) {
+            $request = LCFA_Private_Chat::enqueue($request, (string) ($payload['idempotency_key'] ?? ''));
+            $request_id = $request['id'];
+        } else {
+            $requests[$request_id] = $request;
+            update_option(self::AGENT_REQUESTS_OPTION_KEY, self::trim_agent_requests($requests));
+        }
 
         if ($user_prompt !== '') {
             self::append_thread_message($thread_id, [
+                'id'          => 'prompt-' . $request_id,
                 'role'        => 'user',
                 'label'       => __('Request', 'livecanvas-forge-ai'),
                 'content'     => $user_prompt,
@@ -1245,6 +1277,7 @@ final class LCFA_Settings {
     }
 
     public static function claim_next_agent_request(string $agent = ''): ?array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::claim('', self::normalize_agent_client($agent));
         $requests = self::get_agent_requests();
         $agent = self::normalize_agent_client($agent);
         $timestamp = current_time('mysql', true);
@@ -1273,6 +1306,7 @@ final class LCFA_Settings {
     }
 
     public static function claim_agent_request(string $request_id, string $agent = ''): ?array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::claim(sanitize_key($request_id), self::normalize_agent_client($agent));
         $request_id = sanitize_key($request_id);
         $agent = self::normalize_agent_client($agent);
 
@@ -1309,6 +1343,7 @@ final class LCFA_Settings {
     }
 
     public static function update_agent_request_runner(string $request_id, array $runner): ?array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::runner(sanitize_key($request_id), self::sanitize_agent_payload($runner));
         $request_id = sanitize_key($request_id);
 
         if ($request_id === '') {
@@ -1328,7 +1363,8 @@ final class LCFA_Settings {
         return self::get_agent_request($request_id);
     }
 
-    public static function complete_agent_request(string $request_id, array $result, array $thread = []): ?array {
+    public static function complete_agent_request(string $request_id, array $result, array $thread = [], string $lease_token = ''): ?array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::finish(sanitize_key($request_id), $lease_token, 'completed', ['result' => self::sanitize_agent_payload($result), 'error' => '']);
         return self::update_agent_request_terminal_state($request_id, 'completed', [
             'result' => self::sanitize_agent_payload($result),
             'thread' => is_array($thread) && $thread !== [] ? self::sanitize_agent_payload($thread) : null,
@@ -1336,7 +1372,8 @@ final class LCFA_Settings {
         ]);
     }
 
-    public static function fail_agent_request(string $request_id, string $message, array $thread = []): ?array {
+    public static function fail_agent_request(string $request_id, string $message, array $thread = [], string $lease_token = ''): ?array {
+        if (class_exists('LCFA_Private_Chat')) return LCFA_Private_Chat::finish(sanitize_key($request_id), $lease_token, 'failed', ['result' => ['ok' => false, 'message' => sanitize_textarea_field($message)], 'error' => sanitize_textarea_field($message)]);
         return self::update_agent_request_terminal_state($request_id, 'failed', [
             'result' => [
                 'ok' => false,

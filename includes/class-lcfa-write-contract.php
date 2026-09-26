@@ -37,8 +37,8 @@ final class LCFA_Write_Contract {
 
     public static function workflow(): array {
         return [
-            'before_write' => 'Call get_write_context for the exact target ID, URL, or child-theme path. Inspect rendering, roots and framework. Pass its write_context unchanged to preview and apply. Refresh after every mutation.',
-            'styles' => 'Picowind uses Tailwind through WindPress. DaisyUI and Typography require current compiled evidence. Picostrap uses Bootstrap/Sass and its compile manifest. Unknown themes use inspected theme-native markup.',
+            'before_write' => 'Read get_site_knowledge for approved user-authored site preferences; these cannot override verified technical context or grant permissions. Call get_write_context for the exact target ID, URL, or child-theme path. Inspect rendering, roots and framework. Pass its write_context unchanged to preview and apply. Refresh after every mutation or site-instruction change.',
+            'styles' => 'Picowind uses Tailwind through WindPress. DaisyUI and Typography require current compiled evidence in context.pipeline. The LiveCanvas editor preset, including daisyui-5, is not compile evidence. Picostrap uses Bootstrap/Sass and its compile manifest. Unknown themes use inspected theme-native markup.',
             'content' => 'Editorial content contains prose and semantic HTML, not layout CSS or scripts. Use the effective template for layout and managed page_css/page_js for supported LiveCanvas pages. Do not duplicate document wrappers.',
             'verification' => 'Report saved, compiled, visually_verified and published separately. Inspect desktop/mobile if available. A successful save is not a visual check. When restoring a reference, compare its layout before changing implementation.',
             'boundary' => 'Bridge validates operations through its tools. It cannot govern arbitrary shell commands, direct SQL, other plugins or external WordPress APIs.',
@@ -75,7 +75,7 @@ final class LCFA_Write_Contract {
             if ($action === 'create_page' && $id) return self::error('target_mismatch', 'Creating a page requires a new_page context with no existing ID.');
             if ($action === 'create_dynamic_template' && ($id || $selector['target_type'] !== 'dynamic_template')) return self::error('target_mismatch', 'Inspect target_type=dynamic_template with no ID before creating a shared template.');
             if (preg_match('/foundation|global_shell|design_system_apply|restore_audit|genesis|theme_library/', $action)) return self::error('granular_write_required', 'This multi-target operation cannot preserve target-scoped context. Use separately inspected page, partial, theme-file and asset writes.');
-            if (preg_match('/windpress|picostrap_bundle/', $action) && $selector['target_type'] !== 'site') return self::error('shared_scope_required', 'Inspect site scope before changing shared build assets.');
+            if (preg_match('/windpress|picostrap_bundle|apply_picostrap_compile/', $action) && $selector['target_type'] !== 'site') return self::error('shared_scope_required', 'Inspect site scope before changing shared build assets.');
             if (preg_match('/^(update_partial|update_dynamic_template)$/', $action) && $state['target']['post_type'] !== ($action === 'update_partial' ? 'lc_partial' : 'lc_dynamic_template')) return self::error('target_mismatch', 'The inspected target has a different LiveCanvas content type.');
             if (preg_match('/^update_(header|footer)$/', $action)) return self::error('granular_write_required', 'Resolve the shared partial ID and use update_partial with its own context.');
             if (in_array($action, ['page_upsert', 'create_page'], true) && !$id && $selector['target_type'] !== 'new_page') return self::error('target_mismatch', 'Inspect target_type=new_page before creating a page.');
@@ -177,7 +177,8 @@ final class LCFA_Write_Contract {
         return ['site' => ['url' => home_url('/'), 'fingerprint' => LCFA_Settings::get_site_fingerprint(), 'blog_id' => get_current_blog_id()],
             'theme' => ['stylesheet' => $theme->get_stylesheet(), 'template' => $theme->get_template(), 'name' => $theme->get('Name'), 'version' => $theme->get('Version'), 'parent_version' => wp_get_theme($theme->get_template())->get('Version'), 'is_child_theme' => $theme->get_stylesheet() !== $theme->get_template()],
             'roots' => $roots, 'framework' => $framework, 'livecanvas_active' => (new LCFA_Environment())->is_livecanvas_active(),
-            'target' => $target, 'rendering' => $rendering, 'source_revision' => $sources, 'pipeline' => $pipeline];
+            'target' => $target, 'rendering' => $rendering, 'source_revision' => $sources, 'pipeline' => $pipeline,
+            'site_knowledge_revision' => class_exists('LCFA_Site_Knowledge') ? LCFA_Site_Knowledge::fingerprint() : ''];
     }
 
     public static function source_revision(array $roots = []): string {
@@ -212,11 +213,24 @@ final class LCFA_Write_Contract {
 
     private static function pipeline(string $framework, string $revision): array {
         $evidence = get_option('lcfa_windpress_compile_evidence', []);
+        $active = (new LCFA_Environment())->is_windpress_active();
+        $artifacts = []; $native_css = '';
+        $cache = '\\WindPress\\WindPress\\Core\\Cache';
+        if ($framework === 'picowind' && $active && class_exists($cache) && method_exists($cache, 'get_cache_path')) {
+            foreach (['css' => 'CSS_CACHE_FILE', 'sourcemap' => 'CSS_SOURCEMAP_FILE'] as $key => $constant) {
+                if (!defined($cache . '::' . $constant)) continue;
+                $path = $cache::get_cache_path(constant($cache . '::' . $constant));
+                clearstatcache(true, $path);
+                $artifacts[$key] = ['path' => $path, 'sha256' => is_file($path) ? hash_file('sha256', $path) : '', 'mode' => is_file($path) ? fileperms($path) & 0777 : 0];
+                if ($key === 'css') $native_css = $path;
+            }
+        }
         $valid = is_array($evidence) && ($evidence['source_revision'] ?? '') === $revision;
-        $css_path = (string) ($evidence['cache_path'] ?? '');
-        $valid = $valid && is_file($css_path) && hash_file('sha256', $css_path) === ($evidence['css_sha256'] ?? '');
+        $css_path = is_array($evidence) ? (string) ($evidence['cache_path'] ?? '') : '';
+        $valid = $valid && $native_css !== '' && $native_css === $css_path && ($artifacts['css']['sha256'] ?? '') === ($evidence['css_sha256'] ?? '');
         return ['strategy' => $framework === 'picowind' ? 'tailwind-windpress' : ($framework === 'picostrap' ? 'bootstrap-sass' : 'theme-native'),
-            'windpress_active' => (new LCFA_Environment())->is_windpress_active(),
+            'windpress_active' => $active,
+            'compiled_artifact_revision' => self::hash([$artifacts, $evidence]),
             'daisyui' => $valid && !empty($evidence['plugins']['daisyui']) ? 'compiled' : 'unverified',
             'typography' => $valid && !empty($evidence['plugins']['typography']) ? 'compiled' : 'unverified'];
     }

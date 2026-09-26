@@ -11,6 +11,15 @@ define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.5');
 $GLOBALS['lcfa_test_options'] = [];
 $GLOBALS['lcfa_test_transients'] = [];
 
+// In-memory service double for pairing rules. Actual CAS and concurrent
+// revocation are covered by the WordPress integration fixture.
+final class LCFA_Session_Store {
+    public static function read(): array { return get_option('lcfa_mcp_sessions', []); }
+    public static function mutate(callable $change): array {
+        $sessions = $change(self::read()); update_option('lcfa_mcp_sessions', $sessions, false); return $sessions;
+    }
+}
+
 class WP_Error {
     private string $code;
     private string $message;

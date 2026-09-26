@@ -17,6 +17,7 @@ const DEFAULTS = {
   toolProfile: 'full',
   host: '127.0.0.1',
   port: 7681,
+  bridgeTokenFile: '',
   tool: '',
   toolArgs: {},
   output: 'json',
@@ -44,6 +45,7 @@ function loadConfig(argv = []) {
     toolProfile: process.env.LCFA_TOOL_PROFILE || DEFAULTS.toolProfile,
     host: process.env.LCFA_MCP_HOST || DEFAULTS.host,
     port: parsePort(process.env.LCFA_MCP_PORT || DEFAULTS.port),
+    bridgeTokenFile: process.env.LCFA_BRIDGE_TOKEN_FILE || DEFAULTS.bridgeTokenFile,
     tool: process.env.LCFA_TOOL || DEFAULTS.tool,
     toolArgs: parseToolArguments(process.env.LCFA_TOOL_ARGS || ''),
     output: process.env.LCFA_OUTPUT || DEFAULTS.output,
@@ -115,6 +117,9 @@ function loadConfig(argv = []) {
         break
       case 'port':
         config.port = parsePort(value)
+        break
+      case 'bridge-token-file':
+        config.bridgeTokenFile = value || ''
         break
       case 'tool':
         config.tool = value || config.tool

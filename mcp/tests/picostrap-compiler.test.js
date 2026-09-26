@@ -498,6 +498,7 @@ async function testSiteFoundationCompilesBeforeApply() {
 }
 
 async function run() {
+  await testBundleContextJournalAndFailurePropagation()
   await testLocalCompileUsesThemeFilesystemRoots()
   await testLocalCompileUsesManifestRootsBeforeThemeDiscovery()
   await testLocalCompileTriesUnderscoredCandidatesBeforeRemoteFallback()
@@ -505,6 +506,28 @@ async function run() {
   await testRunLcCommandAutoCompileOrchestration()
   await testRunLcCommandCompileFailureDoesNotApply()
   await testSiteFoundationCompilesBeforeApply()
+}
+
+async function testBundleContextJournalAndFailurePropagation() {
+  const proof = { signature: 'fixture-only' }
+  let fail = false
+  const compiler = new PicostrapCompiler({ config: {}, themeFiles: {}, client: {
+    async storePicostrapBundle(css, metadata) {
+      assert.equal(css, '.fixture { color: red; }')
+      assert.deepEqual(metadata, { write_context: proof, acknowledge_shared: true, sourceFingerprint: 'source-fixture' })
+      if (fail) return { result: { ok: false, code: 'stale_compilation', message: 'Compile again.' } }
+      return { result: { ok: true, changeset: { id: 'private-fixture', undo_available: true }, rollback_available: true, undo_tool: 'undo_changeset', compilation_evidence: { source_fingerprint_verified: true } } }
+    }
+  } })
+  compiler.compileBundle = async () => ({ css: '.fixture { color: red; }', source_fingerprint: 'source-fixture', compiled_bytes: 24 })
+  const result = await compiler.buildBundle({ write_context: proof, acknowledge_shared: true })
+  assert.equal(result.changeset.id, 'private-fixture')
+  assert.equal(result.rollback_available, true)
+  assert.equal(result.undo_tool, 'undo_changeset')
+  assert.equal(result.compilation_evidence.compiled_locally, true)
+  assert.equal(result.verification_states.visually_verified, 'not_checked')
+  fail = true
+  await assert.rejects(compiler.buildBundle({ write_context: proof, acknowledge_shared: true }), /Compile again/)
 }
 
 run()

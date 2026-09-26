@@ -247,6 +247,9 @@ function lcfa_assert_true(bool $condition, string $message): void {
     }
 }
 
+// This legacy Genesis unit tests composition. The real control/storage have
+// their own site_knowledge_phase1 and real WordPress integration coverage.
+final class LCFA_Site_Knowledge { public static function render_controls(): void { echo '<p>Shared instructions control fixture</p>'; } }
 require LCFA_DIR . 'includes/class-lcfa-settings.php';
 require LCFA_DIR . 'includes/class-lcfa-genesis-executor.php';
 require LCFA_DIR . 'includes/class-lcfa-admin.php';

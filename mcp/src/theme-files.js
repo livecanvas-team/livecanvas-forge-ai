@@ -341,58 +341,12 @@ class ThemeFilesystem {
       }
     }
 
-    if (dryRun) {
-      return {
-        ok: true,
-        dry_run: true,
-        root_scope: rootScope,
-        verification_states: { saved: false, compiled: 'not_checked', visually_verified: 'not_checked', published: 'not_applicable' },
-        root: root.key,
-        theme: root.label,
-        relative_path: relativePath,
-        absolute_path: absolutePath,
-        exists,
-        created,
-        changed,
-        bytes_before: Buffer.byteLength(previousContent, 'utf8'),
-        bytes_after: Buffer.byteLength(content, 'utf8')
-      }
-    }
-
-    if (createDirectories) {
-      await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
-    }
-
-    const backupFile = await this.createBackup({
-      root,
-      relativePath,
-      content: previousContent,
-      originalExists: exists
-    })
-    const backupId = toPosix(path.relative(this.backupsDirectory, backupFile))
-
-    await fsp.writeFile(absolutePath, content, 'utf8')
-    const stats = await fsp.stat(absolutePath)
-
-    return {
-      ok: true,
-      dry_run: false,
-      writable: true,
-      verification_states: { saved: true, compiled: 'not_checked', visually_verified: 'not_checked', published: 'not_applicable' },
-      root_scope: rootScope,
-      root: root.key,
-      theme: root.label,
-      relative_path: relativePath,
-      absolute_path: absolutePath,
-      exists: true,
-      created,
-      changed,
-      backup_file: backupFile,
-      backup_id: backupId,
-      bytes_before: Buffer.byteLength(previousContent, 'utf8'),
-      bytes_after: Buffer.byteLength(content, 'utf8'),
-      modified_at: stats.mtime.toISOString()
-    }
+    // All mutations use the authenticated WordPress coordinator and its
+    // owner-scoped journal. Never fall back to a direct local write.
+    const response = dryRun
+      ? await this.client.remoteThemeFilePreviewWrite({ ...options, path: relativePath, content })
+      : await this.client.remoteThemeFileWrite({ ...options, path: relativePath, content })
+    return response.result || response
   }
 
   async writeTemplateFile(options = {}) {
@@ -487,117 +441,8 @@ class ThemeFilesystem {
     }
   }
 
-  async restoreBackup(options = {}) {
-    const backup = await this.readBackup(options)
-    const requestedRootScope = String(options.root_scope || '').trim()
-    const rootScope = ['stylesheet', 'template', 'active', 'all'].includes(requestedRootScope)
-      ? requestedRootScope
-      : (backup.root || 'stylesheet')
-    const relativePath = sanitizeRelativePath(options.path || backup.relative_path)
-    const dryRun = Boolean(options.dry_run)
-
-    if (!relativePath) {
-      throw new Error('Unable to infer the original theme file path from the selected backup.')
-    }
-
-    let currentFile = null
-
-    try {
-      currentFile = await this.readFile({
-        root_scope: rootScope === 'all' ? 'active' : rootScope,
-        path: relativePath
-      })
-    } catch (error) {
-      currentFile = null
-    }
-
-    let writeResult
-
-    if (backup.original_exists === false) {
-      const roots = await this.verifyWrite({ ...options, path: relativePath, root_scope: rootScope, content: '' })
-      const root = this.resolveWriteTarget(rootScope, roots)
-      const writePolicy = this.getWriteRootPolicy(root, roots, options)
-      const absolutePath = this.resolveAbsolutePath(root.path, relativePath)
-      const exists = fs.existsSync(absolutePath)
-      const previousContent = exists ? await fsp.readFile(absolutePath, 'utf8') : ''
-
-      assertAllowedExtension(relativePath, WRITABLE_EXTENSIONS, 'restore')
-      assertWritablePath(relativePath)
-
-      if (!writePolicy.writable) {
-        throw new Error(writePolicy.message)
-      }
-
-      let safetyBackupFile = null
-      let safetyBackupId = null
-      if (!dryRun && exists) {
-        safetyBackupFile = await this.createBackup({
-          root,
-          relativePath,
-          content: previousContent,
-          originalExists: true
-        })
-        safetyBackupId = toPosix(path.relative(this.backupsDirectory, safetyBackupFile))
-        await fsp.unlink(absolutePath)
-      }
-
-      writeResult = {
-        ok: true,
-        dry_run: dryRun,
-        writable: true,
-        root_scope: rootScope,
-        root: root.key,
-        theme: root.label,
-        relative_path: relativePath,
-        absolute_path: absolutePath,
-        exists: dryRun ? exists : false,
-        created: false,
-        changed: exists,
-        deleted: exists,
-        restore_action: 'delete_created_file',
-        backup_file: safetyBackupFile,
-        backup_id: safetyBackupId,
-        bytes_before: Buffer.byteLength(previousContent, 'utf8'),
-        bytes_after: 0
-      }
-    } else {
-      writeResult = await this.writeFile({
-        ...options,
-        root_scope: rootScope,
-        path: relativePath,
-        content: backup.content || '',
-        dry_run: dryRun,
-        create_directories: options.create_directories !== false
-      })
-    }
-
-    return {
-      ...writeResult,
-      restored_from_backup: {
-        backup_id: backup.backup_id,
-        created_at: backup.created_at,
-        relative_path: backup.relative_path,
-        root: backup.root,
-        theme: backup.theme,
-        kind: backup.kind,
-        bytes: backup.bytes,
-        original_exists: backup.original_exists,
-        restore_action: backup.restore_action
-      },
-      current_file: currentFile
-        ? {
-            exists: true,
-            root: currentFile.root,
-            theme: currentFile.theme,
-            relative_path: currentFile.relative_path,
-            absolute_path: currentFile.absolute_path,
-            size: currentFile.size,
-            modified_at: currentFile.modified_at
-          }
-        : {
-            exists: false
-          }
-    }
+  async restoreBackup() {
+    throw new Error('legacy_backup_review_required: Read and review legacy backup content before an explicit write_theme_file change. Use undo_changeset for new owner-scoped changes.')
   }
 
   resolveReadableFile(rootScope, relativePath, roots) {
@@ -720,26 +565,6 @@ class ThemeFilesystem {
     return TEMPLATE_DIRECTORIES
   }
 
-  async createBackup({ root, relativePath, content, originalExists = true }) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const backupDirectory = path.join(this.backupsDirectory, stamp.slice(0, 10), root.label)
-    const safeFilename = relativePath.replace(/[\\/]/g, '__')
-    const backupPath = path.join(backupDirectory, `${stamp}__${safeFilename}`)
-
-    await fsp.mkdir(backupDirectory, { recursive: true })
-    await fsp.writeFile(backupPath, content, 'utf8')
-    await fsp.writeFile(this.getBackupMetadataPath(backupPath), JSON.stringify({
-      root: root.key,
-      theme: root.label,
-      relative_path: relativePath,
-      kind: classifyFileKind(relativePath),
-      original_exists: Boolean(originalExists),
-      restore_action: originalExists ? 'restore_content' : 'delete_created_file',
-      created_at: new Date().toISOString()
-    }, null, 2), 'utf8')
-
-    return backupPath
-  }
 
   getBackupMetadataPath(backupPath) {
     return `${backupPath}.json`

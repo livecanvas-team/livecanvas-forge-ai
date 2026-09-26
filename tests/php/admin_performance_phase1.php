@@ -255,6 +255,10 @@ require dirname(__DIR__, 2) . '/includes/class-lcfa-remote-client.php';
 $environment = new LCFA_Environment();
 $environment->get_snapshot();
 $environment->get_snapshot();
+$profile = $environment->get_snapshot()['editor_profile'];
+lcfa_assert_same('editor_preset_only', $profile['role'], 'snapshot must distinguish presets from build evidence');
+lcfa_assert_same(false, $profile['is_compile_evidence'], 'an editor preset must never grant compiled capability');
+lcfa_assert_same('bootstrap', $profile['slug'], 'legacy slug must be retained');
 
 lcfa_assert_same(1, $GLOBALS['lcfa_test_get_plugins_calls'], 'environment snapshot should scan installed plugins only once per request');
 lcfa_assert_same(1, $GLOBALS['lcfa_test_wp_get_themes_calls'], 'environment snapshot should scan themes only once per request');
@@ -262,6 +266,7 @@ lcfa_assert_same(1, $GLOBALS['lcfa_test_wp_get_themes_calls'], 'environment snap
 $inventory = new LCFA_Inventory($environment);
 $inventory->get_summary();
 $inventory->get_summary();
+lcfa_assert_same($profile, $inventory->get_summary()['editor_profile'], 'inventory must carry the same preset provenance');
 
 lcfa_assert_same(6, $GLOBALS['lcfa_test_wp_query_calls'], 'inventory summary should execute its count queries only once per request');
 

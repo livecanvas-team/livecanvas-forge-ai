@@ -16,6 +16,7 @@ class CaptureClient extends WPClient {
 
   async request(method, route, options = {}) {
     this.calls.push({ method, route, options })
+    if (route === 'agent/request/claim') return { request: { id: 'req-123', status: 'running' }, lease_token: 'fixture-lease' }
     return { ok: true }
   }
 }
@@ -63,13 +64,13 @@ class CaptureClient extends WPClient {
   assert.strictEqual(runBody._lcfa_processed_by, 'codex_mcp', 'MCP command executions should declare Codex as the processor')
   assert.strictEqual(runBody._lcfa_site_fingerprint, 'site-fp-test', 'MCP command executions should carry the configured WordPress site fingerprint')
 
-  assert.strictEqual(client.calls[2].method, 'GET', 'getNextAgentRequest should read from the agent queue')
-  assert.strictEqual(client.calls[2].route, 'agent/request', 'getNextAgentRequest should call agent/request')
-  assert.strictEqual(client.calls[2].options.query.agent, 'codex', 'getNextAgentRequest should ask for the configured Codex queue')
-  assert.strictEqual(client.calls[2].options.query.request_id, 'req-123', 'getNextAgentRequest should support claiming one exact frontend request')
-  assert.strictEqual(client.calls[2].options.query.claim, '1', 'getNextAgentRequest should opt into claiming when a request id is provided')
+  assert.strictEqual(client.calls[2].method, 'POST', 'getNextAgentRequest must use an explicit mutating claim')
+  assert.strictEqual(client.calls[2].route, 'agent/request/claim', 'getNextAgentRequest should call the leased claim route')
+  assert.strictEqual(client.calls[2].options.body.agent, 'codex', 'getNextAgentRequest should ask for the configured Codex queue')
+  assert.strictEqual(client.calls[2].options.body.request_id, 'req-123', 'getNextAgentRequest should support claiming one exact frontend request')
 
   const completeBody = client.calls[3].options.body
+  assert.strictEqual(completeBody.lease_token, 'fixture-lease', 'Completion must carry the capability retained by this MCP process')
   assert.strictEqual(client.calls[3].method, 'POST', 'completeAgentRequest should write the agent queue result')
   assert.strictEqual(client.calls[3].route, 'agent/request/complete', 'completeAgentRequest should call agent/request/complete')
   assert.strictEqual(completeBody.request_id, 'req-123', 'completeAgentRequest should send the request id')

@@ -67,6 +67,7 @@ final class LCFA_Context_Builder {
                 'template_directory'    => get_template_directory(),
                 'framework'             => $snapshot['detected_framework'],
                 'editor_config'         => $snapshot['framework_slug'],
+                'editor_profile'        => $snapshot['editor_profile'] ?? [],
                 'site_mode'             => $snapshot['site_mode'],
                 'tangible_available'    => $snapshot['tangible_available'],
                 'acf_active'            => $snapshot['acf_active'],
@@ -587,7 +588,7 @@ final class LCFA_Context_Builder {
             'inline_js'            => false,
             'prefer_template_type' => 'php-html',
             'notes'                => [
-                __('Stack not recognized. Keep changes conservative and target post content first.', 'livecanvas-forge-ai'),
+                __('Stack not recognized. Resolve the effective renderer with get_write_context and inspect the theme-native asset pipeline before choosing a write target. An editor preset does not verify compiled framework support.', 'livecanvas-forge-ai'),
                 __('Do not wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>. LiveCanvas already owns the page shell; return only the sections and containers that belong inside it.', 'livecanvas-forge-ai'),
             ],
         ];

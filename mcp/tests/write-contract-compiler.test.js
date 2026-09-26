@@ -22,7 +22,7 @@ async function run() {
     getWindPressStatus: async () => ({ available: true, source_revision: statusReads++ ? revision : 'a', providers: [{ id: 'posts' }] }),
     getWindPressVolume: async () => ({ entries: [{ relative_path: 'main.css', content: main }] }),
     scanWindPressProviderFull: async () => ({ ok: true, metadata: { truncated }, contents: [{ content: Buffer.from('flex').toString('base64') }] }),
-    saveWindPressCache: async () => { saves++; return { result: { ok: saveOK, message: 'save rejected' } } }
+    saveWindPressCache: async () => { saves++; return { result: { ok: saveOK, message: 'save rejected', changeset: { id: 'cache-fixture', undo_available: true }, rollback_available: true, undo_tool: 'undo_changeset' } } }
   }
   const compiler = new WindPressCompiler({ client, config: {} })
   compiler.loadCompiler = async () => ({ compile: async () => ({ sources: [], build: () => css }), loadSource: async () => [], getCandidates: async () => ['flex'], optimize: async value => ({ code: value }) })
@@ -41,6 +41,14 @@ async function run() {
   assert.equal((await compiler.buildCache({ store: false })).plugins.typography, false, 'Commented plugins must not be loaded or advertised')
   truncated = true
   await assert.rejects(() => compiler.buildCache(), /truncated/)
+  truncated = false; statusReads = 0; saveOK = true
+  const stored = await compiler.buildCache()
+  assert.equal(stored.changeset.id, 'cache-fixture', 'The compiler must retain the server journal ID')
+  assert.equal(stored.rollback_available, true)
+  assert.equal(stored.undo_tool, 'undo_changeset')
+  assert.equal(stored.compilation_evidence.compiled_locally, true)
+  assert.equal(stored.database_filesystem_atomic, false)
+  assert.equal(stored.verification_states.visually_verified, 'not_checked')
   console.log('PASS: assets/dist manifest, traversal, compile evidence, stale/truncated sources, required plugins and failed storage')
 }
 run().catch(error => { console.error(error); process.exitCode = 1 })

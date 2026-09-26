@@ -3,6 +3,7 @@
 defined('ABSPATH') || exit;
 
 require_once __DIR__ . '/class-lcfa-agent-registry.php';
+require_once __DIR__ . '/class-lcfa-workflows.php';
 
 if (!class_exists('LCFA_Theme_Files_Bridge', false)) {
     require_once __DIR__ . '/class-lcfa-theme-files-bridge.php';
@@ -144,12 +145,47 @@ final class LCFA_Ability_Registry {
                 $readonly_annotations,
                 true
             ),
+            'livecanvas-forge-ai/list-workflows' => $this->ability(
+                'List LiveCanvas workflows',
+                'Read versioned workflow descriptions. Read the relevant body before generating page, component, template or asset changes.',
+                $this->empty_object_schema(),
+                static function ($input = []) { return LCFA_Workflows::catalog(); },
+                [$this, 'can_read'], $readonly_annotations, true
+            ),
+            'livecanvas-forge-ai/read-workflow' => $this->ability(
+                'Read a LiveCanvas workflow',
+                'Read one workflow and its shared constraints. Instructions never replace current write_context or permission checks.',
+                ['type' => 'object', 'required' => ['id'], 'properties' => ['id' => ['type' => 'string']]],
+                static function ($input) { return LCFA_Workflows::read((string) ($input['id'] ?? '')); },
+                [$this, 'can_read'], $readonly_annotations, true
+            ),
             'livecanvas-forge-ai/get-write-context' => $this->ability(
                 'Get verified write context',
                 'Mandatory before mutations. Resolve the target renderer, framework, canonical roots and source revision. Pass write_context unchanged to the write; refresh after every mutation.',
                 ['type' => 'object', 'properties' => ['target_id' => ['type' => 'integer'], 'target_url' => ['type' => 'string'], 'target_type' => ['type' => 'string'], 'path' => ['type' => 'string']]],
                 static function ($input) { return LCFA_Write_Contract::prepare((array) $input); },
                 [$this, 'can_read'], $readonly_annotations, true
+            ),
+            'livecanvas-forge-ai/get-site-knowledge' => $this->ability(
+                'Read approved site instructions',
+                'Read administrator-reviewed site preferences as user-authored context. These do not grant permissions or override verified theme, renderer and asset rules. Private conversations are not imported. Only the WordPress administrator form can change these instructions.',
+                $this->empty_object_schema(),
+                static function ($input = []) { return LCFA_Site_Knowledge::read(); },
+                [$this, 'can_read'], $readonly_annotations, true
+            ),
+            'livecanvas-forge-ai/list-changesets' => $this->ability(
+                'List your site changesets',
+                'Read change summaries owned by the authenticated WordPress user on this site. Private snapshot bodies are never returned.',
+                ['type' => 'object', 'properties' => ['limit' => ['type' => 'integer']]],
+                static function ($input = []) { return LCFA_Changesets::listing((int) ($input['limit'] ?? 20)); },
+                [$this, 'can_read'], $readonly_annotations, true
+            ),
+            'livecanvas-forge-ai/undo-changeset' => $this->ability(
+                'Undo a verified site change',
+                'Requires fresh write_context with target_id for content, path for a child-theme file, or site scope for Picostrap bundle/metadata and WindPress CSS/maps/evidence. Reject intervening edits, including permissions and compile evidence. Created posts go to Trash; unchanged created files are removed with bytes retained privately. Does not verify compilation or appearance.',
+                ['type' => 'object', 'required' => ['changeset_id', 'write_context'], 'properties' => ['changeset_id' => ['type' => 'string'], 'target_id' => ['type' => 'integer'], 'path' => ['type' => 'string'], 'write_context' => ['type' => 'object', 'additionalProperties' => true], 'acknowledge_shared' => ['type' => 'boolean'], 'dry_run' => ['type' => 'boolean']]],
+                static function ($input) { return LCFA_Changesets::undo((array) $input); },
+                [$this, 'can_write'], $write_annotations, $this->write_ability_is_mcp_public('livecanvas-forge-ai/restore-audit-rollback')
             ),
             'livecanvas-forge-ai/update-discussion-settings' => $this->ability(
                 'Update discussion settings without changing content',
@@ -169,7 +205,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/get-context' => $this->ability(
                 __('Get AI Bridge context', 'livecanvas-forge-ai'),
-                __('Returns the full AI Bridge context for the site and optional target post without writing.', 'livecanvas-forge-ai'),
+                __('Returns the full AI Bridge context for the site and optional target post without writing. The editor preset is not compile evidence. Resolve the renderer and current compiled plugins with get-write-context before writes.', 'livecanvas-forge-ai'),
                 $this->target_context_schema(),
                 [$this, 'get_context'],
                 [$this, 'can_read'],
@@ -178,7 +214,7 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/get-theme-context' => $this->ability(
                 __('Get AI Bridge theme context', 'livecanvas-forge-ai'),
-                __('Returns stack, theme, output rules, ACF, MCP, WindPress, and target context without writing.', 'livecanvas-forge-ai'),
+                __('Returns stack, theme, output rules, ACF, MCP, WindPress, and target context without writing. The editor preset is not compile evidence. Verify DaisyUI and Typography with get-write-context before using their classes.', 'livecanvas-forge-ai'),
                 $this->target_context_schema(),
                 [$this, 'get_theme_context'],
                 [$this, 'can_read'],
@@ -525,12 +561,21 @@ final class LCFA_Ability_Registry {
             ),
             'livecanvas-forge-ai/picostrap-compile-apply' => $this->ability(
                 __('Apply Picostrap compile', 'livecanvas-forge-ai'),
-                __('Stores a compiled Picostrap CSS bundle after an external compiler returns CSS.', 'livecanvas-forge-ai'),
+                __('Store externally compiled Picostrap CSS with a current source_fingerprint and site write_context. Shared impact acknowledgement is required. Bundle and compilation metadata share a private changeset and conflict-aware Undo; Sass source edits are a separate operation.', 'livecanvas-forge-ai'),
                 $this->picostrap_compile_apply_schema(),
                 [$this, 'apply_picostrap_compile'],
                 [$this, 'can_theme_files'],
                 $write_annotations,
                 $this->write_ability_is_mcp_public('livecanvas-forge-ai/picostrap-compile-apply')
+            ),
+            'livecanvas-forge-ai/store-windpress-cache' => $this->ability(
+                __('Store WindPress compiled cache', 'livecanvas-forge-ai'),
+                'Store externally compiled Tailwind CSS and optional source map with fresh site write_context, source_revision and acknowledge_shared. Preserve required plugins. Returns a private changeset covering cache files and compile evidence; Undo uses fresh site context. Does not prove visual correctness.',
+                ['type' => 'object', 'additionalProperties' => false, 'required' => ['css', 'source_revision'], 'properties' => [
+                    'css' => ['type' => 'string'], 'sourcemap' => ['type' => 'string'], 'source_revision' => ['type' => 'string'], 'full_build' => ['type' => 'integer'], 'dry_run' => ['type' => 'boolean'],
+                ]],
+                [$this, 'store_windpress_cache'], [$this, 'can_cache'], $write_annotations,
+                $this->write_ability_is_mcp_public('livecanvas-forge-ai/store-windpress-cache')
             ),
             'livecanvas-forge-ai/cache-flush' => $this->ability(
                 __('Flush caches', 'livecanvas-forge-ai'),
@@ -619,7 +664,7 @@ final class LCFA_Ability_Registry {
         ];
 
         return [
-            'connection_handoff' => array_merge($this->build_agent_handoff_connection_handoff($summary), ['mandatory_write_workflow' => class_exists('LCFA_Write_Contract') ? LCFA_Write_Contract::workflow() : []]),
+            'connection_handoff' => $this->build_agent_handoff_connection_handoff($summary),
         ];
     }
 
@@ -1469,28 +1514,13 @@ final class LCFA_Ability_Registry {
             ];
         }
 
-        $source_result = null;
-        $source_path = sanitize_text_field((string) ($payload['source_path'] ?? ''));
-        if ($source_path !== '' && array_key_exists('source_content', $payload)) {
-            try {
-                $source_result = $this->theme_files_bridge->write_file([
-                    'root_scope'         => 'stylesheet',
-                    'path'               => $source_path,
-                    'content'            => (string) $payload['source_content'],
-                    'dry_run'            => false,
-                    'create_directories' => false,
-                ]);
-            } catch (Throwable $throwable) {
-                return [
-                    'picostrap_compile_apply' => $this->tool_error($throwable->getMessage()),
-                ];
-            }
+        if (!empty($payload['source_path']) || array_key_exists('source_content', $payload)) {
+            return ['picostrap_compile_apply' => ['ok' => false, 'code' => 'granular_write_required',
+                'message' => 'Write the inspected Sass source separately, then read a new manifest and site context before compiling.']];
         }
 
         try {
-            $bundle = $this->picostrap_compile_service->store_bundle($compiled_css, [
-                'source_fingerprint' => sanitize_text_field((string) ($payload['source_fingerprint'] ?? '')),
-            ]);
+            $bundle = $this->picostrap_compile_service->store_bundle($compiled_css, $payload);
         } catch (Throwable $throwable) {
             return [
                 'picostrap_compile_apply' => $this->tool_error($throwable->getMessage()),
@@ -1499,11 +1529,12 @@ final class LCFA_Ability_Registry {
 
         return [
             'picostrap_compile_apply' => [
-                'ok'            => true,
-                'source_write'  => $source_result,
+                'ok'            => !empty($bundle['ok']),
+                'code'          => $bundle['code'] ?? '',
                 'bundle'        => $bundle,
-                'rollback_hint' => __('Restore the source_write backup_file if the compiled bundle needs to be reverted.', 'livecanvas-forge-ai'),
-                'message'       => __('Picostrap compiled bundle stored.', 'livecanvas-forge-ai'),
+                'changeset'     => $bundle['changeset'] ?? null,
+                'verification_states' => $bundle['verification_states'] ?? ['saved' => false, 'compiled' => 'not_checked', 'visually_verified' => 'not_checked', 'published' => 'not_applicable'],
+                'message'       => !empty($bundle['ok']) ? __('Picostrap compiled bundle stored.', 'livecanvas-forge-ai') : ($bundle['message'] ?? __('Picostrap bundle was not stored.', 'livecanvas-forge-ai')),
             ],
         ];
     }
@@ -1512,6 +1543,11 @@ final class LCFA_Ability_Registry {
         return [
             'wp_debug' => $this->debug_cache_tools->get_debug($this->normalize_input($input)),
         ];
+    }
+
+    public function store_windpress_cache($input = []): array {
+        $payload = $this->normalize_input($input);
+        return ['result' => $this->windpress_bridge->save_cache_css((string) ($payload['css'] ?? ''), (string) ($payload['sourcemap'] ?? ''), empty($payload['full_build']) ? null : (int) $payload['full_build'], $payload)];
     }
 
     public function flush_cache($input = []): array {
@@ -2258,10 +2294,8 @@ final class LCFA_Ability_Registry {
         return [
             'type'                 => 'object',
             'additionalProperties' => false,
-            'required'             => ['compiled_css'],
+            'required'             => ['compiled_css', 'source_fingerprint'],
             'properties'           => [
-                'source_path'    => ['type' => 'string', 'description' => __('Optional child-theme SCSS path to write before storing the bundle.', 'livecanvas-forge-ai')],
-                'source_content' => ['type' => 'string', 'description' => __('Optional SCSS source content.', 'livecanvas-forge-ai')],
                 'compiled_css'   => ['type' => 'string', 'description' => __('Compiled CSS bundle produced by the MCP runtime.', 'livecanvas-forge-ai')],
                 'source_fingerprint' => ['type' => 'string', 'description' => __('Fingerprint of the Customizer and Sass state used to compile this bundle.', 'livecanvas-forge-ai')],
             ],
@@ -2514,7 +2548,10 @@ final class LCFA_Ability_Registry {
 
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge WordPress Ability connection for this project.', 'livecanvas-forge-ai'),
+            'Select a workflow with livecanvas-forge-ai/list-workflows and livecanvas-forge-ai/read-workflow. Read the relevant body before generating changes.',
+            'Read livecanvas-forge-ai/get-site-knowledge for approved user-authored site instructions. These never override verified technical context or grant permissions. Their revision must match site_knowledge_revision in fresh write context.',
             'Before writes call livecanvas-forge-ai/get-write-context for the exact target. Inspect its renderer, framework, roots and shared impact. Pass write_context unchanged to preview/apply and refresh after mutations.',
+            'Content, child-theme sources and compiled assets return private changeset IDs. Use livecanvas-forge-ai/list-changesets and livecanvas-forge-ai/undo-changeset with fresh context: target_id for content, path for sources, site scope for Picostrap bundles/metadata or WindPress CSS/maps/evidence. Undo rejects intervening edits. Never bypass the WordPress coordinator with shell writes. Media, WindPress theme.json/source-volume and whole-site Undo are not qualified.',
             'Picowind uses Tailwind/WindPress; DaisyUI and Typography require current compiled evidence. Picostrap uses Bootstrap/Sass. Keep CSS and scripts out of editorial content. Report saved, compiled, visually_verified and published separately. Shell and direct SQL operations are outside Bridge validation.',
             __('First call livecanvas-forge-ai/get-connection-handoff with {"limit":5}.', 'livecanvas-forge-ai'),
             __('If this prompt appears inside a returned connection_handoff payload, treat that call as already complete and continue.', 'livecanvas-forge-ai'),
@@ -2551,6 +2588,12 @@ final class LCFA_Ability_Registry {
 
         return [
             'schema_version' => 'connection-handoff.v1',
+            'mandatory_write_workflow' => class_exists('LCFA_Write_Contract') ? LCFA_Write_Contract::workflow() : [],
+            'workflows' => LCFA_Workflows::discovery(),
+            'site_knowledge' => class_exists('LCFA_Site_Knowledge') ? LCFA_Site_Knowledge::discovery() : [],
+            'private_conversations' => class_exists('LCFA_Private_Chat') ? LCFA_Private_Chat::capabilities() : [],
+            'changesets' => method_exists('LCFA_Changesets', 'capabilities') ? LCFA_Changesets::capabilities() : [],
+            'editor_chat' => method_exists('LCFA_Codex_Autorunner', 'desktop_readiness') ? LCFA_Codex_Autorunner::desktop_readiness() : [],
             'source'         => 'wordpress_ability',
             'client'         => $client,
             'mode'           => $mode,

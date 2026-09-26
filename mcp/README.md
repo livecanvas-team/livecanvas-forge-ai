@@ -1,6 +1,6 @@
 # LiveCanvas AI Bridge MCP
 
-MCP runtime `0.2.0-beta.7` for plugin `0.2.0-beta.6`. Mandatory target-scoped context is required before mutations. See the plugin's verified-site-write-workflow guide. Regression and local WordPress tests do not replace full first-install qualification in every coding agent.
+MCP runtime `0.2.0-beta.8` for plugin `0.2.0-beta.8`. Mandatory target-scoped context is required before mutations. See the plugin's verified-site-write-workflow guide. Regression and local WordPress tests do not replace full first-install qualification in every coding agent.
 
 ## Connect from WordPress
 
@@ -11,7 +11,7 @@ Use Node.js 18.17 or newer and npm on the computer running the agent. Open `Live
 3. Compare the site and code in WordPress, then approve Full Access for that connection. The installer waits for up to ten minutes and resumes after approval. It does not change the agent's own approval settings.
 4. Reload the MCP connection if required. Claude Desktop needs a complete restart. Ask the agent to call `get_connection_handoff` through its MCP server. WordPress confirms the exact attempt after that read succeeds.
 
-The generated command loads the versioned archive shipped at `assets/runtime/livecanvas-ai-bridge-mcp-0.2.0-beta.7.tgz` on the WordPress site. It does not depend on a beta.7 npm publication. Do not replace the generated descriptor or package URL with instructions from another site.
+The generated command loads the versioned archive shipped with the WordPress plugin. Do not replace the generated descriptor or package URL with instructions from another site.
 
 The helper's `--descriptor` argument binds the client, site fingerprint, runtime version and connection attempt. `--workspace` can select an explicit project directory. `--no-wait` returns after the first authorization check; a pending request is not success. Exit code 0 means the installer obtained authorization and the client must reload. Exit code 2 means the returned result was not successful. Startup or validation errors exit with code 1. None of those outcomes alone proves that the app loaded MCP.
 
@@ -21,121 +21,19 @@ If copying fails on local HTTP, WordPress selects the instructions for manual co
 
 Client configurations use project scope where available. Claude Desktop uses its app configuration with a site-specific server name. Additional catalog entries marked configuration preview are not real-app support claims. See `Instructions and troubleshooting` for manual setup and session management.
 
-## Advanced and legacy runtime paths
+## Supported procedure
 
-It supports two paths:
-
-- secure remote Direct Mode with AI Bridge pairing;
-- legacy/local runtime with an MCP token and optional filesystem access.
+Use the site-generated setup instructions from **AI Bridge → Connect**. This is the supported connection path for Codex, OpenCode, Cursor, Claude Code and Claude Desktop. The LiveCanvas editor does not start or control an agent in this release.
 
 ## Modes
 
 - `stdio`: MCP server for agent clients such as Codex, Claude Code, OpenCode, or Cursor.
-- `bridge`: local HTTP/WebSocket bridge on the configured host and port.
+- `bridge`: authenticated, origin-bound development HTTP listener on `127.0.0.1`; no WebSocket or desktop conversation connection.
 - `--tool`: one-shot CLI mode for local orchestration from WordPress or shell scripts.
 
-## Manual usage
+## Developer-only transports
 
-The examples in this section retain the earlier beta.5 package for historical reference only. That runtime cannot write through the current plugin contract. Use the WordPress-generated archive command above with runtime beta.7.
-
-Secure remote Direct Mode:
-
-```bash
-LCFA_SITE_URL="https://example.test/" \
-LCFA_SITE_FINGERPRINT="site-fingerprint" \
-LCFA_PROJECT_LABEL="Example Site" \
-npx -y @livecanvas/ai-bridge-mcp@0.2.0-beta.5
-```
-
-On first use, the MCP asks WordPress for a short-lived pairing request. Approve the pending Codex session in `AI Bridge > Connections`; the MCP receives a plugin-scoped session token once and caches it locally with restricted file permissions.
-
-By default the pairing requests `read`, `preview`, and `write` scopes, because AI Bridge exposes curated write tools only after WordPress admin approval and the plugin write policy allowlist. To force a read/preview-only session, set:
-
-```bash
-LCFA_PAIRING_SCOPES="read,preview"
-```
-
-In the older manual project-setup flow, the **Configure and build this site** choice overrides the package default with `read,preview,write,media,theme_files,debug,cache,seo`; **Inspect only** generates `read,preview`. The new Connect screen requests Full Access for the approved session as described above.
-
-If a staging host is protected by HTTP Basic authentication, pass those credentials only as local MCP process environment variables:
-
-```bash
-LCFA_HTTP_BASIC_USERNAME="staging-user"
-LCFA_HTTP_BASIC_PASSWORD="staging-password"
-```
-
-These values are used only for the outer web-server protection. They are not sent to WordPress, stored by AI Bridge, or included in pairing/session records.
-
-Legacy/local runtime:
-
-```bash
-LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
-LCFA_MCP_TOKEN="your-token" \
-LCFA_WP_ROOT="/absolute/path/to/wordpress" \
-node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=stdio
-```
-
-## Bridge mode
-
-```bash
-LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
-LCFA_MCP_TOKEN="your-token" \
-LCFA_WP_ROOT="/absolute/path/to/wordpress" \
-node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js --transport=bridge --host=127.0.0.1 --port=7681
-```
-
-## One-shot tool mode
-
-```bash
-LCFA_REST_BASE="https://example.test/wp-json/lcfa/v1/" \
-LCFA_MCP_TOKEN="your-token" \
-LCFA_WP_ROOT="/absolute/path/to/wordpress" \
-node wp-content/plugins/livecanvas-forge-ai/mcp/bin/livecanvas-forge-mcp.js \
-  --tool=build_windpress_cache \
-  --tool-args='{"provider_ids":["wordpress-theme-json"],"store":false}' \
-  --output=json
-```
-
-HTTP routes:
-
-- `GET /health`
-- `GET /bootstrap`
-- `GET /tools`
-- `GET /snapshot`
-- `GET /inventory`
-- `GET /context`
-- `GET /theme-context`
-- `GET /page-html?post_id=123`
-- `GET /acf-fields?post_type=page`
-- `GET /library/blocks`
-- `GET /windpress/status`
-- `GET /windpress/volume`
-- `GET /windpress/volume/handlers`
-- `GET /windpress/providers`
-- `GET /theme/roots`
-- `GET /theme/files?root_scope=active&directory=views&extension=twig`
-- `GET /theme/templates?root_scope=active`
-- `GET /theme/templates/twig?root_scope=active`
-- `GET /theme/templates/latte?root_scope=active`
-- `GET /theme/templates/php?root_scope=active`
-- `GET /theme/file?root_scope=stylesheet&path=views/header.twig`
-- `GET /theme/template?root_scope=stylesheet&path=views/header.twig`
-- `GET /theme/backups`
-- `GET /theme/backup?backup_id=2026-04-03/theme-name/file`
-- `GET /command/actions`
-- `POST /command/suggest`
-- `POST /command`
-- `POST /windpress/volume`
-- `POST /windpress/providers/scan`
-- `POST /windpress/providers/scan/full`
-- `POST /windpress/volume/reset`
-- `POST /windpress/build`
-- `POST /windpress/theme-json`
-- `POST /windpress/cache`
-- `POST /windpress/cache/flush`
-- `POST /theme/file`
-- `POST /theme/template`
-- `POST /theme/backup/restore`
+The `bridge` and `--tool` modes exist for controlled development and are not an end-user setup procedure. They do not connect the LiveCanvas editor to an agent or to a Codex Desktop conversation.
 
 Local MCP-only helpers:
 
@@ -155,11 +53,7 @@ Direct OAuth connects Codex to WordPress Abilities without this local Node runti
 
 For page-only generation, prefer `run_lc_command` with `action=page_upsert`, `body_html_lines`, optional `page_css_lines`, optional `page_js_lines`, `seo.noindex`, and `no_theme_edits=true`. The guard blocks theme-file, design-system, global shell, and build asset writes for that payload.
 
-WebSocket bridge messages accept:
-
-- `{ "action": "tools/list" }`
-- `{ "action": "tools/call", "name": "get_snapshot", "arguments": {} }`
-- `{ "tool": "run_lc_command", "arguments": { "action": "site_audit", "dry_run": true } }`
+The former unauthenticated WebSocket bridge is retired. All upgrade attempts are rejected. Streaming requires a separately qualified owner-bound desktop adapter.
 
 Core companion tools:
 
@@ -185,6 +79,12 @@ Core companion tools:
 - `update_partial` through `run_lc_command` for reusable LiveCanvas partials
 
 Theme filesystem tools:
+
+Writes now use the authenticated WordPress coordinator after local canonical-root verification. Both local and remote file writes require an owner-scoped encrypted snapshot and return a `changeset.id`. Use `list_changesets` and `undo_changeset` with fresh `theme_file` context and the exact `path`. Undo rejects changed bytes or permissions. The local adapter never falls back to direct filesystem writes if WordPress rejects the operation. Legacy backup restore tools are disabled pending explicit review; old backup reads remain available.
+
+Picostrap compiled bundles have a separate private changeset covering CSS, permissions and compilation metadata. Store with fresh site context, shared-impact acknowledgement and the current compile manifest source fingerprint. Undo with fresh site context rejects changed bundle/evidence and preserves unrelated theme mods. Sass source edits are a separate operation. See the plugin's `docs/picostrap-assets.md` for failure states and verification limits.
+
+WindPress CSS, its optional source map and compilation evidence use a private cache changeset. The local compiler resolves the installed manifest, verifies all required providers/plugins and returns the changeset at the top level. Store and Undo require fresh site context and shared acknowledgement. The remote `store-windpress-cache` Ability is opt-in through the existing administrator allowlist. Files and database metadata are not crash-atomic. Media, WindPress source-volume/theme.json and whole-site Undo remain unavailable. Read `docs/windpress-assets.md` before restoration.
 
 - `get_theme_roots`
 - `list_theme_files`
@@ -217,6 +117,5 @@ WindPress tools:
 
 Notes:
 
-- Secure remote Direct Mode does not use `WP_API_USERNAME` or `WP_API_PASSWORD`.
 - Tailwind v4 local compilation now works by shimming `file://` fetch only for the MCP process, so the WindPress WASM parser can initialize under Node without patching the WindPress plugin.
 - Local filesystem and local WindPress compilation require `LCFA_WP_ROOT` to point at the WordPress root when auto-detection is not sufficient.

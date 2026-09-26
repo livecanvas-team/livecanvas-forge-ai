@@ -39,6 +39,11 @@ class PicostrapCompiler {
       bundle_url: stored.bundle_url || '',
       bundle_version: stored.bundle_version || 0,
       compiled_at: stored.compiled_at || '',
+      changeset: stored.changeset || null,
+      rollback_available: stored.rollback_available === true,
+      undo_tool: stored.undo_tool || '',
+      compilation_evidence: { ...stored.compilation_evidence, compiler: 'bridge_dart_sass', compiled_locally: true },
+      database_filesystem_atomic: false,
       warnings: []
     }
   }

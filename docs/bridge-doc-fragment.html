@@ -820,6 +820,73 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 </style>
 
 <div id="lcab-doc">
+    <div class="lcabd-shell">
+        <aside class="lcabd-sidebar" aria-label="Bridge documentation">
+            <a class="lcabd-brand" href="/bridge/">
+                <img src="https://raw.githubusercontent.com/livecanvas-team/livecanvas-forge-ai/main/assets/plugin-icon-128.png" alt="">
+                <span><strong>LiveCanvas AI Bridge</strong><span>Connect a coding agent</span></span>
+            </a>
+            <nav class="lcabd-nav" aria-label="On this page">
+                <a href="#connect" aria-current="location">Connect</a>
+                <a href="#verify">Verify</a>
+                <a href="#work">Work safely</a>
+                <a href="#help">Help</a>
+            </nav>
+            <div class="lcabd-sidebar__release"><span>Current beta</span><strong>0.2.0-beta.8</strong></div>
+        </aside>
+
+        <main class="lcabd-main" id="lcabd-main">
+            <header class="lcabd-intro" id="connect">
+                <h1>Connect your coding agent.</h1>
+                <p class="lcabd-intro__lead">One supported path: start in WordPress, then continue in your coding agent.</p>
+                <div class="lcabd-actions">
+                    <a class="lcabd-button lcabd-button--primary" href="https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.2.0-beta.8/livecanvas-forge-ai.zip">Download beta.8</a>
+                    <a class="lcabd-button" href="/bridge/">About AI Bridge</a>
+                </div>
+                <div class="lcabd-next-action">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                    <div><strong>Open WordPress → AI Bridge → Connect.</strong><span>Choose your agent, copy the generated setup, then paste it in that agent’s project.</span></div>
+                </div>
+            </header>
+
+            <section class="lcabd-section" id="verify" aria-labelledby="verify-title">
+                <h2 id="verify-title">Confirm the connection.</h2>
+                <ol class="lcabd-steps">
+                    <li><div><strong>Install the generated setup.</strong><p>Use the exact instructions from WordPress. They safely identify this site and its MCP runtime.</p></div></li>
+                    <li><div><strong>Restart or reload the agent.</strong><p>Then ask it to call <code>get_connection_handoff</code>.</p></div></li>
+                    <li><div><strong>Approve it in WordPress.</strong><p>Continue only when AI Bridge shows the matching agent and site as Ready.</p></div></li>
+                </ol>
+                <div class="lcabd-warning"><strong>Important:</strong> the LiveCanvas editor does not launch or host an agent chat. Use your connected coding agent for requests.</div>
+            </section>
+
+            <section class="lcabd-section" id="work" aria-labelledby="work-title">
+                <h2 id="work-title">Ask the agent to work safely.</h2>
+                <div class="lcabd-prompts">
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>Check the site first</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-check">Copy prompt</button></div>
+                        <p id="prompt-check">Call get_connection_handoff and get_snapshot. Report the site URL, active theme, framework and fingerprint. Do not change anything.</p>
+                    </article>
+                    <article class="lcabd-prompt">
+                        <div class="lcabd-prompt__head"><h3>Create a safe draft</h3><button class="lcabd-copy" type="button" data-lcabd-copy="prompt-draft">Copy prompt</button></div>
+                        <p id="prompt-draft">Verify the site first. Inspect the active theme and LiveCanvas context, then prepare an About us page as a draft. Use the detected framework and asset pipeline. Preview the change and wait for my approval before applying it.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="lcabd-section" id="help" aria-labelledby="help-title">
+                <h2 id="help-title">If something is not Ready.</h2>
+                <div class="lcabd-troubleshooting">
+                    <details><summary>The agent cannot find livecanvas-forge</summary><p>Return to WordPress → AI Bridge → Connect, copy a new setup for the same project, then reload the agent.</p></details>
+                    <details><summary>The site or fingerprint is wrong</summary><p>Stop without writing. Revoke the old connection in WordPress and create a new one from the correct site.</p></details>
+                    <details><summary>The plugin was updated</summary><p>Reload the coding agent, run <code>get_connection_handoff</code> again, then confirm the connection is Ready.</p></details>
+                </div>
+            </section>
+
+            <footer class="lcabd-footer">LiveCanvas AI Bridge beta.8 is for supervised local and staging work. Review previews and keep rollback information for every write.</footer>
+        </main>
+    </div>
+
+    <div class="lcabd-legacy" hidden aria-hidden="true">
     <a class="lcabd-skip" href="#lcabd-main">Skip to documentation</a>
 
     <div class="lcabd-shell">
@@ -1023,6 +1090,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
             <footer class="lcabd-footer">LiveCanvas AI Bridge beta.5 is a test build for supervised local and staging work. Earlier beta.4 instructions are retained above. Use previews, audit IDs and rollback for every write workflow.</footer>
         </main>
+    </div>
     </div>
 </div>
 

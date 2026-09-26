@@ -34,6 +34,10 @@ This example is Picowind markup. For Picostrap, use Bootstrap classes instead. A
 
 ## Rendering and assets
 
+The dashboard's **Editor preset** is LiveCanvas's editing configuration. For example, `daisyui-5` can appear even when the imported WindPress sources do not compile DaisyUI. **API compatibility** describes the Bridge integration APIs and does not confirm CSS output. Neither value authorizes dependent classes.
+
+Snapshot `framework_slug` and context/inventory `editor_config` remain available for older clients. The adjacent `editor_profile` object labels the value `editor_preset_only`, with `is_compile_evidence: false`. Read the current `get_write_context.context.pipeline`: only `daisyui: "compiled"` or `typography: "compiled"` permits the corresponding classes. `unverified` includes missing or stale evidence; it does not by itself prove that a plugin is uninstalled. Use plain Tailwind while optional plugin compilation is unverified.
+
 | Verified stack | Markup and build workflow |
 | --- | --- |
 | Picowind | Tailwind classes scanned by WindPress. DaisyUI and Typography are allowed only when the current source revision has successful compiled CSS evidence for those plugins. Otherwise use plain Tailwind. |

@@ -165,6 +165,23 @@ final class LCFA_Command_Deck {
     }
 
     public function execute(array $payload): array {
+        $action = sanitize_key((string) ($payload['action'] ?? ''));
+        if (class_exists('LCFA_Changesets') && LCFA_Changesets::supports($action) && empty($payload['dry_run']) && ($payload['execution_target'] ?? 'local') !== 'remote') {
+            $policy = $this->evaluate_policy($action, false);
+            if (!empty($policy['ok']) && empty($policy['force_preview'])) {
+                $related_ids = [];
+                if (in_array($action, ['create_dynamic_template', 'update_dynamic_template'], true) && $this->dynamic_template_assignment_was_provided($payload)) {
+                    $assignment = $this->sanitize_dynamic_template_assignment($payload);
+                    $template_id = (int) ($payload['target_id'] ?? $payload['post_id'] ?? 0);
+                    $related_ids = [(int) ($assignment['assigned_post_id'] ?? 0), $template_id ? (int) get_post_meta($template_id, '_lcfa_template_assigned_post_id', true) : 0];
+                }
+                return LCFA_Changesets::run_post($payload, function () use ($payload) { return $this->execute_internal($payload); }, $related_ids);
+            }
+        }
+        return $this->execute_internal($payload);
+    }
+
+    private function execute_internal(array $payload): array {
         $action    = sanitize_key($payload['action'] ?? '');
         if (class_exists('LCFA_Write_Contract') && !$this->is_read_action($action) && $action !== 'design_system_compose') {
             $contract = LCFA_Write_Contract::validate($payload, $action);
@@ -193,6 +210,12 @@ final class LCFA_Command_Deck {
 
         if ($content !== '' && (!isset($payload['content']) || trim((string) $payload['content']) === '')) {
             $payload['content'] = $content;
+        }
+
+        // Generated starters must pass the same contract as caller-supplied HTML.
+        if ($content !== '' && class_exists('LCFA_Write_Contract') && !$this->is_read_action($action) && $action !== 'design_system_compose') {
+            $generated_contract = LCFA_Write_Contract::validate($payload, $action);
+            if (empty($generated_contract['ok'])) return $generated_contract;
         }
 
         if (!isset($this->get_actions()[$action])) {
@@ -628,6 +651,7 @@ final class LCFA_Command_Deck {
                     $result['target_id'] = (int) $post_id;
                     if ($assignment_provided) {
                         $result['data']['assignment_write'] = $this->persist_dynamic_template_assignment((int) $post_id, $template_assignment);
+                        if (empty($result['data']['assignment_write']['ok'])) return $this->error_result($result['data']['assignment_write']['message']);
                     }
                     $result['edit_url'] = function_exists('get_edit_post_link') ? (string) get_edit_post_link((int) $post_id, 'raw') : '';
                     $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
@@ -706,6 +730,7 @@ final class LCFA_Command_Deck {
 
                     if ($assignment_provided) {
                         $result['data']['assignment_write'] = $this->persist_dynamic_template_assignment($target_id, $template_assignment);
+                        if (empty($result['data']['assignment_write']['ok'])) return $this->error_result($result['data']['assignment_write']['message']);
                     }
                     $preview_target = $this->resolve_dynamic_template_preview_target($template_assignment);
                     $result['data']['preview_target'] = $preview_target;
@@ -1020,6 +1045,10 @@ final class LCFA_Command_Deck {
                     return $this->error_result($throwable->getMessage());
                 }
 
+                if (empty($write_result['ok'])) return $write_result;
+                $result['changeset'] = $write_result['changeset'] ?? null;
+                $result['verification_states'] = $write_result['verification_states'];
+                $result['undo_tool'] = $write_result['undo_tool'] ?? '';
                 $result['message'] = $action === 'write_theme_template'
                     ? __('Theme template written.', 'livecanvas-forge-ai')
                     : __('Theme file written.', 'livecanvas-forge-ai');
@@ -3117,6 +3146,19 @@ HTML,
         $assigned_post_id = absint($assignment['assigned_post_id'] ?? 0);
         $native_template_keys = $this->get_dynamic_template_native_meta_keys($assignment);
 
+        // WordPress leaves draft slugs empty. LiveCanvas's page-specific
+        // relation is slug-based, so verify a usable slug before saving it.
+        if ($assigned_post_id > 0 && $template_slug === '') {
+            if (!$post) return ['ok' => false, 'message' => __('The dynamic template no longer exists.', 'livecanvas-forge-ai')];
+            $template_slug = wp_unique_post_slug('lc-template-' . $post_id, $post_id, 'publish', 'lc_dynamic_template', 0);
+            $saved = $this->with_unfiltered_post_content(static function () use ($post_id, $template_slug) {
+                return wp_update_post(['ID' => $post_id, 'post_name' => $template_slug], true);
+            });
+            if (is_wp_error($saved) || (string) get_post_field('post_name', $post_id) !== $template_slug) {
+                return ['ok' => false, 'message' => __('The template slug could not be verified. No assignment was saved.', 'livecanvas-forge-ai')];
+            }
+        }
+
         if ($assignment) {
             update_post_meta($post_id, '_lcfa_template_assignment', $assignment);
             update_post_meta($post_id, '_lcfa_template_native_keys', $native_template_keys);
@@ -3163,11 +3205,17 @@ HTML,
             $previous_relation = (string) get_post_meta($previous_assigned_post_id, 'lc_use_template_of_slug', true);
             if ($previous_relation === $template_slug && function_exists('delete_post_meta')) {
                 delete_post_meta($previous_assigned_post_id, 'lc_use_template_of_slug');
+                if ((string) get_post_meta($previous_assigned_post_id, 'lc_use_template_of_slug', true) === $template_slug) {
+                    return ['ok' => false, 'message' => __('The previous template assignment could not be removed.', 'livecanvas-forge-ai')];
+                }
             }
         }
 
         if ($assigned_post_id > 0 && $template_slug !== '') {
             update_post_meta($assigned_post_id, 'lc_use_template_of_slug', $template_slug);
+            if ((string) get_post_meta($assigned_post_id, 'lc_use_template_of_slug', true) !== $template_slug) {
+                return ['ok' => false, 'message' => __('The page-specific template assignment could not be verified.', 'livecanvas-forge-ai')];
+            }
         }
 
         $language = sanitize_key((string) ($assignment['language'] ?? ''));
@@ -3429,6 +3477,12 @@ HTML,
     }
 
     private function attach_audit_envelope(array &$result, array $payload, array $provenance): void {
+        if (in_array($payload['action'] ?? '', ['write_theme_file', 'write_theme_template'], true)) return;
+        if (class_exists('LCFA_Changesets') && LCFA_Changesets::active()) {
+            // The private journal owns snapshots. Never duplicate editorial bytes
+            // into the legacy global rollback option during a journaled write.
+            return;
+        }
         if (!is_array($result['data'] ?? null)) {
             $result['data'] = [];
         }

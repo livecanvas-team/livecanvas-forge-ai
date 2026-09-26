@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connection preview | LiveCanvas AI Bridge</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <!-- Operate: minimal visible text, startup prompt with clipboard button.
+  Inherit dark/system/cyan identity. Named status light; diagnostics disclosed.
+  Simulation only. Consent remains explicit. -->
+  <a class="skip-link" href="#connection">Skip to connection</a>
+  <div class="workspace">
+    <header class="product-header"><h1>LiveCanvas AI Bridge</h1><span class="preview-label">Preview</span></header>
+    <main id="connection" class="connection" tabindex="-1">
+      <div class="context-row">
+        <div class="site-context"><span class="field-label">WordPress site</span><strong>example.local</strong></div>
+        <div class="agent-field"><label for="agent">Coding agent</label><div class="agent-select"><img id="agent-logo" src="logos/codex-color.svg" width="24" height="24" alt="" aria-hidden="true"><select id="agent"><option value="codex">Codex</option><option value="opencode">OpenCode</option><option value="cursor">Cursor</option><option value="claude-code">Claude Code</option><option value="claude-desktop">Claude Desktop</option></select></div></div>
+      </div>
+      <section class="status-region" aria-labelledby="status-title">
+        <span class="status-light" aria-hidden="true"></span><h2 id="status-title">Not connected</h2>
+      </section>
+      <section class="task" aria-label="Connection action">
+        <div id="approval-panel" hidden>
+          <p>Match this code in your agent.</p><strong class="verification-code">ALFR-2048</strong>
+          <label class="confirmation"><input id="code-match" type="checkbox"><span>The code and site match.</span></label>
+          <p class="permission-notice"><strong>Full Access:</strong> edit content, media and theme files; run builds, debugging, cache and SEO tools. Approve only an agent you trust.</p>
+        </div>
+        <div class="prompt-header"><label id="prompt-label" for="prompt">Setup prompt</label><button id="primary" class="primary"><svg id="copy-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span id="primary-label">Copy prompt</span></button><button id="cancel" class="secondary" hidden>Cancel</button></div>
+        <textarea id="prompt" rows="5" readonly spellcheck="false" aria-describedby="destination copy-feedback"></textarea>
+        <p id="destination" class="destination">Paste into your Codex project chat.</p>
+        <p id="copy-feedback" class="copy-feedback" role="status" aria-live="polite" hidden></p>
+      </section>
+      <details id="connection-details" class="details"><summary>Details &amp; help</summary><div class="details-body">
+        <dl id="diagnostics"></dl><p id="help-text"></p>
+        <p>Use HTTP only on a trusted local network. Public sites need HTTPS.</p>
+        <p>Setup requires approval in WordPress. Keep a backup before editing.</p>
+        <button id="restart" class="text-button">Start setup again</button>
+      </div></details>
+      <p id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+    </main>
+    <details class="preview-controls"><summary>Preview controls <span>· Simulated data</span></summary><div class="preview-tools">
+      <label for="scenario">Preview state</label><select id="scenario">
+        <option value="start">First connection</option><option value="manual">Manual copy</option><option value="waiting">Waiting for agent</option><option value="approval">Approval required</option><option value="verifying">Verifying</option><option value="connected">Connected</option><option value="update">Update required</option><option value="optional">Compatible update</option><option value="stale">Check needed</option><option value="failed">Connection failed</option><option value="revoked">Access removed</option><option value="expired">Setup expired</option>
+      </select><button id="demo-event" class="secondary" hidden></button>
+      <p>Simulation only. Nothing is installed or changed.</p>
+    </div></details>
+  </div>
+</body>
+</html>

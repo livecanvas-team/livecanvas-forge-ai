@@ -6,6 +6,11 @@ const { ThemeFilesystem } = require('../src/theme-files')
 
 function createClient(stylesheet, template, wpRoot) {
   return {
+    async remoteThemeFileWrite(options) {
+      // Fixture coordinator, not the local filesystem adapter, performs writes.
+      fs.writeFileSync(path.join(wpRoot, 'wp-content/themes', stylesheet, options.path), options.content)
+      return { result: { ok: true, writable: true, changeset: { id: 'fixture' } } }
+    },
     async validateWriteContext(options) {
       if (stylesheet === template || options.root_scope === 'template') return { ok: false, code: 'parent_theme_read_only', message: 'Parent theme is read-only. Use a child theme.' }
       const root = path.join(wpRoot, 'wp-content/themes', stylesheet)

@@ -3,50 +3,34 @@
 defined('ABSPATH') || exit;
 
 final class LCFA_Codex_Autorunner {
+    public static function desktop_readiness(): array {
+        return ['available' => false, 'state' => 'needs_action', 'code' => 'desktop_transport_required',
+            'same_desktop_conversation_verified' => false,
+            'message' => __('MCP is separate from desktop chat. A verified connection to the same Codex conversation is not available yet. Continue in your coding agent.', 'livecanvas-forge-ai')];
+    }
+
     public static function maybe_spawn(array $agent_request): array {
         $request_id = sanitize_key((string) ($agent_request['id'] ?? ''));
-        $connections = LCFA_Settings::get_connections();
 
         if ($request_id === '') {
             return ['state' => 'skipped', 'reason' => 'missing_request_id'];
         }
 
-        if (!self::should_autorun($agent_request, $connections)) {
-            $runner = [
-                'state'      => 'skipped',
-                'reason'     => 'autorun_not_available',
-                'updated_at' => current_time('mysql', true),
-            ];
+        if (($agent_request['agent'] ?? 'codex') !== 'codex') {
+            $runner = ['state' => 'waiting_worker', 'reason' => 'agent_claim_required',
+                'message' => __('Waiting for the connected coding agent to claim this request. No local process was started.', 'livecanvas-forge-ai'),
+                'updated_at' => current_time('mysql', true)];
             LCFA_Settings::update_agent_request_runner($request_id, $runner);
             return $runner;
         }
 
-        $codex_binary = self::resolve_codex_binary();
-        if ($codex_binary === '') {
-            $runner = [
-                'state'      => 'unavailable',
-                'reason'     => 'codex_binary_not_found',
-                'message'    => __('Codex CLI was not found. Keep Codex open and process the request through the MCP tools, or install the Codex CLI.', 'livecanvas-forge-ai'),
-                'updated_at' => current_time('mysql', true),
-            ];
-            LCFA_Settings::update_agent_request_runner($request_id, $runner);
-            return $runner;
-        }
-
-        $workspace_root = self::resolve_workspace_root($connections);
-        $run_dir = self::resolve_run_dir();
-        $plan = self::build_launch_plan($agent_request, $codex_binary, $workspace_root, $run_dir);
-
-        $started = self::spawn_plan($plan);
+        // PHP may run on a remote web host. A CLI job there is neither the user's
+        // computer nor their desktop conversation. Never launch it as a fallback.
         $runner = [
-            'state'       => $started['ok'] ? 'started' : 'failed',
-            'reason'      => $started['ok'] ? 'codex_exec_started' : (string) ($started['error'] ?? 'spawn_failed'),
-            'pid'         => sanitize_text_field((string) ($started['pid'] ?? '')),
-            'prompt_file' => $plan['prompt_file'],
-            'log_file'    => $plan['log_file'],
-            'command'       => $plan['command'],
-            'codex_options' => $plan['codex_options'],
-            'updated_at'    => current_time('mysql', true),
+            'state'      => 'unavailable',
+            'reason'     => 'desktop_transport_required',
+            'message'    => __('Desktop chat requires a verified local connection to the same Codex conversation. No separate CLI job was started.', 'livecanvas-forge-ai'),
+            'updated_at' => current_time('mysql', true),
         ];
 
         LCFA_Settings::update_agent_request_runner($request_id, $runner);
@@ -75,7 +59,6 @@ final class LCFA_Codex_Autorunner {
             escapeshellarg($codex_binary),
             'exec',
             '--skip-git-repo-check',
-            '--ignore-rules',
         ];
 
         if ($codex_options['model'] !== '') {
@@ -88,17 +71,12 @@ final class LCFA_Codex_Autorunner {
             $parts[] = escapeshellarg('model_reasoning_effort="' . $codex_options['reasoning_effort'] . '"');
         }
 
-        if ($sandbox_mode === 'danger-full-access') {
-            $parts[] = '--dangerously-bypass-approvals-and-sandbox';
-        } else {
-            $parts[] = '--full-auto';
-            $parts[] = '--sandbox';
-            $parts[] = escapeshellarg($sandbox_mode);
-        }
+        $parts[] = '--sandbox';
+        $parts[] = escapeshellarg($sandbox_mode);
 
         $parts = array_merge($parts, [
             '-c',
-            escapeshellarg('shell_environment_policy.inherit=all'),
+            escapeshellarg('shell_environment_policy.inherit=core'),
             escapeshellarg('--cd'),
             escapeshellarg($workspace_root),
             '-',
@@ -146,18 +124,19 @@ final class LCFA_Codex_Autorunner {
             '',
             '1. Before any analysis, call mcp__livecanvas_forge__get_frontend_prompt_request with {"agent":"' . $agent . '","request_id":"' . $request_id . '"}. If your runtime exposes un-namespaced MCP tools, call get_frontend_prompt_request with the same payload.',
             '2. If no request is returned, call fail_frontend_prompt_request for request_id "' . $request_id . '" with a clear reason and stop.',
-            '3. Use the returned payload, page context, theme context, and page HTML to decide the safest change.',
-            '4. Apply the change through run_lc_command. Use action "' . $action . '", target_id/post_id ' . (string) $post_id . ', auto_apply true when the user asked for a direct frontend change.',
+            '3. Call list_workflows and read_workflow for the relevant task, then get_write_context for the exact target. Inspect the effective renderer, site identity, child-theme roots, framework and shared impact.',
+            '4. Preview and apply through run_lc_command with the unchanged write_context. Use action "' . $action . '", target_id/post_id ' . (string) $post_id . '. Apply only the requested scope. Automatic apply requires a verified snapshot and conflict-aware Undo. Refresh context after each mutation.',
             '5. Call complete_frontend_prompt_request with request_id "' . $request_id . '" and the exact run_lc_command result.',
             '6. If you cannot safely apply the request, call fail_frontend_prompt_request with request_id "' . $request_id . '".',
             '',
             'LiveCanvas output rules:',
             'Never wrap generated LiveCanvas page content in <main>, <html>, <head>, or <body>; LiveCanvas already owns the page shell.',
-            'Return only sections, containers, rows, components, and scripts that belong inside the existing LiveCanvas page content.',
-            'Prefer framework-compatible markup for the detected theme. Picostrap uses Bootstrap; Picowind uses Tailwind/DaisyUI.',
+            'Return content fragments. Keep CSS and scripts out of editorial content; use supported managed assets or the verified child-theme pipeline.',
+            'Picostrap uses Bootstrap/Sass. Picowind uses Tailwind/WindPress. Use DaisyUI or Typography only with current successful compile evidence.',
+            'Report saved, compiled, visually_verified and published separately. New pages remain drafts unless publication is authorized.',
             '',
             'Operational constraints:',
-            'Do not call list_mcp_resources, list_mcp_resource_templates, read_mcp_resource, local file searches, shell commands, or skill files before claiming this request.',
+            'Read only the relevant workflow and target context. Do not inspect unrelated personal chats or projects.',
             'Use MCP tools for WordPress and LiveCanvas writes. Do not edit plugin files for this frontend request.',
             'Speed profile: ' . $speed . '. ' . $speed_instruction,
             'Keep the final Codex message short; the drawer reads completion from complete_frontend_prompt_request.',
@@ -212,82 +191,8 @@ final class LCFA_Codex_Autorunner {
         return max(30, $timeout);
     }
 
-    private static function should_autorun(array $agent_request, array $connections): bool {
-        if (defined('LCFA_DISABLE_CODEX_AUTORUN') && LCFA_DISABLE_CODEX_AUTORUN) {
-            return false;
-        }
-
-        $env_toggle = getenv('LCFA_CODEX_AUTORUN');
-        if (is_string($env_toggle) && in_array(strtolower($env_toggle), ['0', 'false', 'off', 'no'], true)) {
-            return false;
-        }
-
-        if (($connections['connection_status'] ?? '') !== 'ready') {
-            return false;
-        }
-
-        if (sanitize_key((string) ($connections['preferred_client'] ?? '')) !== 'codex') {
-            return false;
-        }
-
-        if (sanitize_key((string) ($agent_request['agent'] ?? '')) !== 'codex') {
-            return false;
-        }
-
-        if (($agent_request['status'] ?? '') !== 'queued') {
-            return false;
-        }
-
-        $runner = is_array($agent_request['runner'] ?? null) ? $agent_request['runner'] : [];
-        if (in_array((string) ($runner['state'] ?? ''), ['started', 'running'], true)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static function resolve_codex_binary(): string {
-        $env_binary = trim((string) getenv('LCFA_CODEX_BIN'));
-        if ($env_binary !== '' && is_executable($env_binary)) {
-            return $env_binary;
-        }
-
-        $desktop_binary = '/Applications/Codex.app/Contents/Resources/codex';
-        if (is_executable($desktop_binary)) {
-            return $desktop_binary;
-        }
-
-        if (function_exists('shell_exec')) {
-            $path_binary = trim((string) @shell_exec('command -v codex 2>/dev/null'));
-            if ($path_binary !== '' && is_executable($path_binary)) {
-                return $path_binary;
-            }
-        }
-
-        return '';
-    }
-
-    private static function resolve_workspace_root(array $connections): string {
-        $workspace_root = trim((string) ($connections['workspace_root'] ?? ''));
-
-        if ($workspace_root !== '') {
-            return $workspace_root;
-        }
-
-        return defined('ABSPATH') ? rtrim((string) ABSPATH, '/\\') : getcwd();
-    }
-
-    private static function resolve_run_dir(): string {
-        $uploads = function_exists('wp_upload_dir') ? wp_upload_dir(null, false) : [];
-        $base_dir = is_array($uploads) && !empty($uploads['basedir'])
-            ? (string) $uploads['basedir']
-            : sys_get_temp_dir();
-
-        return rtrim(wp_normalize_path($base_dir), '/\\') . '/livecanvas-forge-ai/codex-runs';
-    }
-
     private static function resolve_sandbox_mode(string $preferred_sandbox = ''): string {
-        $allowed = ['read-only', 'workspace-write', 'danger-full-access'];
+        $allowed = ['read-only', 'workspace-write'];
         $preferred_sandbox = sanitize_key($preferred_sandbox);
 
         if (in_array($preferred_sandbox, $allowed, true)) {
@@ -300,7 +205,7 @@ final class LCFA_Codex_Autorunner {
             return $env_sandbox;
         }
 
-        return 'danger-full-access';
+        return 'read-only';
     }
 
     private static function resolve_process_path(): string {
@@ -323,20 +228,4 @@ final class LCFA_Codex_Autorunner {
         return implode(PATH_SEPARATOR, $paths);
     }
 
-    private static function spawn_plan(array $plan): array {
-        if (!function_exists('shell_exec')) {
-            return [
-                'ok'    => false,
-                'error' => 'shell_exec_disabled',
-            ];
-        }
-
-        $pid = trim((string) @shell_exec((string) ($plan['command'] ?? '')));
-
-        return [
-            'ok'  => $pid !== '',
-            'pid' => $pid,
-            'error' => $pid !== '' ? '' : 'empty_pid',
-        ];
-    }
 }

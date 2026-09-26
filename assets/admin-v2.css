@@ -142,6 +142,17 @@
 .lcfa-admin .lcfa-hero-details-panel[open] {
     width: min(440px, 100%);
     border-radius: var(--lcfa-v2-radius);
+    grid-column: 1 / -1;
+}
+
+/* Open diagnostics must not squeeze the page title into a narrow column. */
+.lcfa-admin .lcfa-hero-main:has(.lcfa-hero-details-panel[open]) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+}
+
+.lcfa-admin .lcfa-hero-meta:has(> .lcfa-hero-details-panel[open]) {
+    flex-wrap: wrap;
 }
 
 .lcfa-admin .lcfa-hero-details-panel[open] > .lcfa-hero-details-toggle {

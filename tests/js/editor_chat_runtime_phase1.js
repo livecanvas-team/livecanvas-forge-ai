@@ -369,6 +369,7 @@ async function flush() {
 
   const editorConfig = {
     postId: 42,
+    threadOwner: 7,
     targetId: 42,
     variant: '1',
     threadId: 'default',
@@ -510,6 +511,8 @@ async function flush() {
           result: {
             ok: true,
             summary: isPreview ? 'Preview generated.' : 'Page updated.',
+            target_id: 42,
+            verification_states: { saved: !isPreview, compiled: 'not_checked', visually_verified: 'not_checked', published: false },
             message: isPreview ? 'Preview generated.' : 'Page updated.',
             action: 'page_upsert',
             mode: isPreview ? 'preview' : 'apply',
@@ -561,6 +564,7 @@ async function flush() {
     },
     window: {
       fetch,
+      LCFACreateEditorBuffer: () => ({ read: () => ({ state: 'clean' }), unchanged: () => true, refresh: async () => { liveCanvasRefreshCalls.push('guarded-refresh'); return { refreshed: true }; } }),
       location: { origin: 'http://example.test' },
       lc_editor_url_to_load: 'http://example.test/?page_id=42&lc_page_editing_mode=1',
       loadURLintoEditor(url) {
@@ -602,7 +606,8 @@ async function flush() {
   assert.strictEqual(shellNodes.shell.dataset.bound, '1', 'editor chat runtime should bind to the shell once');
   assert.strictEqual(shellNodes.shell.dataset.ready, '1', 'editor chat runtime should reveal the launcher when no LiveCanvas loader is active');
   assert.strictEqual(shellNodes.shell.classList.contains('is-ready'), true, 'editor chat runtime should mark the launcher ready after load/loader checks');
-  assert.strictEqual(localStorageState['lcfa-editor-thread:42'], 'default', 'editor chat runtime should persist the selected thread key for the current post');
+  assert.strictEqual(localStorageState['lcfa-editor-thread:7:42'], 'default', 'editor chat runtime should persist the selected thread key for the current user and post');
+  assert.strictEqual(localStorageState['lcfa-editor-thread:42'], undefined, 'the shared legacy selection key must not be reused');
   assert.strictEqual(shellNodes.attachmentPreview.hidden, true, 'editor chat runtime should keep the screenshot preview hidden until an image is attached');
   assert.strictEqual(shellNodes.analyzeButton.disabled, true, 'editor chat runtime should keep the primary action disabled until the request has content');
   assert.strictEqual(typeof shellNodes.attachmentTriggerButton.listeners.click, 'function', 'editor chat runtime should wire the upload button to the hidden image input');
@@ -700,7 +705,7 @@ async function flush() {
   assert.strictEqual(executionBodies[0].variant, '1', 'send flow should preserve the current variant');
   assert.strictEqual(executionPolls.length, 1, 'send flow should poll the queued inline execution until completion');
   assert.strictEqual(shellNodes.analyzeButton.children[shellNodes.analyzeButton.children.length - 1].textContent, 'Send', 'editor chat runtime should restore the primary action label after inline execution completes');
-  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'applied', 'send flow should move the conversation directly to applied state');
+  assert.strictEqual(shellNodes.statusNode.getAttribute('data-state'), 'saved', 'Save evidence must not imply compilation or visual verification');
   assert.ok(shellNodes.openDeckLink.href.includes('suggest_action=page_upsert'), 'analyze flow should update the Command Deck deeplink with the suggested action');
   assert.ok(shellNodes.diffNode.innerHTML.includes('changed'), 'send flow should render diff support details from the inline execution');
   assert.strictEqual(shellNodes.existingNode.textContent, '<section>old</section>', 'send flow should render the current markup support pane');
@@ -708,7 +713,8 @@ async function flush() {
   assert.strictEqual(shellNodes.threadLog.children.length, 1, 'editor chat runtime should suppress suggestion-only messages in the frontend drawer thread');
   assert.strictEqual(shellNodes.threadLog.children[0].className, 'lcfa-editor-thread-message is-tool_result', 'editor chat runtime should keep only the execution result message in the frontend drawer thread');
   assert.strictEqual(liveCanvasRefreshCalls.length, 1, 'send flow should resync the LiveCanvas editor after a successful inline apply');
-  assert.ok(liveCanvasRefreshCalls[0].includes('lcfa_refresh='), 'send flow should cache-bust the LiveCanvas editor refresh URL');
+  assert.strictEqual(liveCanvasRefreshCalls[0], 'guarded-refresh', 'Inline refresh must delegate to the editor buffer guard');
+  assert.ok(shellNodes.shell.querySelector('[data-lcfa-editor-result-meta]').children.some(chip => chip.textContent === 'Compiled: Not checked'));
 
   documentListeners.keydown({ key: 'Escape' });
   assert.strictEqual(shellNodes.shell.classList.contains('is-open'), false, 'Escape should close the drawer');

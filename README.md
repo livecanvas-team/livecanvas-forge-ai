@@ -6,9 +6,7 @@ It does not replace LiveCanvas. It handles structural work, agent integration, p
 
 ## Current Status
 
-Current pre-release: [LiveCanvas AI Bridge 0.2.0-beta.6](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.6), with bundled MCP runtime `0.2.0-beta.7`. [Download the WordPress plugin ZIP](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.2.0-beta.6/livecanvas-forge-ai.zip). Use this beta for supervised staging tests. Read the [mandatory write workflow](./docs/verified-site-write-workflow.md) and [compatibility notes](./docs/release-notes-0.2.0-beta.6.md) before updating. Client/OS qualification remains incomplete.
-
-Previous published beta: [LiveCanvas AI Bridge 0.2.0-beta.4](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.4). Its setup screens differ from beta.6.
+Current pre-release: [LiveCanvas AI Bridge 0.2.0-beta.8](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/tag/v0.2.0-beta.8), with bundled MCP runtime `0.2.0-beta.8`. [Download the WordPress plugin ZIP](https://github.com/livecanvas-team/livecanvas-forge-ai/releases/download/v0.2.0-beta.8/livecanvas-forge-ai.zip). Use this beta for supervised staging tests. Read the [mandatory write workflow](./docs/verified-site-write-workflow.md) and [release notes](./docs/release-notes-0.2.0-beta.8.md) before updating.
 
 Beta / not production guaranteed: this repository is public for staging tests and integration review. The plugin can write WordPress content when write abilities are explicitly enabled, so use backups, previews, `dry_run` checks, and rollback IDs before applying agent-generated changes.
 
@@ -25,9 +23,6 @@ Usable today:
 
 - connect Codex, OpenCode, Claude Code, Claude Desktop, and Cursor through secure pairing or the local MCP bridge
 - run the fully supported REST/pairing path on WordPress 6.8
-- use WordPress 7 Abilities and Direct OAuth when available, with secure pairing as the fallback
-- use Codex Direct Mode through OAuth 2.1 + PKCE on public HTTPS sites, without an npm proxy or WordPress credentials in Codex
-- fall back automatically to secure AI Bridge pairing on local/private sites or when WordPress MCP Adapter is unavailable
 - keep Codex connections site-bound with project-scoped `.codex/config.toml` files and a Site ID fingerprint
 - expose WordPress 7 Abilities and a custom WordPress MCP Adapter server when available
 - inspect WordPress, LiveCanvas, Picostrap, Picowind, WindPress, WooCommerce, and ACF context
@@ -39,8 +34,6 @@ Usable today:
 - preview Picostrap Customizer/Sass changes, compile them in the MCP runtime, then apply Customizer values and `bundle.css` atomically with fingerprint checks and rollback
 - run first-pass site foundation workflows with `site_foundation_run`
 - create/update LiveCanvas dynamic templates with native `is_*` conditions, `menu_order` priority, Polylang language, post-specific `lc_use_template_of_slug`, real target preview URLs, and rollback
-- use the AI Bridge drawer inside the LiveCanvas editor for prompt-driven edits and screenshot references
-- queue LiveCanvas editor prompts with a preferred WordPress Ability contract for the connected coding agent
 - inspect recent runs with audit IDs and restore stored rollback records for local apply operations
 - use the PHP-rendered `AI Studio` tab to inspect abilities, MCP write exposure, AI readiness, and audited runs
 - consume the read-only `/wp-json/lcfa/v1/studio` state endpoint for a future React/DataViews Studio UI
@@ -71,13 +64,7 @@ Usable today:
 - install validated Picowind or Picostrap child themes from the Theme Library and import deterministic LiveCanvas starter data with rollback metadata
 - finish pending remote Picowind builds with an audit-bound, checksum-verified MCP build tool
 
-Previous beta qualification: OpenCode, Cursor, Claude Desktop Free, and Codex passed real local handoff, snapshot, preview, write, and rollback tests with MCP `0.2.0-beta.5`. Claude Code setup generation is available, but its CLI path is preview/configuration-only until a full authenticated run is qualified.
-
-The beta.5 test build (runtime `0.2.0-beta.6`) introduces one connection screen for these five clients. Activation opens Connect before project setup. Copy the generated instructions into the coding agent; for Claude Desktop, run the generated command in Terminal or PowerShell. Approve the matching code in WordPress to grant Full Access to that new session. The installer waits for approval, preserves other MCP servers and creates a backup when changing an existing configuration. The client then calls `get_connection_handoff`; the page verifies that exact installation attempt automatically.
-
-The test ZIP includes the installer archive, so these instructions do not require an unpublished npm package. Manual setup and session management remain available under Instructions and troubleshooting. Existing sessions keep their scopes and site policies. The new Full Access profile is request-scoped, and owner capability removal invalidates access. Additional clients are explicitly marked configuration preview.
-
-In the beta.5 macOS test run, Codex CLI, OpenCode Desktop and Claude Desktop completed authenticated reads and created separate About us drafts. Cursor's usage limit and Claude Code's missing sign-in blocked their page tests. Codex Desktop, clean database installation and Windows/Linux remain untested. A known mismatch can leave legacy handoff fields reporting `not_connected` / `smoke_test` while Connect reports Connected. Stop before writes if statuses disagree. See the [test report](./docs/client-validation-2026-09-25.md) and [beta.5 notes](./docs/release-notes-0.2.0-beta.5.md) for evidence and open gates; earlier beta results do not qualify this build.
+Use one setup path for every supported coding agent: open `AI Bridge → Connect` in WordPress, choose the agent, copy the generated setup, install it in the same project, then complete the matching approval in WordPress. Reload the agent and ask it to call `get_connection_handoff` before any write. The LiveCanvas editor does not launch or host an agent chat in this release.
 
 Still in progress:
 
@@ -106,7 +93,7 @@ Main areas:
 - `AI Studio`: operational view for abilities, native page blueprints, MCP exposure, AI readiness, runs, audit IDs, and rollback shortcuts
 - `Theme Library`: admin-only catalog installer for validated Picowind and Picostrap child themes with deterministic LiveCanvas starter data
 - `Command Deck`: preview/apply console for structured operations
-- `LiveCanvas editor drawer`: in-editor prompt surface for contextual page edits
+- `Connect`: the supported setup surface for connecting an external coding agent
 - `MCP package`: local Node bridge in [`mcp/`](./mcp/)
 
 ## Product Family
@@ -127,14 +114,12 @@ Recommended:
 - WordPress 6.8 through 7.1
 - LiveCanvas
 - PHP 8.0 or newer
-- the official WordPress MCP Adapter for the recommended remote Direct OAuth path
-- a public HTTPS WordPress URL for Direct OAuth
-- Node.js 18.17 or newer and npm on the agent host for the new connection installer and its bridge; the separate Direct OAuth path does not use this runtime
+- Node.js 18.17 or newer and npm on the agent host for the generated connection setup and its bridge
 - Picostrap, Picowind/WindPress, or another active WordPress theme
 
 ## Installation
 
-1. Download the beta.5 test ZIP linked above, or run `bash scripts/build-dist.sh` and use `dist/livecanvas-forge-ai.zip`. The tagged beta.4 release still uses its previous setup flow.
+1. Download the beta.8 ZIP linked above, or run `bash scripts/build-dist.sh` and use `dist/livecanvas-forge-ai.zip`.
 2. Open `WordPress Admin > Plugins > Add New Plugin > Upload Plugin` and upload the ZIP.
 3. Activate `LiveCanvas AI Bridge`.
 4. Activation opens `LiveCanvas > AI Bridge > Connect`. Choose a coding agent. Project setup can be completed when the work requires it.
@@ -196,11 +181,11 @@ package: https://github.com/livecanvas-team/livecanvas-forge-ai/releases/downloa
 
 The Connect screen confirms the connection only after the agent successfully reads the expected WordPress site. A copied command, configuration file or approved request alone is not a verified connection. Use preview or `dry_run: true` before the first write.
 
-This build pins runtime `0.2.0-beta.7` and ships its installer archive in the plugin ZIP. Use the generated site-specific command; a beta.7 npm publication is not assumed. After an update, reload the site-specific server in the agent's MCP settings. In Cursor, reloading the window can leave the previous MCP process running. Claude Desktop needs a complete app restart. Older runtimes cannot obtain the mandatory write context and their mutations will be rejected.
+This build pins runtime `0.2.0-beta.8` and ships its installer archive in the plugin ZIP. Use the generated site-specific command. After an update, reload the site-specific server in the agent's MCP settings. In Cursor, reload the Forge MCP server. Claude Desktop needs a complete app restart. Older runtimes cannot obtain the mandatory write context and their mutations will be rejected.
 
 For copying problems, expired requests, limited-scope access or existing session management, open `Instructions and troubleshooting`. A local HTTP browser can require manual copying. Public sites require HTTPS; cloud agents cannot reach a `.local` site on your computer. Additional clients marked configuration preview have not completed real-app qualification.
 
-The bundled [connection guide](./docs/coding-agent-setup.html) describes this build. The [public Bridge documentation](https://livecanvas.com/bridge-doc/) may still describe the published beta. Technical reference: [`mcp/README.md`](./mcp/README.md). See the [beta.5 release notes](./docs/release-notes-0.2.0-beta.5.md) for qualification limits.
+The bundled [connection guide](./docs/coding-agent-setup.html) describes the supported procedure. The LiveCanvas editor does not launch an agent in this release. Technical reference: [`mcp/README.md`](./mcp/README.md). See the [beta.8 release notes](./docs/release-notes-0.2.0-beta.8.md) for qualification limits.
 
 ## Theme Library
 
@@ -636,70 +621,6 @@ Create a first draft WooCommerce single product template. Use a large product im
 
 ```text
 Build the first site foundation for a boutique architecture studio. Use the uploaded logo as brand reference. Create the design system, global header and footer, Home, Studio, Projects, Services, Journal, and Contact draft pages. Also create a single post template for Journal articles with a large featured image and editorial layout. Preview the full plan first, then apply only after I confirm.
-```
-
-## Example User Prompts In The LiveCanvas Editor
-
-Use these inside the AI Bridge drawer while editing a page in LiveCanvas. They are scoped to the current page or selected section.
-
-### 1. Small Text Improvement
-
-```text
-Improve the copy in this section. Make it clearer and more direct, but keep the same layout, classes, and structure.
-```
-
-### 2. Add A Section
-
-```text
-Add a compact FAQ section with three questions at the end of this page.
-```
-
-### 3. Improve The Hero
-
-```text
-Rework this hero section with a stronger headline, a short supporting paragraph, one primary CTA, one secondary CTA, and better spacing. Keep the current colors and framework classes.
-```
-
-### 4. Use The Selected Section As An Anchor
-
-Select a section in LiveCanvas, then send:
-
-```text
-Add a three-step process section immediately after the selected section. It should feel like part of the same page and should not duplicate existing content.
-```
-
-### 5. Add Pricing
-
-```text
-Add a pricing section with three plans: Starter, Pro, and Team. Make Pro the recommended plan, include concise feature bullets, and add a CTA button for each plan.
-```
-
-### 6. Match An Uploaded Screenshot
-
-Attach a screenshot in the AI Bridge drawer, then send:
-
-```text
-Use the uploaded screenshot as a visual reference for this section. Match the hierarchy, spacing, and CTA structure, but keep this site's colors, typography, and framework classes.
-```
-
-### 7. Add A Logo-Informed Brand Section
-
-Upload the logo in the drawer, then send:
-
-```text
-Use this logo as brand reference and redesign the current section around it. Create a premium visual feel, choose supporting colors from the logo, and keep the section responsive in LiveCanvas.
-```
-
-### 8. Create A Rich Blog Hero
-
-```text
-Turn this top section into a blog-post hero with a large featured image area, category label, title, excerpt, author/date metadata, and a clean scroll path into the article content.
-```
-
-### 9. Page-Level Refresh
-
-```text
-Refresh this page for a consulting business. Keep the current content intent, improve section order, add a stronger CTA before the footer, and avoid changing the global header or footer.
 ```
 
 ## Development Roadmap

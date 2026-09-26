@@ -37,10 +37,15 @@ try {
         screen_expect($descriptor['client'] === $client && $descriptor['attempt'] === $attempt['id'], 'Descriptor must bind the exact client and attempt.');
         screen_expect($descriptor['runtime_package'] === LCFA_URL . 'assets/runtime/livecanvas-ai-bridge-mcp-' . LCFA_MCP_PACKAGE_VERSION . '.tgz', 'Instructions use the bundled release archive.');
         ob_start(); LCFA_Connection_Screen::render(['preferred_client' => $client]); $html = ob_get_clean();
-        screen_expect(strpos($html, 'value="' . $client . '" selected=') !== false, 'The selected client must survive rendering.');
-        screen_expect(substr_count($html, 'data-connect-copy') === 1, 'One copy action for every client.');
-        screen_expect(strpos($html, 'Authorize Full Access') !== false && strpos($html, 'data-connect-approve hidden') !== false, 'Consent is explicit and hidden until an actual request exists.');
+        screen_expect((bool) preg_match('/value="' . preg_quote($client, '/') . '"[^>]* selected=/', $html), 'The selected client must survive rendering.');
+        screen_expect(substr_count($html, 'data-connect-copy disabled') === 1, 'One copy action for every client.');
+        screen_expect(strpos($html, 'Approve Full Access') !== false && strpos($html, 'data-connect-approve hidden disabled') !== false, 'Consent is explicit and disabled until an actual request and code match exist.');
+        screen_expect(strpos($html, 'id="lcfa-connect-prompt"') < strpos($html, '<details'), 'The prompt is visible outside the details disclosure.');
+        screen_expect(strpos($html, 'data-connect-logo') !== false && strpos($html, 'data-logo=') !== false, 'Known clients reuse the plugin logos.');
+        screen_expect(strpos($html, 'data-connect-copy-feedback') !== false && strpos($html, 'data-connect-match') !== false, 'Clipboard feedback and consent matching have separate controls.');
+        screen_expect(strpos($html, 'data-tone="amber"') !== false, 'A server render must not claim an unverified green connection.');
         screen_expect(strpos($html, 'connection_ui=manual') !== false, 'The previous setup remains available for recovery.');
     }
+    screen_expect(strpos(LCFA_Connection_Screen::labels()['copyManually'], '%s') !== false, 'Clipboard fallback has a platform-specific shortcut.');
     echo "PASS: unified screen, five client descriptors, explicit consent and versioned bundled installer\n";
 } finally { unlink($archive); rmdir($fixture . 'assets/runtime'); rmdir($fixture . 'assets'); rmdir($fixture); }

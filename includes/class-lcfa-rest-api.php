@@ -3,6 +3,7 @@
 defined('ABSPATH') || exit;
 
 require_once __DIR__ . '/class-lcfa-agent-registry.php';
+require_once __DIR__ . '/class-lcfa-workflows.php';
 require_once __DIR__ . '/class-lcfa-connection-attempt.php';
 
 if (!class_exists('LCFA_Thread_Message_Actions', false) && defined('LCFA_DIR')) {
@@ -103,6 +104,42 @@ final class LCFA_Rest_Api {
     }
 
     public function register_routes(): void {
+        register_rest_route('lcfa/v1', '/changesets', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => static function ($request) { return new WP_REST_Response(LCFA_Changesets::listing((int) ($request['limit'] ?? 20))); },
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+        register_rest_route('lcfa/v1', '/changesets/undo', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => static function ($request) {
+                $result = LCFA_Changesets::undo((array) $request->get_json_params());
+                return new WP_REST_Response($result, !empty($result['ok']) ? 200 : 409);
+            },
+            'permission_callback' => [$this, 'can_write'],
+        ]);
+        register_rest_route('lcfa/v1', '/workflows', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => static function () { return new WP_REST_Response(LCFA_Workflows::catalog()); },
+            'permission_callback' => [$this, 'can_read'],
+        ]);
+        register_rest_route('lcfa/v1', '/site-knowledge', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => static function () {
+                $result = LCFA_Site_Knowledge::read();
+                return new WP_REST_Response($result, !empty($result['ok']) ? 200 : 503);
+            },
+            'permission_callback' => function ($request) {
+                return $request->get_header('x-lcfa-mcp-session') ? $this->has_valid_mcp_session($request, 'read') : $this->can_read($request);
+            },
+        ]);
+        register_rest_route('lcfa/v1', '/workflows/(?P<id>[a-z][a-z0-9-]{0,63})', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => static function ($request) {
+                $result = LCFA_Workflows::read((string) $request['id']);
+                return new WP_REST_Response($result, !empty($result['ok']) ? 200 : 404);
+            },
+            'permission_callback' => [$this, 'can_read'],
+        ]);
         register_rest_route('lcfa/v1', '/write-context', [
             'methods' => WP_REST_Server::READABLE,
             'callback' => static function ($request) { return new WP_REST_Response(LCFA_Write_Contract::prepare($request->get_params())); },
@@ -439,38 +476,38 @@ final class LCFA_Rest_Api {
 
         register_rest_route('lcfa/v1', '/chat/send', [
             'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => [$this, 'send_chat_message'],
+            'callback'            => $this->private_chat_callback('send_chat_message'),
             'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/chat/thread', [
             'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => [$this, 'manage_chat_thread'],
+            'callback'            => $this->private_chat_callback('manage_chat_thread'),
             'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/agent/request', [
             [
                 'methods'             => WP_REST_Server::CREATABLE,
-                'callback'            => [$this, 'enqueue_agent_request'],
+                'callback'            => $this->private_chat_callback('enqueue_agent_request'),
                 'permission_callback' => [$this, 'can_write'],
             ],
             [
                 'methods'             => WP_REST_Server::READABLE,
-                'callback'            => [$this, 'get_agent_request_status'],
+                'callback'            => $this->private_chat_callback('get_agent_request_status'),
                 'permission_callback' => [$this, 'can_read'],
             ],
         ]);
 
         register_rest_route('lcfa/v1', '/agent/request/complete', [
             'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => [$this, 'complete_agent_request'],
+            'callback'            => $this->private_chat_callback('complete_agent_request'),
             'permission_callback' => [$this, 'can_write'],
         ]);
 
         register_rest_route('lcfa/v1', '/agent/request/fail', [
             'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => [$this, 'fail_agent_request'],
+            'callback'            => $this->private_chat_callback('fail_agent_request'),
             'permission_callback' => [$this, 'can_write'],
         ]);
 
@@ -479,6 +516,14 @@ final class LCFA_Rest_Api {
             'callback'            => [$this, 'run_command'],
             'permission_callback' => [$this, 'can_write'],
         ]);
+
+        foreach (['claim' => 'claim_agent_request', 'renew' => 'renew_agent_request', 'cancel' => 'cancel_agent_request', 'acknowledge-stop' => 'acknowledge_agent_stop'] as $path => $method) {
+            register_rest_route('lcfa/v1', '/agent/request/' . $path, [
+                'methods' => WP_REST_Server::CREATABLE, 'callback' => $this->private_chat_callback($method), 'permission_callback' => [$this, 'can_write'],
+            ]);
+        }
+        register_rest_route('lcfa/v1', '/agent/request/pending', ['methods' => WP_REST_Server::READABLE,
+            'callback' => $this->private_chat_callback('get_pending_agent_requests'), 'permission_callback' => [$this, 'can_read']]);
 
         register_rest_route('lcfa/v1', '/command/execution', [
             [
@@ -503,6 +548,12 @@ final class LCFA_Rest_Api {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [$this, 'get_mcp_health'],
             'permission_callback' => [$this, 'can_mcp_health'],
+        ]);
+
+        register_rest_route('lcfa/v1', '/mcp/transport-identity', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_transport_identity'],
+            'permission_callback' => [$this, 'can_transport_identity'],
         ]);
 
         register_rest_route('lcfa/v1', '/mcp/local-status', [
@@ -623,7 +674,7 @@ final class LCFA_Rest_Api {
         register_rest_route('lcfa/v1', '/windpress/cache', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'save_windpress_cache'],
-            'permission_callback' => [$this, 'can_write'],
+            'permission_callback' => [$this, 'can_cache'],
         ]);
 
         register_rest_route('lcfa/v1', '/windpress/build-local', [
@@ -1088,9 +1139,8 @@ final class LCFA_Rest_Api {
         $attempt = LCFA_Connection_Attempt::create($client, get_current_user_id());
         $instructions = LCFA_Connection_Screen::instructions($attempt);
         if ($instructions === []) return new WP_Error('lcfa_installer_missing', __('The installer package is missing. Install the complete plugin release or use manual setup.', 'livecanvas-forge-ai'), ['status' => 503]);
-        update_user_meta(get_current_user_id(), 'lcfa_connection_attempt', $attempt['id']);
-        unset($attempt['owner']);
-        return new WP_REST_Response(array_merge($attempt, $instructions), 201);
+        LCFA_Connection_Attempt::remember($attempt, get_current_user_id());
+        return new WP_REST_Response(array_merge(LCFA_Connection_Attempt::public_status($attempt['id'], get_current_user_id()), $instructions), 201);
     }
 
     public function get_connection_attempt(WP_REST_Request $request) {
@@ -1366,8 +1416,19 @@ final class LCFA_Rest_Api {
 
         if (($connections['connection_status'] ?? '') !== 'ready' || $agent === '') {
             return new WP_REST_Response([
+                'delivery_state' => 'not_queued',
                 'error' => __('No verified coding agent is connected yet. Finish the Connections smoke test or use the local AI Bridge fallback.', 'livecanvas-forge-ai'),
             ], 409);
+        }
+
+        if ($agent === 'codex') {
+            $desktop = LCFA_Codex_Autorunner::desktop_readiness();
+            if (!$desktop['available']) {
+                // Do not leave a prompt waiting forever in an unrelated CLI queue.
+                // This gate must be replaced by a verified site/user conversation
+                // binding, never a caller-supplied "connected" flag.
+                return new WP_REST_Response(['error' => $desktop['message'], 'code' => $desktop['code'], 'editor_chat' => $desktop, 'delivery_state' => 'not_queued'], 409);
+            }
         }
 
         $payload['agent'] = $agent;
@@ -1390,48 +1451,56 @@ final class LCFA_Rest_Api {
     public function get_agent_request_status(WP_REST_Request $request): WP_REST_Response {
         $request_id = sanitize_key((string) ($request->get_param('request_id') ?: $request->get_param('id') ?: ''));
         $claim = in_array((string) $request->get_param('claim'), ['1', 'true', 'yes'], true);
-        $agent = sanitize_key((string) ($request->get_param('agent') ?: ''));
-
-        if ($request_id !== '') {
-            $agent_request = null;
-
-            if ($claim) {
-                $agent_request = LCFA_Settings::claim_agent_request($request_id, $agent);
-            }
-
-            if (!is_array($agent_request)) {
-                $agent_request = LCFA_Settings::get_agent_request($request_id);
-            }
-
-            if (!is_array($agent_request)) {
-                return new WP_REST_Response([
-                    'error' => __('Agent request not found.', 'livecanvas-forge-ai'),
-                ], 404);
-            }
-
-            $agent_request = $this->maybe_fail_stale_agent_request($agent_request);
-            $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
-
-            return new WP_REST_Response([
-                'request' => $this->build_agent_request_response($agent_request),
-                'thread'  => $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id),
-                'status'  => $claim && (($agent_request['status'] ?? '') === 'running') ? 'claimed' : sanitize_key((string) ($agent_request['status'] ?? 'queued')),
-            ], 200);
-        }
-
-        $agent_request = LCFA_Settings::claim_next_agent_request($agent);
-
-        if (!is_array($agent_request)) {
-            return new WP_REST_Response([
-                'request' => null,
-                'status'  => 'empty',
-            ], 200);
-        }
-
+        if ($claim) return new WP_REST_Response(['code' => 'claim_requires_post', 'error' => 'Use POST agent/request/claim. Reading a request never starts it.'], 405);
+        if ($request_id === '') return new WP_REST_Response(['code' => 'request_id_required', 'error' => 'Choose a request ID to read its status.'], 400);
+        $agent_request = LCFA_Settings::get_agent_request($request_id);
+        if (!$agent_request) return new WP_REST_Response(['error' => 'Agent request not found.'], 404);
+        $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
         return new WP_REST_Response([
             'request' => $this->build_agent_request_response($agent_request),
-            'status'  => 'claimed',
+            'thread' => $this->decorate_thread(LCFA_Settings::get_thread($thread_id), $thread_id),
+            'status' => $agent_request['status'],
         ], 200);
+    }
+
+    public function claim_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $agent = LCFA_Agent_Registry::normalize((string) ($payload['agent'] ?? ''));
+        $record = LCFA_Private_Chat::claim(sanitize_key((string) ($payload['request_id'] ?? '')), $agent);
+        return new WP_REST_Response(['request' => $record ? $this->build_agent_request_response($record) : null,
+            'lease_token' => $record['lease_token'] ?? null, 'status' => $record ? 'claimed' : 'empty']);
+    }
+
+    public function renew_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $record = LCFA_Private_Chat::renew(sanitize_key((string) ($payload['request_id'] ?? '')), (string) ($payload['lease_token'] ?? ''));
+        return new WP_REST_Response(['request' => $record ? $this->build_agent_request_response($record) : null], $record ? 200 : 404);
+    }
+
+    public function cancel_agent_request(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $record = LCFA_Private_Chat::cancel(sanitize_key((string) ($payload['request_id'] ?? '')));
+        return new WP_REST_Response(['request' => $record ? $this->build_agent_request_response($record) : null], $record ? 200 : 404);
+    }
+
+    public function get_pending_agent_requests(WP_REST_Request $request): WP_REST_Response {
+        return new WP_REST_Response(['requests' => LCFA_Private_Chat::pending()]);
+    }
+
+    public function acknowledge_agent_stop(WP_REST_Request $request): WP_REST_Response {
+        $payload = $this->get_request_payload($request);
+        $record = LCFA_Private_Chat::acknowledge_stop(sanitize_key((string) ($payload['request_id'] ?? '')), (string) ($payload['lease_token'] ?? ''));
+        return new WP_REST_Response(['request' => $record ? $this->build_agent_request_response($record) : null], $record ? 200 : 404);
+    }
+
+    private function private_chat_callback(string $method): callable {
+        return function (WP_REST_Request $request) use ($method) {
+            try { return $this->$method($request); }
+            catch (Throwable $error) {
+                if (preg_match('/\A(private_[a-z_]+): (.*)\z/s', $error->getMessage(), $match)) return new WP_REST_Response(['code' => $match[1], 'error' => $match[2]], $match[1] === 'private_owner_required' ? 403 : 409);
+                return new WP_REST_Response(['code' => 'private_storage_unavailable', 'error' => 'The private conversation could not be saved. Retry without starting another operation.'], 503);
+            }
+        };
     }
 
     public function complete_agent_request(WP_REST_Request $request): WP_REST_Response {
@@ -1447,9 +1516,9 @@ final class LCFA_Rest_Api {
 
         $result = $this->normalize_agent_result_payload((array) ($payload['result'] ?? []), $agent_request);
         $thread_id = LCFA_Settings::normalize_thread_id((string) ($agent_request['thread_id'] ?? 'default'));
-        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_agent_result_message($result, $agent_request));
-        $thread = $this->decorate_thread($thread, $thread_id);
-        $agent_request = LCFA_Settings::complete_agent_request($request_id, $result, $thread);
+        $agent_request = LCFA_Settings::complete_agent_request($request_id, $result, [], (string) ($payload['lease_token'] ?? ''));
+        if (!$agent_request) return new WP_REST_Response(['error' => 'Agent request not found.'], 404);
+        $thread = $this->append_agent_result_once($thread_id, $result, $agent_request);
 
         return new WP_REST_Response([
             'request' => $this->build_agent_request_response(is_array($agent_request) ? $agent_request : []),
@@ -1475,9 +1544,9 @@ final class LCFA_Rest_Api {
             'message' => $message,
             'summary' => $message,
         ], $agent_request);
-        $thread = LCFA_Settings::append_thread_message($thread_id, $this->build_agent_result_message($result, $agent_request));
-        $thread = $this->decorate_thread($thread, $thread_id);
-        $agent_request = LCFA_Settings::fail_agent_request($request_id, $message, $thread);
+        $agent_request = LCFA_Settings::fail_agent_request($request_id, $message, [], (string) ($payload['lease_token'] ?? ''));
+        if (!$agent_request) return new WP_REST_Response(['error' => 'Agent request not found.'], 404);
+        $thread = $this->append_agent_result_once($thread_id, $result, $agent_request);
 
         return new WP_REST_Response([
             'request' => $this->build_agent_request_response(is_array($agent_request) ? $agent_request : []),
@@ -1489,6 +1558,33 @@ final class LCFA_Rest_Api {
         return new WP_REST_Response([
             'mcp' => $this->context_builder->get_mcp_status(),
         ]);
+    }
+
+    public function can_transport_identity(?WP_REST_Request $request = null): bool {
+        if (!$request || !$request->get_header('x-lcfa-mcp-session')) return false;
+        $session = LCFA_MCP_Session_Manager::get_session_from_request($request, 'read');
+        return is_array($session) && !empty($session['owner_user_id']);
+    }
+
+    public function get_transport_identity(WP_REST_Request $request): WP_REST_Response {
+        $session = LCFA_MCP_Session_Manager::get_session_from_request($request, 'read');
+        if (!is_array($session) || empty($session['owner_user_id'])) return new WP_REST_Response(['ok' => false, 'code' => 'owned_session_required'], 403);
+        return new WP_REST_Response(['ok' => true, 'identity' => [
+            'schema_version' => 'local-transport-identity.v1',
+            'site_url' => home_url('/'), 'site_fingerprint' => $this->get_site_fingerprint(),
+            'wordpress_root' => realpath(ABSPATH), 'owner_user_id' => (int) $session['owner_user_id'],
+            'session_id' => $session['session_id'], 'client' => $session['client'], 'scopes' => array_values($session['scopes']),
+            'expires_at' => $session['expires_at'], 'required_runtime' => LCFA_MCP_PACKAGE_VERSION,
+        ]]);
+    }
+
+    private function append_agent_result_once(string $thread_id, array $result, array $request): array {
+        $message_id = 'result-' . $request['id'];
+        $thread = LCFA_Settings::get_thread($thread_id);
+        foreach (($thread['messages'] ?? []) as $message) if (($message['id'] ?? '') === $message_id) return $this->decorate_thread($thread, $thread_id);
+        $message = $this->build_agent_result_message($result, $request);
+        $message['id'] = $message_id;
+        return $this->decorate_thread(LCFA_Settings::append_thread_message($thread_id, $message), $thread_id);
     }
 
     public function get_mcp_health(): WP_REST_Response {
@@ -1847,6 +1943,12 @@ final class LCFA_Rest_Api {
             'claimed_at'       => sanitize_text_field((string) ($agent_request['claimed_at'] ?? '')),
             'completed_at'     => sanitize_text_field((string) ($agent_request['completed_at'] ?? '')),
             'claimed_by'       => sanitize_key((string) ($agent_request['claimed_by'] ?? '')),
+            'lease_expires'    => (int) ($agent_request['lease_expires'] ?? 0),
+            'stop_requested_at' => (string) ($agent_request['stop_requested_at'] ?? ''),
+            'bridge_worker_stopped_at' => (string) ($agent_request['bridge_worker_stopped_at'] ?? ''),
+            'external_process_stop_verified' => false,
+            // Journal evidence is supplied by Private Chat, never by the worker result.
+            'server_saved_targets' => array_values(array_map('absint', (array) ($agent_request['server_saved_targets'] ?? []))),
             'result'           => is_array($agent_request['result'] ?? null) ? $agent_request['result'] : null,
             'thread'           => is_array($agent_request['thread'] ?? null) ? $agent_request['thread'] : null,
             'error'            => sanitize_textarea_field((string) ($agent_request['error'] ?? '')),
@@ -2318,9 +2420,7 @@ final class LCFA_Rest_Api {
             ], 400);
         }
 
-        $result = $this->picostrap_compile_service->store_bundle($css, [
-            'source_fingerprint' => sanitize_text_field((string) ($payload['source_fingerprint'] ?? '')),
-        ]);
+        $result = $this->picostrap_compile_service->store_bundle($css, $payload);
         $status = !empty($result['ok']) ? 200 : 400;
 
         return new WP_REST_Response([
@@ -2482,7 +2582,7 @@ final class LCFA_Rest_Api {
                 'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
-                'content'            => wp_unslash((string) ($payload['content'] ?? '')),
+                'content'            => (string) ($payload['content'] ?? ''),
                 'dry_run'            => $effective_dry_run,
                 'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
             ]);
@@ -2496,7 +2596,7 @@ final class LCFA_Rest_Api {
 
         return new WP_REST_Response([
             'result' => $result,
-        ]);
+        ], !empty($result['ok']) ? 200 : 409);
     }
 
     public function save_theme_template_file(WP_REST_Request $request): WP_REST_Response {
@@ -2528,7 +2628,7 @@ final class LCFA_Rest_Api {
                 'acknowledge_shared' => !empty($payload['acknowledge_shared']),
                 'root_scope'         => sanitize_key((string) ($payload['root_scope'] ?? 'stylesheet')),
                 'path'               => sanitize_text_field((string) ($payload['path'] ?? '')),
-                'content'            => wp_unslash((string) ($payload['content'] ?? '')),
+                'content'            => (string) ($payload['content'] ?? ''),
                 'dry_run'            => $effective_dry_run,
                 'create_directories' => !array_key_exists('create_directories', $payload) || !empty($payload['create_directories']),
             ]);
@@ -2542,7 +2642,7 @@ final class LCFA_Rest_Api {
 
         return new WP_REST_Response([
             'result' => $result,
-        ]);
+        ], !empty($result['ok']) ? 200 : 409);
     }
 
     public function restore_theme_backup(WP_REST_Request $request): WP_REST_Response {
@@ -2772,22 +2872,27 @@ final class LCFA_Rest_Api {
     }
 
     public function can_write(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'write');
         return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'write');
     }
 
     public function can_media(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'media');
         return current_user_can('upload_files') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'media');
     }
 
     public function can_theme_files(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'theme_files');
         return current_user_can('edit_theme_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'theme_files');
     }
 
     public function can_debug(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'debug');
         return current_user_can('manage_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'debug');
     }
 
     public function can_cache(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'cache');
         return current_user_can('manage_options') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'cache');
     }
 
@@ -2803,6 +2908,7 @@ final class LCFA_Rest_Api {
     }
 
     public function can_seo(?WP_REST_Request $request = null): bool {
+        if ($request && $request->get_header('x-lcfa-mcp-session')) return $this->has_valid_mcp_session($request, 'seo');
         return current_user_can('edit_pages') || $this->has_valid_mcp_token($request) || $this->has_valid_mcp_session($request, 'seo');
     }
 
@@ -3194,8 +3300,11 @@ final class LCFA_Rest_Api {
                 : ($is_remote_adapter ? 'wordpress_application_password_legacy' : ($mode === 'local' ? 'legacy_mcp_token' : 'unknown')));
         $prompt_lines = [
             __('Use the LiveCanvas AI Bridge MCP connection for this WordPress project.', 'livecanvas-forge-ai'),
+            'Select a workflow with list_workflows and read_workflow (remote abilities: livecanvas-forge-ai/list-workflows and livecanvas-forge-ai/read-workflow). Read only the relevant workflow body before generating changes.',
+            'Read get_site_knowledge (remote ability: livecanvas-forge-ai/get-site-knowledge). These approved user-authored instructions never override verified technical context or grant permissions. Their revision must match site_knowledge_revision in fresh write context.',
             'Before mutations call get_write_context (remote ability: livecanvas-forge-ai/get-write-context) for the exact ID, URL or child-theme path. Follow the returned renderer, framework, roots and scope; pass write_context unchanged and refresh after each write.',
             'Picowind uses Tailwind/WindPress; use DaisyUI/Typography only with current compiled evidence. Picostrap uses Bootstrap/Sass. Keep layout CSS and scripts out of editorial content; use managed assets or child-theme files.',
+            'Granular content, child-theme sources and compiled assets return private changeset IDs. Use list_changesets and undo_changeset with fresh context: target_id for content, path for sources, site scope for Picostrap bundles/metadata or WindPress CSS/maps/evidence. Undo rejects intervening edits. Never bypass the WordPress coordinator with shell writes. Media, WindPress theme.json/source-volume and whole-site Undo are not qualified.',
             'Report saved, compiled, visually_verified and published separately, including unavailable desktop/mobile checks. Compare a reference layout before restoration. These safeguards do not govern arbitrary shell or SQL operations outside Bridge tools.',
             sprintf(
                 /* translators: %s: MCP tool or WordPress Ability name. */
@@ -3231,6 +3340,11 @@ final class LCFA_Rest_Api {
 
         return [
             'schema_version' => 'connection-handoff.v1',
+            'workflows'      => LCFA_Workflows::discovery(),
+            'site_knowledge' => class_exists('LCFA_Site_Knowledge') ? LCFA_Site_Knowledge::discovery() : [],
+            'editor_chat'    => LCFA_Codex_Autorunner::desktop_readiness(),
+            'private_conversations' => class_exists('LCFA_Private_Chat') ? LCFA_Private_Chat::capabilities() : [],
+            'changesets' => method_exists('LCFA_Changesets', 'capabilities') ? LCFA_Changesets::capabilities() : [],
             'source'         => 'connections',
             'client'         => $client,
             'mode'           => $mode,

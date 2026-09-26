@@ -3,7 +3,7 @@
  * Plugin Name: LiveCanvas AI Bridge
  * Plugin URI: https://livecanvas.com/
  * Description: AI companion and guided setup flow for LiveCanvas, Picostrap, Picowind, and WindPress.
- * Version: 0.2.0-beta.6
+ * Version: 0.2.0-beta.8
  * Requires at least: 6.8
  * Tested up to: 7.1
  * Requires PHP: 8.0
@@ -15,8 +15,8 @@
 
 defined('ABSPATH') || exit;
 
-define('LCFA_VERSION', '0.2.0-beta.6');
-define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.7');
+define('LCFA_VERSION', '0.2.0-beta.8');
+define('LCFA_MCP_PACKAGE_VERSION', '0.2.0-beta.8');
 define('LCFA_MCP_PACKAGE_SPEC', '@livecanvas/ai-bridge-mcp@' . LCFA_MCP_PACKAGE_VERSION);
 define('LCFA_FILE', __FILE__);
 define('LCFA_DIR', plugin_dir_path(__FILE__));
@@ -40,7 +40,13 @@ if (
 }
 require_once LCFA_DIR . 'includes/class-lcfa-environment.php';
 require_once LCFA_DIR . 'includes/class-lcfa-render-target.php';
+require_once LCFA_DIR . 'includes/class-lcfa-site-knowledge.php';
 require_once LCFA_DIR . 'includes/class-lcfa-write-contract.php';
+require_once LCFA_DIR . 'includes/class-lcfa-workflows.php';
+require_once LCFA_DIR . 'includes/class-lcfa-changesets.php';
+require_once LCFA_DIR . 'includes/class-lcfa-private-store.php';
+require_once LCFA_DIR . 'includes/class-lcfa-desktop-delivery.php';
+require_once LCFA_DIR . 'includes/class-lcfa-private-chat.php';
 LCFA_Render_Target::hooks();
 LCFA_Write_Contract::hooks();
 require_once LCFA_DIR . 'includes/class-lcfa-stack-capabilities.php';
